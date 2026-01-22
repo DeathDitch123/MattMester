@@ -1,24 +1,71 @@
 <!DOCTYPE html>
 <html lang="hu">
-    <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Főoldal</title>
-        <!--!Bootstrap-->
-        <link rel="stylesheet" href="../bootstrap/css/bootstrap.min.css" />
-        <!--?Popper: dropdowns, popovers, tooltips-->
-        <script src="../bootstrap/js/popper.min.js"></script>
-        <script src="../bootstrap/js/bootstrap.min.js"></script>
-        <!--!CSS-->
-        <link rel="stylesheet" href="../css/index.css" />
-        <!--!JavaScript-->
-        <script src="../javascript/index.js"></script>
-    </head>
-    <body>
-        <div class="container-fluid">
-            <div class="row text-center">
-                <h1 class="display-1">A szerver fut.</h1>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Főoldal</title>
+    <!--!Bootstrap-->
+    <link rel="stylesheet" href="../bootstrap/css/bootstrap.min.css" />
+    <!--?Popper: dropdowns, popovers, tooltips-->
+    <script src="../bootstrap/js/popper.min.js"></script>
+    <script src="../bootstrap/js/bootstrap.min.js"></script>
+    <!--!CSS-->
+    <link rel="stylesheet" href="../css/index.css" />
+    <!--!JavaScript-->
+    <script src="../javascript/index.js"></script>
+</head>
+
+<body>
+
+    <div class="container py-4">
+        <div class="main-bubble">
+
+            <!-- MENÜ -->
+            <div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
+                <button class="menu-btn active">GÉP ELLEN</button>
+                <button class="menu-btn">MATT MESTER</button>
+                <button class="menu-btn">TRADICIONÁLIS</button>
             </div>
+
+            <!-- FŐ TARTALOM -->
+            <div class="row align-items-center gy-4">
+
+                <!-- BAL PANEL -->
+                <div class="col-lg-3 col-md-4">
+                    <div class="panel">
+                        <h5 class="text-center fw-bold">Ranglista</h5>
+                        <hr>
+                        #1 Player<br>
+                        #2 Player<br>
+                        #3 Player<br>
+                        #4 Player
+                    </div>
+                </div>
+
+                <!-- KÖZÉP -->
+                <div class="col-lg-6 col-md-8 text-center">
+                    <img src="matt-mester.png" class="character mb-3" alt="">
+                    <h1 class="outlined-text">MATT MESTER</h1>
+                </div>
+
+                <!-- JOBB OLDAL -->
+                <div class="col-lg-3 d-none d-lg-block text-muted small">
+                    Itt jöhet AI generált animált háttér, particle effektek stb.
+                </div>
+
+            </div>
+
+            <!-- ALSÓ GOMBOK -->
+            <div class="d-flex justify-content-center gap-3 mt-5 flex-wrap">
+                <button class="auth-btn signin">sign in</button>
+                <button class="play-btn">PLAY<br><small>as guest</small></button>
+                <button class="auth-btn signup">sign up</button>
+            </div>
+
         </div>
-    </body>
+    </div>
+
+</body>
+
 </html>

@@ -1,0 +1,103 @@
+body {
+    background: radial-gradient(circle at center, #1c2430, #0b0f14);
+    color: #fff;
+    min-height: 100vh;
+    font-family: 'Segoe UI', sans-serif;
+}
+
+/* ==== FŐ BUBORÉK ==== */
+.main-bubble {
+    background: #1b2330;
+    border-radius: 40px;
+    box-shadow:
+        inset 0 0 0 6px #0d1117,
+        0 0 80px rgba(0,0,0,0.7);
+    padding: 30px;
+}
+
+/* ==== MENÜ GOMBOK ==== */
+.menu-btn {
+    background: #c83b3b;
+    color: #fff;
+    border: 4px solid #2b1d0f;
+    border-radius: 14px;
+    padding: 10px 24px;
+    font-weight: 800;
+    box-shadow: 0 6px 0 #1a0f08;
+    transition: 0.1s;
+}
+.menu-btn.active {
+    background: #ff5a5a;
+}
+.menu-btn:active {
+    transform: translateY(4px);
+    box-shadow: 0 2px 0 #1a0f08;
+}
+
+/* ==== PANEL ==== */
+.panel {
+    background: #f4a261;
+    border-radius: 20px;
+    border: 4px solid #2b1d0f;
+    box-shadow:
+        0 6px 0 #1a0f08,
+        inset 0 0 0 2px rgba(255,255,255,0.2);
+    padding: 16px;
+    color: #2b1d0f;
+}
+
+/* ==== SZÖVEG OUTLINE ==== */
+.outlined-text {
+    color: #f5c16c;
+    font-weight: 900;
+    text-shadow:
+        -3px -3px 0 #1a0f08,
+         3px -3px 0 #1a0f08,
+        -3px  3px 0 #1a0f08,
+         3px  3px 0 #1a0f08,
+         0px  5px 0 #1a0f08;
+}
+
+/* ==== KARAKTER ==== */
+.character {
+    max-width: 280px;
+    width: 100%;
+    filter:
+        drop-shadow(6px 6px 0 #000)
+        drop-shadow(-6px -6px 0 #000);
+}
+
+/* ==== PLAY GOMB ==== */
+.play-btn {
+    background: #3a2a1a;
+    color: #f0b35a;
+    border-radius: 50px;
+    padding: 16px 44px;
+    border: 4px solid #2b1d0f;
+    font-size: 1.6rem;
+    font-weight: bold;
+    box-shadow: 0 8px 0 #1a0f08;
+}
+.play-btn:active {
+    transform: translateY(6px);
+    box-shadow: 0 2px 0 #1a0f08;
+}
+
+/* ==== AUTH GOMBOK ==== */
+.auth-btn {
+    border-radius: 30px;
+    padding: 12px 30px;
+    font-weight: bold;
+    border: 4px solid #2b1d0f;
+    box-shadow: 0 6px 0 #1a0f08;
+    color: #fff;
+}
+.signin { background: #6a8f1f; }
+.signup { background: #3f51b5; }
+
+/* ==== RESZPONZÍV ==== */
+@media (max-width: 768px) {
+    .character {
+        max-width: 220px;
+    }
+}
