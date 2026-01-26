@@ -1,0 +1,76 @@
+HTTPS használata – titkosított kapcsolat, tanúsítvány beszerzése (pl. Let’s Encrypt).
+
+Tűzfal beállítása – csak a szükséges portokat (pl. 3000, 80, 443) engedélyezd, minden mást zárj le.
+
+Rate limiting – védelem brute force és DoS támadások ellen (pl. express-rate-limit csomag).
+
+Input validáció és szűrés – minden adatot ellenőrizz, amit a felhasználó küld (SQL injection, XSS ellen).
+
+Jelszavak hash-elése – bcrypt vagy argon2 használata.
+
+Session/cookie védelem – secure, httpOnly, sameSite beállítások.
+
+CORS szabályozás – csak megbízható domainekről engedélyezd a kéréseket.
+
+Frissítések – rendszeresen frissítsd a Node.js-t, csomagokat, MySQL-t.
+
+Logolás és monitoring – naplózd a gyanús aktivitásokat, hibákat.
+
+Backup – rendszeres adatmentés, hogy támadás esetén visszaállítható legyen minden.
+
+-------------------------------------------
+Be kéne építeni hogy a szerver indításakor induljon el a adatbázis is, biztonsági egyebekkel...
+-------------------------------------------
+
+
+Szerver + Adatbázis működése: 
+
+A szervergép (a te géped) futtatja:
+
+A MySQL adatbázist (háttérben, 3306-os porton).
+A Node.js szervert (Express, pl. 3000-es porton).
+A külső gép (felhasználó):
+
+A böngészőjében beírja a szervergép publikus IP-címét és a portot, pl.:
+http://<szervergép-ip>:3000
+Ha van frontend (pl. index.html), az vagy a backend szolgálja ki, vagy külön webszerverről érhető el.
+A kapcsolat folyamata:
+
+A böngésző HTTP-kérést küld a szervergép 3000-es portjára.
+Az Express szerver fogadja a kérést, feldolgozza (pl. API, statikus fájlok).
+Ha adat kell, a szerver lekérdez a MySQL adatbázisból.
+Az eredményt visszaküldi a böngészőnek, ami megjeleníti.
+Ami ehhez kell:
+
+A szervergép tűzfalán engedélyezni kell a 3000-es portot (vagy amelyiken a szerver fut).
+Ha router mögött vagy, port forwardingot kell beállítani a 3000-es portra.
+A szervergép publikus IP-címét kell használni (vagy domain nevet, ha van).
+Production környezetben érdemes HTTPS-t, erős jelszavakat, és biztonsági beállításokat használni.
+
+
+Jelenlegi működés részletezése:
+--------------------------------------------------
+- A szerver oldali alkalmazás Node.js/Express alapú, 3000-es porton fut.
+- Az adatbázis MySQL, helyileg a szervergépen, 3306-os porton.
+- A frontend (index.html, JS, CSS) külön mappában van, de kiszolgálható a backendből is.
+- A szerver API-kon keresztül kommunikál az adatbázissal (pl. játékosok, játszmák, lépések kezelése).
+- A szerver és az adatbázis kapcsolata connection pool-lal történik, ami hatékony és biztonságos.
+- A setup.js egyszeri vagy manuális futtatásra szolgál az adatbázis-táblák létrehozásához.
+- A rendszer jelenleg csak helyi hálózaton vagy megfelelő port forwardinggal érhető el kívülről.
+
+További elvárások, megvalósítandó feladatok:
+--------------------------------------------------
+1. Felhasználói regisztráció, bejelentkezés, jogosultságkezelés (auth, session, jelszó-visszaállítás).
+2. Valósidejű játék (pl. WebSocket/SSE, online párosítás, játékállapot szinkronizálás).
+3. Felhasználói profilok, statisztikák, barátlista, meghívások kezelése.
+4. Adminisztrációs felület (felhasználók, játszmák, jelentések kezelése).
+5. E-mail értesítések (regisztráció, jelszócsere, játékmeghívás stb.).
+6. Skálázhatóság: több szerver, load balancer, adatbázis replikáció lehetősége.
+7. Monitoring és hibakezelés: automatikus riasztás, loggyűjtés, statisztikák.
+8. Jogszabályi megfelelés: GDPR, adatkezelési tájékoztató, felhasználási feltételek.
+9. Felhasználói élmény: reszponzív design, gyors betöltés, akadálymentesség.
+10. Biztonsági audit, rendszeres tesztelés (pl. penetration test, vulnerability scan).
+11. Verziókövetés, CI/CD pipeline bevezetése (automatikus teszt, build, deploy).
+12. Dokumentáció: fejlesztői és felhasználói dokumentáció naprakészen tartása.
+
+Ezek a pontok biztosítják, hogy a projekt ne csak működjön, hanem hosszú távon is biztonságos, megbízható és fenntartható legyen.
