@@ -1,11 +1,12 @@
-const { createTables } = require('./sql/database');
+
+const { initDatabase } = require('./sql/database');
 
 async function setupDatabase() {
     try {
-        await createTables();
-        console.log('Database tables created successfully.');
+        await initDatabase();
+        console.log('Database and tables created successfully.');
     } catch (error) {
-        console.error('Error creating tables:', error);
+        console.error('Error creating database or tables:', error);
     } finally {
         process.exit();
     }

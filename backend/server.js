@@ -2,6 +2,7 @@
 const express = require('express'); //?npm install express
 const session = require('express-session'); //?npm install express-session
 const path = require('path');
+const { initDatabase } = require('./sql/database');
 
 //!Beállítások
 const app = express();
@@ -33,11 +34,21 @@ app.use('/', router);
 const endpoints = require('./api/api.js');
 app.use('/api', endpoints);
 
+
 //!Szerver futtatása
 app.use(express.static(path.join(__dirname, '../frontend'))); //?frontend mappa tartalmának betöltése az oldal működéséhez
-app.listen(port, ip, () => {
-    console.log(`Szerver elérhetősége: http://${ip}:${port}`);
-});
+
+// Adatbázis inicializálása, majd szerver indítása
+initDatabase()
+    .then(() => {
+        app.listen(port, ip, () => {
+            console.log(`Szerver elérhetősége: http://${ip}:${port}`);
+        });
+    })
+    .catch((err) => {
+        console.error('Adatbázis inicializálási hiba:', err);
+        process.exit(1);
+    });
 
 //?Szerver futtatása terminalból: npm run dev
 //?Szerver leállítása (MacBook és Windows): Control + C

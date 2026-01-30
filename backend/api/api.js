@@ -27,7 +27,7 @@ router.get('/test', (request, response) => {
 });
 
 //?GET /api/testsql
-router.get('/testsql', async (request, response) => {
+router.get('/testselect', async (request, response) => {
     try {
         const selectall = await database.selectall();
         response.status(200).json({
@@ -37,6 +37,28 @@ router.get('/testsql', async (request, response) => {
     } catch (error) {
         response.status(500).json({
             message: 'Ez a végpont nem működik.'
+        });
+    }
+});
+router.post('/testinsert', async (request, response) => {
+    try {
+        const { id , username } = request.body;
+
+        if (!id || !username) {
+            return response.status(400).json({
+                message: 'paraméterek szükségesek'
+            });
+        }
+
+        await database.insertall(id, username);
+        response.status(200).json({
+            message: 'Sikeres beszúrás.'
+        });
+    } catch (error) {
+        console.error('Insert error:', error);
+        response.status(500).json({
+            message: 'Sikertelen beszúrás.',
+            error: error.message
         });
     }
 });

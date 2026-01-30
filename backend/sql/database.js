@@ -1,6 +1,7 @@
+
 const mysql = require('mysql2/promise');
 
-const pool = mysql.createPool({
+const dbConfig = {
     host: '127.0.0.1',
     user: 'root',
     password: '',
@@ -8,11 +9,28 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
-});
+};
+
+let pool;
+
+async function ensureDatabaseExists() {
+    // Csatlakozás az adatbázis szerverhez, de konkrét adatbázis nélkül
+    const connection = await mysql.createConnection({
+        host: dbConfig.host,
+        user: dbConfig.user,
+        password: dbConfig.password
+    });
+    await connection.query('CREATE DATABASE IF NOT EXISTS mattmester');
+    await connection.end();
+}
 
 // Create tables if they don't exist
 async function createTables() {
     const queries = [
+        `CREATE TABLE IF NOT EXISTS testtable (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL
+        )`,
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(50) UNIQUE NOT NULL,
@@ -82,16 +100,36 @@ async function createTables() {
     }
 }
 
+// Inicializáló függvény, ami először létrehozza az adatbázist, majd a pool-t, majd a táblákat
+async function initDatabase() {
+    await ensureDatabaseExists();
+    pool = mysql.createPool(dbConfig);
+    await createTables();
+}
+
 //!SQL Queries
 async function selectall() {
-    const query = 'SELECT * FROM exampletable;';
+    const query = 'SELECT * FROM testtable;';
     const [rows] = await pool.execute(query);
     return rows;
 }
 
+async function insertall(nev, ev) {
+    const query = 'INSERT INTO testtable (id, username) VALUES (?, ?)';
+    try {
+        const [result] = await pool.execute(query, [nev, ev]);
+        return result;
+    } catch (error) {
+        console.error('Database error:', error);
+        throw error;
+    }
+}
+
 // Export
 module.exports = {
-    pool,
+    initDatabase,
+    getPool: () => pool,
     createTables,
-    selectall
+    selectall,
+    insertall
 };
