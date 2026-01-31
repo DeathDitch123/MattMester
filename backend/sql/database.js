@@ -114,10 +114,10 @@ async function selectall() {
     return rows;
 }
 
-async function insertall(nev, ev) {
+async function insertall(id, username) {
     const query = 'INSERT INTO testtable (id, username) VALUES (?, ?)';
     try {
-        const [result] = await pool.execute(query, [nev, ev]);
+        const [result] = await pool.execute(query, [id, username]);
         return result;
     } catch (error) {
         console.error('Database error:', error);
