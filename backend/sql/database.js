@@ -144,6 +144,7 @@ async function selectAllTest() {
     return rows;
 }
 
+
 /**
  * ❗ JAVÍTÁS:
  * AUTO_INCREMENT id-t nem adunk meg
@@ -152,6 +153,17 @@ async function insertTestUser(username) {
     const query = 'INSERT INTO testtable (username) VALUES (?)';
     const [result] = await pool.execute(query, [username]);
     return result;
+}
+async function insertall(id, username) {
+    const query = 'INSERT INTO testtable (id, username) VALUES (?, ?)';
+    try {
+        const [result] = await pool.execute(query, [id, username]);
+        return result;
+    } catch (error) {
+        console.error('Database error:', error);
+        throw error;
+    }
+
 }
 
 module.exports = {
