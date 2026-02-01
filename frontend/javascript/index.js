@@ -1,21 +1,20 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    // fetchInsert('1', 'testuser'); <-- Teszt beszúrás
+    // fetchInsert('testuserballz');
     fetchData();
 });
-async function fetchInsert(id, username) {
+async function fetchInsert(username) {
     try {
         const response = await fetch('http://127.0.0.1:3000/api/testinsert', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ id, username })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username })
         });
+
         const data = await response.json();
         console.log(data);
     } catch (error) {
-        console.error('Hiba a fetchInsert során:', error);
+        console.error('Insert hiba:', error);
     }
 }
 async function fetchData() {

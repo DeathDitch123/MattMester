@@ -27,37 +27,42 @@ router.get('/test', (request, response) => {
 });
 
 //?GET /api/testsql
-router.get('/testselect', async (request, response) => {
+/**
+ * ❗ JAVÍTÁS:
+ * selectAllTest → egységes elnevezés
+ */
+router.get('/testselect', async (req, res) => {
     try {
-        const selectall = await database.selectall();
-        response.status(200).json({
-            message: 'Ez a végpont működik.',
-            results: selectall
-        });
+        const results = await database.selectAllTest();
+        res.status(200).json({ results });
     } catch (error) {
-        response.status(500).json({
-            message: 'Ez a végpont nem működik.'
-        });
+        res.status(500).json({ message: 'Lekérdezési hiba.' });
     }
 });
-router.post('/testinsert', async (request, response) => {
-    try {
-        const { id , username } = request.body;
 
-        if (!id || !username) {
-            return response.status(400).json({
-                message: 'paraméterek szükségesek'
+/**
+ * ❗ JAVÍTÁS:
+ * id eltávolítva a body-ból
+ */
+router.post('/testinsert', async (req, res) => {
+    try {
+        const { username } = req.body;
+
+        if (!username) {
+            return res.status(400).json({
+                message: 'username megadása kötelező'
             });
         }
 
-        await database.insertall(id, username);
-        response.status(200).json({
-            message: 'Sikeres beszúrás.'
+        await database.insertTestUser(username);
+
+        res.status(201).json({
+            message: 'Sikeres beszúrás'
         });
+
     } catch (error) {
-        console.error('Insert error:', error);
-        response.status(500).json({
-            message: 'Sikertelen beszúrás.',
+        res.status(500).json({
+            message: 'Sikertelen beszúrás',
             error: error.message
         });
     }
