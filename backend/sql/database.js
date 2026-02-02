@@ -17,14 +17,30 @@ let pool;
  * Az adatbázist külön hozzuk létre, mielőtt pool-t csinálunk
  */
 async function ensureDatabaseExists() {
-    const connection = await mysql.createConnection({
-        host: dbConfig.host,
-        user: dbConfig.user,
-        password: dbConfig.password
-    });
+    let connection;
+    try {
+        connection = await mysql.createConnection({
+            host: dbConfig.host,
+            user: dbConfig.user,
+            password: dbConfig.password
+        });
 
-    await connection.query('CREATE DATABASE IF NOT EXISTS mattmester');
-    await connection.end();
+        const dbName = dbConfig.database;
+        await connection.query(
+            `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+        );
+    } catch (err) {
+        console.error('Failed to ensure database exists:', err);
+        throw err;
+    } finally {
+        if (connection) {
+            try {
+                await connection.end();
+            } catch (e) {
+                console.error('Error closing temporary connection:', e);
+            }
+        }
+    }
 }
 
 /**
@@ -129,9 +145,42 @@ async function createTables() {
  * pool csak az adatbázis létrehozása után jön létre
  */
 async function initDatabase() {
-    await ensureDatabaseExists();
-    pool = mysql.createPool(dbConfig);
-    await createTables();
+    try {
+        await ensureDatabaseExists();
+
+        pool = mysql.createPool(dbConfig);
+
+        // verify pool connectivity
+        const conn = await pool.getConnection();
+        conn.release();
+
+        await createTables();
+        console.log('Database initialized successfully.');
+    } catch (err) {
+        console.error('Failed to initialize database:', err);
+        if (pool) {
+            try {
+                await pool.end();
+            } catch (e) {
+                console.error('Error closing pool after failed init:', e);
+            }
+            pool = null;
+        }
+        throw err;
+    }
+}
+
+async function closeDatabase() {
+    if (pool) {
+        try {
+            await pool.end();
+            pool = null;
+            console.log('Database pool closed.');
+        } catch (err) {
+            console.error('Error closing database pool:', err);
+            throw err;
+        }
+    }
 }
 
 /* ================= SQL QUERIES ================= */
@@ -168,6 +217,7 @@ async function insertall(id, username) {
 
 module.exports = {
     initDatabase,
+    closeDatabase,
     getPool: () => pool,
     selectAllTest,
     insertTestUser
