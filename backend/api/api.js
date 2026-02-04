@@ -178,4 +178,18 @@ router.post('/register', async (request, response) => {
     }
 });
 
+router.get('/sessioninfo', (request, response) => {
+    if (request.session.userId) {
+        return response.status(200).json({
+            loggedIn: true,
+            user: {
+                username: request.session.username,
+                role: request.session.role,
+                elo: request.session.elo
+            }
+        });
+    } else {
+        return response.status(200).json({ loggedIn: false });
+    }
+});
 module.exports = router;
