@@ -15,18 +15,38 @@
     <script src="../javascript/login.js"></script>
 </head>
 <body>
-    <h1>Login</h1>
-    <form action="/login" method="POST">
-        <label for="username">Username/Email:</label>
-        <input placeholder="Username123" type="text" id="username" name="username" required>
-        <br>
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required>
-        <br>
-        <label for="remember">Remember me:</label>
-        <input type="checkbox" id="remember" name="remember">
-        <br>
-        <button type="submit">Login</button>
-    </form>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card shadow p-4">
+                    <h1 class="text-center mb-4">Login</h1>
+                    <form id="loginForm">
+                        <div class="mb-3">
+                            <label for="loginUsername" class="form-label">Felhasználónév:</label>
+                            <input class="form-control" type="text" id="loginUsername" placeholder="Ide írd be a felhasználónevedet" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="loginPassword" class="form-label">Jelszó:</label>
+                            <input class="form-control" type="password" id="loginPassword" placeholder="Add meg a jelszavadat" required>
+                        </div>
+
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="rememberMe">
+                            <label class="form-check-label" for="rememberMe">Emlékezz rám: </label>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-primary w-100">Bejelentkezés</button>
+                    </form>
+                    
+                    <div id="loginMessage" class="mt-3 text-center alert" style="display: none;"></div>
+
+                    <div class="text-center mt-3">
+                        <small>Még nem regisztráltál? <a href="register.html">Itt tudsz regisztrálni</a></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 </html>

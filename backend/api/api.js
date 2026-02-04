@@ -129,6 +129,7 @@ router.get('/logout', (request, response) => {
     }
 });
 
+// ?POST /api/register - új felhasználó regisztrációja
 router.post('/register', async (request, response) => {
     try {
         const { username, password, email } = request.body;
@@ -178,6 +179,7 @@ router.post('/register', async (request, response) => {
     }
 });
 
+// ?GET /api/sessioninfo - aktuális session információk lekérdezése
 router.get('/sessioninfo', (request, response) => {
     if (request.session.userId) {
         return response.status(200).json({

@@ -17,19 +17,41 @@
 </head>
 
 <body>
-    <h1>Register</h1>
-    <form action="/register" method="POST">
-        <label for="username">Username:</label>
-        <input placeholder="Username123" type="text" id="username" name="username" required>
-        <br>
-        <label for="email">Email:</label>
-        <input placeholder="gipsz.jakab@gmail.com" type="email" id="email" name="email" required>
-        <br>
-        <label for="password">Password:</label>
-        <input type="password" id="password" name="password" required>
-        <br>
-        <button type="submit">Register</button>
-    </form>
+    <div class="container mt-5">
+        <div class="row justify-content-center">
+            <div class="col-md-6">
+                <div class="card shadow p-4">
+                    <h1 class="text-center mb-4">Register</h1>
+                    <form id="registerForm">
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Felhasználónév:</label>
+                            <input class="form-control" placeholder="Username123" type="text" id="username" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email:</label>
+                            <input class="form-control" placeholder="gipsz.jakab@gmail.com" type="email" id="email"
+                                required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Jelszó:</label>
+                            <input class="form-control" type="password" id="password" required>
+                            <small class="text-muted">Min. 8 karakter, legalább egy szám.</small>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary w-100">Regisztráció</button>
+                    </form>
+
+                    <div id="message" class="mt-3 text-center" style="display: none;"></div>
+
+                    <div class="text-center mt-3">
+                        <small>Már regisztráltál? <a href="login.html">Itt tudsz bejelentkezni</a></small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

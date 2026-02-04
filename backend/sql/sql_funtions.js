@@ -1,4 +1,7 @@
+const { getPool } = require('./database.js');
+
 async function insertUser(username, passwordHash, email) {
+    const pool = getPool();
     const query = 'INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)';
     try {
         const [result] = await pool.execute(query, [username, passwordHash, email]);
@@ -14,6 +17,7 @@ async function insertUser(username, passwordHash, email) {
     }
 }
 async function getUserByUsername(username) {
+    const pool = getPool();
     const query = 'SELECT * FROM users WHERE username = ?';
     try {
         const [rows] = await pool.execute(query, [username]);
