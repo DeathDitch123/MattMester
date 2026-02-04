@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt'); //?npm install bcrypt
 const database = require('../sql/database.js');
+const sql = require('../sql/sql_funtions.js');
 const fs = require('fs/promises');
 
 //!Multer
@@ -77,7 +78,7 @@ router.post('/login', async (request, response) => {
         if (!username || !password) {
             return response.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
         }
-        const user = await database.getUserByUsername(username);
+        const user = await sql.getUserByUsername(username);
         const authErrorMsg = 'Hibás felhasználónév vagy jelszó.';
         if (!user) {
             return response.status(401).json({ message: authErrorMsg });
@@ -166,7 +167,7 @@ router.post('/register', async (req, res) => {
         }
         const saltRounds = 10;
         const passwordHash = await bcrypt.hash(password, saltRounds);
-        const result = await database.insertUser(username, passwordHash, email);
+        const result = await sql.insertUser(username, passwordHash, email);
 
         request.session.userId = result.insertId;
         request.session.username = username;
