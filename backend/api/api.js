@@ -68,4 +68,58 @@ router.post('/testinsert', async (req, res) => {
     }
 });
 
+// ?POST /api/login - felhasználó azonosítása és session-be mentése
+router.post('/login', async (request, response) => {
+    const { username, password } = request.body;
+    try {
+        if (!username || !password) {
+            throw new Error("Hiányzó username vagy password.");
+        }
+        let user = null;
+        //függvémy meghívása mely eldönti hogy létezik e a user
+        if (userCheck(username, password)) {
+            // biztosítjuk, hogy request.session.user objektum létezzen
+
+            request.session.user = {
+                name: username,
+                timestamp: Date.now()
+            };
+            console.log(request.session.user);
+            response.status(200).json({ message: "Minden fasza" });
+        }
+        else {
+            response.status(401).json({ message: "Hibás felhasználó vagy jelszó" });
+        }
+    } catch (error) {
+        console.error('Login hiba:', error);
+        return response.status(500).json({ message: error });
+    }
+});
+
+// ?GET /api/logout - session lezárása és cookie törlése
+router.get('/logout', (request, response) => {
+    try {
+        if (!request.session) {
+            return response.status(200).json({ message: 'Nincs aktív session.' });
+        }
+        request.session.destroy(err => {
+            if (err) {
+                console.error('Session destroy hiba:', err);
+                return response.status(500).json({ message: 'Sikertelen kijelentkezés.' });
+            }
+            // alapértelmezett cookie név: connect.sid
+            response.clearCookie('connect.sid');
+            return response.status(200).json({ message: 'Sikeres kijelentkezés.' });
+        });
+    } catch (error) {
+        console.error('Logout hiba:', error);
+        return response.status(500).json({ message: 'Szerverhiba a kijelentkezés során.' });
+    }
+});
+
+function userCheck(p1, p2) {
+    return p1 == p2;
+}
+
+
 module.exports = router;
