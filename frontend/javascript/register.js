@@ -28,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageDiv.classList.add('alert-success');
                 messageDiv.innerText = result.message + " Átirányítás...";
                 setTimeout(() => {
-                    window.location.href = '/dashboard'; 
+                    window.location.href = '/html/index.html'; 
                 }, 2000);
             } else {
                 messageDiv.classList.add('alert-danger');

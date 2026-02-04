@@ -15,56 +15,48 @@
     <!--!JavaScript-->
     <script src="../javascript/index.js"></script>
 </head>
-
 <body>
-
     <div class="container py-4">
-        <div class="main-bubble">
-
-            <!-- MENÜ -->
+        <div class="main-bubble shadow">
             <div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
                 <button class="menu-btn active">GÉP ELLEN</button>
                 <button class="menu-btn">MATT MESTER</button>
                 <button class="menu-btn">TRADICIONÁLIS</button>
             </div>
 
-            <!-- FŐ TARTALOM -->
             <div class="row align-items-center gy-4">
-
-                <!-- BAL PANEL -->
                 <div class="col-lg-3 col-md-4">
-                    <div class="panel">
+                    <div class="panel p-3 bg-light rounded shadow-sm">
                         <h5 class="text-center fw-bold">Ranglista</h5>
                         <hr>
-                        #1 Player<br>
-                        #2 Player<br>
-                        #3 Player<br>
-                        #4 Player
+                        <div id="leaderboard">
+                            #1 Player - 2100<br>
+                            #2 Player - 1950<br>
+                            #3 Player - 1800<br>
+                            #4 Player - 1700
+                        </div>
                     </div>
                 </div>
 
-                <!-- KÖZÉP -->
                 <div class="col-lg-6 col-md-8 text-center">
-                    <h1 class="outlined-text">MATT MESTER</h1>
+                    <h1 class="outlined-text display-3 fw-bold">MATT MESTER</h1>
                 </div>
 
-                <!-- JOBB OLDAL -->
-                <div class="col-lg-3 d-none d-lg-block text-muted small">
-                    Itt jöhet AI generált animált háttér, particle effektek stb.
+                <div class="col-lg-3 d-none d-lg-block">
+                    <div id="user-status-panel" class="panel p-3 text-center border rounded shadow-sm" style="display: none !important;">
+                        <h6 class="fw-bold mb-1" id="display-username">Username</h6>
+                        <p class="small mb-2">ELO: <span id="display-elo" class="badge bg-primary">1200</span></p>
+                        <button class="btn btn-sm btn-outline-danger" id="logoutBtn">Kijelentkezés</button>
+                    </div>
                 </div>
-
             </div>
 
-            <!-- ALSÓ GOMBOK -->
-            <div class="d-flex justify-content-center gap-3 mt-5 flex-wrap">
-                <button class="auth-btn signin">sign in</button>
+            <div id="auth-section" class="d-flex justify-content-center gap-3 mt-5 flex-wrap">
+                <button class="auth-btn signin" onclick="location.href='/login.html'">sign in</button>
                 <button class="play-btn">PLAY<br><small>as guest</small></button>
-                <button class="auth-btn signup">sign up</button>
+                <button class="auth-btn signup" onclick="location.href='/register.html'">sign up</button>
             </div>
-
         </div>
     </div>
-
 </body>
-
 </html>

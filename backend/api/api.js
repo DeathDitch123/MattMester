@@ -180,7 +180,7 @@ router.post('/register', async (request, response) => {
 });
 
 // ?GET /api/sessioninfo - aktuális session információk lekérdezése
-router.get('/sessioninfo', (request, response) => {
+router.get('/sessionInfo', (request, response) => {
     if (request.session.userId) {
         return response.status(200).json({
             loggedIn: true,

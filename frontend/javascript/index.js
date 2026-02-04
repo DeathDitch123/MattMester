@@ -1,33 +1,31 @@
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+    const authSection = document.getElementById('auth-section');
+    const userPanel = document.getElementById('user-status-panel');
+    const displayUsername = document.getElementById('display-username');
+    const displayElo = document.getElementById('display-elo');
 
-    // fetchInsert('testuserballz');
-    fetchData();
+    try {
+        const response = await fetch('/api/sessionInfo');
+        const data = await response.json();
+
+        if (data.loggedIn) {
+            authSection.innerHTML = `
+                <button class="play-btn">PLAY NOW<br><small>Ranked Match</small></button>
+            `;
+            userPanel.style.setProperty('display', 'block', 'important');
+            displayUsername.innerText = data.user.username;
+            displayElo.innerText = data.user.elo;
+
+            document.getElementById('logoutBtn').addEventListener('click', async () => {
+                await fetch('/api/logout', { method: 'POST' });
+                window.location.reload();
+            });
+
+        } else {
+            console.log("Vendég mód");
+        }
+
+    } catch (error) {
+        console.error('Hiba a státusz lekérésekor:', error);
+    }
 });
-async function fetchInsert(username) {
-    try {
-        const response = await fetch('http://127.0.0.1:3000/api/testinsert', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username })
-        });
-
-        const data = await response.json();
-        console.log(data);
-    } catch (error) {
-        console.error('Insert hiba:', error);
-    }
-}
-async function fetchData() {
-    try {
-        const response = await fetch('http://127.0.0.1:3000/api/testselect', {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
-            }
-        });
-        const data = await response.json();
-        console.log(data);
-    } catch (error) {
-        console.error('Hiba a fetchData során:', error);
-    }
-}
