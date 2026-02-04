@@ -9,6 +9,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const data = await response.json();
 
         if (data.loggedIn) {
+            console.log("Bejelentkezett felhasználó mód");
+            console.log(data.user);
             authSection.innerHTML = `
                 <button class="play-btn">PLAY NOW<br><small>Ranked Match</small></button>
             `;

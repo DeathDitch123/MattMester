@@ -189,7 +189,9 @@ router.get('/sessionInfo', (request, response) => {
             user: {
                 username: request.session.username,
                 role: request.session.role,
-                elo: request.session.elo
+                elo: request.session.elo,
+                sessionMaxAge: request.session.cookie.maxAge,
+                sessionExpires: request.session.cookie.expires
             }
         });
     } else {
