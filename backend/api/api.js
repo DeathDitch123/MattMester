@@ -129,12 +129,13 @@ router.get('/logout', (request, response) => {
     }
 });
 
-router.post('/register', async (req, res) => {
+router.post('/register', async (request, response) => {
     try {
-        const { username, password, email } = req.body;
+        const { username, password, email } = request.body;
         if (!username || !password || !email) {
-            return res.status(400).json({ message: 'Minden mező kitöltése kötelező.' });
+            return response.status(400).json({ message: 'Minden mező kitöltése kötelező.' });
         }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(email)) {
             return response.status(400).json({ message: 'Érvénytelen email cím formátum!' });
         }
@@ -156,11 +157,18 @@ router.post('/register', async (req, res) => {
         request.session.role = 'player';
         request.session.elo = 1200;
 
-        return response.status(201).json({
+        request.session.save((err) => {
+            if (err) {
+                console.error('Session mentési hiba:', err);
+                return response.status(500).json({ message: 'Hiba a beléptetés során.' });
+            }
+            return response.status(201).json({
                 message: 'Sikeres regisztráció',
                 elo: 1200,
                 role: 'player'
             });
+        });
+
     } catch (error) {
         if (error.message.includes('foglalt')) {
             return response.status(409).json({ message: error.message });
