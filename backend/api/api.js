@@ -108,24 +108,10 @@ router.post('/login', async (request, response) => {
     }
 });
 
-router.post('/logout', (request, response) => {
-    if (!request.session.userId) {
-        return response.status(200).json({ message: 'Nincs aktív bejelentkezés.' });
-    }
-    request.session.destroy(err => {
-        if (err) {
-            console.error('logout hiba:', err);
-            return response.status(500).json({ message: 'Sikertelen kijelentkezés.' });
-        }
-        response.clearCookie('connect.sid');
-        return response.status(200).json({ message: 'Sikeres kijelentkezés.' });
-    });
-});
-
 // ?GET /api/logout - session lezárása és cookie törlése
 router.get('/logout', (request, response) => {
     try {
-        if (!request.session) {
+        if (!request.session.userId) {
             return response.status(200).json({ message: 'Nincs aktív session.' });
         }
         request.session.destroy(err => {
@@ -142,10 +128,6 @@ router.get('/logout', (request, response) => {
         return response.status(500).json({ message: 'Szerverhiba a kijelentkezés során.' });
     }
 });
-
-function userCheck(p1, p2) {
-    return p1 == p2;
-}
 
 router.post('/register', async (req, res) => {
     try {
