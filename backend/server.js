@@ -43,6 +43,13 @@ router.get('/', (request, response) => {
     response.sendFile(path.join(__dirname, '../frontend/html/index.html'));
 });
 
+router.get('/register', (request, response) => {
+    response.sendFile(path.join(__dirname, '../frontend/html/register.html'));
+});
+
+router.get('/login', (request, response) => {
+    response.sendFile(path.join(__dirname, '../frontend/html/login.html'));
+});
 //!API endpoints
 app.use('/', router);
 const endpoints = require('./api/api.js');

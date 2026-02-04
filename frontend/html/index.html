@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MattMester</title>
     <!--!Bootstrap-->
@@ -52,9 +53,9 @@
             </div>
 
             <div id="auth-section" class="d-flex justify-content-center gap-3 mt-5 flex-wrap">
-                <button class="auth-btn signin" onclick="location.href='./login.html'">Bejelentkezés</button>
+                <button class="auth-btn signin" onclick="location.href='/login'">Bejelentkezés</button>
                 <button class="play-btn">Játék<br><small>vendégként</small></button>
-                <button class="auth-btn signup" onclick="location.href='./register.html'">Regisztráció</button>
+                <button class="auth-btn signup" onclick="location.href='/register'">Regisztráció</button>
             </div>
         </div>
     </div>
