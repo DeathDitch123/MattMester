@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcrypt'); //?npm install bcrypt
 const database = require('../sql/database.js');
 const fs = require('fs/promises');
 
 //!Multer
 const multer = require('multer'); //?npm install multer
 const path = require('path');
+const { request } = require('http');
 
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
@@ -121,5 +123,45 @@ function userCheck(p1, p2) {
     return p1 == p2;
 }
 
+router.post('/register', async (req, res) => {
+    try {
+        const { username, password, email } = req.body;
+        if (!username || !password || !email) {
+            return res.status(400).json({ message: 'Minden mező kitöltése kötelező.' });
+        }
+        if (!emailRegex.test(email)) {
+            return response.status(400).json({ message: 'Érvénytelen email cím formátum!' });
+        }
+        if (username.length < 3 || username.length > 50) {
+            return response.status(400).json({ message: 'A felhasználónévnek 3 és 50 karakter között kell lennie!' });
+        }
+        if (password.length < 8) {
+            return response.status(400).json({ message: 'A jelszónak legalább 8 karakter hosszúnak kell lennie!' });
+        }
+        if (!/\d/.test(password)) {
+            return response.status(400).json({ message: 'A jelszónak tartalmaznia kell legalább egy számot!' });
+        }
+        const saltRounds = 10;
+        const passwordHash = await bcrypt.hash(password, saltRounds);
+        const result = await database.insertUser(username, passwordHash, email);
+
+        request.session.userId = result.insertId;
+        request.session.username = username;
+        request.session.role = 'player';
+        request.session.elo = 1200;
+
+        return response.status(201).json({
+                message: 'Sikeres regisztráció',
+                elo: 1200,
+                role: 'player'
+            });
+    } catch (error) {
+        if (error.message.includes('foglalt')) {
+            return response.status(409).json({ message: error.message });
+        }
+        console.error('Register hiba:', error);
+        return response.status(500).json({ message: 'Sikertelen regisztráció.' });
+    }
+});
 
 module.exports = router;

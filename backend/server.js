@@ -17,9 +17,23 @@ app.set('trust proxy', 1); //?Middleware Proxy
 //!Session beállítása:
 app.use(
     session({
-        secret: 'titkos_kulcs', //?Ezt generálni kell a későbbiekben
+        secret: 'chu+)2_23iIa6souo79247r9Xbsibv%', //?Ezt generálni kell a későbbiekben
         resave: false,
-        saveUninitialized: true
+        saveUninitialized: true,
+        cookie: {
+            // Időtartam: 1000ms * 60s * 60p * 24ó = 1 nap
+            maxAge: 1000 * 60 * 60 * 24, 
+            
+            // Biztonság: a kliens oldali JS (document.cookie) nem férhet hozzá
+            httpOnly: true, 
+            
+            // HTTPS: ha true, csak titkosított kapcsolaton megy a süti
+            // Fejlesztéskor (localhost) legyen false, élesben true!
+            secure: false, 
+            
+            // CSRF védelem: korlátozza a süti küldését más oldalakról
+            sameSite: 'lax' 
+        }
     })
 );
 

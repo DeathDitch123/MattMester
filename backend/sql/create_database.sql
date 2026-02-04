@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
     elo INT DEFAULT 1200,
+    role ENUM('player', 'admin') DEFAULT 'player',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
