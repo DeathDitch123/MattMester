@@ -72,30 +72,53 @@ router.post('/testinsert', async (req, res) => {
 
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
 router.post('/login', async (request, response) => {
-    const { username, password } = request.body;
+    const { username, password, remember } = request.body;
     try {
         if (!username || !password) {
-            throw new Error("Hiányzó username vagy password.");
+            return response.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
         }
-        let user = null;
-        //függvémy meghívása mely eldönti hogy létezik e a user
-        if (userCheck(username, password)) {
-            // biztosítjuk, hogy request.session.user objektum létezzen
+        const user = await database.getUserByUsername(username);
+        const authErrorMsg = 'Hibás felhasználónév vagy jelszó.';
+        if (!user) {
+            return response.status(401).json({ message: authErrorMsg });
+        }
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return response.status(401).json({ message: authErrorMsg });
+        }
+        request.session.userId = user.id;
+        request.session.username = user.username;
+        request.session.role = user.role;
+        request.session.elo = user.elo;
 
-            request.session.user = {
-                name: username,
-                timestamp: Date.now()
-            };
-            console.log(request.session.user);
-            response.status(200).json({ message: "Minden fasza" });
+        if (remember) {
+            request.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7; // 7 nap
+        } else {
+            request.session.cookie.expires = false;
         }
-        else {
-            response.status(401).json({ message: "Hibás felhasználó vagy jelszó" });
-        }
+        return response.status(200).json({
+            message: 'Sikeres bejelentkezés.',
+            elo: user.elo,
+            role: user.role
+        });
     } catch (error) {
         console.error('Login hiba:', error);
-        return response.status(500).json({ message: error });
+        return response.status(500).json({ message: 'Szerverhiba a bejelentkezés során.' });
     }
+});
+
+router.post('/logout', (request, response) => {
+    if (!request.session.userId) {
+        return response.status(200).json({ message: 'Nincs aktív bejelentkezés.' });
+    }
+    request.session.destroy(err => {
+        if (err) {
+            console.error('logout hiba:', err);
+            return response.status(500).json({ message: 'Sikertelen kijelentkezés.' });
+        }
+        response.clearCookie('connect.sid');
+        return response.status(200).json({ message: 'Sikeres kijelentkezés.' });
+    });
 });
 
 // ?GET /api/logout - session lezárása és cookie törlése

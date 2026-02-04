@@ -13,7 +13,16 @@ async function insertUser(username, passwordHash, email) {
         throw new Error(message);
     }
 }
+async function getUserByUsername(username) {
+    const query = 'SELECT * FROM users WHERE username = ?';
+    try {
+        const [rows] = await pool.execute(query, [username]);
+        return rows[0];
+    } catch (error) {
+        throw new Error('Hiba a felhasználó lekérdezése során.');
+    }
+}
 module.exports = {
-    getPool: () => pool,
-    insertUser
+    insertUser,
+    getUserByUsername
 };
