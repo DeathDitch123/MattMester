@@ -109,7 +109,7 @@ router.post('/login', async (request, response) => {
 });
 
 // ?GET /api/logout - session lezárása és cookie törlése
-router.get('/logout', (request, response) => {
+const logoutHandler = (request, response) => {
     try {
         if (!request.session.userId) {
             return response.status(200).json({ message: 'Nincs aktív session.' });
@@ -127,7 +127,9 @@ router.get('/logout', (request, response) => {
         console.error('Logout hiba:', error);
         return response.status(500).json({ message: 'Szerverhiba a kijelentkezés során.' });
     }
-});
+};
+router.get('/logout', logoutHandler);
+router.post('/logout', logoutHandler);
 
 // ?POST /api/register - új felhasználó regisztrációja
 router.post('/register', async (request, response) => {
