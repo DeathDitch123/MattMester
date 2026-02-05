@@ -145,8 +145,11 @@ router.post('/register', async (request, response) => {
         if (username.length < 3 || username.length > 50) {
             return response.status(400).json({ message: 'A felhasználónévnek 3 és 50 karakter között kell lennie!' });
         }
-        if (username.contains("\\")) {
+        if (username.includes("\\")) {
             return response.status(400).json({ message: 'A felhasználónév nem megendgedett karaktert tartalmaz!' });
+        }
+        if (password.includes("\\")) {
+            return response.status(400).json({ message: 'A jelszó nem megendgedett karaktert tartalmaz!' });
         }
         if (password.length < 8) {
             return response.status(400).json({ message: 'A jelszónak legalább 8 karakter hosszúnak kell lennie!' });
