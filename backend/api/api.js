@@ -73,13 +73,16 @@ router.post('/testinsert', async (req, res) => {
 
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
 router.post('/login', async (request, response) => {
-    const { username, password, remember } = request.body;
+    const { usernameOrMail, password, remember } = request.body;
     try {
-        if (!username || !password) {
+        if (!usernameOrMail || !password) {
             return response.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
         }
-        const user = await sql.getUserByUsername(username);
-        const authErrorMsg = 'Hibás felhasználónév vagy jelszó.';
+        let user = await sql.getUserByUsername(usernameOrMail);
+        if (!user) {
+            user = await sql.getUserByEmail(usernameOrMail);
+        }
+        const authErrorMsg = 'Hibás felhasználónév, emailcím vagy jelszó.';
         if (!user) {
             return response.status(401).json({ message: authErrorMsg });
         }
@@ -87,6 +90,7 @@ router.post('/login', async (request, response) => {
         if (!isMatch) {
             return response.status(401).json({ message: authErrorMsg });
         }
+        
         request.session.userId = user.id;
         request.session.username = user.username;
         request.session.role = user.role;

@@ -26,7 +26,18 @@ async function getUserByUsername(username) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
 }
+async function getUserByEmail(mailAdress) {
+    const pool = getPool();
+    const query = 'SELECT * FROM users WHERE email = ?';
+    try {
+        const [rows] = await pool.execute(query, [mailAdress]);
+        return rows[0];
+    } catch (error) {
+        throw new Error('Hiba a felhasználó lekérdezése során.');
+    }
+}
 module.exports = {
     insertUser,
-    getUserByUsername
+    getUserByUsername,
+    getUserByEmail
 };
