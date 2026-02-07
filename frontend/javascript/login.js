@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
         messageDiv.style.display = 'none';
         messageDiv.className = 'mt-3 text-center alert';
 
-        const username = document.getElementById('loginUsername').value;
+        const usernameOrMail = document.getElementById('loginUsername').value;
         const password = document.getElementById('loginPassword').value;
         const remember = document.getElementById('rememberMe').checked;
 
@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ username, password, remember })
+                body: JSON.stringify({ usernameOrMail, password, remember })
             });
             const result = await response.json();
             messageDiv.style.display = 'block';
