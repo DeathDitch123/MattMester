@@ -96,7 +96,7 @@ router.post('/login', async (request, response) => {
                     if (remember) {
                         request.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7; // 7 nap
                     } else {
-                        request.session.cookie.expires = false;
+                        request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
                     }
                 }
             }
