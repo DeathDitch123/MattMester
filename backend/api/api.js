@@ -22,19 +22,11 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-//!Endpoints:
-//?GET /api/test
 router.get('/test', (request, response) => {
     response.status(200).json({
         message: 'Ez a végpont működik.'
     });
 });
-
-//?GET /api/testsql
-/**
- * ❗ JAVÍTÁS:
- * selectAllTest → egységes elnevezés
- */
 router.get('/testselect', async (req, res) => {
     try {
         const results = await database.selectAllTest();
@@ -44,10 +36,6 @@ router.get('/testselect', async (req, res) => {
     }
 });
 
-/**
- * ❗ JAVÍTÁS:
- * id eltávolítva a body-ból
- */
 router.post('/testinsert', async (req, res) => {
     try {
         const { username } = req.body;
@@ -149,57 +137,102 @@ router.post('/logout', logoutHandler);
 
 // ?POST /api/register - új felhasználó regisztrációja
 router.post('/register', async (request, response) => {
+    let statusCode = 200;
     try {
         const { username, password, email } = request.body;
         if (!username || !password || !email) {
-            return response.status(400).json({ message: 'Minden mező kitöltése kötelező.' });
+            statusCode = 400;
+            throw new Error('Minden mező kitöltése kötelező.');
         }
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-            return response.status(400).json({ message: 'Érvénytelen email cím formátum!' });
-        }
-        if (username.length < 3 || username.length > 50) {
-            return response.status(400).json({ message: 'A felhasználónévnek 3 és 50 karakter között kell lennie!' });
-        }
-        if (username.includes("\\")) {
-            return response.status(400).json({ message: 'A felhasználónév nem megendgedett karaktert tartalmaz!' });
-        }
-        if (password.includes("\\")) {
-            return response.status(400).json({ message: 'A jelszó nem megendgedett karaktert tartalmaz!' });
-        }
-        if (password.length < 8) {
-            return response.status(400).json({ message: 'A jelszónak legalább 8 karakter hosszúnak kell lennie!' });
-        }
-        if (!/\d/.test(password)) {
-            return response.status(400).json({ message: 'A jelszónak tartalmaznia kell legalább egy számot!' });
-        }
-        const saltRounds = 10;
-        const passwordHash = await bcrypt.hash(password, saltRounds);
-        const result = await sql.insertUser(username, passwordHash, email);
-
-        request.session.userId = result.insertId;
-        request.session.username = username;
-        request.session.role = 'player';
-        request.session.elo = 1200;
-
-        request.session.save((err) => {
-            if (err) {
-                console.error('Session mentési hiba:', err);
-                return response.status(500).json({ message: 'Hiba a beléptetés során.' });
+        else {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                statusCode = 400;
+                throw new Error('Érvénytelen email cím formátum!');
             }
-            return response.status(201).json({
-                message: 'Sikeres regisztráció',
-                elo: 1200,
-                role: 'player'
-            });
-        });
+            else {
+                if (username.length < 3 || username.length > 50) {
+                    statusCode = 400;
+                    throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie!');
+                }
+                else {
+                    const usernameRegex = /^[a-zA-Z0-9._-]+$/;
+                    if (!usernameRegex.test(username)) {
+                        statusCode = 400;
+                        throw new Error('A felhasználónév csak alfanumerikus karaktereket, pontot, aláhúzást és kötőjelet tartalmazhat!');
+                    }
+                    else {
+                        if (password.includes("\\")) {
+                            statusCode = 400;
+                            throw new Error('A jelszó nem megengedett karaktert tartalmaz!');
+                        }
+                        else {
+                            if (password.length < 8) {
+                                statusCode = 400;
+                                throw new Error('A jelszónak legalább 8 karakter hosszúnak kell lennie!');
+                            }
+                            else {
+                                const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+                                if (!passwordRegex.test(password)) {
+                                    statusCode = 400;
+                                    throw new Error('A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot!');
+                                }
+                                else {
+                                    let existingUserByEmail = await sql.getUserByEmail(email);
+                                    if (existingUserByEmail) {
+                                        statusCode = 409;
+                                        throw new Error('Az email cím már foglalt!');
+                                    }
+                                    else {
+                                        let existingUserByUsername = await sql.getUserByUsername(username);
+                                        if (existingUserByUsername) {
+                                            statusCode = 409;
+                                            throw new Error('A felhasználónév már foglalt!');
+                                        }
+                                        else {
+                                            // Ha minden ellenőrzés sikeres, akkor folytatjuk a regisztrációt
+                                            const saltRounds = 10;
+                                            const passwordHash = await bcrypt.hash(password, saltRounds);
+                                            const result = await sql.insertUser(username, passwordHash, email);
+
+                                            request.session.userId = result.insertId;
+                                            request.session.username = username;
+                                            request.session.role = 'player';
+                                            request.session.elo = 1200;
+
+                                            statusCode = 201;
+
+                                            request.session.save((err) => {
+                                                if (err) {
+                                                    console.error('Session mentési hiba:', err);
+                                                    return response.status(500).json({ message: 'Sikertelen regisztráció.' });
+                                                }
+                                                else {
+                                                    console.log('Session sikeresen mentése a regisztráció után.');
+                                                    return response.status(statusCode).json({
+                                                        message: 'Sikeres regisztráció',
+                                                        elo: 1200,
+                                                        role: 'player'
+                                                    });
+                                                }
+                                            });
+
+                                        }
+                                    }
+
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
 
     } catch (error) {
-        if (error.message.includes('foglalt')) {
-            return response.status(409).json({ message: error.message });
-        }
-        console.error('Register hiba:', error);
-        return response.status(500).json({ message: 'Sikertelen regisztráció.' });
+        console.error('Regisztrációs hiba:', error);
+        const FinalStatusCode = statusCode === 200 ? 500 : statusCode;
+        return response.status(FinalStatusCode).json({ message: error.message });
     }
 });
 
