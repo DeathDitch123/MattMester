@@ -199,6 +199,7 @@ router.post('/register', async (request, response) => {
                                             request.session.username = username;
                                             request.session.role = 'player';
                                             request.session.elo = 1200;
+                                            request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
 
                                             statusCode = 201;
 
