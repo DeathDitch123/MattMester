@@ -9,6 +9,7 @@ const fs = require('fs/promises');
 const multer = require('multer'); //?npm install multer
 const path = require('path');
 const { request } = require('http');
+const { stat } = require('fs');
 
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
@@ -74,44 +75,55 @@ router.post('/testinsert', async (req, res) => {
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
 router.post('/login', async (request, response) => {
     const { usernameOrMail, password, remember } = request.body;
+    let statusCode = 200;
+    let currentUser = null;
     try {
         if (!usernameOrMail || !password) {
-            return response.status(400).json({ message: 'Felhasználónév és jelszó megadása kötelező.' });
+            statusCode = 400;
+            throw new Error("Nincs megadva username/email vagy jelszó");
         }
-        let user = await sql.getUserByUsername(usernameOrMail);
-        if (!user) {
-            user = await sql.getUserByEmail(usernameOrMail);
-        }
-        const authErrorMsg = 'Hibás felhasználónév, emailcím vagy jelszó.';
-        if (!user) {
-            return response.status(401).json({ message: authErrorMsg });
-        }
-        const isMatch = await bcrypt.compare(password, user.password_hash);
-        if (!isMatch) {
-            return response.status(401).json({ message: authErrorMsg });
-        }
-        
-        request.session.userId = user.id;
-        request.session.username = user.username;
-        request.session.role = user.role;
-        request.session.elo = user.elo;
+        else {
+            // erre itt még rá kell nézni, hogy a sql függvények jól vannak-e megírva, mert lehet, hogy nem jól keresnek rá a username-re és emailre
+            let user = await sql.getUserByUsername(usernameOrMail);
+            if (!user) {
+                user = await sql.getUserByEmail(usernameOrMail);
+            }
+            if (!user) {
+                statusCode = 401;
+                throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
+            }
+            else {
+                const isMatch = await bcrypt.compare(password, user.password_hash);
+                if (!isMatch) {
+                    statusCode = 401;
+                    throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
+                }
+                else {
+                    currentUser = user;
 
-        if (remember) {
-            request.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7; // 7 nap
-        } else {
-            request.session.cookie.expires = false;
+                    request.session.userId = user.id;
+                    request.session.username = user.username;
+                    request.session.role = user.role;
+                    request.session.elo = user.elo;
+                    if (remember) {
+                        request.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7; // 7 nap
+                    } else {
+                        request.session.cookie.expires = false;
+                    }
+                }
+            }
         }
-        return response.status(200).json({
+        return response.status(statusCode).json({
             message: 'Sikeres bejelentkezés.',
-            elo: user.elo,
-            role: user.role
+            elo: currentUser.elo,
+            role: currentUser.role
         });
     } catch (error) {
         console.error('Login hiba:', error);
-        return response.status(500).json({ message: 'Szerverhiba a bejelentkezés során.' });
+        const finalStatusCode = statusCode === 200 ? 500 : statusCode;
+        return response.status(finalStatusCode).json({ message: error.message });
     }
 });
-
 // ?GET /api/logout - session lezárása és cookie törlése
 const logoutHandler = (request, response) => {
     try {
