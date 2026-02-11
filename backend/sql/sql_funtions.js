@@ -3,17 +3,30 @@ const { getPool } = require('./database.js');
 async function insertUser(username, passwordHash, email) {
     const pool = getPool();
     const query = 'INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)';
-    try {
-        const [result] = await pool.execute(query, [username, passwordHash, email]);
-        return result;
-    } catch (error) {
-        if (error.code === 'ER_DUP_ENTRY') {
-            const message = error.sqlMessage.includes('email')
-                ? 'Ez az email cím már foglalt.'
-                : 'Ez a felhasználónév már foglalt.';
-            throw new Error(message);
+
+    const existingUser = await getUserByUsername(username);
+    const existingEmail = await getUserByEmail(email);
+
+    if (existingUser) {
+        throw new Error('Ez a felhasználónév már foglalt.');
+    } else {
+        if (existingEmail) {
+            throw new Error('Ez az email cím már foglalt.');
         }
-        throw new Error(message);
+        else {
+            try {
+                const [result] = await pool.execute(query, [username, passwordHash, email]);
+                return result;
+            } catch (error) {
+                if (error.code === 'ER_DUP_ENTRY') {
+                    const message = error.sqlMessage.includes('email')
+                        ? 'Ez az email cím már foglalt.'
+                        : 'Ez a felhasználónév már foglalt.';
+                    throw new Error(message);
+                }
+                throw new Error('Adatbázis hiba a beszúrás során.');
+            }
+        }
     }
 }
 async function getUserByUsername(username) {
@@ -46,6 +59,7 @@ async function getLeaderBoard() {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
 }
+
 module.exports = {
     insertUser,
     getUserByUsername,

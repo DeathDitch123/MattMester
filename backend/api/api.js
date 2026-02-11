@@ -62,10 +62,10 @@ router.post('/testinsert', async (req, res) => {
 
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
 router.post('/login', async (request, response) => {
-    const { usernameOrMail, password, remember } = request.body;
     let statusCode = 200;
     let currentUser = null;
     try {
+        const { usernameOrMail, password, remember } = request.body;
         if (!usernameOrMail || !password) {
             statusCode = 400;
             throw new Error("Nincs megadva username/email vagy jelszó");
