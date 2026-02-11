@@ -36,8 +36,19 @@ async function getUserByEmail(mailAdress) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
 }
+async function getLeaderBoard() {
+    const pool = getPool();
+    const query = 'SELECT users.username, users.elo FROM users ORDER BY elo DESC LIMIT 10';
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba a felhasználó lekérdezése során.');
+    }
+}
 module.exports = {
     insertUser,
     getUserByUsername,
-    getUserByEmail
+    getUserByEmail,
+    getLeaderBoard
 };
