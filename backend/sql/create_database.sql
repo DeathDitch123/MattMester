@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS users (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+INSERT INTO users (username, password_hash, email, elo, role) VALUES
+('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
+
 -- Statistics table (1:1 with users)
 CREATE TABLE IF NOT EXISTS statistics (
     id INT AUTO_INCREMENT PRIMARY KEY,

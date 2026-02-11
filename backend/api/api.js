@@ -113,20 +113,31 @@ router.post('/login', async (request, response) => {
     }
 });
 // ?GET /api/logout - session lezárása és cookie törlése
-const logoutHandler = (request, response) => {
+const logoutHandler = async (request, response) => {
+    let statusCode = 200;
+    let message = 'Sikeres kijelentkezés.';
+
     try {
-        if (!request.session.userId) {
-            return response.status(200).json({ message: 'Nincs aktív session.' });
+        if (!request.session.userId || !request.session) {
+            message = 'Nincs aktív session.';
         }
-        request.session.destroy(err => {
-            if (err) {
-                console.error('Session destroy hiba:', err);
-                return response.status(500).json({ message: 'Sikertelen kijelentkezés.' });
-            }
-            // alapértelmezett cookie név: connect.sid
-            response.clearCookie('connect.sid');
-            return response.status(200).json({ message: 'Sikeres kijelentkezés.' });
-        });
+        else {
+            await new Promise((resolve, reject) => {
+                request.session.destroy(err => {
+                    if (err) {
+                        console.error('Session destroy hiba:', err);
+                        statusCode = 500;
+                        message = 'Sikertelen kijelentkezés.';
+                        resolve(); // Akkor is resolve, hogy a try folytatódjon a beállított adatokkal
+                    } else {
+                        console.log('Session sikeresen megsemmisítve.');
+                        response.clearCookie('connect.sid');
+                        resolve();
+                    }
+                });
+            });
+        }
+        response.status(statusCode).json({ message });
     } catch (error) {
         console.error('Logout hiba:', error);
         return response.status(500).json({ message: 'Szerverhiba a kijelentkezés során.' });
