@@ -56,8 +56,8 @@ async function createTables() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );`,
 
-        `INSERT INTO users (username, password_hash, email, elo, role) VALUES
-            ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, role) 
+            VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
         `,
 
         `CREATE TABLE IF NOT EXISTS statistics (
