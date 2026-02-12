@@ -94,9 +94,6 @@ async function createTables() {
             FOREIGN KEY (black_player_id) REFERENCES users(id),
             FOREIGN KEY (winner_id) REFERENCES users(id)
         )`,
-
-        //JAVÍTÁS:
-        //Sakk-specifikus mezők hozzáadva
         
         `CREATE TABLE IF NOT EXISTS moves (
             id INT AUTO_INCREMENT PRIMARY KEY,
