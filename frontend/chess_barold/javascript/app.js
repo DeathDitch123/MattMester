@@ -1,162 +1,129 @@
 document.addEventListener("DOMContentLoaded", init);
 
-function init() {
-    checkLogin();
-    buildLayout();
-    showHome();
+async function init() {
+    const user = await checkSession();
+
+    if (!user) {
+        window.location.href = "/html/login.html";
+        return;
+    }
+
+    buildLayout(user);
+    showHome(user);
 }
 
 /* =============================
-   LOGIN ELLENŐRZÉS
+   SESSION CHECK
 ============================= */
 
-function checkLogin() {
-    const loggedIn = localStorage.getItem("loggedIn");
+async function checkSession() {
+    try {
+        const response = await fetch('/api/sessionInfo');
+        const data = await response.json();
 
-    if (loggedIn !== "true") {
-        window.location.href = "login.html";
+        if (data.loggedIn) {
+            return data.user;
+        }
+
+        return null;
+
+    } catch (error) {
+        console.error("Session hiba:", error);
+        return null;
     }
 }
 
 /* =============================
-   ALAP LAYOUT
+   LAYOUT
 ============================= */
 
-function buildLayout() {
+function buildLayout(user) {
+
     const app = document.getElementById("app");
+    app.innerHTML = "";
 
-    createNavbar(app);
-    createMainContent(app);
-}
-
-function createNavbar(parent) {
     const nav = document.createElement("div");
     nav.classList.add("navbar");
 
-    const navLeft = document.createElement("div");
-    navLeft.classList.add("nav-left");
+    const left = document.createElement("div");
+    const right = document.createElement("div");
 
-    const navRight = document.createElement("div");
-    navRight.classList.add("nav-right");
+    // Gombok
+    const homeBtn = createNavButton("Főoldal", () => showHome(user));
+    const profileBtn = createNavButton("Profil", () => showProfile(user));
+    const logoutBtn = createNavButton("Kijelentkezés", logout);
 
-    const homeBtn = document.createElement("button");
-    homeBtn.textContent = "Főoldal";
-    homeBtn.addEventListener("click", showHome);
+    left.appendChild(homeBtn);
+    left.appendChild(profileBtn);
+    right.appendChild(logoutBtn);
 
-    const productsBtn = document.createElement("button");
-    productsBtn.textContent = "Termékek";
-    productsBtn.addEventListener("click", showProducts);
+    nav.appendChild(left);
+    nav.appendChild(right);
 
-    const profileBtn = document.createElement("button");
-    profileBtn.textContent = "Profil";
-    profileBtn.addEventListener("click", showProfile);
-
-    const logoutBtn = document.createElement("button");
-    logoutBtn.textContent = "Kijelentkezés";
-    logoutBtn.addEventListener("click", logout);
-
-    navLeft.appendChild(homeBtn);
-    navLeft.appendChild(productsBtn);
-    navLeft.appendChild(profileBtn);
-
-    navRight.appendChild(logoutBtn);
-
-    nav.appendChild(navLeft);
-    nav.appendChild(navRight);
-
-    parent.appendChild(nav);
-}
-
-function createMainContent(parent) {
     const main = document.createElement("div");
     main.id = "main-content";
-    parent.appendChild(main);
+
+    app.appendChild(nav);
+    app.appendChild(main);
+}
+
+function createNavButton(text, callback) {
+    const btn = document.createElement("button");
+    btn.textContent = text;
+    btn.addEventListener("click", callback);
+    return btn;
 }
 
 function clearMain() {
-    const main = document.getElementById("main-content");
-    main.innerHTML = "";
+    document.getElementById("main-content").innerHTML = "";
 }
 
 /* =============================
    OLDALAK
 ============================= */
 
-function showHome() {
+function showHome(user) {
     clearMain();
-
     const main = document.getElementById("main-content");
 
     const title = document.createElement("h1");
-    title.textContent = "Üdvözöllek a főoldalon!";
+    title.textContent = "Üdv, " + user.username + "!";
 
-    const text = document.createElement("p");
-    text.textContent = "Ez az oldal teljesen JavaScriptből generálódik.";
+    const elo = document.createElement("p");
+    elo.textContent = "ELO pontszám: " + user.elo;
+
+    const playBtn = document.createElement("button");
+    playBtn.classList.add("play-btn");
+    playBtn.innerHTML = "PLAY NOW<br><small>Ranked Match</small>";
 
     main.appendChild(title);
-    main.appendChild(text);
+    main.appendChild(elo);
+    main.appendChild(playBtn);
 }
 
-function showProducts() {
+function showProfile(user) {
     clearMain();
-
     const main = document.getElementById("main-content");
 
-    const products = [
-        { name: "Laptop", price: 250000 },
-        { name: "Egér", price: 5000 },
-        { name: "Billentyűzet", price: 12000 }
-    ];
+    const title = document.createElement("h2");
+    title.textContent = "Profil adatok";
 
-    const title = document.createElement("h1");
-    title.textContent = "Termékek";
-    main.appendChild(title);
+    const username = document.createElement("p");
+    username.textContent = "Felhasználónév: " + user.username;
 
-    products.forEach(product => {
-        const card = document.createElement("div");
-        card.classList.add("card");
-
-        const name = document.createElement("h3");
-        name.textContent = product.name;
-
-        const price = document.createElement("p");
-        price.textContent = product.price + " Ft";
-
-        const btn = document.createElement("button");
-        btn.textContent = "Kosárba";
-
-        btn.addEventListener("click", () => {
-            alert(product.name + " hozzáadva a kosárhoz!");
-        });
-
-        card.appendChild(name);
-        card.appendChild(price);
-        card.appendChild(btn);
-
-        main.appendChild(card);
-    });
-}
-
-function showProfile() {
-    clearMain();
-
-    const main = document.getElementById("main-content");
-
-    const title = document.createElement("h1");
-    title.textContent = "Profil";
-
-    const userInfo = document.createElement("p");
-    userInfo.textContent = "Bejelentkezett felhasználó.";
+    const elo = document.createElement("p");
+    elo.textContent = "ELO: " + user.elo;
 
     main.appendChild(title);
-    main.appendChild(userInfo);
+    main.appendChild(username);
+    main.appendChild(elo);
 }
 
 /* =============================
    LOGOUT
 ============================= */
 
-function logout() {
-    localStorage.removeItem("loggedIn");
-    window.location.href = "login.html";
+async function logout() {
+    await fetch('/api/logout', { method: 'POST' });
+    window.location.href = "/html/login.html";
 }
