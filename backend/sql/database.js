@@ -13,7 +13,7 @@ const dbConfig = {
 let pool;
 
 /**
- * ❗ JAVÍTÁS:
+ * JAVÍTÁS:
  * Az adatbázist külön hozzuk létre, mielőtt pool-t csinálunk
  */
 async function ensureDatabaseExists() {
@@ -44,13 +44,13 @@ async function ensureDatabaseExists() {
 }
 
 /**
- * ❗ JAVÍTÁS:
+ * JAVÍTÁS:
  * Táblák pontosítása (AUTO_INCREMENT helyes használat)
  */
 async function createTables() {
     const queries = [
 
-        // ❗ JAVÍTÁS: id AUTO_INCREMENT, nem szabad kézzel tölteni
+        // JAVÍTÁS: id AUTO_INCREMENT, nem szabad kézzel tölteni
         `CREATE TABLE IF NOT EXISTS testtable (
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(100) UNIQUE NOT NULL
@@ -95,10 +95,9 @@ async function createTables() {
             FOREIGN KEY (winner_id) REFERENCES users(id)
         )`,
 
-        /**
-         * ❗ JAVÍTÁS:
-         * sakk-specifikus mezők hozzáadva
-         */
+        //JAVÍTÁS:
+        //Sakk-specifikus mezők hozzáadva
+        
         `CREATE TABLE IF NOT EXISTS moves (
             id INT AUTO_INCREMENT PRIMARY KEY,
             game_id INT NOT NULL,
@@ -141,10 +140,9 @@ async function createTables() {
     }
 }
 
-/**
- * ❗ JAVÍTÁS:
- * pool csak az adatbázis létrehozása után jön létre
- */
+//JAVÍTÁS:
+//pool csak az adatbázis létrehozása után jön létre
+
 async function initDatabase() {
     try {
         await ensureDatabaseExists();
@@ -195,10 +193,9 @@ async function selectAllTest() {
 }
 
 
-/**
- * ❗ JAVÍTÁS:
- * AUTO_INCREMENT id-t nem adunk meg
- */
+//JAVÍTÁS:
+//AUTO_INCREMENT id-t nem adunk meg
+ 
 async function insertTestUser(username) {
     const query = 'INSERT INTO testtable (username) VALUES (?)';
     const [result] = await pool.execute(query, [username]);

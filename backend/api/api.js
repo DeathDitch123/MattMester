@@ -30,10 +30,9 @@ router.get('/test', (request, response) => {
 });
 
 //?GET /api/testsql
-/**
- * ❗ JAVÍTÁS:
- * selectAllTest → egységes elnevezés
- */
+//JAVÍTÁS:
+// selectAllTest → egységes elnevezés
+
 router.get('/testselect', async (req, res) => {
     try {
         const results = await database.selectAllTest();
@@ -43,10 +42,9 @@ router.get('/testselect', async (req, res) => {
     }
 });
 
-/**
- * ❗ JAVÍTÁS:
- * id eltávolítva a body-ból
- */
+
+//id eltávolítva a body-ból
+
 router.post('/testinsert', async (req, res) => {
     try {
         const { username } = req.body;
