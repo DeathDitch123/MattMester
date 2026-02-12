@@ -12,29 +12,35 @@ const dbConfig = {
 
 let pool;
 
-/**
- * ❗ JAVÍTÁS:
- * Az adatbázist külön hozzuk létre, mielőtt pool-t csinálunk
- */
 async function ensureDatabaseExists() {
-    const connection = await mysql.createConnection({
-        host: dbConfig.host,
-        user: dbConfig.user,
-        password: dbConfig.password
-    });
+    let connection;
+    try {
+        connection = await mysql.createConnection({
+            host: dbConfig.host,
+            user: dbConfig.user,
+            password: dbConfig.password
+        });
 
-    await connection.query('CREATE DATABASE IF NOT EXISTS mattmester');
-    await connection.end();
+        const dbName = dbConfig.database;
+        await connection.query(
+            `CREATE DATABASE IF NOT EXISTS \`${dbName}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+        );
+    } catch (err) {
+        console.error('Failed to ensure database exists:', err);
+        throw err;
+    } finally {
+        if (connection) {
+            try {
+                await connection.end();
+            } catch (e) {
+                console.error('Error closing temporary connection:', e);
+            }
+        }
+    }
 }
 
-/**
- * ❗ JAVÍTÁS:
- * Táblák pontosítása (AUTO_INCREMENT helyes használat)
- */
 async function createTables() {
     const queries = [
-
-        // ❗ JAVÍTÁS: id AUTO_INCREMENT, nem szabad kézzel tölteni
         `CREATE TABLE IF NOT EXISTS testtable (
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(100) UNIQUE NOT NULL
@@ -42,13 +48,17 @@ async function createTables() {
 
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
+            username VARCHAR(50) BINARY UNIQUE NOT NULL, 
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
             elo INT DEFAULT 1200,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_elo (elo)
-        )`,
+            role ENUM('player', 'admin') DEFAULT 'player',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );`,
+
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, role) 
+            VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
+        `,
 
         `CREATE TABLE IF NOT EXISTS statistics (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -77,11 +87,6 @@ async function createTables() {
             FOREIGN KEY (black_player_id) REFERENCES users(id),
             FOREIGN KEY (winner_id) REFERENCES users(id)
         )`,
-
-        /**
-         * ❗ JAVÍTÁS:
-         * sakk-specifikus mezők hozzáadva
-         */
         `CREATE TABLE IF NOT EXISTS moves (
             id INT AUTO_INCREMENT PRIMARY KEY,
             game_id INT NOT NULL,
@@ -124,31 +129,48 @@ async function createTables() {
     }
 }
 
-/**
- * ❗ JAVÍTÁS:
- * pool csak az adatbázis létrehozása után jön létre
- */
 async function initDatabase() {
-    await ensureDatabaseExists();
-    pool = mysql.createPool(dbConfig);
-    await createTables();
+    try {
+        await ensureDatabaseExists();
+
+        pool = mysql.createPool(dbConfig);
+        const conn = await pool.getConnection();
+        conn.release();
+
+        await createTables();
+        console.log('Database initialized successfully.');
+    } catch (err) {
+        console.error('Failed to initialize database:', err);
+        if (pool) {
+            try {
+                await pool.end();
+            } catch (e) {
+                console.error('Error closing pool after failed init:', e);
+            }
+            pool = null;
+        }
+        throw err;
+    }
 }
 
-/* ================= SQL QUERIES ================= */
+async function closeDatabase() {
+    if (pool) {
+        try {
+            await pool.end();
+            pool = null;
+            console.log('Database pool closed.');
+        } catch (err) {
+            console.error('Error closing database pool:', err);
+            throw err;
+        }
+    }
+}
 
-/**
- * ✔ OK
- */
 async function selectAllTest() {
     const [rows] = await pool.execute('SELECT * FROM testtable');
     return rows;
 }
 
-
-/**
- * ❗ JAVÍTÁS:
- * AUTO_INCREMENT id-t nem adunk meg
- */
 async function insertTestUser(username) {
     const query = 'INSERT INTO testtable (username) VALUES (?)';
     const [result] = await pool.execute(query, [username]);
@@ -168,6 +190,7 @@ async function insertall(id, username) {
 
 module.exports = {
     initDatabase,
+    closeDatabase,
     getPool: () => pool,
     selectAllTest,
     insertTestUser

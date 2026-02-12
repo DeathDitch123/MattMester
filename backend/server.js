@@ -11,15 +11,31 @@ const router = express.Router();
 const ip = '127.0.0.1';
 const port = 3000;
 
+// Admin_Password = lj@YXaßasHZ27G]|akn&&yDKM=+!af=sa
+
 app.use(express.json()); //?Middleware JSON
 app.set('trust proxy', 1); //?Middleware Proxy
 
 //!Session beállítása:
 app.use(
     session({
-        secret: 'titkos_kulcs', //?Ezt generálni kell a későbbiekben
+        secret: 'chu+)2_23iIa6sou&>#o79247r9Xbsibv%', //?Ezt generálni kell a későbbiekben
         resave: false,
-        saveUninitialized: true
+        saveUninitialized: true,
+        cookie: {
+            // Időtartam: 1000ms * 60s * 60p * 24ó = 1 nap
+            maxAge: 1000 * 60 * 60 * 24, 
+            
+            // Biztonság: a kliens oldali JS (document.cookie) nem férhet hozzá
+            httpOnly: true, 
+            
+            // HTTPS: ha true, csak titkosított kapcsolaton megy a süti
+            // Fejlesztéskor (localhost) legyen false, élesben true!
+            secure: false, 
+            
+            // CSRF védelem: korlátozza a süti küldését más oldalakról
+            sameSite: 'lax' 
+        }
     })
 );
 
@@ -29,6 +45,13 @@ router.get('/', (request, response) => {
     response.sendFile(path.join(__dirname, '../frontend/html/index.html'));
 });
 
+router.get('/register', (request, response) => {
+    response.sendFile(path.join(__dirname, '../frontend/html/register.html'));
+});
+
+router.get('/login', (request, response) => {
+    response.sendFile(path.join(__dirname, '../frontend/html/login.html'));
+});
 //!API endpoints
 app.use('/', router);
 const endpoints = require('./api/api.js');
