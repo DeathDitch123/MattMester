@@ -41,11 +41,6 @@ async function ensureDatabaseExists() {
 
 async function createTables() {
     const queries = [
-        `CREATE TABLE IF NOT EXISTS testtable (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(100) UNIQUE NOT NULL
-        )`,
-
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(50) BINARY UNIQUE NOT NULL, 
@@ -68,6 +63,10 @@ async function createTables() {
             abilities_used INT DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
+
+        `INSERT IGNORE INTO statistics (user_id) 
+            SELECT id FROM users WHERE username = 'admin';
+        `,
 
         `CREATE TABLE IF NOT EXISTS abilities (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -114,13 +113,13 @@ async function createTables() {
 
         `CREATE TABLE IF NOT EXISTS friends (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            user1_id INT NOT NULL,
-            user2_id INT NOT NULL,
+            user_init_id INT NOT NULL,
+            user_recv_id INT NOT NULL,
             status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
             invite_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_friendship (user1_id, user2_id),
-            FOREIGN KEY (user1_id) REFERENCES users(id),
-            FOREIGN KEY (user2_id) REFERENCES users(id)
+            UNIQUE KEY unique_friendship (user_init_id, user_recv_id),
+            FOREIGN KEY (user_init_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_recv_id) REFERENCES users(id) ON DELETE CASCADE
         )`
     ];
 
