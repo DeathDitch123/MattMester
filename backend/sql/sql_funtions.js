@@ -2,31 +2,32 @@ const { getPool } = require('./database.js');
 
 async function insertUser(username, passwordHash, email) {
     const pool = getPool();
-    const query = 'INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)';
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
 
-    const existingUser = await getUserByUsername(username);
-    const existingEmail = await getUserByEmail(email);
+        const query = 'INSERT INTO users (username, password_hash, email) VALUES (?, ?, ?)';
+        const [userResult] = await connection.execute(query, [username, passwordHash, email]);
+        const insertedUserId = userResult.insertId;
 
-    if (existingUser) {
-        throw new Error('Ez a felhasználónév már foglalt.');
-    } else {
-        if (existingEmail) {
-            throw new Error('Ez az email cím már foglalt.');
+        const statsQuery = 'INSERT INTO stats (user_id) VALUES (?)';
+        await connection.execute(statsQuery, [insertedUserId]);
+
+        await connection.commit();
+
+        return userResult;
+    } catch (error) {
+        await connection.rollback();
+        if (error.code === 'ER_DUP_ENTRY') {
+            const message = error.sqlMessage.includes('email')
+                ? 'Ez az email cím már foglalt.'
+                : 'Ez a felhasználónév már foglalt.';
+            throw new Error(message);
         }
-        else {
-            try {
-                const [result] = await pool.execute(query, [username, passwordHash, email]);
-                return result;
-            } catch (error) {
-                if (error.code === 'ER_DUP_ENTRY') {
-                    const message = error.sqlMessage.includes('email')
-                        ? 'Ez az email cím már foglalt.'
-                        : 'Ez a felhasználónév már foglalt.';
-                    throw new Error(message);
-                }
-                throw new Error('Adatbázis hiba a beszúrás során.');
-            }
-        }
+        throw new Error('Hiba történt a regisztráció során. Minden módosítás visszavonva.');
+    }
+    finally {
+        connection.release();
     }
 }
 async function getUserByUsername(username) {
