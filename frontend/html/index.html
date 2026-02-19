@@ -44,10 +44,12 @@
                 </div>
 
                 <div class="col-lg-3 d-none d-lg-block">
-                    <div id="user-status-panel" class="panel p-3 text-center border rounded shadow-sm" style="display: none !important;">
+                    <div id="user-status-panel" class="panel p-3 text-center border rounded shadow-sm hidden">
                         <h6 class="fw-bold mb-1" id="display-username">Username</h6>
                         <p class="small mb-2">ELO: <span id="display-elo" class="badge bg-primary">1200</span></p>
-                        <button class="btn btn-sm btn-outline-danger" id="logoutBtn">Kijelentkezés</button>
+                        <button class="btn btn-warning hidden" id="adminPage">Admin Panel</button>
+                        <button class="btn btn-success hidden" id="settingsBtn">Beállítások</button>
+                        <button class="btn btn-danger" id="logoutBtn">Kijelentkezés</button>
                     </div>
                 </div>
             </div>

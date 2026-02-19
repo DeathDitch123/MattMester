@@ -10,6 +10,7 @@ const multer = require('multer'); //?npm install multer
 const path = require('path');
 const { request } = require('http');
 const { stat } = require('fs');
+const { isAdmin } = require('./funtions.js');
 
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
@@ -22,51 +23,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage });
 
-router.get('/test', (request, response) => {
+router.get('/test', isAdmin, (request, response) => {
     response.status(200).json({
         message: 'Ez a végpont működik.'
     });
-});
-
-
-//?GET /api/testsql
-//JAVÍTÁS:
-//selectAllTest → egységes elnevezés
-router.get('/testselect', async (req, res) => {
-    try {
-        const results = await database.selectAllTest();
-        res.status(200).json({ results });
-    } catch (error) {
-        res.status(500).json({ message: 'Lekérdezési hiba.' });
-    }
-});
-
-
-
-//JAVÍTÁS:
-//id eltávolítva a body-ból
-router.post('/testinsert', async (req, res) => {
-    try {
-        const { username } = req.body;
-
-        if (!username) {
-            return res.status(400).json({
-                message: 'username megadása kötelező'
-            });
-        }
-
-        await database.insertTestUser(username);
-
-        res.status(201).json({
-            message: 'Sikeres beszúrás'
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            message: 'Sikertelen beszúrás',
-            error: error.message
-        });
-    }
 });
 
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
@@ -176,7 +136,7 @@ router.post('/register', async (request, response) => {
                     throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie!');
                 }
                 else {
-                    const usernameRegex = /^[a-zA-Z0-9._-]+$/;
+                    const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
                     if (!usernameRegex.test(username)) {
                         statusCode = 400;
                         throw new Error('A felhasználónév csak alfanumerikus karaktereket, pontot, aláhúzást és kötőjelet tartalmazhat!');

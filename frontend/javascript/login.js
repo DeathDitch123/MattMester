@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageDiv.innerText = "Sikeres bejelentkezés! Átirányítás...";
                 setTimeout(() => {
                     window.location.href = '/html/index.html';
-                }, 1000);
+                }, 500);
             } else {
                 messageDiv.classList.add('alert-danger');
                 messageDiv.innerText = result.message;

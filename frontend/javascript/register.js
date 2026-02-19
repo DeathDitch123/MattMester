@@ -29,7 +29,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageDiv.innerText = result.message + " Átirányítás...";
                 setTimeout(() => {
                     window.location.href = '/html/index.html'; 
-                }, 2000);
+                }, 1000);
             } else {
                 messageDiv.classList.add('alert-danger');
                 messageDiv.innerText = result.message;

@@ -95,6 +95,10 @@ body {
 .signin { background: #6a8f1f; }
 .signup { background: #3f51b5; }
 
+.hidden {
+    display: none !important;
+}
+
 /* ==== RESZPONZÍV ==== */
 @media (max-width: 768px) {
     .character {
