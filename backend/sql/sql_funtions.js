@@ -10,7 +10,7 @@ async function insertUser(username, passwordHash, email) {
         const [userResult] = await connection.execute(query, [username, passwordHash, email]);
         const insertedUserId = userResult.insertId;
 
-        const statsQuery = 'INSERT INTO stats (user_id) VALUES (?)';
+        const statsQuery = 'INSERT INTO statistics (user_id) VALUES (?)';
         await connection.execute(statsQuery, [insertedUserId]);
 
         await connection.commit();
