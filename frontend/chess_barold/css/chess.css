@@ -39,14 +39,44 @@ body
     will-change: auto;  /* Böngésző optimalizáció kikapcsolva */
 }
 
+.topbar, .bottombar
+{ 
+    display: flex;  /* Flexbox használata */
+    justify-content: center;  /* Középre igazítás */
+    margin: 10px 0;  /* 10px függőleges margó */
+}
+
 .player
 {
-    background:var(--ui-bg); /* Háttérszín a változóból */
-    padding:10px 14px;  /* Belső margó (függőleges 10px, vízszintes 14px) */
-    border-radius:8px;  /* Lekerekített sarkok 8px sugarral */
-    min-width:320px;  /* Minimum szélesség */
-    display:flex;  /* Flexbox */
-    justify-content:space-between;  /* Elemek széthúzása (név balra, óra jobbra) */
-    align-items:center;  /* Függőleges középre igazítás */
+    background: var(--ui-bg); /* Háttérszín a változóból */
+    padding: 10px 14px;  /* Belső margó (függőleges 10px, vízszintes 14px) */
+    border-radius: 8px;  /* Lekerekített sarkok 8px sugarral */
+    min-width: 320px;  /* Minimum szélesség */
+    display: flex;  /* Flexbox */
+    justify-content: space-between;  /* Elemek széthúzása (név balra, óra jobbra) */
+    align-items: center;  /* Függőleges középre igazítás */
     box-shadow: 0 8px 18px rgba(0,0,0,0.5);  /* Árnyék (vízszintes 0, függőleges 8px, elmosás 18px) */
+}
+
+.player .name 
+{
+    font-weight: 700;  /* Vastag betű (bold) */
+}
+
+.clock
+{
+    background: #111;  /* Nagyon sötét háttér */
+    padding: 6px 10px;  /* Belső margó */
+    border-radius: 6px;  /* Lekerekített sarkok */
+    font-family: monospace;  /* Fix szélességű betű (órához jobb) */
+}
+
+.main
+{
+    display: flex;  /* Flexbox elrendezés */
+    gap: 18px;  /* 18px távolság az elemek között */
+    align-items:flex-start;  /* Elemek felülre igazítása */
+    justify-content:center;  /* Vízszintesen középre */
+    position: relative;  /* Relatív pozíció */
+    isolation: isolate;  /* Új stacking context (layout shift megelőzés) */
 }
