@@ -8,6 +8,45 @@
     <script src="../javascript/chess.js" defer></script>
 </head>
 <body>
-    
+    <div class="app">
+        <header class="topbar">
+            <div class="player player-black">
+                <div class="name">Magnus</div>
+                <div class="clock" id="clock-black">10:00</div>
+            </div>
+        </header>
+
+        <main class="main">
+            <div class="board-wrap">
+                <div id="board" class="board" aria-label="Sakk tábla"></div>
+
+                <div id="promotion-modal" class="promotion-modal hidden">
+                    <div class="promotion-overlay"></div>
+                    <div class="promotion-choices">
+                        <div class="promotion-piece" data-type="queen"></div>
+                        <div class="promotion-piece" data-type="rook"></div>
+                        <div class="promotion-piece" data-type="bishop"></div>
+                        <div class="promotion-piece" data-type="knight"></div>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="sidebar">
+                <div class="status-row">
+                    Aktív: <strong id="turn-name">fehér</strong>
+                </div>
+                <div id="status" class="status">játékon</div>
+                <button id="resetBtn">Újra</button>
+                <div class="legend">
+                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
+                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
+                    <div><span class="legend-sq check"></span> Király sakkban</div>
+                    <div><span class="legend-sq enpassant"></span> En passant</div>
+                    <div><span class="legend-sq castle"></span> Sáncolás</div>
+                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
+                </div>
+            </aside>
+        </main>
+    </div>
 </body>
 </html>
