@@ -38,3 +38,15 @@ body
     position: relative;  /* Relatív pozíció (rögzített elhelyezéshez) */
     will-change: auto;  /* Böngésző optimalizáció kikapcsolva */
 }
+
+.player
+{
+    background:var(--ui-bg); /* Háttérszín a változóból */
+    padding:10px 14px;  /* Belső margó (függőleges 10px, vízszintes 14px) */
+    border-radius:8px;  /* Lekerekített sarkok 8px sugarral */
+    min-width:320px;  /* Minimum szélesség */
+    display:flex;  /* Flexbox */
+    justify-content:space-between;  /* Elemek széthúzása (név balra, óra jobbra) */
+    align-items:center;  /* Függőleges középre igazítás */
+    box-shadow: 0 8px 18px rgba(0,0,0,0.5);  /* Árnyék (vízszintes 0, függőleges 8px, elmosás 18px) */
+}
