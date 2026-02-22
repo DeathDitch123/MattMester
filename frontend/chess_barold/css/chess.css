@@ -16,3 +16,17 @@
 *{
     box-sizing: border-box; /* Minden elemhez: padding és border a méretbe bele számít */
 }
+
+body
+{
+    margin: 0;  /* Nincs margó az oldal szélén */
+    font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;  /* Betűtípus prioritási sorrend */
+    background: #2b2926;  /* Sötét háttérszín */
+    color: #f4f4f4;  /* Világos szövegszín */
+    display: flex;  /* Flexbox layout használata */
+    justify-content: center;  /* Vízszintesen középre igazítás */
+    padding: 20px;  /* 20px belső margó minden oldalon */
+    min-height: 100vh;  /* Minimum magasság: teljes képernyő magasság */
+    overflow-x: hidden;  /* Vízszintes görgetés letiltása */
+    position: relative;  /* Relatív pozícionálás (gyermek elemek alapja) */
+}
