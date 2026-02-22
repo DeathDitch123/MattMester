@@ -142,3 +142,21 @@ body
     user-select: none;  /* Kijelölés tiltása */
     -webkit-user-drag: none;  /* Húzás tiltása (Safari) */
 }
+
+/* MEZŐ KIEMELÉSEK (lépési lehetőségek) */
+/* Utolsó lépés kezdő- és célmezője (sárga) */
+.square.from, .square.to
+{ 
+    background: var(--from) !important;  /* Felülírja az eredeti színt */
+}
+
+/* Lépési lehetőség jelzése (kis kör a mező közepén) */
+.square.move::after{
+    content: "";  /* Üres tartalom (csak vizuális elem) */
+    width: 18px;  /* Kör átmérője */
+    height: 18px;  /* Kör magassága */
+    border-radius: 50%;  /* Tökéletes kör */
+    position: absolute;  /* Abszolút pozíció (központosításhoz) */
+    z-index: 2;  /* Felül jelenjen meg */
+    background: rgba(0,0,0,0.18);  /* Átlátszó fekete */
+}
