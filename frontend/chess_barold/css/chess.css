@@ -29,4 +29,12 @@ body
     min-height: 100vh;  /* Minimum magasság: teljes képernyő magasság */
     overflow-x: hidden;  /* Vízszintes görgetés letiltása */
     position: relative;  /* Relatív pozícionálás (gyermek elemek alapja) */
+}}
+
+.app
+{ 
+    width: 100%;  /* Teljes szélesség */
+    max-width: 980px;  /* Maximum szélesség (nagy képernyőkön) */
+    position: relative;  /* Relatív pozíció (rögzített elhelyezéshez) */
+    will-change: auto;  /* Böngésző optimalizáció kikapcsolva */
 }
