@@ -105,6 +105,7 @@ body
     touch-action: none;  /* Érintéses műveletek letiltása (mobil) */
 }
 
+/* SAKKTÁBLA MEZŐK */
 .square
 {
     width: 100%;  /* Mező teljes szélessége */
@@ -113,4 +114,31 @@ body
     align-items: center;  /* Függőleges középre */
     justify-content: center;  /* Vízszintes középre */
     position: relative;  /* Relatív pozíció (kiemelések elhelyezéséhez) */
+}
+
+/* Világos mező színe */
+.square[role="light"] /* Attribútum szelektor: csak azokra a .square elemekre vonatkozik, ahol role="light" */
+{
+    background: var(--light) /* Bézs szín */
+}
+
+/* Sötét mező színe */
+.square[role="dark"]{ /* Attribútum szelektor: csak azokra a .square elemekre vonatkozik, ahol role="dark" */
+    background: var(--dark); /* Zöld szín */
+}
+
+/* BÁBUK (képek háttérként) */
+.piece
+{
+    width: 80%;  /* Bábu 80%-a a mezőnek */
+    height: 80%;  /* Bábu magassága is 80% */
+    pointer-events: auto;  /* Egér események engedélyezése */
+    position: relative;  /* Relatív pozíció */
+    background-size: contain;  /* Kép teljes megjelenítése arányosan */
+    background-repeat: no-repeat;  /* Ne ismétlődjön a kép */
+    background-position: center;  /* Kép középre igazítása */
+    cursor: grab;  /* "Megfogó" kurzor */
+    will-change: auto;  /* Optimalizáció kikapcsolva */
+    user-select: none;  /* Kijelölés tiltása */
+    -webkit-user-drag: none;  /* Húzás tiltása (Safari) */
 }
