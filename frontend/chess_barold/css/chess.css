@@ -105,3 +105,12 @@ body
     touch-action: none;  /* Érintéses műveletek letiltása (mobil) */
 }
 
+.square
+{
+    width: 100%;  /* Mező teljes szélessége */
+    height: 100%;  /* Mező teljes magassága */
+    display: flex;  /* Flexbox (bábu középre) */
+    align-items: center;  /* Függőleges középre */
+    justify-content: center;  /* Vízszintes középre */
+    position: relative;  /* Relatív pozíció (kiemelések elhelyezéséhez) */
+}
