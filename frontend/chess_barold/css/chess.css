@@ -160,3 +160,34 @@ body
     z-index: 2;  /* Felül jelenjen meg */
     background: rgba(0,0,0,0.18);  /* Átlátszó fekete */
 }
+
+/* Ütési lehetőség (narancs) */
+.square.capture
+{
+    background: var(--capture) !important; /* capture változó felhasználása, !important: felülír minden más háttérszínt*/
+}
+
+/* Király sakkban (piros) */
+.square.check
+{ 
+    background: var(--check) !important; /* check változó felhasználása, !important: felülír minden más háttérszínt*/
+}
+
+/* En passant lehetőség (zöld) */
+.square.enpassant
+{ 
+    background: var(--enpassant) !important; /* enpassant változó felhasználása, !important: felülír minden más háttérszínt*/
+}
+
+/* Sáncolási lehetőség (zöld) */
+.square.castle
+{ 
+    background: var(--castle) !important; /* castle változó felhasználása, !important: felülír minden más háttérszínt*/
+}
+
+/* Gyalog átváltozás célmezője (lila) */
+.square.promotion-target
+{ 
+    background: var(--promotion) !important; /* promotion változó felhasználása, !important: felülír minden más háttérszínt*/
+}
+
