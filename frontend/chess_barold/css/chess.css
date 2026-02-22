@@ -239,3 +239,26 @@ body
     vertical-align: middle;  /* Függőleges igazítás szöveghez */
     border-radius: 3px;  /* Enyhén lekerekített sarkok */
 }
+
+/* Jelmagyarázat színei (mindegyik a saját változójából) */
+.legend-sq.from{ 
+    background:var(--from);  /* Utolsó lépés jelölőszíne (sárga) */
+} 
+.legend-sq.capture{ 
+    background:var(--capture);  /* Ütési lehetőség jelölőszíne (narancs) */
+}
+.legend-sq.check{ 
+    background:var(--check);  /* Sakk jelölőszíne (piros) */
+}
+
+.legend-sq.enpassant{ 
+    background:var(--enpassant);  /* En passant jelölőszíne (zöld) */
+}
+
+.legend-sq.castle{ 
+    background:var(--castle);  /* Sáncolás jelölőszíne (kék) */
+}
+
+.legend-sq.promotion{ 
+    background:var(--promotion);  /* Átváltozás jelölőszíne (lila) */
+}
