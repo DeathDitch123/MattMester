@@ -84,3 +84,11 @@ body
     isolation: isolate;  /* Új stacking context (layout shift megelőzés) */
 }
 
+.board-wrap
+{
+    width: var(--board-size);  /* Szélesség a változóból (560px) */
+    height: var(--board-size);  /* Magasság ugyanannyi */
+    border: 6px solid #5c4033;  /* 6px vastag barna keret */
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6);  /* Árnyék hatás */
+    position: relative;  /* Relatív pozíció (modal elhelyezéshez) */
+}
