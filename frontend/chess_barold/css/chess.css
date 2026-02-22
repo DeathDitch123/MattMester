@@ -1,0 +1,18 @@
+:root
+{
+    /*CSS GLOBÁLIS VÁLTOZÓK*/
+    --board-size: 560px;  /* Sakktábla mérete pixelben */
+    --light: #eeeed2;  /* Világos mező színe (bézs) */
+    --dark: #769656;  /* Sötét mező színe (zöld) */
+    --from: rgba(255,255,50,0.55);  /* Utolsó lépés kezdőpont színe (sárga, átlátszó) */
+    --capture: rgba(255,165,0,0.65);  /* Ütési lehetőség színe (narancs) */
+    --check: rgba(255,0,0,0.55);  /* Sakk jelzés színe (piros) */
+    --enpassant: rgba(50,255,50,0.65);  /* En passant jelzés színe (zöld) */
+    --castle: rgba(50, 64, 255, 0.65);  /* Sáncolás jelzés színe (zöld) */
+    --promotion: rgba(200,50,255,0.65);  /* Átváltozás jelzés színe (lila) */
+    --ui-bg: #3b3936;  /* Felhasználói felület háttérszíne (sötétszürke) */
+}
+
+*{
+    box-sizing: border-box; /* Minden elemhez: padding és border a méretbe bele számít */
+}
