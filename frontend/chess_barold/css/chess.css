@@ -293,3 +293,60 @@ body
   height: 100%;  /* Teljes magasság lefedése */
   background: rgba(0,0,0,0.75);  /* Fekete háttér 75%-os átlátszatlansággal, a tábla elsötétítéséhez */
 }
+
+/* Választható bábuk konténere */
+.promotion-choices
+{
+    display: flex;  /* Flexbox (bábuk egymás mellett) */
+    gap: 15px;  /* 15px távolság bábuk között */
+    background: var(--ui-bg);  /* UI háttérszín */
+    padding: 20px;  /* Belső margó */
+    border-radius: 10px;  /* Lekerekített sarkok */
+    box-shadow: 0 10px 40px rgba(0,0,0,0.8);  /* Erős árnyék */
+    position: relative;  /* Relatív pozíció (overlay fölött) */
+    z-index: 1001;  /* Overlay fölé */
+}
+
+/* Egyetlen választható bábu */
+.promotion-piece
+{
+    width: 80px;  /* Bábu doboz szélessége */
+    height: 80px;  /* Bábu doboz magassága */
+    background-size: contain;  /* A kép arányosan kitölti a dobozt, nem vágódik le */
+    background-repeat: no-repeat;  /* A kép ne ismétlődjön */
+    background-position: center;  /* A kép középre igazítva */
+    cursor: pointer;  /* Kattintható kéz kurzor jelenik meg */
+    border: 3px solid transparent;  /* Alapból láthatatlan keret, hover-nél fehérre vált */
+    border-radius: 8px;  /* Sarkok lekerekítése 8 pixellel */
+    transition: all 0.2s;  /* Minden tulajdonságváltozás 0.2s alatt animálódik (border, transform) */
+}
+
+/* Hover állapot (rámutatás) */
+.promotion-piece:hover
+{
+  border-color: #fff;  /* Fehér keret */
+  transform: scale(1.1);  /* 10% nagyítás */
+}
+
+/* RESZPONZÍV DESIGN (kis képernyők) */
+@media (max-width:900px)
+{
+  .main{ 
+    flex-direction:column;  /* Oszlop elrendezés (tábla fölött oldalsáv) */
+    align-items:center;  /* Középre igazítás */
+  }
+  .sidebar{ 
+    width:100%;  /* Teljes szélesség */
+    max-width:560px;  /* Maximum sakktábla szélessége */
+  }
+}
+
+/* HÚZÁS KÖZBEN (dragging állapot) */
+.piece.dragging
+{
+  opacity: 1;  /* Teljes láthatóság */
+  cursor: grabbing !important;  /* "Megfogott" kurzor */
+  transform: scale(1.15);  /* 15% nagyítás */
+  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.7));  /* Árnyék hatás */
+  transition: none;  /* Nincs animáció (azonnali követés) */
+}
