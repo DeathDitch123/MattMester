@@ -1,6 +1,6 @@
+/*CSS GLOBÁLIS VÁLTOZÓK*/
 :root
 {
-    /*CSS GLOBÁLIS VÁLTOZÓK*/
     --board-size: 560px;  /* Sakktábla mérete pixelben */
     --light: #eeeed2;  /* Világos mező színe (bézs) */
     --dark: #769656;  /* Sötét mező színe (zöld) */
@@ -31,6 +31,7 @@ body
     position: relative;  /* Relatív pozícionálás (gyermek elemek alapja) */
 }
 
+/* FŐ ALKALMAZÁS KONTÉNER */
 .app
 { 
     width: 100%;  /* Teljes szélesség */
@@ -39,6 +40,7 @@ body
     will-change: auto;  /* Böngésző optimalizáció kikapcsolva */
 }
 
+/* FELSŐ ÉS ALSÓ SÁV (játékos információk) */
 .topbar, .bottombar
 { 
     display: flex;  /* Flexbox használata */
@@ -71,6 +73,7 @@ body
     font-family: monospace;  /* Fix szélességű betű (órához jobb) */
 }
 
+/* FŐ TARTALOM (sakktábla + oldalsáv) */
 .main
 {
     display: flex;  /* Flexbox elrendezés */
@@ -80,3 +83,4 @@ body
     position: relative;  /* Relatív pozíció */
     isolation: isolate;  /* Új stacking context (layout shift megelőzés) */
 }
+
