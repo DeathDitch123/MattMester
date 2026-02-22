@@ -191,3 +191,29 @@ body
     background: var(--promotion) !important; /* promotion változó felhasználása, !important: felülír minden más háttérszínt*/
 }
 
+/* OLDALSÁV (játékinformációk) */
+.sidebar
+{ 
+    width: 260px;  /* Fix szélesség */
+    display: flex;  /* Flexbox függőleges elrendezéshez */
+    flex-direction: column;  /* Oszlop irány (elemek egymás alatt) */
+    gap: 12px;  /* 12px távolság elemek között */
+}
+
+.status-row
+{ 
+    background: #222;  /* Sötét háttér */
+    padding: 8px;  /* Belső margó */
+    border-radius: 6px;  /* Lekerekített sarkok */
+}
+
+/* Új játék gomb */
+#resetBtn
+{ 
+    background: var(--ui-bg);  /* UI háttérszín */
+    color: white;  /* Fehér szöveg */
+    border: 0;  /* Nincs keret */
+    padding: 10px;  /* Belső margó */
+    border-radius: 8px;  /* Lekerekített sarkok */
+    cursor: pointer;  /* Kéz kurzor (kattintható) */
+}
