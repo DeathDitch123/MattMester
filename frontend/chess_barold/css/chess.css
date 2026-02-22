@@ -92,3 +92,16 @@ body
     box-shadow: 0 10px 30px rgba(0,0,0,0.6);  /* Árnyék hatás */
     position: relative;  /* Relatív pozíció (modal elhelyezéshez) */
 }
+
+.board
+{
+    width: 100%;  /* Teljes szélesség */
+    height: 100%;  /* Teljes magasság */
+    display: grid;  /* CSS Grid használata */
+    grid-template-columns: repeat(8, 1fr);  /* 8 egyenlő oszlop */
+    grid-template-rows: repeat(8, 1fr);  /* 8 egyenlő sor */
+    user-select: none;  /* Szöveg kijelölés letiltása */
+    position: relative;  /* Relatív pozíció */
+    touch-action: none;  /* Érintéses műveletek letiltása (mobil) */
+}
+
