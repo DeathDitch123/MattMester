@@ -217,3 +217,25 @@ body
     border-radius: 8px;  /* Lekerekített sarkok */
     cursor: pointer;  /* Kéz kurzor (kattintható) */
 }
+
+/* JELMAGYARÁZAT */
+.legend
+{ 
+    margin-top: 6px;  /* Felső margó */
+    font-size: 0.95rem;  /* Betűméret (kicsit kisebb) */
+}
+.legend>div  /* A .legend közvetlen gyermek div elemeire vonatkozik (>) */
+{ 
+    margin: 4px 0;  /* Függőleges margó soronként */
+}
+
+/* Színes négyzet a jelmagyarázatban */
+.legend-sq
+{ 
+    display: inline-block;  /* Inline blokk elem */
+    width: 22px;  /* Szélesség */
+    height: 14px;  /* Magasság */
+    margin-right: 8px;  /* Jobb oldali margó */
+    vertical-align: middle;  /* Függőleges igazítás szöveghez */
+    border-radius: 3px;  /* Enyhén lekerekített sarkok */
+}
