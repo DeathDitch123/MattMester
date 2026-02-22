@@ -262,3 +262,34 @@ body
 .legend-sq.promotion{ 
     background:var(--promotion);  /* Átváltozás jelölőszíne (lila) */
 }
+
+/* ÁTVÁLTOZÁS POPUP ABLAK */
+.promotion-modal
+{
+    position: absolute;  /* Abszolút pozíció (sakktáblán belül) */
+    top: 0;  /* Felső él */
+    left: 0;  /* Bal él */
+    width: 100%;  /* Teljes szélesség */
+    height: 100%;  /* Teljes magasság */
+    display: flex;  /* Flexbox (tartalom középre) */
+    align-items: center;  /* Függőleges középre */
+    justify-content: center;  /* Vízszintes középre */
+    z-index: 1000;  /* Felül jelenjen meg */
+}
+
+/* Rejtett állapot */
+.promotion-modal.hidden
+{
+    display: none;  /* Nem látható */
+}
+
+/* Sötét háttér overlay */
+.promotion-overlay
+{
+  position: absolute;  /* A legközelebbi relative szülőhöz képest pozícionál (board-wrap) */
+  top: 0;  /* Felső saroktól indul */
+  left: 0;  /* Bal saroktól indul */
+  width: 100%;  /* Teljes szélesség lefedése */
+  height: 100%;  /* Teljes magasság lefedése */
+  background: rgba(0,0,0,0.75);  /* Fekete háttér 75%-os átlátszatlansággal, a tábla elsötétítéséhez */
+}
