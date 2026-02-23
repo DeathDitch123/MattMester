@@ -1,9 +1,11 @@
 document.addEventListener('DOMContentLoaded', () => {
+
     const loginForm = document.getElementById('loginForm');
     const messageDiv = document.getElementById('loginMessage');
 
     loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
+
         messageDiv.style.display = 'none';
         messageDiv.className = 'mt-3 text-center alert';
 
@@ -19,11 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 },
                 body: JSON.stringify({ usernameOrMail, password, remember })
             });
+
             const result = await response.json();
             messageDiv.style.display = 'block';
+
             if (response.ok) {
                 messageDiv.classList.add('alert-success');
-                messageDiv.innerText = "Sikeres bejelentkezés! Átirányítás...";
+                messageDiv.innerText = "Sikeres bejelentkezés!";
+
                 setTimeout(() => {
                     window.location.href = '/html/index.html';
                 }, 500);
@@ -31,8 +36,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 messageDiv.classList.add('alert-danger');
                 messageDiv.innerText = result.message;
             }
+
         } catch (error) {
-            console.error('Login hiba:', error);
             messageDiv.style.display = 'block';
             messageDiv.classList.add('alert-danger');
             messageDiv.innerText = 'Nem sikerült csatlakozni a szerverhez.';

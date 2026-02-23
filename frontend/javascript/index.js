@@ -42,6 +42,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         } else {
             console.log("Vendég mód");
+
+            // Vendég módban létező gombhoz esemény hozzáadása
+            const guestBtn = document.querySelector('.play-btn');
+            if (guestBtn) {
+                guestBtn.addEventListener('click', () => {
+                    window.location.href = '../chess_barold/html/chess.html';
+                });
+            }
         }
 
     } catch (error) {
