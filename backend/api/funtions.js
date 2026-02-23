@@ -1,11 +1,8 @@
 function isAdmin(request, response, next) {
-    if(!request.session || request.session.role !== 'admin') {
-        return response.status(403).json({ message: 'Hozzáférés megtagadva: Admin jogosultság szükséges.' });
+    if(request.session && request.session.role === 'admin') {
+        return next();
     }
-    if (request.session.role !== 'admin') {
-        return response.status(403).json({ message: 'Hozzáférés megtagadva: Admin jogosultság szükséges.' });
-    }
-    next();
+    return response.status(403).json({ message: 'Nincs jogosultságod ehhez a művelethez.' });
 }
 
 module.exports = {

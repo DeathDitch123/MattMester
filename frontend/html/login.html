@@ -20,11 +20,11 @@
         <div class="row justify-content-center">
             <div class="col-md-6">
                 <div class="card shadow p-4">
-                    <h1 class="text-center mb-4">Login</h1>
+                    <h1 class="text-center mb-4">Bejelentkezés</h1>
                     <form id="loginForm">
                         <div class="mb-3">
-                            <label for="loginUsername" class="form-label">Felhasználónév:</label>
-                            <input class="form-control" type="text" id="loginUsername" placeholder="Ide írd be a felhasználónevedet" required>
+                            <label for="loginUsername" class="form-label">Felhasználónév/Email:</label>
+                            <input class="form-control" type="text" id="loginUsername" placeholder="Mattmester / mattmester@gmail.com" required>
                         </div>
                         
                         <div class="mb-3">
@@ -43,7 +43,8 @@
                     <div id="loginMessage" class="mt-3 text-center alert" style="display: none;"></div>
 
                     <div class="text-center mt-3">
-                        <small>Még nem regisztráltál? <a href="/register">Itt tudsz regisztrálni</a></small>
+                        <small>Még nem regisztráltál? <a href="/register">Itt tudsz regisztrálni</a></small><br>
+                        <small><a id="home" href="/">Vissza a főoldalra 🛖</a></small>
                     </div>
                 </div>
             </div>

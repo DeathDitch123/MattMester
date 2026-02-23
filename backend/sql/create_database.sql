@@ -5,13 +5,17 @@ USE mattmester;
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    username VARCHAR(50) UNIQUE NOT NULL,
+    -- A BINARY kulcsszó bevezetése:
+    username VARCHAR(50) BINARY UNIQUE NOT NULL, 
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
     elo INT DEFAULT 1200,
     role ENUM('player', 'admin') DEFAULT 'player',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+INSERT IGNORE INTO users (username, password_hash, email, elo, role) 
+VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
 
 -- Statistics table (1:1 with users)
 CREATE TABLE IF NOT EXISTS statistics (

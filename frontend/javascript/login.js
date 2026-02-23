@@ -9,15 +9,17 @@ document.addEventListener('DOMContentLoaded', () => {
         messageDiv.style.display = 'none';
         messageDiv.className = 'mt-3 text-center alert';
 
-        const username = document.getElementById('loginUsername').value;
+        const usernameOrMail = document.getElementById('loginUsername').value;
         const password = document.getElementById('loginPassword').value;
         const remember = document.getElementById('rememberMe').checked;
 
         try {
             const response = await fetch('/api/login', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, remember })
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ usernameOrMail, password, remember })
             });
 
             const result = await response.json();
@@ -29,8 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 setTimeout(() => {
                     window.location.href = '/html/index.html';
-                }, 800);
-
+                }, 500);
             } else {
                 messageDiv.classList.add('alert-danger');
                 messageDiv.innerText = result.message;

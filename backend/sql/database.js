@@ -43,29 +43,21 @@ async function ensureDatabaseExists() {
     }
 }
 
-/**
- * JAVÍTÁS:
- * Táblák pontosítása (AUTO_INCREMENT helyes használat)
- */
 async function createTables() {
     const queries = [
-
-        // JAVÍTÁS: id AUTO_INCREMENT, nem szabad kézzel tölteni
-        `CREATE TABLE IF NOT EXISTS testtable (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(100) UNIQUE NOT NULL
-        )`,
-
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) UNIQUE NOT NULL,
+            username VARCHAR(50) BINARY UNIQUE NOT NULL, 
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
             elo INT DEFAULT 1200,
             role ENUM('player', 'admin') DEFAULT 'player',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            INDEX idx_elo (elo)
-        )`,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );`,
+
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, role) 
+            VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
+        `,
 
         `CREATE TABLE IF NOT EXISTS statistics (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -75,6 +67,10 @@ async function createTables() {
             abilities_used INT DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
+
+        `INSERT IGNORE INTO statistics (user_id) 
+            SELECT id FROM users WHERE username = 'admin';
+        `,
 
         `CREATE TABLE IF NOT EXISTS abilities (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -94,7 +90,6 @@ async function createTables() {
             FOREIGN KEY (black_player_id) REFERENCES users(id),
             FOREIGN KEY (winner_id) REFERENCES users(id)
         )`,
-        
         `CREATE TABLE IF NOT EXISTS moves (
             id INT AUTO_INCREMENT PRIMARY KEY,
             game_id INT NOT NULL,
@@ -122,13 +117,13 @@ async function createTables() {
 
         `CREATE TABLE IF NOT EXISTS friends (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            user1_id INT NOT NULL,
-            user2_id INT NOT NULL,
+            user_init_id INT NOT NULL,
+            user_recv_id INT NOT NULL,
             status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
             invite_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_friendship (user1_id, user2_id),
-            FOREIGN KEY (user1_id) REFERENCES users(id),
-            FOREIGN KEY (user2_id) REFERENCES users(id)
+            UNIQUE KEY unique_friendship (user_init_id, user_recv_id),
+            FOREIGN KEY (user_init_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_recv_id) REFERENCES users(id) ON DELETE CASCADE
         )`
     ];
 
@@ -137,16 +132,11 @@ async function createTables() {
     }
 }
 
-//JAVÍTÁS:
-//pool csak az adatbázis létrehozása után jön létre
-
 async function initDatabase() {
     try {
         await ensureDatabaseExists();
 
         pool = mysql.createPool(dbConfig);
-
-        // verify pool connectivity
         const conn = await pool.getConnection();
         conn.release();
 
@@ -179,20 +169,11 @@ async function closeDatabase() {
     }
 }
 
-/* ================= SQL QUERIES ================= */
-
-/**
- * ✔ OK
- */
 async function selectAllTest() {
     const [rows] = await pool.execute('SELECT * FROM testtable');
     return rows;
 }
 
-
-//JAVÍTÁS:
-//AUTO_INCREMENT id-t nem adunk meg
- 
 async function insertTestUser(username) {
     const query = 'INSERT INTO testtable (username) VALUES (?)';
     const [result] = await pool.execute(query, [username]);
