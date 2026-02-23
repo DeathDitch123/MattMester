@@ -12,10 +12,6 @@ const dbConfig = {
 
 let pool;
 
-/**
- * JAVÍTÁS:
- * Az adatbázist külön hozzuk létre, mielőtt pool-t csinálunk
- */
 async function ensureDatabaseExists() {
     let connection;
     try {
