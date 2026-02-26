@@ -244,6 +244,58 @@ function babuHuzasEgerMozog(em, klon, eltX, eltY) {
     return true;  // Visszaad true értéket jelezve hogy az esemény kezelve lett
 }
 
+function babuHuzasEgerFel(ef, klon, babuElem, lepesek, babu) 
+{
+    let elemAlatt = document.elementFromPoint(ef.clientX, ef.clientY);  // Megkeresi melyik HTML elem van a kurzor alatt
+    let celMezoElem = (elemAlatt !== null) ? elemAlatt.closest(".square") : null;  // Megkeresi a legközelebbi .square osztályú elemet
+    klon.remove();  // Törli a klónt a DOM-ból
+    babuElem.style.opacity = "";  // Visszaállítja az eredeti bábu átlátszóságát
+    
+    if (celMezoElem !== null)  // Ellenőrzi hogy van-e célmező
+    {
+        let celMezo = mezoPozKeres(celMezoElem.dataset.pos);  // Megkeresi a célmező objektumot
+        let talaltLepes = null;  // Létrehoz egy változót a megtalált lépés tárolására
+        
+        for (let i = 0; i < lepesek.length; i = i + 1)  // Végigmegy a szabályos lépéseken
+        {
+            if (lepesek[i].to.pos === celMezo.pos)  // Ellenőrzi hogy a lépés célmezője egyezik-e
+            {
+                talaltLepes = lepesek[i];  // Elmenti a lépést
+                break;  // Kilép a ciklusból
+            }
+        }
+        
+        if (talaltLepes !== null)  // Ellenőrzi hogy ez szabályos lépés-e
+        {
+            if (babu.type === "pawn")  // Ellenőrzi hogy a bábu gyalog-e
+            {
+                let utSor = (babu.color === "white") ? 0 : 7;  // Kiszámolja az utolsó sort
+                
+                if (talaltLepes.to.y === utSor)  // Ellenőrzi hogy a gyalog elérte-e az utolsó sort
+                {
+                    jatek.atvaltozasVar = { piece: babu, move: talaltLepes };  // Elmenti az átváltozás adatait
+                    atvaltozasModal(babu.color, talaltLepes.to);  // Megjeleníti a választó popup ablakot
+                    huzasKiemelTorol();  // Törli a kiemeléseket
+                    return true;  // Visszaad true értéket
+                }
+            }
+            lepesHajt(babu, talaltLepes);  // Végrehajtja a lépést
+        } 
+        else  // Ha nem szabályos lépés
+        {
+            tablaRajzol();  // Újrarajzolja a táblát
+        }
+    } 
+    else  // Ha nincs célmező
+    {
+        tablaRajzol();  // Újrarajzolja a táblát
+    }
+    
+    huzasKiemelTorol();  // Törli a kiemeléseket
+    return true;  // Visszaad true értéket
+}
+
+
 
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
