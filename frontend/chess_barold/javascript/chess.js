@@ -23,3 +23,20 @@ let babuKepek = {
         pawn: "images/black_pawn.png"       // Fekete gyalog képfájljának elérési útja
     }
 };
+
+// Objektum literál: Játék állapot tárolása
+// Létrehoz egy objektumot ami a teljes játék állapotát tárolja (tábla, játékosok, idő, stb)
+
+let jatek =
+{
+    tabla: [],          // Üres tömb ami a 64 sakkmezőt fogja tárolni (8x8=64 mező)
+    koronLevo: "white", // Tárolja melyik játékos jön most ("white" vagy "black") - fehér kezd
+    utolsoLepes: null,  // Tárolja az utolsó lépés adatait (honnan-hová) - kezdetben nincs lépés ezért null
+    enPassant: null,    // Tárolja az en passant lehetőség adatait (x, y koordináta és szín) - kezdetben nincs ezért null
+    jatekosok: {        // Objektum ami mindkét játékos adatait tárolja
+        white: { ido: 600, timer: null, oraElem: null, nev: "Orlan" }, // Fehér játékos: 600mp idő (10 perc), nincs időzítő, nincs HTML óra elem, név: Orlan
+        black: { ido: 600, timer: null, oraElem: null, nev: "Magnus" } // Fekete játékos: 600mp idő (10 perc), nincs időzítő, nincs HTML óra elem, név: Magnus
+    },
+    vege: false,        // Jelzi hogy vége van-e a játéknak (false = még megy, true = vége)
+    atvaltozasVar: null // Tárolja a várakozó gyalog átváltozás adatait (melyik gyalog, melyik lépés) - kezdetben nincs ezért null
+};
