@@ -170,6 +170,65 @@ function tablaRajzol() {
     return true;  // Visszaad true értéket jelezve hogy a függvény sikeresen lefutott
 }
 
+// Függvény: Húzás eseménykezelő hozzáadása
+// Hozzáad drag&drop funkcionalitást egy bábuhoz (egér lenyomás, mozgatás, felengedés események kezelése)
+
+function huzasHozzaad(babuElem, babu) 
+{
+    babuElem.addEventListener("mousedown", function (e) 
+    {
+        if (jatek.vege === true)  // Ellenőrzi hogy véget ért-e a játék
+        {
+            return false;  // Ha a játék véget ért, akkor kilép
+        }
+        
+        if (babu.color !== jatek.koronLevo)  // Ellenőrzi hogy a bábu színe egyezik-e a körön lévő játékos színével
+        {
+            return false;  // Ha nem egyezik, akkor kilép
+        }
+        
+        e.preventDefault();  // Megakadályozza a böngésző alapértelmezett viselkedését
+        e.stopPropagation();  // Megállítja az esemény továbbterjedését
+        let klon = babuElem.cloneNode(true);  // Létrehoz egy másolatot a bábu HTML elemről
+        klon.className = "piece dragging";  // Beállítja a klón CSS osztályát
+        klon.style.position = "fixed";  // Beállítja a klón pozícióját fixed-re
+        klon.style.zIndex = 9999;  // Beállítja a klón z-index értékét
+        klon.style.pointerEvents = "none";  // Letiltja az egér eseményeket a klónon
+        klon.style.width = babuElem.offsetWidth + "px";  // Beállítja a klón szélességét
+        klon.style.height = babuElem.offsetHeight + "px";  // Beállítja a klón magasságát
+        let eltX = babuElem.offsetWidth / 2;  // Kiszámolja a vízszintes eltolást
+        let eltY = babuElem.offsetHeight / 2;  // Kiszámolja a függőleges eltolást
+        document.body.appendChild(klon);  // Hozzáadja a klónt a body elemhez
+        babuElem.style.opacity = "0.3";  // Beállítja az eredeti bábu átlátszóságát
+        let lepesek = szabLepKeres(babu);  // Megkeresi a bábu összes szabályos lépését
+        huzasKiemel(babu, lepesek);  // Kiemeli a lehetséges célmezőket
+        
+        babuKlonMozgat(e.clientX, e.clientY, klon, eltX, eltY);  // Mozgatja a klónt a kezdő pozícióra
+        
+        // Elementés eseménykezelő függvényeket változókba
+        let egerMozogKezelo = function(em) 
+        {
+            babuHuzasEgerMozog(em, klon, eltX, eltY);  // Mozgatja a klónt az egér mozgásakor
+        };
+        
+        let egerFelKezelo = function(ef) 
+        {
+            document.removeEventListener("mousemove", egerMozogKezelo);  // Leválasztja az egér mozgás eseményt (MOST MÁR JÓ!)
+            document.removeEventListener("mouseup", egerFelKezelo);  // Leválasztja az egér felengedés eseményt (MOST MÁR JÓ!)
+            babuHuzasEgerFel(ef, klon, babuElem, lepesek, babu);  // Végrehajtja a felengedés kezelést
+        };
+        
+        document.addEventListener("mousemove", egerMozogKezelo);  // Hozzáadja az egér mozgás eseményt
+        document.addEventListener("mouseup", egerFelKezelo);  // Hozzáadja az egér felengedés eseményt
+        
+        return true;  // Visszaad true értéket
+    });
+    
+    return true;  // Visszaad true értéket
+}
+
+
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
