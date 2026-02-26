@@ -75,6 +75,31 @@ function tablaEpit() {
     return true;  // Visszaad true értéket jelezve hogy a függvény sikeresen lefutott
 }
 
+// Függvény: Mező keresése koordinátákkal
+// Megkeresi és visszaadja azt a mezőt a jatek.tabla tömbben ami az adott x és y koordinátán van
+
+function mezoKeres(x, y) {
+    for (let i = 0; i < jatek.tabla.length; i = i + 1) {  // Végigmegy a jatek.tabla tömb összes elemén (i = 0-tól a tömb hosszáig)
+        if (jatek.tabla[i].x === x && jatek.tabla[i].y === y) {  // Ellenőrzi hogy az aktuális mező x koordinátája egyezik-e a keresett x-szel ÉS az y koordinátája egyezik-e a keresett y-nal
+            return jatek.tabla[i];  // Ha megtalálta a megfelelő mezőt, visszaadja azt a mező objektumot
+        }
+    }
+    return null;  // Ha nem talált megfelelő mezőt (végigment az egész tömbön), akkor null-t ad vissza (nincs találat)
+}
+
+
+// Függvény: Mező keresése pozíció névvel
+// Megkeresi és visszaadja azt a mezőt a jatek.tabla tömbben ami az adott pozíció néven van (pl: "e4", "a8")
+
+function mezoPozKeres(poz) {
+    for (let i = 0; i < jatek.tabla.length; i = i + 1) {  // Végigmegy a jatek.tabla tömb összes elemén (i = 0-tól a tömb hosszáig)
+        if (jatek.tabla[i].pos === poz) {  // Ellenőrzi hogy az aktuális mező pos tulajdonsága egyezik-e a keresett poz értékkel
+            return jatek.tabla[i];  // Ha megtalálta a megfelelő mezőt, visszaadja azt a mező objektumot
+        }
+    }
+    return null;  // Ha nem talált megfelelő mezőt (végigment az egész tömbön), akkor null-t ad vissza (nincs találat)
+}
+
 // Függvény: Kezdő állás beállítása
 // Elhelyezi az összes bábut a kezdőpozícióba a sakktáblán (fehér bábuk 1-2. sor, fekete bábuk 7-8. sor)
 
