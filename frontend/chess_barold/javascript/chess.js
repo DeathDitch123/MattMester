@@ -227,6 +227,22 @@ function huzasHozzaad(babuElem, babu)
     return true;  // Visszaad true értéket
 }
 
+// Függvény: Bábu klón mozgatása
+// Mozgatja a húzott bábu klónt a kurzor pozíciójára (középre igazítva)
+
+function babuKlonMozgat(mx, my, klon, eltX, eltY) {
+    klon.style.left = (mx - eltX) + "px";  // Beállítja a klón vízszintes pozícióját (kurzor X - eltolás, így a kurzor a középen marad)
+    klon.style.top = (my - eltY) + "px";  // Beállítja a klón függőleges pozícióját (kurzor Y - eltolás, így a kurzor a középen marad)
+    return true;  // Visszaad true értéket jelezve hogy a mozgatás megtörtént
+}
+
+// Függvény: Egér mozgás kezelése húzás közben
+// Folyamatosan frissíti a bábu klón pozícióját amikor az egér mozog
+
+function babuHuzasEgerMozog(em, klon, eltX, eltY) {
+    babuKlonMozgat(em.clientX, em.clientY, klon, eltX, eltY);  // Meghívja a babuKlonMozgat() függvényt az új kurzor pozícióval (frissíti a klón pozícióját)
+    return true;  // Visszaad true értéket jelezve hogy az esemény kezelve lett
+}
 
 
 // Függvény: Átváltozás modal elrejtés
