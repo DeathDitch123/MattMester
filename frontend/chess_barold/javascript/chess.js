@@ -295,7 +295,46 @@ function babuHuzasEgerFel(ef, klon, babuElem, lepesek, babu)
     return true;  // Visszaad true értéket
 }
 
+// Függvény: Kiemelés húzás közben
+// Kiemeli a lehetséges célmezőket színekkel amikor egy bábut húzunk (zöld, narancs, lila, stb)
 
+function huzasKiemel(babu, lepesek) {
+    for (let i = 0; i < lepesek.length; i = i + 1) {
+        let l = lepesek[i];    // Elmenti az aktuális lépés objektumot a lepesek tömb i-edik eleméből
+
+        if (l.special === "enpassant") {
+            l.to.el.classList.add("enpassant");    // Hozzáadja az "enpassant" CSS osztályt a célmező HTML eleméhez (zöld kiemelés)
+        }
+        else if (l.special === "castle-ks" || l.special === "castle-qs") {
+            if (babu.type === "king" && l.rookFrom) {
+                l.rookFrom.el.classList.add("castle");    // Ha király mozog sáncoláskor, akkor hozzáadja a "castle" CSS osztályt a bástya mezőjéhez (zöld kiemelés)
+            }
+            else if (babu.type === "rook") {
+                let hazSor = (babu.color === "white") ? 7 : 0;    // Kiszámolja a ház sort (fehér: 7. sor = 1. sor, fekete: 0. sor = 8. sor)
+                let kirMezo = mezoKeres(4, hazSor);    // Megkeresi a király mezőjét (4. oszlop a ház sorban)
+
+                if (kirMezo && kirMezo.el) {
+                    kirMezo.el.classList.add("castle");    // Ha bástya mozog sáncoláskor, akkor hozzáadja a "castle" CSS osztályt a király mezőjéhez (zöld kiemelés)
+                }
+            }
+        }
+        else if (l.capture === true) {
+            l.to.el.classList.add("capture");    // Ha ütés lépés, akkor hozzáadja a "capture" CSS osztályt a célmező HTML eleméhez (narancs kiemelés)
+        }
+        else {
+            l.to.el.classList.add("move");    // Ha normál lépés, akkor hozzáadja a "move" CSS osztályt a célmező HTML eleméhez (kis kör jelenik meg)
+        }
+
+        if (babu.type === "pawn") {
+            let utSor = (babu.color === "white") ? 0 : 7;    // Kiszámolja az utolsó sort (fehér gyalog: 0. sor = 8. sor, fekete gyalog: 7. sor = 1. sor)
+
+            if (l.to.y === utSor) {
+                l.to.el.classList.add("promotion-target");    // Ha gyalog lép az utolsó sorba, akkor hozzáadja a "promotion-target" CSS osztályt a célmező HTML eleméhez (lila kiemelés)
+            }
+        }
+    }
+    return true;    // Visszaad true értéket jelezve hogy a kiemelések sikeresen hozzáadva
+}
 
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
