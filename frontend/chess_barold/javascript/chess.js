@@ -336,6 +336,23 @@ function huzasKiemel(babu, lepesek) {
     return true;    // Visszaad true értéket jelezve hogy a kiemelések sikeresen hozzáadva
 }
 
+
+// Függvény: Húzás kiemelés törlése
+// Törli az összes húzás közbeni kiemelést a mezőkről (zöld, narancs, lila jelölések eltávolítása)
+
+function huzasKiemelTorol() {
+    let mezok = document.querySelectorAll(".square");    // Megkeresi az összes .square osztályú HTML elemet (mind a 64 mező) és elmenti a mezok változóba (tömb-szerű lista)
+
+    for (let i = 0; i < mezok.length; i = i + 1) {
+        mezok[i].classList.remove("move", "capture", "enpassant", "castle", "promotion-target");    // Törli a mezők HTML eleméről a húzás közbeni CSS osztályokat (move, capture, enpassant, castle, promotion-target), így a kiemelések eltűnnek
+    }
+
+    return true;    // Visszaad true értéket jelezve hogy a kiemelések sikeresen törölve
+}
+
+
+
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
