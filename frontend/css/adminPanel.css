@@ -102,3 +102,15 @@ h6 {
     opacity: 0.7;
     font-weight: 600;
 }
+
+/* Main Content */
+.main-content {
+    margin-left: 280px;
+    transition: all 0.3s ease;
+    min-height: 100vh;
+    padding: 2rem;
+}
+
+.main-content.expanded {
+    margin-left: 0;
+}
