@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Beállítások</title>
+    <!--!Bootstrap-->
+    <link rel="stylesheet" href="../bootstrap/css/bootstrap.min.css" />
+    <!--?Popper: dropdowns, popovers, tooltips-->
+    <script src="../bootstrap/js/popper.min.js"></script>
+    <script src="../bootstrap/js/bootstrap.min.js"></script>
+    <!--!CSS-->
+    <link rel="stylesheet" href="../css/index.css" />
+    <!--!JavaScript-->
+    <script src="../javascript/index.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>Beállítások</h1>
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Felhasználói adatok</h5>
+                <p class="card-text">Név: <span id="username">Betöltés...</span></p>
+                <p class="card-text">Email: <span id="email">Betöltés...</span></p>
+                <button class="btn btn-primary" id="editProfileBtn">Szerkesztés</button>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Jelszó módosítása</h5>
+                <button class="btn btn-secondary" id="changePasswordBtn">Módosítás</button>
+            </div>
+        </div>
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5 class="card-title">Fiók törlése</h5>
+                <button class="btn btn-danger" id="deleteAccountBtn">Törlés</button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
