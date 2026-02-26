@@ -74,3 +74,204 @@ function tablaEpit() {
     }
     return true;  // Visszaad true értéket jelezve hogy a függvény sikeresen lefutott
 }
+
+// Függvény: Kezdő állás beállítása
+// Elhelyezi az összes bábut a kezdőpozícióba a sakktáblán (fehér bábuk 1-2. sor, fekete bábuk 7-8. sor)
+
+function kezdoAllasRak() {
+    for (let i = 0; i < jatek.tabla.length; i = i + 1) {  // Végigmegy a jatek.tabla tömb összes elemén (mind a 64 mezőn)
+        jatek.tabla[i].piece = null;  // Minden mező piece tulajdonságát null-ra állítja (törli az összes bábut a tábláról)
+    }
+
+    let fekeHaz = ["a8", "b8", "c8", "d8", "e8", "f8", "g8", "h8"];  // Tömb ami tartalmazza a fekete nehéz bábuk pozícióit a 8. sorban
+    let fTipus = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"];  // Tömb ami tartalmazza a fekete nehéz bábuk típusait sorrendben (bástya, huszár, futó, vezér, király, futó, huszár, bástya)
+    for (let i = 0; i < fekeHaz.length; i = i + 1)  // Végigmegy a fekeHaz tömb elemein (8 elem, i = 0-tól 7-ig)
+    {
+        babuRak("black", fTipus[i], fekeHaz[i]);  // Meghívja a babuRak() függvényt ami elhelyez egy fekete bábut az adott típussal az adott pozícióra
+    }
+    for (let i = 0; i < 8; i = i + 1) {  // Végigmegy 8-szor (i = 0-tól 7-ig) a fekete gyalogok elhelyezéséhez
+        babuRak("black", "pawn", "abcdefgh"[i] + "7");  // Elhelyez egy fekete gyalogot a 7. sor i-edik oszlopában (a7, b7, c7... h7)
+    }
+
+    let fehHaz = ["a1", "b1", "c1", "d1", "e1", "f1", "g1", "h1"];  // Tömb ami tartalmazza a fehér nehéz bábuk pozícióit az 1. sorban
+    let hTipus = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"];  // Tömb ami tartalmazza a fehér nehéz bábuk típusait sorrendben (bástya, huszár, futó, vezér, király, futó, huszár, bástya)
+    for (let i = 0; i < fehHaz.length; i = i + 1) {  // Végigmegy a fehHaz tömb elemein (8 elem, i = 0-tól 7-ig)
+        babuRak("white", hTipus[i], fehHaz[i]);  // Meghívja a babuRak() függvényt ami elhelyez egy fehér bábut az adott típussal az adott pozícióra
+    }
+    for (let i = 0; i < 8; i = i + 1) {  // Végigmegy 8-szor (i = 0-tól 7-ig) a fehér gyalogok elhelyezéséhez
+        babuRak("white", "pawn", "abcdefgh"[i] + "2");  // Elhelyez egy fehér gyalogot a 2. sor i-edik oszlopában (a2, b2, c2... h2)
+    }
+    jatek.koronLevo = "white";  // Beállítja hogy fehér játékos jön először (white kezd mindig)
+    jatek.utolsoLepes = null;  // Beállítja null-ra mert még nem volt lépés
+    jatek.enPassant = null;  // Beállítja null-ra mert nincs en passant lehetőség a játék elején
+    jatek.vege = false;  // Beállítja false-ra mert a játék most indul, nincs vége
+    jatek.atvaltozasVar = null;  // Beállítja null-ra mert nincs várakozó gyalog átváltozás
+    return true;  // Visszaad true értéket jelezve hogy a függvény sikeresen lefutott
+}
+
+function babuRak(szin, tipus, poz) {
+    let mezo = mezoPozKeres(poz);  // Meghívja a mezoPozKeres() függvényt ami megkeresi a mezőt a poz pozíció név alapján és elmenti a mezo változóba
+    if (mezo === null) {
+        return false;  // Ha a mezo null (nem találta meg a mezőt), akkor visszaad false értéket (hiba történt)
+    }
+    mezo.piece = { color: szin, type: tipus, hasMoved: false, square: mezo };  // Létrehoz egy bábu objektumot (szín, típus, még nem mozdult, melyik mezőn van) és hozzárendeli a mezo.piece tulajdonsághoz
+    return true;  // Visszaad true értéket jelezve hogy a bábu sikeresen elhelyezve
+}
+
+// Függvény: Sakktábla kirajzolása
+// Létrehozza a HTML elemeket a sakktáblához és megjeleníti a bábukat a képernyőn
+
+function tablaRajzol() {
+    let boardDiv = document.getElementById("board");  // Megkeresi a HTML-ben az id="board" elemet és elmenti a boardDiv változóba (ez a sakktábla konténere)
+    boardDiv.innerHTML = "";  // Kitörli a boardDiv elem teljes tartalmát (üres string-re állítja, így minden benne lévő HTML elem törlődik)
+    for (let i = 0; i < jatek.tabla.length; i = i + 1) {
+        let mezo = jatek.tabla[i];  // Elmenti az aktuális mező objektumot a mezo változóba (jatek.tabla tömb i-edik eleme)
+        let div = document.createElement("div");  // Létrehoz egy új div HTML elemet a mezőhöz
+        div.className = "square";  // Beállítja a div CSS osztályát "square"-re (a CSS fájlban így kapja meg a stílusát)
+        div.setAttribute("role", mezo.role);  // Beállítja a div "role" attribútumát a mező színére ("light" vagy "dark")
+        div.dataset.pos = mezo.pos;  // Beállítja a div data-pos attribútumát a mező pozíció nevére (pl: "e4", később így találjuk meg)
+        mezo.el = div;  // Elmenti a div elemet a mezo.el tulajdonságba (így később a mező objektumból elérjük a HTML elemet)
+        if (mezo.piece !== null) {
+            let pDiv = document.createElement("div");  // Létrehoz egy új div HTML elemet a bábuhoz
+            pDiv.className = "piece";  // Beállítja a bábu div CSS osztályát "piece"-re
+            let kep = babuKepek[mezo.piece.color][mezo.piece.type];  // Kikeresi a bábu kép elérési útját a babuKepek objektumból (szín és típus alapján)
+            pDiv.style.backgroundImage = "url('" + kep + "')";  // Beállítja a bábu div háttérképét a kép elérési útjára (CSS background-image tulajdonság)
+            div.appendChild(pDiv);  // Hozzáadja a bábu div-et a mező div-hez (a bábu div a mező div gyereke lesz)
+            huzasHozzaad(pDiv, mezo.piece);  // Meghívja a huzasHozzaad() függvényt ami hozzáad drag&drop eseménykezelőt a bábuhoz
+        }
+        boardDiv.appendChild(div);  // Hozzáadja a mező div-et a boardDiv-hez (a mező div megjelenik a sakktáblán)
+    }
+    kiemelFrissit();  // Meghívja a kiemelFrissit() függvényt ami frissíti a színes kiemeléseket (utolsó lépés, sakk jelzés)
+    return true;  // Visszaad true értéket jelezve hogy a függvény sikeresen lefutott
+}
+
+// Függvény: Átváltozás modal elrejtés
+// Elrejti az átváltozás választó popup ablakot
+
+function atvaltozasModalElrejt() 
+{
+    document.getElementById("promotion-modal").classList.add("hidden");  // Megkeresi az id="promotion-modal" elemet és hozzáadja a "hidden" CSS osztályt (így eltűnik)
+    return true;  // Visszaad true értéket jelezve hogy a modal sikeresen elrejtve
+}
+
+// Függvény: Időmérés indítása
+// Elindítja az időmérést a játék elején (mindkét játékos idejét frissíti és a körön lévő ideje fut)
+
+function idoIndit() 
+{
+    idoFrissit();  // Meghívja az idoFrissit() függvényt ami frissíti mindkét játékos óráját a képernyőn
+    idoFut(jatek.koronLevo);  // Meghívja az idoFut() függvényt a körön lévő játékos színével (elindítja az időzítőt)
+    return true;  // Visszaad true értéket jelezve hogy az időmérés sikeresen elindítva
+}
+
+// Függvény: Időmérés futtatása adott játékosnak
+// Elindít egy 1 másodperces időzítőt ami folyamatosan csökkenti a játékos idejét
+
+async function idoFut(szin) 
+{
+    idoLeall();  // Meghívja az idoLeall() függvényt ami leállítja az összes futó időzítőt (elkerüli hogy több időzítő fusson egyszerre)
+    jatek.jatekosok[szin].timer = setInterval(function() { idoTikk(szin); }, 1000);  // Létrehoz egy időzítőt ami 1000 milliszekundumenként (1 másodperc) meghívja az idoTikk() függvényt és elmenti a timer változóba
+    koronLevoFrissit();  // Meghívja a koronLevoFrissit() függvényt ami frissíti a képernyőn hogy ki jön most
+    return true;  // Visszaad true értéket jelezve hogy az időmérés sikeresen elindítva
+}
+
+// Függvény: Idő tikk (1 másodperc eltelt)
+// Ez a függvény fut le minden másodpercben az időmérés közben
+
+function idoTikk(szin) 
+{
+    if (jatek.vege === true)  // Ellenőrzi hogy véget ért-e a játék
+    {
+        idoLeall();  // Meghívja az idoLeall() függvényt ami leállítja az időmérést
+        return false;  // Visszaad false értéket és befejezi a függvényt
+    }
+    
+    jatek.jatekosok[szin].ido = jatek.jatekosok[szin].ido - 1;  // Csökkenti a játékos hátralévő idejét 1 másodperccel (ido - 1)
+    
+    if (jatek.jatekosok[szin].ido <= 0)  // Ellenőrzi hogy a játékos ideje lejárt-e (kisebb vagy egyenlő 0)
+    {
+        jatek.jatekosok[szin].ido = 0;  // Beállítja az időt 0-ra (nem lehet negatív)
+        jatek.vege = true;  // Beállítja hogy a játék véget ért (vege = true)
+        let nyertes = (szin === "white") ? "black" : "white";  // Kiszámolja a nyertes színét (ellenkező szín mint akinek lejárt az ideje)
+        document.getElementById("status").textContent = szin + " időtúllépés — " + nyertes + " nyert";  // Kiírja a képernyőre hogy időtúllépés van és ki nyert
+        idoLeall();  // Meghívja az idoLeall() függvényt ami leállítja az időmérést
+        return false;  // Visszaad false értéket és befejezi a függvényt
+    }
+    
+    idoFrissit();  // Meghívja az idoFrissit() függvényt ami frissíti az órát a képernyőn
+    return true;  // Visszaad true értéket jelezve hogy a tikk sikeresen lefutott
+}
+
+// Függvény: Időmérés váltása
+// Átváltja az időmérést a másik játékosra (a lépés után hívódik meg)
+
+function idoValt() 
+{
+    idoFut(jatek.koronLevo);  // Meghívja az idoFut() függvényt az új körön lévő játékos színével (elindítja az időmérést neki)
+    return true;  // Visszaad true értéket jelezve hogy az időmérés sikeresen átváltva
+}
+
+// Függvény: Időmérés leállítása
+// Leállítja mindkét játékos időzítőjét
+
+function idoLeall() 
+{
+    for (let szin in jatek.jatekosok)  // Végigmegy a jatek.jatekosok objektum összes kulcsán (szin = "white" majd "black")
+    {
+        if (jatek.jatekosok[szin].timer !== null)  // Ellenőrzi hogy a játékosnak van-e futó időzítője (timer nem null)
+        {
+            clearInterval(jatek.jatekosok[szin].timer);  // Leállítja az időzítőt (clearInterval törli a setInterval-t)
+            jatek.jatekosok[szin].timer = null;  // Beállítja a timer értékét null-ra (jelzi hogy nincs futó időzítő)
+        }
+    }
+    return true;  // Visszaad true értéket jelezve hogy az időmérés sikeresen leállítva
+}
+
+// Függvény: Óra frissítése képernyőn
+// Frissíti mindkét játékos óráját a HTML-ben
+
+function idoFrissit() 
+{
+    jatek.jatekosok.white.oraElem.textContent = idoFormat(jatek.jatekosok.white.ido);  // Beállítja a fehér játékos óra HTML elemének szövegét a formázott időre (meghívja az idoFormat() függvényt)
+    jatek.jatekosok.black.oraElem.textContent = idoFormat(jatek.jatekosok.black.ido);  // Beállítja a fekete játékos óra HTML elemének szövegét a formázott időre
+    return true;  // Visszaad true értéket jelezve hogy az órák sikeresen frissítve
+}
+
+// Függvény: Idő formázása
+// Átalakítja a másodperceket perc:másodperc formátumra (pl: 125 másodperc → "02:05")
+
+function idoFormat(mp) 
+{
+    let perc = Math.floor(mp / 60);  // Kiszámolja a perceket (mp osztva 60-al, lefelé kerekítve, Math.floor = egész rész)
+    let mperc = mp % 60;  // Kiszámolja a maradék másodperceket (mp osztva 60-al, maradék, % = modulo)
+    let percStr = String(perc).padStart(2, "0");  // Átalakítja a percet string-re és kitölti 2 karakterre (elé rak 0-t ha kell, pl: 5 → "05")
+    let mpStr = String(mperc).padStart(2, "0");  // Átalakítja a másodpercet string-re és kitölti 2 karakterre (elé rak 0-t ha kell)
+    return percStr + ":" + mpStr;  // Visszaadja a formázott időt (perc:másodperc formátumban)
+}
+
+// Függvény: Körön lévő játékos kiírása
+// Frissíti a képernyőn hogy melyik játékos jön most
+
+function koronLevoFrissit() 
+{
+    document.getElementById("turn-name").textContent = jatek.koronLevo;  // Megkeresi az id="turn-name" elemet és beállítja a szövegét a körön lévő játékos színére ("white" vagy "black")
+    return true;  // Visszaad true értéket jelezve hogy a kiírás sikeresen frissítve
+}
+
+// Függvény: Játék újraindítása
+// Visszaállítja a játékot a kezdőállapotba (új játék indítása)
+
+function jatekUjraIndit() 
+{
+    idoLeall();  // Meghívja az idoLeall() függvényt ami leállítja az időmérést
+    atvaltozasModalElrejt();  // Meghívja az atvaltozasModalElrejt() függvényt ami elrejti az átváltozás modal-t (ha esetleg nyitva lenne)
+    jatek.jatekosok.white.ido = 600;  // Visszaállítja a fehér játékos idejét 600 másodpercre (10 perc)
+    jatek.jatekosok.black.ido = 600;  // Visszaállítja a fekete játékos idejét 600 másodpercre (10 perc)
+    kezdoAllasRak();  // Meghívja a kezdoAllasRak() függvényt ami elhelyezi a bábukat a kezdőpozícióba
+    tablaRajzol();  // Meghívja a tablaRajzol() függvényt ami újrarajzolja a sakktáblát
+    idoFrissit();  // Meghívja az idoFrissit() függvényt ami frissíti az órákat a képernyőn
+    idoIndit();  // Meghívja az idoIndit() függvényt ami elindítja az időmérést
+    document.getElementById("status").textContent = "játékon";  // Beállítja az id="status" elem szövegét "játékon"-ra (jelzi hogy a játék folyamatban van)
+    koronLevoFrissit();  // Meghívja a koronLevoFrissit() függvényt ami frissíti hogy ki jön most
+    return true;  // Visszaad true értéket jelezve hogy a játék sikeresen újraindítva
+}
