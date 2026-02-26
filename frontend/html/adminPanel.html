@@ -12,7 +12,9 @@
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+        rel="stylesheet">
     <!--?Popper: dropdowns, popovers, tooltips-->
     <script src="../bootstrap/js/popper.min.js"></script>
     <script src="../bootstrap/js/bootstrap.min.js"></script>
@@ -23,12 +25,34 @@
 </head>
 
 <body>
-        <!-- Sidebar -->
+    <!-- Sidebar -->
     <nav class="sidebar" id="sidebar">
-        <div class="">
+        <div class="sidebar-header">
+            <a href="#">
+                <i class="bi bi-king-fill"></i>
+                <span>Admin Panel</span>
+            </a>
+        </div>
 
+        <div class="sidebar-menu">
+            <div class="menu-category">Főmenü</div>
+            <a href="#" class="nav-link active" onclick="showSection('dasboard')">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span>Dashboard</span>
+            </a>
+
+            <a href="#" class="nav-link">
+                <i class="bi bi-people"></i>
+                <span>Felhasználók</span>
+            </a>
+            <a href="#" class="nav-link">
+                <i class="bi bi-gear"></i>
+                <span>Beállítások</span>
+            </a>
         </div>
     </nav>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 
 </html>
