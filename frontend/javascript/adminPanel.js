@@ -13,3 +13,10 @@ function showSection(sectionId) {
     });
     document.querySelector(`.nav-link[data-section="${sectionId}"]`).classList.add('active');
 }
+function toggleSidebar() {
+    //ez a függvény a sidebar megjelenítését és elrejtését kezeli, amikor a toggle gombra kattintanak
+    const sidebar = document.getElementById('sidebar');
+    const mainContent = document.getElementById('mainContent');
+    mainContent.classList.toggle('expanded');
+    sidebar.classList.toggle('collapsed');
+}
