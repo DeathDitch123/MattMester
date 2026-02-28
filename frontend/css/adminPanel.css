@@ -114,3 +114,15 @@ h6 {
 .main-content.expanded {
     margin-left: 0;
 }
+/* Top Navbar */
+.top-navbar {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    padding: 1rem 1.5rem;
+    margin-bottom: 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
