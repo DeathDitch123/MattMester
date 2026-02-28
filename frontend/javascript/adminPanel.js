@@ -47,3 +47,9 @@ function exportUsers() {
             alert('Hiba történt a felhasználók exportálása során.');
         });
 }
+function viewUser(userId) {
+    //ez a függvény egy adott felhasználó adatainak megtekintését kezeli
+    //MÉG LE KELL FEJLESZTENI + API ENDPOINTOT A BACKENDEN
+    const modal = new bootstrap.Modal(document.getElementById('userModal'));
+    modal.show();
+}
