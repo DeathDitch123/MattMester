@@ -350,7 +350,44 @@ function huzasKiemelTorol() {
     return true;    // Visszaad true értéket jelezve hogy a kiemelések sikeresen törölve
 }
 
+// Függvény: Kiemelések frissítése
+// Frissíti a folyamatos kiemeléseket (utolsó lépés sárga jelzése, király prios jelzése ha sakkban van)
 
+function kiemelFrissit()
+{
+    let mezok = document.querySelectorAll(".square"); //Megkeresi az összes .square osztályú HTML elemet (mind a 64 mező) és elmenti a mezők változóba (tömb szerű lista)
+
+    for (let i = 0; i < mezok.length; i++) 
+    {    
+        mezok[i].classList.remove("from", "to", "check"); // Törli a mezők HTML eleméről a foylamatos kiemelés CSS osztályokat (from, to, check), így a régi kiemelések eltűnnek
+    }
+
+    if(jatek.utolsoLepes !== null)
+    {
+        let honnan = mezoPozKeres(jatek.utolsoLepes.fromPos);  // Megkeresi azt a mezőt ahonnan az utolsó lépés indult (jatek.utolsoLepes.fromPos pozíció név alapján)
+        let hova = mezoPozKeres(jatek.utolsoLepes.toPos);  // Megkeresi azt a mezőt ahová az utolsó lépés ment (jatek.utolsoLepes.toPos pozíció név alapján)
+
+        if (honnan && honnan.el) {
+            honnan.el.classList.add("from");  // Ha a honnan mező létezik és van HTML eleme, akkor hozzáadja a "from" CSS osztályt (sárga kiemelés a kiindulási mezőn)
+        }
+
+        if (hova && hova.el) {
+            hova.el.classList.add("to");  // Ha a hova mező létezik és van HTML eleme, akkor hozzáadja a "to" CSS osztályt (sárga kiemelés a célmezőn)
+        }
+    }
+
+    for (let i = 0; i < jatek.tabla.length; i = i + 1) {
+        let m = jatek.tabla[i];    // Elmenti az aktuális mező objektumot a jatek.tabla tömb i-edik eleméből
+
+        if (m.piece && m.piece.type === "king") {
+            if (mezoTamadva(m, m.piece.color) === true) {
+                m.el.classList.add("check");    // Ha a király mezőt támadják, akkor hozzáadja a "check" CSS osztályt a mező HTML eleméhez (piros kiemelés)
+            }
+        }
+    }
+
+    return true;    // Visszaad true értéket jelezve hogy a kiemelések sikeresen frissítve
+}
 
 
 // Függvény: Átváltozás modal elrejtés
