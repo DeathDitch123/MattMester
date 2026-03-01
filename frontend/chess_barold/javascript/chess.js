@@ -877,6 +877,22 @@ function atvaltozasModal(szin, celMezo)
     return true;  // Visszaad true értéket jelezve hogy a modal sikeresen megjelenítve
 }
 
+// Függvény: Átváltozás bábu választás
+// Amikor a játékos rákattint egy bábura az átváltozás modal-ban, végrehajtja az átváltozást
+
+function atvaltozasBabuValaszt(tipus) 
+{
+    atvaltozasModalElrejt();  // Meghívja az atvaltozasModalElrejt() függvényt ami elrejti a modal ablakot
+    
+    if (jatek.atvaltozasVar)  // Ellenőrzi hogy van-e várakozó átváltozás (jatek.atvaltozasVar nem null)
+    {
+        lepesHajt(jatek.atvaltozasVar.piece, jatek.atvaltozasVar.move, tipus);  // Meghívja a lepesHajt() függvényt a várakozó gyaloggal, lépéssel és a választott típussal
+        jatek.atvaltozasVar = null;  // Törli a várakozó átváltozást (null-ra állítja)
+    }
+    
+    return true;  // Visszaad true értéket jelezve hogy a választás sikeresen kezelve
+}
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
