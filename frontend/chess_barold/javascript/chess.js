@@ -5,22 +5,22 @@
 let babuKepek = {
     white:
     {
-        king: "chess_barold/images/white_king.png",      // Fehér király képfájljának elérési útja
-        queen: "chess_barold/images/white_queen.png",    // Fehér vezér képfájljának elérési útja
-        rook: "chess_barold/images/white_rook.png",      // Fehér bástya képfájljának elérési útja
-        bishop: "chess_barold/images/white_bishop.png",  // Fehér futó képfájljának elérési útja
-        knight: "chess_barold/images/white_knight.png",  // Fehér huszár képfájljának elérési útja
-        pawn: "chess_barold/images/white_pawn.png"       // Fehér gyalog képfájljának elérési útja
+        king: "../images/white_king.png",      // Fehér király képfájljának elérési útja
+        queen: "../images/white_queen.png",    // Fehér vezér képfájljának elérési útja
+        rook: "../images/white_rook.png",      // Fehér bástya képfájljának elérési útja
+        bishop: "../images/white_bishop.png",  // Fehér futó képfájljának elérési útja
+        knight: "../images/white_knight.png",  // Fehér huszár képfájljának elérési útja
+        pawn: "../images/white_pawn.png"       // Fehér gyalog képfájljának elérési útja
     },
 
     black:
     {
-        king: "chess_barold/images/black_king.png",      // Fekete király képfájljának elérési útja
-        queen: "chess_barold/images/black_queen.png",    // Fekete vezér képfájljának elérési útja
-        rook: "chess_barold/images/black_rook.png",      // Fekete bástya képfájljának elérési útja
-        bishop: "chess_barold/images/black_bishop.png",  // Fekete futó képfájljának elérési útja
-        knight: "chess_barold/images/black_knight.png",  // Fekete huszár képfájljának elérési útja
-        pawn: "chess_barold/images/black_pawn.png"       // Fekete gyalog képfájljának elérési útja
+        king: "../images/black_king.png",      // Fekete király képfájljának elérési útja
+        queen: "../images/black_queen.png",    // Fekete vezér képfájljának elérési útja
+        rook: "../images/black_rook.png",      // Fekete bástya képfájljának elérési útja
+        bishop: "../images/black_bishop.png",  // Fekete futó képfájljának elérési útja
+        knight: "../images/black_knight.png",  // Fekete huszár képfájljának elérési útja
+        pawn: "../images/black_pawn.png"       // Fekete gyalog képfájljának elérési útja
     }
 };
 
