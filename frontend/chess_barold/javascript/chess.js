@@ -590,6 +590,31 @@ function lehetsLepSzamit(babu, sakkEllen) {
     return lepesek;  // Visszaadja a lépések tömbjét (ha egyik bábu típus sem volt, üres tömb)
 }
 
+// Függvény: Lépés próba
+// Megpróbál hozzáadni egy lépést az adott célmezőre (ellenőrzi hogy szabályos-e)
+
+function lepesProba(cx, cy, lepesek, babu) {
+    if (cx < 0 || cx > 7 || cy < 0 || cy > 7)  // Ellenőrzi hogy a célmező a táblán kívül van-e (cx vagy cy kisebb mint 0 VAGY nagyobb mint 7)
+    {
+        return false;  // Visszaad false értéket (nem lehet a táblán kívülre lépni)
+    }
+
+    let cm = mezoKeres(cx, cy);  // Megkeresi a célmezőt a koordináták alapján
+
+    if (cm.piece !== null)  // Ellenőrzi hogy van-e bábu a célmezőn
+    {
+        if (cm.piece.color === babu.color)  // Ellenőrzi hogy a célmezőn lévő bábu ugyanolyan színű-e mint a mozgatott bábu
+        {
+            return false;  // Visszaad false értéket (nem lehet saját bábura lépni)
+        }
+        lepesek.push({ from: babu.square, to: cm, capture: true });  // Hozzáad egy ütés lépést a lepesek tömbhöz (ellenfél bábu van a célmezőn)
+        return false;  // Visszaad false értéket (nem lehet tovább menni ezen a mezőn túl, mert bábu van)
+    }
+
+    lepesek.push({ from: babu.square, to: cm, capture: false });  // Hozzáad egy normál lépést a lepesek tömbhöz (üres a célmező)
+    return true;  // Visszaad true értéket (lehet tovább menni ebben az irányban, mert üres volt a mező)
+}
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
