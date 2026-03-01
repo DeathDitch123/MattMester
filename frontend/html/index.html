@@ -92,6 +92,7 @@
     </header>
     <!-- Main -->
     <main class="container">
+        <!--? Gyors statisztikák -->
         <section class="mb-4">
             <div class="row g-3" id="quickStats">
                 <div class="col-6 col-lg-3">
@@ -122,6 +123,62 @@
                         <div class="stat-sub">24 órában</div>
                     </div>
                 </div>
+            </div>
+        </section>
+        <!--? ranglista -->
+        <section id="ranglista" class="mb-4">
+            <div class="content-card">
+                <div class="d-flex justify-content-between align-items-center p-3 p-md-4 border-bottom"
+                    style="border-color: var(--border-color) !important;">
+                    <h2 class="section-title h4"><i class="bi bi-trophy-fill me-2"
+                            style="color: var(--accent-gold);"></i>Top játékosok ELO szerint</h2>
+                </div>
+                <!-- itt ezt meg kell csinálni, hogy a backendről jön a frissítés ideje, és ne csak statikusan legyen kiírva, hogy "ma" -->
+                <span class="text-secondary small">Frissítve: ma</span>
+                <div class="table-controls p-3">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-4">
+                            <input type="text" id="leaderboardSearch" class="form-control"
+                                placeholder="Keresés játékosra...">
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <select id="leaderboardStatus" class="form-select">
+                                <option value="all">Minden állapot</option>
+                                <option value="online">Csak online</option>
+                                <option value="offline">Csak offline</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <select id="leaderboardSort" class="form-select">
+                                <option value="elo">Rendezés: ELO</option>
+                                <option value="name">Rendezés: Név</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <select id="leaderboardLimit" class="form-select">
+                                <option value="5">Top 5</option>
+                                <option value="10" selected>Top 10</option>
+                                <option value="all">Összes</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-dark table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Játékos</th>
+                                <th>ELO</th>
+                                <th>Állapot</th>
+                                <th>Felhasználó ezóta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardBody"></tbody>
+                    </table>
+                </div>
+                <div id="leaderboardEmpty" class="table-empty d-none">Nincs találat a megadott szűrőkkel.</div>
+            </div>
             </div>
         </section>
     </main>
