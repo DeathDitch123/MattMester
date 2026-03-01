@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MattMester</title>
     <!--!Bootstrap-->
@@ -16,6 +17,7 @@
     <!--!JavaScript-->
     <script src="../javascript/index.js"></script>
 </head>
+
 <body>
     <!--?Navbar-->
     <nav class="navbar navbar-expand-lg navbar-dark navbar-glass fixed-top">
@@ -30,21 +32,37 @@
             </button>
 
             <div class="collapse navbar-collapse" id="mainNav">
+                <!--? Vendég menü + talán később élő óra funkció -->
                 <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2" id="guestActions">
-                    <!--? Vendég menü + talán később élő óra funkció --> 
-
                     <!-- <li class="nav-item me-lg-2">
                         <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
                     </li> -->
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Bejelentkezés</button>
+                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
+                            data-bs-target="#loginModal">Bejelentkezés</button>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Regisztráció</button>
+                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
+                            data-bs-target="#registerModal">Regisztráció</button>
+                    </li>
+                </ul>
+                <!--? Bejelentkezett felhasználó menü -->
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2" id="userActions">
+                    <!-- <li class="nav-item me-lg-2">
+                        <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
+                    </li> -->
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/profile'">Profil
+                            beállítás</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
+                            onclick="logout()">Kijelentkezés</button>
                     </li>
                 </ul>
             </div>
         </div>
     </nav>
 </body>
+
 </html>
