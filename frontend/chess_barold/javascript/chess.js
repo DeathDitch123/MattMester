@@ -615,6 +615,97 @@ function lepesProba(cx, cy, lepesek, babu) {
     return true;  // Visszaad true értéket (lehet tovább menni ebben az irányban, mert üres volt a mező)
 }
 
+// Függvény: Szabályos lépések keresése
+// Kiszámolja egy bábu összes szabályos lépését (figyelembe véve hogy a király nem maradhat sakkban)
+
+function szabLepKeres(babu) {
+    let pseudo = lehetsLepSzamit(babu, false);  // Meghívja a lehetsLepSzamit() függvényt ami visszaadja az összes lehetséges lépést (false = sakk ellenőrzés nélkül)
+    let szabalyos = [];  // Létrehoz egy üres tömböt ami tárolni fogja a szabályos lépéseket
+
+    for (let i = 0; i < pseudo.length; i = i + 1)  // Végigmegy az összes lehetséges lépésen (pseudo tömb elemein)
+    {
+        let l = pseudo[i];  // Elmenti az aktuális lépés objektumot a pseudo tömb i-edik eleméből
+
+        if (l.special === "castle-ks" || l.special === "castle-qs")  // Ellenőrzi hogy ez sáncolás lépés-e (király oldali VAGY vezér oldali)
+        {
+            let kirPoz = (babu.type === "king") ? babu.square : mezoKeres(4, babu.square.y);  // Meghatározza a király jelenlegi pozícióját (ha király mozog akkor a bábu pozíciója, ha bástya mozog akkor a 4. oszlopban keresi a királyt)
+            let celKirPoz = l.kingTo;  // Elmenti a király célpozícióját a lépés objektumból
+            let kezdX = kirPoz.x;  // Elmenti a király kezdő X koordinátáját
+            let vegX = celKirPoz.x;  // Elmenti a király cél X koordinátáját
+            let lep = (vegX > kezdX) ? 1 : -1;  // Kiszámolja a lépés irányát (ha cél nagyobb mint kezdő akkor 1 = jobbra, különben -1 = balra)
+            let rossz = false;  // Létrehoz egy flag változót ami jelzi hogy a sáncolás érvénytelen-e (kezdetben false = érvényes)
+
+            for (let cx = kezdX; cx !== vegX + lep; cx = cx + lep)  // Végigmegy a király útvonaláán (kezdő X-től a cél X + 1 lépés-ig, azaz beleértve a célmezőt is)
+            {
+                let teszt = mezoKeres(cx, kirPoz.y);  // Megkeresi az aktuális mező objektumot az útvonalon
+
+                if (mezoTamadva(teszt, babu.color) === true)  // Ellenőrzi hogy ezt a mezőt támadják-e az ellenfél bábui
+                {
+                    rossz = true;  // Beállítja a flag-et true-ra (érvénytelen sáncolás mert támadott mezőn menne át a király)
+                    break;  // Kilép a ciklusból (nem kell tovább ellenőrizni)
+                }
+            }
+
+            if (rossz === false)  // Ellenőrzi hogy a sáncolás érvényes-e (rossz flag false maradt)
+            {
+                szabalyos.push(l);  // Hozzáadja a sáncolás lépést a szabályos lépések tömbhöz
+            }
+            continue;  // Folytatja a külső ciklust a következő lépéssel (átugorja a normál lépés ellenőrzést)
+        }
+
+        let honnan = l.from;  // Elmenti a lépés kiindulási mezőjét
+        let hova = l.to;  // Elmenti a lépés célmezőjét
+        let mentHonnan = honnan.piece;  // Elmenti a kiindulási mezőn lévő bábut (később vissza kell állítani)
+        let mentHova = hova.piece;  // Elmenti a célmezőn lévő bábut (lehet null ha üres, vagy ellenfél bábu ha ütés)
+        let mentEP = jatek.enPassant;  // Elmenti a jelenlegi en passant állapotot (később vissza kell állítani)
+        let utottBabu = null;  // Létrehoz egy változót az en passant ütött bábu tárolására
+
+        if (l.special === "enpassant" && l.captured)  // Ellenőrzi hogy ez en passant lépés-e ÉS van captured mező (ütött gyalog mezője)
+        {
+            utottBabu = l.captured.piece;  // Elmenti az ütött gyalog bábu objektumot
+            l.captured.piece = null;  // Törli az ütött gyalogot a mezőjéről (szimulálja az ütést)
+        }
+
+        honnan.piece = null;  // Üresíti a kiindulási mezőt (szimulálja hogy a bábu elmozdult)
+        hova.piece = mentHonnan;  // Áthelyezi a bábut a célmezőre
+        hova.piece.square = hova;  // Frissíti a bábu square tulajdonságát az új mezőre
+        let kirMezo = null;  // Létrehoz egy változót a király mező tárolására
+
+        for (let j = 0; j < jatek.tabla.length; j = j + 1)  // Végigmegy az összes mezőn a táblán
+        {
+            if (jatek.tabla[j].piece && jatek.tabla[j].piece.type === "king" && jatek.tabla[j].piece.color === babu.color)  // Ellenőrzi hogy a mezőn van-e bábu ÉS az király ÉS a saját színünk királya
+            {
+                kirMezo = jatek.tabla[j];  // Elmenti a király mezőjét
+                break;  // Kilép a ciklusból (megtalálta a királyt)
+            }
+        }
+
+        let sakkban = mezoTamadva(kirMezo, babu.color);  // Ellenőrzi hogy a király mezőjét támadják-e (mezoTamadva visszaad true ha támadott, false ha nem)
+        honnan.piece = mentHonnan;  // Visszaállítja a kiindulási mezőre a bábut (visszavonja a szimulációt)
+        honnan.piece.square = honnan;  // Visszaállítja a bábu square tulajdonságát az eredeti mezőre
+        hova.piece = mentHova;  // Visszaállítja a célmező bábuját (null ha üres volt, vagy ellenfél bábu ha ütés volt)
+
+        if (mentHova)  // Ellenőrzi hogy volt-e bábu a célmezőn
+        {
+            mentHova.square = hova;  // Visszaállítja az ütött bábu square tulajdonságát (ha volt)
+        }
+
+        if (l.special === "enpassant" && l.captured)  // Ellenőrzi hogy ez en passant lépés volt-e
+        {
+            l.captured.piece = utottBabu;  // Visszarakja az ütött gyalogot a mezőjére (visszavonja az ütést)
+        }
+
+        jatek.enPassant = mentEP;  // Visszaállítja az en passant állapotot az eredeti értékre
+
+        if (sakkban === false)  // Ellenőrzi hogy a király NINCS sakkban a lépés után (sakkban változó false)
+        {
+            szabalyos.push(l);  // Hozzáadja ezt a lépést a szabályos lépések tömbhöz (mert nem marad sakkban a király)
+        }
+    }
+
+    return szabalyos;  // Visszaadja a szabályos lépések tömbjét
+}
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
