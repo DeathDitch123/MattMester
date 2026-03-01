@@ -857,6 +857,26 @@ function lepesHajt(babu, lepes, atvalTipus) {
     return true;  // Visszaad true értéket jelezve hogy a lépés sikeresen végrehajtva
 }
 
+// Függvény: Átváltozás modal megjelenítés
+// Megjeleníti a gyalog átváltozás választó popup ablakot a 4 választható bábuval
+
+function atvaltozasModal(szin, celMezo) 
+{
+    let modal = document.getElementById("promotion-modal");  // Megkeresi a HTML-ben az id="promotion-modal" elemet és elmenti a modal változóba
+    let valasztek = modal.querySelectorAll(".promotion-piece");  // Megkeresi a modal-on belül az összes .promotion-piece osztályú elemet (4 db bábu választék) és elmenti a valasztek változóba (tömb-szerű lista)
+    
+    for (let i = 0; i < valasztek.length; i = i + 1)  // Végigmegy mind a 4 választható bábun
+    {
+        let v = valasztek[i];  // Elmenti az aktuális választék HTML elemét
+        let tipus = v.dataset.type;  // Kiolvassa a választék data-type attribútumát (pl: "queen", "rook", "bishop", "knight")
+        v.style.backgroundImage = "url('" + babuKepek[szin][tipus] + "')";  // Beállítja a választék háttérképét a megfelelő színű bábu képére (babuKepek objektumból)
+        v.onclick = function() { atvaltozasBabuValaszt(tipus); };  // Hozzáad egy kattintás eseménykezelőt ami meghívja az atvaltozasBabuValaszt() függvényt a típussal
+    }
+    
+    modal.classList.remove("hidden");  // Törli a "hidden" CSS osztályt a modal elemről (így láthatóvá válik)
+    return true;  // Visszaad true értéket jelezve hogy a modal sikeresen megjelenítve
+}
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
