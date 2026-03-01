@@ -19,7 +19,7 @@
 </head>
 
 <body>
-    <!--?Navbar-->
+    <!--Navbar-->
     <nav class="navbar navbar-expand-lg navbar-dark navbar-glass fixed-top">
         <div class="container">
             <a class="navbar-brand brand d-flex align-items-center gap-2" href="#">
@@ -63,6 +63,33 @@
             </div>
         </div>
     </nav>
+
+    <!-- Header -->
+    <header class="hero">
+        <div class="container">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-12">
+                    <div class="hero-card h-100">
+                        <span class="badge badge-soft mb-3"><i class="bi bi-lightning-charge-fill me-1"></i>Elő
+                            közösségi sakk platform</span>
+                        <h1 class="display-5 fw-bold mb-3">Játssz, fejlődj, lépj a ranglétra élére</h1>
+                        <p class="text-secondary mb-4">Versenyezz Mattmester, Klasszikus vagy Gép elleni módban.
+                            Vendégként azonnal elkezdheted,
+                            fiókkal pedig követheted az ELO fejlődésedet</p>
+
+                        <div class="d-flex flex-wrap gap-2">
+                            <button class="btn btn-gold btn-lg" data-bs-toggle="modal" data-bs-target="#playModal"><i
+                                    class="bi bi-play-fill me-1"></i> Játék</button>
+                        </div>
+                        <a href="#ranglistal" class="btn btn-outline-gold btn-lg"><i
+                                class="bi bi-trophy-fill me-1"></i>Ranglista</a>
+                        <div class="mode-hint mt-3">Utolsó választott mód: <span id="lastModeLabel">Nincs
+                                kiválasztva</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
 </body>
 
 </html>
