@@ -706,6 +706,33 @@ function szabLepKeres(babu) {
     return szabalyos;  // Visszaadja a szabályos lépések tömbjét
 }
 
+// Függvény: Mező támadott-e
+// Ellenőrzi hogy egy adott mezőt támad-e valamelyik ellenfél bábu
+
+function mezoTamadva(mezo, vedoSzin) {
+    let ellenSzin = (vedoSzin === "white") ? "black" : "white";  // Kiszámolja az ellenfél színét (ha védő fehér akkor ellenfél fekete, különben fehér)
+
+    for (let i = 0; i < jatek.tabla.length; i = i + 1)  // Végigmegy a sakktábla összes mezőjén (mind a 64 mezőn)
+    {
+        let m = jatek.tabla[i];  // Elmenti az aktuális mező objektumot a jatek.tabla tömb i-edik eleméből
+
+        if (m.piece && m.piece.color === ellenSzin)  // Ellenőrzi hogy a mezőn van-e bábu ÉS az ellenfél színű-e
+        {
+            let pseudos = lehetsLepSzamit(m.piece, true);  // Meghívja a lehetsLepSzamit() függvényt az ellenfél bábuval (true = sakk ellenőrzés kihagyva, mert végtelen ciklust okozna)
+
+            for (let j = 0; j < pseudos.length; j = j + 1)  // Végigmegy az ellenfél bábu összes lehetséges lépésén
+            {
+                if (pseudos[j].to.pos === mezo.pos)  // Ellenőrzi hogy a lépés célmezője egyezik-e a vizsgált mezővel
+                {
+                    return true;  // Visszaad true értéket (a mezőt támadja ez az ellenfél bábu)
+                }
+            }
+        }
+    }
+
+    return false;  // Visszaad false értéket (egyetlen ellenfél bábu sem támadja ezt a mezőt)
+}
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
