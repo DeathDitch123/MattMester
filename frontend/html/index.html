@@ -254,7 +254,7 @@
                                                 <input type="checkbox" class="form-check-input" id="rememberMe">
                                                 <label class="form-check-label" for="rememberMe">Emlékezz rám:</label>
                                             </div>
-                                            <button type="submit" class="btn btn-primary w-100">Bejelentkezés</button>
+                                            <button type="submit" class="btn btn-gold w-100">Bejelentkezés</button>
                                             <div id="loginMessage" class="mt-3 text-center alert d-none"></div>
                                         </div>
                                     </div>
@@ -267,7 +267,50 @@
         </div>
     </div>
     <!--? Regisztráció -->
-    
+    <div class="modal fade" id="registerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i>Regisztráció</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="registerForm">
+                    <div class="modal-body">
+                        <div class="container-fluid px-0">
+                            <div class="row justify-content-center">
+                                <div class="col-12">
+                                    <div class="card shadow p-4 login-panel">
+                                        <h1 class="text-center mb-4 h4 login-heading">Regisztráció</h1>
+                                        <div>
+                                            <div class="mb-3">
+                                                <label for="registerUsername" class="form-label">Felhasználónév</label>
+                                                <input class="form-control" type="text" id="registerUsername"
+                                                    placeholder="Mattmester / mattmester@gmail.com" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="registerEmail" class="form-label">Email:</label>
+                                                <input class="form-control" type="email" id="registerEmail"
+                                                    placeholder="mattmester@gmail.com" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="registerPassword" class="form-label">Jelszó:</label>
+                                                <input class="form-control" type="password" id="registerPassword"
+                                                    placeholder="Jelszó" minlength="8" required>
+                                                <small class="text-secondary" style="opacity: 0.75;">Min. 8 karakter,
+                                                    legalább egy szám.</small>
+                                            </div>
+                                            <button type="submit" class="btn btn-gold w-100">Regisztráció</button>
+                                            <div id="registerMessage" class="mt-3 text-center alert d-none"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
