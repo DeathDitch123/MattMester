@@ -733,6 +733,130 @@ function mezoTamadva(mezo, vedoSzin) {
     return false;  // Visszaad false értéket (egyetlen ellenfél bábu sem támadja ezt a mezőt)
 }
 
+// Függvény: Lépés végrehajtása
+// Végrehajtja egy lépést a sakktáblán (bábu mozgatás, ütés, sáncolás, átváltozás kezelése és játék állapot frissítése)
+
+function lepesHajt(babu, lepes, atvalTipus) {
+    if (atvalTipus === undefined)  // Ellenőrzi hogy az atvalTipus paraméter meg van-e adva (undefined = nincs megadva)
+    {
+        atvalTipus = "queen";  // Beállítja az alapértelmezett átváltozás típust vezérre (ha gyalog átváltozik és nincs megadva típus)
+    }
+
+    let honnan = lepes.from;  // Elmenti a lépés kiindulási mezőjét
+    let hova = lepes.to;  // Elmenti a lépés célmezőjét
+
+    if (lepes.capture === true && !lepes.special)  // Ellenőrzi hogy ez normál ütés lépés-e (capture = true ÉS nincs special típus)
+    {
+        hova.piece = null;  // Törli az ütött bábut a célmezőről (null-ra állítja)
+    }
+
+    if (lepes.special === "enpassant" && lepes.captured)  // Ellenőrzi hogy ez en passant ütés-e ÉS van captured mező
+    {
+        lepes.captured.piece = null;  // Törli az en passant ütött gyalogot a mezőjéről (ez nem a célmező, hanem oldalt van)
+    }
+
+    if (lepes.special === "castle-ks" || lepes.special === "castle-qs")  // Ellenőrzi hogy ez sáncolás lépés-e (király oldali VAGY vezér oldali)
+    {
+        let rf = lepes.rookFrom;  // Elmenti a bástya kiindulási mezőjét
+        let rt = lepes.rookTo;  // Elmenti a bástya célmezőjét
+        let kt = lepes.kingTo;  // Elmenti a király célmezőjét
+        rt.piece = rf.piece;  // Áthelyezi a bástyát a célmezőre
+        rt.piece.hasMoved = true;  // Beállítja hogy a bástya mozdult (hasMoved = true, többé nem sáncolhat)
+        rt.piece.square = rt;  // Frissíti a bástya square tulajdonságát az új mezőre
+        rf.piece = null;  // Üresíti a bástya régi mezőjét (null-ra állítja)
+        let kir = (babu.type === "king") ? babu : mezoKeres(4, babu.square.y).piece;  // Meghatározza a király bábu objektumot (ha király mozog akkor a babu, ha bástya mozog akkor megkeresi a 4. oszlopban)
+        let regiKirMezo = kir.square;  // Elmenti a király régi mezőjét
+        kt.piece = kir;  // Áthelyezi a királyt a célmezőre
+        kt.piece.hasMoved = true;  // Beállítja hogy a király mozdult (hasMoved = true, többé nem sáncolhat)
+        kt.piece.square = kt;  // Frissíti a király square tulajdonságát az új mezőre
+        regiKirMezo.piece = null;  // Üresíti a király régi mezőjét (null-ra állítja)
+        jatek.utolsoLepes = { fromPos: regiKirMezo.pos, toPos: kt.pos };  // Elmenti az utolsó lépés adatait (király régi pozíció → király új pozíció)
+    }
+    else  // Ha nem sáncolás, akkor normál lépés
+    {
+        hova.piece = honnan.piece;  // Áthelyezi a bábut a kiindulási mezőről a célmezőre
+        hova.piece.square = hova;  // Frissíti a bábu square tulajdonságát az új mezőre
+        hova.piece.hasMoved = true;  // Beállítja hogy a bábu mozdult (hasMoved = true)
+        honnan.piece = null;  // Üresíti a kiindulási mezőt (null-ra állítja)
+
+        if (lepes.special === "double")  // Ellenőrzi hogy ez dupla gyalog lépés-e
+        {
+            jatek.enPassant = { x: hova.x, y: hova.y, color: hova.piece.color };  // Beállítja az en passant lehetőséget (gyalog pozíció és szín tárolása)
+        }
+        else  // Ha nem dupla lépés
+        {
+            jatek.enPassant = null;  // Törli az en passant lehetőséget (null-ra állítja)
+        }
+
+        if (hova.piece.type === "pawn")  // Ellenőrzi hogy a mozgatott bábu gyalog-e
+        {
+            let utSor = (hova.piece.color === "white") ? 0 : 7;  // Kiszámolja az utolsó sort (fehér gyalog: 0. sor = 8. sor, fekete gyalog: 7. sor = 1. sor)
+
+            if (hova.y === utSor)  // Ellenőrzi hogy a gyalog elérte-e az utolsó sort
+            {
+                hova.piece.type = atvalTipus;  // Megváltoztatja a gyalog típusát az atvalTipus értékre (alapértelmezetten "queen")
+            }
+        }
+
+        jatek.utolsoLepes = { fromPos: honnan.pos, toPos: hova.pos };  // Elmenti az utolsó lépés adatait (kiindulási pozíció → cél pozíció)
+    }
+
+    jatek.koronLevo = (jatek.koronLevo === "white") ? "black" : "white";  // Megváltoztatja a körön lévő játékost (fehér → fekete vagy fekete → fehér)
+    idoValt();  // Meghívja az idoValt() függvényt ami átváltja az időmérést a másik játékosra
+    let ellenSzin = jatek.koronLevo;  // Elmenti az ellenfél színét (aki most jön)
+    let vanLepes = false;  // Létrehoz egy flag változót ami jelzi hogy van-e szabályos lépés (kezdetben false)
+
+    for (let i = 0; i < jatek.tabla.length; i = i + 1)  // Végigmegy a sakktábla összes mezőjén
+    {
+        let m = jatek.tabla[i];  // Elmenti az aktuális mező objektumot
+
+        if (m.piece && m.piece.color === ellenSzin)  // Ellenőrzi hogy a mezőn van-e bábu ÉS az ellenfél színű-e
+        {
+            if (szabLepKeres(m.piece).length > 0)  // Meghívja a szabLepKeres() függvényt és ellenőrzi hogy van-e szabályos lépés (tömb hossza nagyobb mint 0)
+            {
+                vanLepes = true;  // Beállítja true-ra (van szabályos lépés)
+                break;  // Kilép a ciklusból (találtunk lépést, nem kell tovább keresni)
+            }
+        }
+    }
+
+    if (vanLepes === false)  // Ellenőrzi hogy nincs-e szabályos lépés
+    {
+        let kirMezo = null;  // Létrehoz egy változót a király mező tárolására
+
+        for (let i = 0; i < jatek.tabla.length; i = i + 1)  // Végigmegy a sakktábla összes mezőjén
+        {
+            if (jatek.tabla[i].piece && jatek.tabla[i].piece.type === "king" && jatek.tabla[i].piece.color === ellenSzin)  // Ellenőrzi hogy a mezőn van-e bábu ÉS az király ÉS az ellenfél színű
+            {
+                kirMezo = jatek.tabla[i];  // Elmenti a király mezőjét
+                break;  // Kilép a ciklusból (megtalálta a királyt)
+            }
+        }
+
+        let sakkban = mezoTamadva(kirMezo, ellenSzin);  // Ellenőrzi hogy a király mezőjét támadják-e
+        jatek.vege = true;  // Beállítja hogy a játék véget ért (vege = true)
+
+        if (sakkban === true)  // Ellenőrzi hogy a király sakkban van-e
+        {
+            let nyertes = (ellenSzin === "white") ? "black" : "white";  // Kiszámolja a nyertes színét (ellenkező szín mint aki mattban van)
+            document.getElementById("status").textContent = ellenSzin + " matt — " + nyertes + " nyert";  // Kiírja a képernyőre hogy matt van és ki nyert
+        }
+        else  // Ha a király nincs sakkban
+        {
+            document.getElementById("status").textContent = "Döntetlen (Stalemate)";  // Kiírja a képernyőre hogy döntetlen (patt = nincs szabályos lépés de nincs sakk sem)
+        }
+
+        idoLeall();  // Meghívja az idoLeall() függvényt ami leállítja az időmérést
+    }
+    else  // Ha van szabályos lépés
+    {
+        document.getElementById("status").textContent = "játékon";  // Kiírja a képernyőre hogy a játék folytatódik
+    }
+
+    tablaRajzol();  // Meghívja a tablaRajzol() függvényt ami újrarajzolja a sakktáblát
+    return true;  // Visszaad true értéket jelezve hogy a lépés sikeresen végrehajtva
+}
+
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
 
