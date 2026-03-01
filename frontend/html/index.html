@@ -17,49 +17,34 @@
     <script src="../javascript/index.js"></script>
 </head>
 <body>
-    <div class="container py-4">
-        <div class="main-bubble shadow">
-            <div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
-                <button class="menu-btn active">GÉP ELLEN</button>
-                <button class="menu-btn">MATT MESTER</button>
-                <button class="menu-btn">TRADICIONÁLIS</button>
-            </div>
+    <!--?Navbar-->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-glass fixed-top">
+        <div class="container">
+            <a class="navbar-brand brand d-flex align-items-center gap-2" href="#">
+                <i class="bi bi-king-fill"></i>
+                <span>MATTMESTER</span>
+            </a>
 
-            <div class="row align-items-center gy-4">
-                <div class="col-lg-3 col-md-4">
-                    <div class="panel p-3 bg-light rounded shadow-sm">
-                        <h5 class="text-center fw-bold">Ranglista</h5>
-                        <hr>
-                        <div id="leaderboard">
-                            #1 Player - 2100<br>
-                            #2 Player - 1950<br>
-                            #3 Player - 1800<br>
-                            #4 Player - 1700
-                        </div>
-                    </div>
-                </div>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
 
-                <div class="col-lg-6 col-md-8 text-center">
-                    <h1 class="outlined-text display-3 fw-bold">MATT MESTER</h1>
-                </div>
+            <div class="collapse navbar-collapse" id="mainNav">
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2" id="guestActions">
+                    <!--? Vendég menü + talán később élő óra funkció --> 
 
-                <div class="col-lg-3 d-none d-lg-block">
-                    <div id="user-status-panel" class="panel p-3 text-center border rounded shadow-sm hidden">
-                        <h6 class="fw-bold mb-1" id="display-username">Username</h6>
-                        <p class="small mb-2">ELO: <span id="display-elo" class="badge bg-primary">1200</span></p>
-                        <button class="btn btn-warning hidden" id="adminPage">Admin Panel</button>
-                        <button class="btn btn-success hidden" id="settingsBtn">Beállítások</button>
-                        <button class="btn btn-danger" id="logoutBtn">Kijelentkezés</button>
-                    </div>
-                </div>
-            </div>
-
-            <div id="auth-section" class="d-flex justify-content-center gap-3 mt-5 flex-wrap">
-                <button class="auth-btn signin" onclick="location.href='/login'">Bejelentkezés</button>
-                <button class="play-btn">Játék<br><small>vendégként</small></button>
-                <button class="auth-btn signup" onclick="location.href='/register'">Regisztráció</button>
+                    <!-- <li class="nav-item me-lg-2">
+                        <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
+                    </li> -->
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Bejelentkezés</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal" data-bs-target="#registerModal">Regisztráció</button>
+                    </li>
+                </ul>
             </div>
         </div>
-    </div>
+    </nav>
 </body>
 </html>
