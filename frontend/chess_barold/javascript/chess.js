@@ -389,6 +389,206 @@ function kiemelFrissit()
     return true;    // Visszaad true értéket jelezve hogy a kiemelések sikeresen frissítve
 }
 
+// Függvény: Lehetséges lépések számítása (pseudo moves)
+// Kiszámolja egy bábu összes lehetséges lépését (még nem ellenőrzi hogy a király sakkban marad-e)
+
+function lehetsLepSzamit(babu, sakkEllen) {
+    let lepesek = [];  // Létrehoz egy üres tömböt ami tárolni fogja az összes lehetséges lépést
+    let x = babu.square.x;  // Elmenti a bábu jelenlegi X koordinátáját (0-7 között)
+    let y = babu.square.y;  // Elmenti a bábu jelenlegi Y koordinátáját (0-7 között)
+
+    if (babu.type === "pawn")  // Ellenőrzi hogy a bábu gyalog-e
+    {
+        let ir = (babu.color === "white") ? -1 : 1;  // Kiszámolja a gyalog mozgási irányát (fehér: -1 = felfelé, fekete: 1 = lefelé)
+        let kezdoSor = (babu.color === "white") ? 6 : 1;  // Kiszámolja a kezdő sort (fehér: 6. sor = 2. sor, fekete: 1. sor = 7. sor)
+        let elore = mezoKeres(x, y + ir);  // Megkeresi az egy mezővel előre lévő mezőt (gyalog irányában)
+
+        if (elore && !elore.piece)  // Ellenőrzi hogy az előre mező létezik-e ÉS üres-e (nincs rajta bábu)
+        {
+            lepesek.push({ from: babu.square, to: elore, capture: false });  // Hozzáad egy normál előre lépést a lepesek tömbhöz
+
+            if (y === kezdoSor)  // Ellenőrzi hogy a gyalog a kezdősorán van-e
+            {
+                let ket = mezoKeres(x, y + ir * 2);  // Megkeresi a két mezővel előre lévő mezőt (dupla lépéshez)
+
+                if (ket && !ket.piece)  // Ellenőrzi hogy a két mezővel előre mező létezik-e ÉS üres-e
+                {
+                    lepesek.push({ from: babu.square, to: ket, capture: false, special: "double" });  // Hozzáad egy dupla lépést a lepesek tömbhöz (special: "double" jelzi hogy dupla lépés)
+                }
+            }
+        }
+
+        for (let dx = -1; dx <= 1; dx = dx + 2)  // Végigmegy a két átlós irányon (dx = -1 majd +1, azaz bal és jobb átló)
+        {
+            let csq = mezoKeres(x + dx, y + ir);  // Megkeresi az átlósan előre lévő mezőt (gyalog ütési mezője)
+
+            if (csq && csq.piece && csq.piece.color !== babu.color)  // Ellenőrzi hogy a mező létezik-e ÉS van rajta bábu ÉS az ellenfél bábuja
+            {
+                lepesek.push({ from: babu.square, to: csq, capture: true });  // Hozzáad egy ütés lépést a lepesek tömbhöz
+            }
+        }
+
+        if (jatek.enPassant)  // Ellenőrzi hogy van-e en passant lehetőség a játékban
+        {
+            let ep = jatek.enPassant;  // Elmenti az en passant adatokat (x, y koordináta, szín)
+
+            if (ep.color !== babu.color && ep.y === y && Math.abs(ep.x - x) === 1)  // Ellenőrzi hogy az en passant gyalog ellenfél színű-e ÉS ugyanabban a sorban van-e ÉS szomszédos oszlopban van-e (Math.abs = abszolút érték, távolság 1)
+            {
+                let cel = mezoKeres(ep.x, y + ir);  // Megkeresi a célmezőt (ahová a gyalog lépne en passant esetén)
+                let ut = mezoKeres(ep.x, ep.y);  // Megkeresi az ütendő gyalog mezőjét
+
+                if (cel)  // Ellenőrzi hogy a célmező létezik-e
+                {
+                    lepesek.push({ from: babu.square, to: cel, capture: true, special: "enpassant", captured: ut });  // Hozzáad egy en passant lépést (special: "enpassant", captured: melyik mezőről törlődik a bábu)
+                }
+            }
+        }
+        return lepesek;  // Visszaadja a gyalog összes lehetséges lépését
+    }
+
+    if (babu.type === "knight")  // Ellenőrzi hogy a bábu huszár-e
+    {
+        let elt = [[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]];  // Tömb ami tartalmazza a huszár 8 lehetséges eltolását (L alakú lépések)
+
+        for (let i = 0; i < elt.length; i = i + 1)  // Végigmegy mind a 8 lehetséges huszár lépésen
+        {
+            lepesProba(x + elt[i][0], y + elt[i][1], lepesek, babu);  // Meghívja a lepesProba() függvényt az aktuális eltolással (x + eltolás[0], y + eltolás[1])
+        }
+        return lepesek;  // Visszaadja a huszár összes lehetséges lépését
+    }
+
+    if (babu.type === "bishop")  // Ellenőrzi hogy a bábu futó-e
+    {
+        let ir = [[1, 1], [1, -1], [-1, 1], [-1, -1]];  // Tömb ami tartalmazza a futó 4 átlós irányát (jobb-fel, jobb-le, bal-fel, bal-le)
+
+        for (let i = 0; i < ir.length; i = i + 1)  // Végigmegy mind a 4 átlós irányon
+        {
+            for (let j = 1; j < 8; j = j + 1)  // Végigmegy maximum 7 mezőn az adott irányban (j = 1-től 7-ig, azaz 1, 2, 3... 7 mező távolság)
+            {
+                if (!lepesProba(x + ir[i][0] * j, y + ir[i][1] * j, lepesek, babu))  // Meghívja a lepesProba() függvényt az aktuális irányban j távolságra, ha false-t ad vissza (nem mehet tovább) akkor
+                {
+                    break;  // Kilép a belső ciklusból (nem megy tovább ebben az irányban, mert akadály van)
+                }
+            }
+        }
+        return lepesek;  // Visszaadja a futó összes lehetséges lépését
+    }
+
+    if (babu.type === "rook")  // Ellenőrzi hogy a bábu bástya-e
+    {
+        let ir = [[1, 0], [-1, 0], [0, 1], [0, -1]];  // Tömb ami tartalmazza a bástya 4 egyenes irányát (jobbra, balra, le, fel)
+
+        for (let i = 0; i < ir.length; i = i + 1)  // Végigmegy mind a 4 egyenes irányon
+        {
+            for (let j = 1; j < 8; j = j + 1)  // Végigmegy maximum 7 mezőn az adott irányban
+            {
+                if (!lepesProba(x + ir[i][0] * j, y + ir[i][1] * j, lepesek, babu))  // Meghívja a lepesProba() függvényt, ha false-t ad vissza akkor
+                {
+                    break;  // Kilép a belső ciklusból (nem megy tovább ebben az irányban)
+                }
+            }
+        }
+
+        if (!sakkEllen && !babu.hasMoved)  // Ellenőrzi hogy a sakk ellenőrzés ki van-e hagyva (sáncoláshoz) ÉS a bástya még nem mozdult-e
+        {
+            let hazSor = (babu.color === "white") ? 7 : 0;  // Kiszámolja a ház sort (fehér: 7. sor = 1. sor, fekete: 0. sor = 8. sor)
+            let kirMezo = mezoKeres(4, hazSor);  // Megkeresi a király mezőjét (4. oszlop = e oszlop)
+
+            if (kirMezo && kirMezo.piece && kirMezo.piece.type === "king" && !kirMezo.piece.hasMoved)  // Ellenőrzi hogy a király mező létezik-e ÉS van rajta bábu ÉS az király ÉS a király nem mozdult még
+            {
+                if (x === 7)  // Ellenőrzi hogy ez a jobb oldali bástya-e (7. oszlop = h oszlop)
+                {
+                    let s1 = mezoKeres(5, hazSor);  // Megkeresi az 5. oszlop mezőjét (f oszlop, köztes mező)
+                    let s2 = mezoKeres(6, hazSor);  // Megkeresi a 6. oszlop mezőjét (g oszlop, köztes mező)
+
+                    if (s1 && s2 && !s1.piece && !s2.piece)  // Ellenőrzi hogy mindkét köztes mező létezik-e ÉS mindkettő üres-e
+                    {
+                        lepesek.push({ from: babu.square, to: kirMezo, capture: false, special: "castle-ks", rookFrom: babu.square, rookTo: s1, kingTo: s2 });  // Hozzáad egy király oldali sáncolás lépést (bástya a királyra "lép", de valójában mindkettő mozog)
+                    }
+                }
+
+                if (x === 0)  // Ellenőrzi hogy ez a bal oldali bástya-e (0. oszlop = a oszlop)
+                {
+                    let s1 = mezoKeres(1, hazSor);  // Megkeresi az 1. oszlop mezőjét (b oszlop, köztes mező)
+                    let s2 = mezoKeres(2, hazSor);  // Megkeresi a 2. oszlop mezőjét (c oszlop, köztes mező)
+                    let s3 = mezoKeres(3, hazSor);  // Megkeresi a 3. oszlop mezőjét (d oszlop, köztes mező)
+
+                    if (s1 && s2 && s3 && !s1.piece && !s2.piece && !s3.piece)  // Ellenőrzi hogy mind a 3 köztes mező létezik-e ÉS mindhárom üres-e
+                    {
+                        lepesek.push({ from: babu.square, to: kirMezo, capture: false, special: "castle-qs", rookFrom: babu.square, rookTo: s3, kingTo: s2 });  // Hozzáad egy vezér oldali sáncolás lépést
+                    }
+                }
+            }
+        }
+        return lepesek;  // Visszaadja a bástya összes lehetséges lépését
+    }
+
+    if (babu.type === "queen")  // Ellenőrzi hogy a bábu vezér-e
+    {
+        let ir = [[1, 1], [1, -1], [-1, 1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]];  // Tömb ami tartalmazza a vezér mind a 8 irányát (4 átló + 4 egyenes)
+
+        for (let i = 0; i < ir.length; i = i + 1)  // Végigmegy mind a 8 irányon
+        {
+            for (let j = 1; j < 8; j = j + 1)  // Végigmegy maximum 7 mezőn az adott irányban
+            {
+                if (!lepesProba(x + ir[i][0] * j, y + ir[i][1] * j, lepesek, babu))  // Meghívja a lepesProba() függvényt, ha false-t ad vissza akkor
+                {
+                    break;  // Kilép a belső ciklusból
+                }
+            }
+        }
+        return lepesek;  // Visszaadja a vezér összes lehetséges lépését
+    }
+
+    if (babu.type === "king")  // Ellenőrzi hogy a bábu király-e
+    {
+        for (let dx = -1; dx <= 1; dx = dx + 1)  // Végigmegy a vízszintes irányokon (dx = -1, 0, 1 azaz bal, középen, jobb)
+        {
+            for (let dy = -1; dy <= 1; dy = dy + 1)  // Végigmegy a függőleges irányokon (dy = -1, 0, 1 azaz fel, középen, le)
+            {
+                if (dx === 0 && dy === 0)  // Ellenőrzi hogy ez a király saját mezője-e (dx=0 és dy=0)
+                {
+                    continue;  // Átugrik erre az iterációra (nem próbálkozik a király saját mezőjével)
+                }
+                lepesProba(x + dx, y + dy, lepesek, babu);  // Meghívja a lepesProba() függvényt az aktuális szomszédos mezőre
+            }
+        }
+
+        if (!sakkEllen && !babu.hasMoved)  // Ellenőrzi hogy a sakk ellenőrzés ki van-e hagyva ÉS a király még nem mozdult-e
+        {
+            let hazSor = (babu.color === "white") ? 7 : 0;  // Kiszámolja a ház sort
+            let bastyaJ = mezoKeres(7, hazSor);  // Megkeresi a jobb oldali bástya mezőjét (7. oszlop = h oszlop)
+
+            if (bastyaJ && bastyaJ.piece && bastyaJ.piece.type === "rook" && !bastyaJ.piece.hasMoved)  // Ellenőrzi hogy a jobb bástya mező létezik-e ÉS van rajta bábu ÉS az bástya ÉS nem mozdult még
+            {
+                let s1 = mezoKeres(5, hazSor);  // Megkeresi az 5. oszlop mezőjét (köztes mező)
+                let s2 = mezoKeres(6, hazSor);  // Megkeresi a 6. oszlop mezőjét (köztes mező)
+
+                if (s1 && s2 && !s1.piece && !s2.piece)  // Ellenőrzi hogy mindkét köztes mező létezik-e ÉS mindkettő üres-e
+                {
+                    lepesek.push({ from: babu.square, to: bastyaJ, capture: false, special: "castle-ks", rookFrom: bastyaJ, rookTo: s1, kingTo: s2 });  // Hozzáad egy király oldali sáncolás lépést (király a bástyára "lép")
+                }
+            }
+
+            let bastyaB = mezoKeres(0, hazSor);  // Megkeresi a bal oldali bástya mezőjét (0. oszlop = a oszlop)
+
+            if (bastyaB && bastyaB.piece && bastyaB.piece.type === "rook" && !bastyaB.piece.hasMoved)  // Ellenőrzi hogy a bal bástya mező létezik-e ÉS van rajta bábu ÉS az bástya ÉS nem mozdult még
+            {
+                let s1 = mezoKeres(1, hazSor);  // Megkeresi az 1. oszlop mezőjét (köztes mező)
+                let s2 = mezoKeres(2, hazSor);  // Megkeresi a 2. oszlop mezőjét (köztes mező)
+                let s3 = mezoKeres(3, hazSor);  // Megkeresi a 3. oszlop mezőjét (köztes mező)
+
+                if (s1 && s2 && s3 && !s1.piece && !s2.piece && !s3.piece)  // Ellenőrzi hogy mind a 3 köztes mező létezik-e ÉS mindhárom üres-e
+                {
+                    lepesek.push({ from: babu.square, to: bastyaB, capture: false, special: "castle-qs", rookFrom: bastyaB, rookTo: s3, kingTo: s2 });  // Hozzáad egy vezér oldali sáncolás lépést
+                }
+            }
+        }
+        return lepesek;  // Visszaadja a király összes lehetséges lépését
+    }
+
+    return lepesek;  // Visszaadja a lépések tömbjét (ha egyik bábu típus sem volt, üres tömb)
+}
 
 // Függvény: Átváltozás modal elrejtés
 // Elrejti az átváltozás választó popup ablakot
