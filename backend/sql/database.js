@@ -51,6 +51,8 @@ async function createTables() {
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
             elo INT DEFAULT 1200,
+            elo_MM INT DEFAULT 1200,
+            elo_bullet INT DEFAULT 1200,
             role ENUM('player', 'admin') DEFAULT 'player',
             is_banned BOOLEAN DEFAULT FALSE,
             ban_reason VARCHAR(255),
@@ -62,8 +64,8 @@ async function createTables() {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )`,
 
-        `INSERT IGNORE INTO users (username, password_hash, email, elo, role) 
-            VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
+            VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
         `,
 
         `CREATE TABLE IF NOT EXISTS login_history (

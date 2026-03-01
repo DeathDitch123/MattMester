@@ -190,7 +190,30 @@
         </div>
     </footer>
     <!-- Modals -->
-     
+
+    <!-- Player Info Modal -->
+    <div class="modal fade" id="playModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-play-fill me-2"></i>Válassz játékmódot</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary">Válaszd ki, milyen módban szeretnél játszani.</p>
+                    <div class="d-grid gap-2">
+                        <button onclick="selectGame('MattMester')" class="btn btn-outline-gold mode-btn" data-mode="MattMester">MattMester</button>
+                        <button onclick="selectGame('MattMester10')" class="btn btn-outline-gold mode-btn" data-mode="MattMester10">Mattmester 10p</button>
+                        <button onclick="selectGame('Klasszikus')" class="btn btn-outline-gold mode-btn" data-mode="Klasszikus">Klasszikus</button>
+                        <button onclick="selectGame('Klasszikus10')" class="btn btn-outline-gold mode-btn" data-mode="Klasszikus10">Klasszikus 10p</button>
+                        <button onclick="selectGame('Bullet')" class="btn btn-outline-gold mode-btn" data-mode="Bullet">Bullet</button>
+                        <button onclick="selectGame('Gepellen')" class="btn btn-outline-gold mode-btn" data-mode="Gepellen">Gép ellen</button>
+                    </div>
+                    <small class="text-secondary d-block mt-3">Vendég módban is elérhető.</small>
+                </div>
+            </div>
+        </div>
+    </div>
     <!--? Bejelentkezés -->
 
 </body>
