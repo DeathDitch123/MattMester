@@ -43,11 +43,11 @@ async function createTables() {
     const queries = [
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) BINARY UNIQUE NOT NULL, 
+            username VARCHAR(50) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
-            email VARCHAR(100) UNIQUE,
+            email VARCHAR(100) NOT NULL UNIQUE,
             elo INT DEFAULT 1200,
-            role ENUM('player', 'admin') DEFAULT 'player',
+            role ENUM('user', 'admin') DEFAULT 'user',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );`,
 
