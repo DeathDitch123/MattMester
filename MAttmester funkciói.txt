@@ -1,0 +1,174 @@
+MAttmester funkciói
+
+1.1 Board State
+·8x8 mátrix
+·minden mező:
+otype
+ocolor
+ohasMoved (sáncoláshoz!)
+·aktuális játékos
+·lépésszám
+·fél-lépés számláló (50 move rule)
+·en passant mező
+Logikai buktató:
+Ha nem tárolod külön:
+·király mozgott-e
+·bástya mozgott-e
+→ sáncolás később hibás lesz
+
+1.2 Move Generation (Pseudo legal) -> (Egy lépés pseudo-legal, ha: a figura szabályosan mozog, de a lépés végén a király sakkban marad.)
+Minden figura generál:
+·potenciális lépéseket
+·ütéseket
+·speciális lépéseket
+Fontos:
+Ez még NEM ellenőrzi a sakkot.
+
+1.3 Legal Move Filtering
+Minden lehetséges lépést:
+1.ideiglenesen végrehajtunk
+2.megnézzük sakkban marad-e a király
+3.ha igen → töröljük a lépést
+Klasszikus hiba:
+Sokan itt hibáznak, és csak a király lépésénél ellenőriznek sakkot.
+
+
+2. SPECIÁLIS SZABÁLYOK
+2.1 Sáncolás
+Feltételek:
+·király nem mozgott
+·bástya nem mozgott
+·nincs sakkban
+·nem lép át sakkon
+·nem érkezik sakkba
+·nincs figura közte
+Logikai bukfenc:
+Sokan csak azt nézik, hogy a célmező nincs sakkban.
+De az áthaladó mező sem lehet támadott!
+
+
+2.2 En Passant
+Tárolni kell:
+·melyik gyalog lépett kettőt
+·melyik mező üthető
+Bukfenc:
+En passant után meg kell nézni, hogy:
+nem marad-e sakkban a király
+(mert az ütött gyalog eltűnik egy másik mezőről)
+
+2.3 Promóció
+·választható figura
+·UI választás
+·engine frissítés
+Bukfenc:
+AI-nál is kezelni kell.
+
+
+3. JÁTÉKÁLLAPOT ELLENŐRZÉS
+
+3.1 Sakk
+·király pozíció
+·ellenfél támadott mezők generálása
+3.2 Matt
+·sakkban van
+·nincs legális lépés
+3.3 Patt
+·nincs sakk
+·nincs legális lépés
+3.4 Döntetlen típusok
+·3-szoros állásismétlés
+·50 lépés szabály
+·elégtelen anyag
+Ehhez kell:
+·move history
+·board hash
+
+UI RÉTEG
+
+4.1 Interakció
+·kattintás
+·drag & drop
+·mobil érintés
+
+4.2 Highlight rendszer
+·kiválasztott figura
+·legális lépések
+·utolsó lépés
+·sakk jelzés
+Bukfenc:
+Ne a DOM alapján számolj logikát.
+A DOM csak vizualizáció.
+
+5. JÁTÉK MÓDOK
+
+5.1 Local játék
+·2 player
+5.2 AI ellenfél
+·minimax --> (A Minimax egy döntési algoritmus, amely:
+-	Feltételezi, hogy
+oaz AI maximalizálni akarja az előnyét
+oaz ellenfél minimalizálni próbálja azt
+)
+·alpha-beta --> (Az Alpha-Beta a Minimax optimalizált verziója.
+Gyorsabb.
+Ha már találtunk egy jobb lépést,
+és egy másik ágon biztosan rosszabb lesz,
+→ nem számoljuk végig.
+)
+Bukfenc:
+Az AI NEM használhat UI logikát.
+Csak a core engine-t.
+
+5.3 Online multiplayer
+·WebSocket
+·szinkronizált board state
+·move validation server oldalon
+Kritikus:
+A backend mindig újraszámolja a lépést.
+Nem bízhatsz a kliensben.
+
+EXTRA FUNKCIÓK (chess.com szint)
+
+6.1 Időzítő
+·bullet
+·blitz
+·rapid
+·increment
+
+6.2 ELO rendszer
+·rating számítás
+·Glicko --> (A Glicko az ELO továbbfejlesztése.
+Három dolgot tárol:
+1.Rating (pontszám)
+2.RD (Rating Deviation)
+3.Volatility (ingadozás)
+)
+
+6.3 Move history
+·algebrai jelölés (e4, Nf3)
+·visszanézés
+
+6.4 Elemzés mód
+·engine evaluation
+·best move
+·mistake detection
+
+7. ARCHITEKTÚRA SZINTŰ GONDOLKODÁS
+Rétegek:
+UI
+↑
+Game Controller
+↑
+Move Validator
+↑
+Board State
+
+
+
+A chess.com NEM úgy működik, hogy:
+"mozgatunk egy figurát"
+1.generál minden legális lépést
+2.csak abból lehet választani
+3.engine validál
+4.UI csak tükröz
+
