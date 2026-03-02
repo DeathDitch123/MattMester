@@ -5,55 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mattmester</title>
     <link rel="stylesheet" href="../css/chess.css">
-    <script src="../javascript/chess.js" defer></script>
+    <!-- <script src="../javascript/chess.js" defer></script> -->
+    <script type="module" src="../javascript/main.js"></script>
 </head>
 <body>
-    <div class="app">
-        <header class="topbar">
-            <div class="player player-black">
-                <div class="name">Magnus</div>
-                <div class="clock" id="clock-black">10:00</div>
-            </div>
-        </header>
+    <h1>Sakkjáték</h1>
+    <div id="info">
+        <div>
+            <div>Fehér: <span id="clock-white">10:00</span></div>
+        </div>
+        <div>
+            <div>Fekete: <span id="clock-black">10:00</span></div>
+        </div>
+        <button id="new-game-btn">Új játék</button>
+    </div>
 
-        <main class="main">
-            <div class="board-wrap">
-                <div id="board" class="board" aria-label="Sakk tábla"></div>
+    <div id="board"></div>
 
-                <div id="promotion-modal" class="promotion-modal hidden">
-                    <div class="promotion-overlay"></div>
-                    <div class="promotion-choices">
-                        <div class="promotion-piece" data-type="queen"></div>
-                        <div class="promotion-piece" data-type="rook"></div>
-                        <div class="promotion-piece" data-type="bishop"></div>
-                        <div class="promotion-piece" data-type="knight"></div>
-                    </div>
-                </div>
-            </div>
-
-            <aside class="sidebar">
-                <div class="status-row">
-                    Aktív: <strong id="turn-name">fehér</strong>
-                </div>
-                <div id="status" class="status">játékon</div>
-                <button id="resetBtn">Újra</button>
-                <div class="legend">
-                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
-                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
-                    <div><span class="legend-sq check"></span> Király sakkban</div>
-                    <div><span class="legend-sq enpassant"></span> En passant</div>
-                    <div><span class="legend-sq castle"></span> Sáncolás</div>
-                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
-                </div>
-            </aside>
-        </main>
-
-        <footer class="bottombar">
-            <div class="player player-white">
-                <div class="name">Orlan</div>
-                <div class="clock" id="clock-white">10:00</div>
-            </div>
-        </footer>
+    <!-- Gylogátváltozás modal -->
+    <div id="promotion-modal" class="hidden">
+        <div class="promotion-piece" data-type="queen"></div>
+        <div class="promotion-piece" data-type="rook"></div>
+        <div class="promotion-piece" data-type="bishop"></div>
+        <div class="promotion-piece" data-type="knight"></div>
     </div>
 </body>
 </html>

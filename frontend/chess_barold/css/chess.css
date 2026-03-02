@@ -1,352 +1,69 @@
-/*CSS GLOBÁLIS VÁLTOZÓK*/
-:root
-{
-    --board-size: 560px;  /* Sakktábla mérete pixelben */
-    --light: #eeeed2;  /* Világos mező színe (bézs) */
-    --dark: #769656;  /* Sötét mező színe (zöld) */
-    --from: rgba(255,255,50,0.55);  /* Utolsó lépés kezdőpont színe (sárga, átlátszó) */
-    --capture: rgba(255,165,0,0.65);  /* Ütési lehetőség színe (narancs) */
-    --check: rgba(255,0,0,0.55);  /* Sakk jelzés színe (piros) */
-    --enpassant: rgba(50,255,50,0.65);  /* En passant jelzés színe (zöld) */
-    --castle: rgba(50, 64, 255, 0.65);  /* Sáncolás jelzés színe (zöld) */
-    --promotion: rgba(200,50,255,0.65);  /* Átváltozás jelzés színe (lila) */
-    --ui-bg: #3b3936;  /* Felhasználói felület háttérszíne (sötétszürke) */
-}
+ body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
 
-*{
-    box-sizing: border-box; /* Minden elemhez: padding és border a méretbe bele számít */
-}
+        #info {
+            display: flex;
+            justify-content: space-between;
+            width: 400px;
+            margin-bottom: 20px;
+        }
 
-body
-{
-    margin: 0;  /* Nincs margó az oldal szélén */
-    font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;  /* Betűtípus prioritási sorrend */
-    background: #2b2926;  /* Sötét háttérszín */
-    color: #f4f4f4;  /* Világos szövegszín */
-    display: flex;  /* Flexbox layout használata */
-    justify-content: center;  /* Vízszintesen középre igazítás */
-    padding: 20px;  /* 20px belső margó minden oldalon */
-    min-height: 100vh;  /* Minimum magasság: teljes képernyő magasság */
-    overflow-x: hidden;  /* Vízszintes görgetés letiltása */
-    position: relative;  /* Relatív pozícionálás (gyermek elemek alapja) */
-}
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 60px);
+            grid-template-rows: repeat(8, 60px);
+            gap: 0;
+            border: 2px solid #333;
+            position: relative;
+        }
 
-/* FŐ ALKALMAZÁS KONTÉNER */
-.app
-{ 
-    width: 100%;  /* Teljes szélesség */
-    max-width: 980px;  /* Maximum szélesség (nagy képernyőkön) */
-    position: relative;  /* Relatív pozíció (rögzített elhelyezéshez) */
-    will-change: auto;  /* Böngésző optimalizáció kikapcsolva */
-}
+        .square {
+            width: 60px;
+            height: 60px;
+            position: relative;
+        }
 
-/* FELSŐ ÉS ALSÓ SÁV (játékos információk) */
-.topbar, .bottombar
-{ 
-    display: flex;  /* Flexbox használata */
-    justify-content: center;  /* Középre igazítás */
-    margin: 10px 0;  /* 10px függőleges margó */
-}
+        .light {
+            background-color: #eee;
+        }
 
-.player
-{
-    background: var(--ui-bg); /* Háttérszín a változóból */
-    padding: 10px 14px;  /* Belső margó (függőleges 10px, vízszintes 14px) */
-    border-radius: 8px;  /* Lekerekített sarkok 8px sugarral */
-    min-width: 320px;  /* Minimum szélesség */
-    display: flex;  /* Flexbox */
-    justify-content: space-between;  /* Elemek széthúzása (név balra, óra jobbra) */
-    align-items: center;  /* Függőleges középre igazítás */
-    box-shadow: 0 8px 18px rgba(0,0,0,0.5);  /* Árnyék (vízszintes 0, függőleges 8px, elmosás 18px) */
-}
+        .dark {
+            background-color: #999;
+        }
 
-.player .name 
-{
-    font-weight: 700;  /* Vastag betű (bold) */
-}
+        /* A modal alapstílusa */
+        #promotion-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 2px solid #333;
+            display: flex;
+            gap: 10px;
+            z-index: 100;
+        }
 
-.clock
-{
-    background: #111;  /* Nagyon sötét háttér */
-    padding: 6px 10px;  /* Belső margó */
-    border-radius: 6px;  /* Lekerekített sarkok */
-    font-family: monospace;  /* Fix szélességű betű (órához jobb) */
-}
+        #promotion-modal.hidden {
+            display: none;
+        }
 
-/* FŐ TARTALOM (sakktábla + oldalsáv) */
-.main
-{
-    display: flex;  /* Flexbox elrendezés */
-    gap: 18px;  /* 18px távolság az elemek között */
-    align-items:flex-start;  /* Elemek felülre igazítása */
-    justify-content:center;  /* Vízszintesen középre */
-    position: relative;  /* Relatív pozíció */
-    isolation: isolate;  /* Új stacking context (layout shift megelőzés) */
-}
+        .promotion-piece {
+            width: 60px;
+            height: 60px;
+            background-size: cover;
+            cursor: pointer;
+        }
 
-.board-wrap
-{
-    width: var(--board-size);  /* Szélesség a változóból (560px) */
-    height: var(--board-size);  /* Magasság ugyanannyi */
-    border: 6px solid #5c4033;  /* 6px vastag barna keret */
-    box-shadow: 0 10px 30px rgba(0,0,0,0.6);  /* Árnyék hatás */
-    position: relative;  /* Relatív pozíció (modal elhelyezéshez) */
-}
-
-.board
-{
-    width: 100%;  /* Teljes szélesség */
-    height: 100%;  /* Teljes magasság */
-    display: grid;  /* CSS Grid használata */
-    grid-template-columns: repeat(8, 1fr);  /* 8 egyenlő oszlop */
-    grid-template-rows: repeat(8, 1fr);  /* 8 egyenlő sor */
-    user-select: none;  /* Szöveg kijelölés letiltása */
-    position: relative;  /* Relatív pozíció */
-    touch-action: none;  /* Érintéses műveletek letiltása (mobil) */
-}
-
-/* SAKKTÁBLA MEZŐK */
-.square
-{
-    width: 100%;  /* Mező teljes szélessége */
-    height: 100%;  /* Mező teljes magassága */
-    display: flex;  /* Flexbox (bábu középre) */
-    align-items: center;  /* Függőleges középre */
-    justify-content: center;  /* Vízszintes középre */
-    position: relative;  /* Relatív pozíció (kiemelések elhelyezéséhez) */
-}
-
-/* Világos mező színe */
-.square[role="light"] /* Attribútum szelektor: csak azokra a .square elemekre vonatkozik, ahol role="light" */
-{
-    background: var(--light) /* Bézs szín */
-}
-
-/* Sötét mező színe */
-.square[role="dark"]{ /* Attribútum szelektor: csak azokra a .square elemekre vonatkozik, ahol role="dark" */
-    background: var(--dark); /* Zöld szín */
-}
-
-/* BÁBUK (képek háttérként) */
-.piece
-{
-    width: 80%;  /* Bábu 80%-a a mezőnek */
-    height: 80%;  /* Bábu magassága is 80% */
-    pointer-events: auto;  /* Egér események engedélyezése */
-    position: relative;  /* Relatív pozíció */
-    background-size: contain;  /* Kép teljes megjelenítése arányosan */
-    background-repeat: no-repeat;  /* Ne ismétlődjön a kép */
-    background-position: center;  /* Kép középre igazítása */
-    cursor: grab;  /* "Megfogó" kurzor */
-    will-change: auto;  /* Optimalizáció kikapcsolva */
-    user-select: none;  /* Kijelölés tiltása */
-    -webkit-user-drag: none;  /* Húzás tiltása (Safari) */
-}
-
-/* MEZŐ KIEMELÉSEK (lépési lehetőségek) */
-/* Utolsó lépés kezdő- és célmezője (sárga) */
-.square.from, .square.to
-{ 
-    background: var(--from) !important;  /* Felülírja az eredeti színt */
-}
-
-/* Lépési lehetőség jelzése (kis kör a mező közepén) */
-.square.move::after{
-    content: "";  /* Üres tartalom (csak vizuális elem) */
-    width: 18px;  /* Kör átmérője */
-    height: 18px;  /* Kör magassága */
-    border-radius: 50%;  /* Tökéletes kör */
-    position: absolute;  /* Abszolút pozíció (központosításhoz) */
-    z-index: 2;  /* Felül jelenjen meg */
-    background: rgba(0,0,0,0.18);  /* Átlátszó fekete */
-}
-
-/* Ütési lehetőség (narancs) */
-.square.capture
-{
-    background: var(--capture) !important; /* capture változó felhasználása, !important: felülír minden más háttérszínt*/
-}
-
-/* Király sakkban (piros) */
-.square.check
-{ 
-    background: var(--check) !important; /* check változó felhasználása, !important: felülír minden más háttérszínt*/
-}
-
-/* En passant lehetőség (zöld) */
-.square.enpassant
-{ 
-    background: var(--enpassant) !important; /* enpassant változó felhasználása, !important: felülír minden más háttérszínt*/
-}
-
-/* Sáncolási lehetőség (zöld) */
-.square.castle
-{ 
-    background: var(--castle) !important; /* castle változó felhasználása, !important: felülír minden más háttérszínt*/
-}
-
-/* Gyalog átváltozás célmezője (lila) */
-.square.promotion-target
-{ 
-    background: var(--promotion) !important; /* promotion változó felhasználása, !important: felülír minden más háttérszínt*/
-}
-
-/* OLDALSÁV (játékinformációk) */
-.sidebar
-{ 
-    width: 260px;  /* Fix szélesség */
-    display: flex;  /* Flexbox függőleges elrendezéshez */
-    flex-direction: column;  /* Oszlop irány (elemek egymás alatt) */
-    gap: 12px;  /* 12px távolság elemek között */
-}
-
-.status-row
-{ 
-    background: #222;  /* Sötét háttér */
-    padding: 8px;  /* Belső margó */
-    border-radius: 6px;  /* Lekerekített sarkok */
-}
-
-/* Új játék gomb */
-#resetBtn
-{ 
-    background: var(--ui-bg);  /* UI háttérszín */
-    color: white;  /* Fehér szöveg */
-    border: 0;  /* Nincs keret */
-    padding: 10px;  /* Belső margó */
-    border-radius: 8px;  /* Lekerekített sarkok */
-    cursor: pointer;  /* Kéz kurzor (kattintható) */
-}
-
-/* JELMAGYARÁZAT */
-.legend
-{ 
-    margin-top: 6px;  /* Felső margó */
-    font-size: 0.95rem;  /* Betűméret (kicsit kisebb) */
-}
-.legend>div  /* A .legend közvetlen gyermek div elemeire vonatkozik (>) */
-{ 
-    margin: 4px 0;  /* Függőleges margó soronként */
-}
-
-/* Színes négyzet a jelmagyarázatban */
-.legend-sq
-{ 
-    display: inline-block;  /* Inline blokk elem */
-    width: 22px;  /* Szélesség */
-    height: 14px;  /* Magasság */
-    margin-right: 8px;  /* Jobb oldali margó */
-    vertical-align: middle;  /* Függőleges igazítás szöveghez */
-    border-radius: 3px;  /* Enyhén lekerekített sarkok */
-}
-
-/* Jelmagyarázat színei (mindegyik a saját változójából) */
-.legend-sq.from{ 
-    background:var(--from);  /* Utolsó lépés jelölőszíne (sárga) */
-} 
-.legend-sq.capture{ 
-    background:var(--capture);  /* Ütési lehetőség jelölőszíne (narancs) */
-}
-.legend-sq.check{ 
-    background:var(--check);  /* Sakk jelölőszíne (piros) */
-}
-
-.legend-sq.enpassant{ 
-    background:var(--enpassant);  /* En passant jelölőszíne (zöld) */
-}
-
-.legend-sq.castle{ 
-    background:var(--castle);  /* Sáncolás jelölőszíne (kék) */
-}
-
-.legend-sq.promotion{ 
-    background:var(--promotion);  /* Átváltozás jelölőszíne (lila) */
-}
-
-/* ÁTVÁLTOZÁS POPUP ABLAK */
-.promotion-modal
-{
-    position: absolute;  /* Abszolút pozíció (sakktáblán belül) */
-    top: 0;  /* Felső él */
-    left: 0;  /* Bal él */
-    width: 100%;  /* Teljes szélesség */
-    height: 100%;  /* Teljes magasság */
-    display: flex;  /* Flexbox (tartalom középre) */
-    align-items: center;  /* Függőleges középre */
-    justify-content: center;  /* Vízszintes középre */
-    z-index: 1000;  /* Felül jelenjen meg */
-}
-
-/* Rejtett állapot */
-.promotion-modal.hidden
-{
-    display: none;  /* Nem látható */
-}
-
-/* Sötét háttér overlay */
-.promotion-overlay
-{
-  position: absolute;  /* A legközelebbi relative szülőhöz képest pozícionál (board-wrap) */
-  top: 0;  /* Felső saroktól indul */
-  left: 0;  /* Bal saroktól indul */
-  width: 100%;  /* Teljes szélesség lefedése */
-  height: 100%;  /* Teljes magasság lefedése */
-  background: rgba(0,0,0,0.75);  /* Fekete háttér 75%-os átlátszatlansággal, a tábla elsötétítéséhez */
-}
-
-/* Választható bábuk konténere */
-.promotion-choices
-{
-    display: flex;  /* Flexbox (bábuk egymás mellett) */
-    gap: 15px;  /* 15px távolság bábuk között */
-    background: var(--ui-bg);  /* UI háttérszín */
-    padding: 20px;  /* Belső margó */
-    border-radius: 10px;  /* Lekerekített sarkok */
-    box-shadow: 0 10px 40px rgba(0,0,0,0.8);  /* Erős árnyék */
-    position: relative;  /* Relatív pozíció (overlay fölött) */
-    z-index: 1001;  /* Overlay fölé */
-}
-
-/* Egyetlen választható bábu */
-.promotion-piece
-{
-    width: 80px;  /* Bábu doboz szélessége */
-    height: 80px;  /* Bábu doboz magassága */
-    background-size: contain;  /* A kép arányosan kitölti a dobozt, nem vágódik le */
-    background-repeat: no-repeat;  /* A kép ne ismétlődjön */
-    background-position: center;  /* A kép középre igazítva */
-    cursor: pointer;  /* Kattintható kéz kurzor jelenik meg */
-    border: 3px solid transparent;  /* Alapból láthatatlan keret, hover-nél fehérre vált */
-    border-radius: 8px;  /* Sarkok lekerekítése 8 pixellel */
-    transition: all 0.2s;  /* Minden tulajdonságváltozás 0.2s alatt animálódik (border, transform) */
-}
-
-/* Hover állapot (rámutatás) */
-.promotion-piece:hover
-{
-  border-color: #fff;  /* Fehér keret */
-  transform: scale(1.1);  /* 10% nagyítás */
-}
-
-/* RESZPONZÍV DESIGN (kis képernyők) */
-@media (max-width:900px)
-{
-  .main{ 
-    flex-direction:column;  /* Oszlop elrendezés (tábla fölött oldalsáv) */
-    align-items:center;  /* Középre igazítás */
-  }
-  .sidebar{ 
-    width:100%;  /* Teljes szélesség */
-    max-width:560px;  /* Maximum sakktábla szélessége */
-  }
-}
-
-/* HÚZÁS KÖZBEN (dragging állapot) */
-.piece.dragging
-{
-  opacity: 1;  /* Teljes láthatóság */
-  cursor: grabbing !important;  /* "Megfogott" kurzor */
-  transform: scale(1.15);  /* 15% nagyítás */
-  filter: drop-shadow(0 10px 20px rgba(0,0,0,0.7));  /* Árnyék hatás */
-  transition: none;  /* Nincs animáció (azonnali követés) */
-}
+        button {
+            padding: 5px 10px;
+            font-size: 16px;
+        }
