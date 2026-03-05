@@ -279,7 +279,8 @@ h6 {
 }
 
 .modal-content {
-    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.72) 100%);
+    --bs-modal-bg: #1e293b;
+    background: linear-gradient(135deg, #1e293b 0%, #172235 100%);
     border: 1px solid var(--border-color);
     border-radius: 1rem;
 }
@@ -291,14 +292,14 @@ h6 {
 
 .form-control,
 .form-select {
-    background: rgba(15, 23, 42, 0.95);
+    background: #0f172a;
     border: 1px solid var(--border-color);
     color: var(--text-primary);
 }
 
 .form-control:focus,
 .form-select:focus {
-    background: rgba(15, 23, 42, 0.95);
+    background: #0f172a;
     border-color: var(--accent-gold);
     color: var(--text-primary);
     box-shadow: 0 0 0 0.25rem rgba(212, 175, 55, 0.25);
@@ -309,7 +310,7 @@ h6 {
 }
 
 .login-panel {
-    background: rgba(15, 23, 42, 0.45);
+    background: #0f172a;
     border: 1px solid var(--border-color) !important;
     color: var(--text-primary);
 }
