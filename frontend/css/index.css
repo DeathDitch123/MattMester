@@ -27,3 +27,16 @@ h1, h2, h3, h4, h5, h6 {
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-color);
 }
+.brand{
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    color: var(--accent-gold);
+    letter-spacing: 1px;
+}
+.nav-link {
+    color: var(--text-primary);
+    font-weight: 500;
+}
+.nav-link:hover {
+    color: var(--accent-gold);
+}
