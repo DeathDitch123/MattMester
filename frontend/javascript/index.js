@@ -6,6 +6,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     const adminPageBtn = document.getElementById('adminPage');
     const settingsBtn = document.getElementById('settingsBtn');
 
+    // Ranglista betöltése
+    try {
+        const lbResponse = await fetch('/api/leaderboard');
+        const lbData = await lbResponse.json();
+        const leaderboardDiv = document.getElementById('leaderboard');
+        if (leaderboardDiv && Array.isArray(lbData) && lbData.length > 0) {
+            leaderboardDiv.innerHTML = lbData
+                .map((player, i) => `#${i + 1} ${player.username} - ${player.elo}`)
+                .join('<br>');
+        } else if (leaderboardDiv) {
+            leaderboardDiv.innerHTML = 'Nincs adat.';
+        }
+    } catch (error) {
+        console.error('Ranglista betöltési hiba:', error);
+    }
+
     try {
         const response = await fetch('/api/sessionInfo');
         const data = await response.json();
