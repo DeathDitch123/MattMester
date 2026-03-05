@@ -100,28 +100,35 @@ h6 {
     transform: translateY(-1px);
     box-shadow: 0 8px 20px rgba(212, 175, 55, 0.25);
 }
+
 .btn-outline-gold {
     border: 1px solid rgba(212, 175, 55, 0.5);
     color: var(--accent-gold);
 }
+
 .btn-outline-gold:hover {
     background: var(--accent-gold);
     color: #000;
 }
-.hero{
+
+.hero {
     padding: 110px 0 70px;
 }
-.hero-card,.content-card {
+
+.hero-card,
+.content-card {
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
     border: 1px solid var(--border-color);
     border-radius: 1rem;
     backdrop-filter: blur(10px);
 }
+
 .hero-card {
     padding: 2rem;
     position: relative;
     overflow: hidden;
 }
+
 .hero-card::before {
     content: '';
     position: absolute;
@@ -133,12 +140,22 @@ h6 {
     background: radial-gradient(circle, rgba(212, 175, 55, 0.2), transparent 70%);
     /* animation: rotate 20s linear infinite; */
 }
+
 .badge-soft {
     background: rgba(59, 130, 246, 0.15);
     color: #93c5fd;
     border: 1px solid rgba(59, 130, 246, 0.25);
 }
+
 .section-title {
     color: var(--text-primary);
     margin-bottom: 0;
+}
+
+.stat-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.72) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    padding: 1rem 1.1rem;
+    height: 100%;
 }
