@@ -248,3 +248,25 @@ h6 {
     color: var(--text-secondary);
     border-color: rgba(148, 163, 184, 0.25);
 }
+.table-controls{
+    border-bottom: 1px solid var(--border-color);
+    background: rgba(15, 23, 42, 0.35);
+}
+.table-empty {
+    text-align: center;
+    padding: 2rem;
+    color: var(--text-secondary);
+}
+.mode-hint{
+    color: #93c5fd;
+    font-size: 0.86rem;
+}
+.modal-content {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.72) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    padding: 1.5rem;
+}
+.modal-header, .modal-footer {
+    border-color: var(--border-color);
+}
