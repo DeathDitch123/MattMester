@@ -232,3 +232,19 @@ h6 {
     background: rgba(251, 146, 60, 0.2);
     color: #fb923c;
 }
+.status-pill {
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.status-online {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--accent-green);
+}
+.status-offline {
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--text-secondary);
+    border-color: rgba(148, 163, 184, 0.25);
+}
