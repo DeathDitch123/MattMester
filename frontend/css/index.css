@@ -179,6 +179,7 @@ h6 {
     font-size: 0.75rem;
 }
 
+/* ehhez itt még hozzá kell nyúlni hogy sötétebb legyen a táblázat, hogy jobban passzoljon a sötét témához. A táblázat színeit és hátterét is módosítani kell, hogy harmonizáljon a többi elemmel. */
 .table {
     color: var(--text-secondary);
     margin: 0;
@@ -196,4 +197,38 @@ h6 {
 .table tbody td {
     border-bottom-color: rgba(51, 65, 85, 0.7);
     vertical-align: middle;
+}
+
+.table tbody tr:hover {
+    background: rgba(212, 175, 55, 0.06);
+}
+
+.table tbody tr {
+    background: var(--bg-card);
+}
+
+.rank-number {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
+
+.rank-gold {
+    background: rgba(212, 175, 55, 0.2);
+    color: var(--accent-gold);
+}
+
+.rank-silver {
+    background: rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+}
+
+.rank-bronze {
+    background: rgba(251, 146, 60, 0.2);
+    color: #fb923c;
 }
