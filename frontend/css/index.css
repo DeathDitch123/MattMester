@@ -310,3 +310,9 @@ h6 {
 .login-panel .login-heading{
     color: var(--text-primary);
 }
+.footer{
+    border-top: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    margin-top: 70px;
+    padding: 20px 0 30px;
+}
