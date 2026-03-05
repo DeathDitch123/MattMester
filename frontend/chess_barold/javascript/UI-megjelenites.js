@@ -1,11 +1,11 @@
 import { jatek, mezoKeres } from './state.js';
 
-const boardElem = document.getElementById("board");
-
 /**
  * Kirajzolja a táblát, a bábukat és a jelölőket.
  */
 export function tablaRajzol(kijeloltMezo = null, ervenyesLepesek = []) {
+    const boardElem = document.getElementById("board");
+    if (!boardElem) return;
     boardElem.innerHTML = ""; // Alaphelyzetbe állítás
 
     for (let y = 0; y < 8; y++) {
@@ -66,6 +66,23 @@ export function uiFrissitIdo() {
     
     document.getElementById("clock-white").textContent = format(jatek.jatekosok.white.ido);
     document.getElementById("clock-black").textContent = format(jatek.jatekosok.black.ido);
+}
+
+/**
+ * Megjeleníti a játék végét jelző üzenetet.
+ */
+export function uiJatekVegeMegjelenit(uzenet) {
+    const meglevo = document.getElementById("game-over-msg");
+    if (meglevo) {
+        meglevo.textContent = uzenet;
+        meglevo.classList.remove("hidden");
+        return;
+    }
+    const div = document.createElement("div");
+    div.id = "game-over-msg";
+    div.style.cssText = "position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:24px 40px;border:2px solid #333;font-size:1.4rem;font-weight:bold;z-index:200;border-radius:8px;text-align:center;";
+    div.textContent = uzenet;
+    document.body.appendChild(div);
 }
 
 /**
