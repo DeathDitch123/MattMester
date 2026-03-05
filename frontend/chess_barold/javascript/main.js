@@ -22,7 +22,7 @@ function init() {
     }
 
     // Tábla kattintás kezelése
-    const tablaElem = document.getElementById("chess-board");
+    const tablaElem = document.getElementById("board");
     if (tablaElem) {
         tablaElem.addEventListener("click", kattintasKezeles);
     }
