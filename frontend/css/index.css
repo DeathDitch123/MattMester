@@ -9,6 +9,7 @@
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --border-color: #334155;
+    --text-dark: #0f172a;
 }
 
 * {
@@ -158,4 +159,41 @@ h6 {
     border-radius: 1rem;
     padding: 1rem 1.1rem;
     height: 100%;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin-bottom: 0.2rem;
+}
+
+.stat-value {
+    font-weight: 700;
+    color: var(--text-primary);
+    font-size: 1.5rem;
+    line-height: 1;
+}
+
+.stat-sub {
+    color: #93c5fd;
+    font-size: 0.75rem;
+}
+
+.table {
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.table thead th {
+    color: var(--text-dark);
+    border-bottom: 1px solid var(--border-color);
+    background: var(--accent-gold);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.table tbody td {
+    border-bottom-color: rgba(51, 65, 85, 0.7);
+    vertical-align: middle;
 }
