@@ -1,5 +1,5 @@
 import { jatek } from './state.js';
-import { uiFrissitIdo, uiJatekVegeMegjelenit } from './ui.js';
+import { uiFrissitIdo, uiJatekVegeMegjelenit } from './UI-megjelenites.js';
 
 export function idoLeall() {
     Object.values(jatek.jatekosok).forEach(p => {
