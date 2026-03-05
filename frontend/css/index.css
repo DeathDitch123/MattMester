@@ -232,6 +232,7 @@ h6 {
     background: rgba(251, 146, 60, 0.2);
     color: #fb923c;
 }
+
 .status-pill {
     border: 1px solid var(--border-color);
     border-radius: 999px;
@@ -239,34 +240,49 @@ h6 {
     font-size: 0.75rem;
     font-weight: 600;
 }
+
 .status-online {
     background: rgba(16, 185, 129, 0.15);
     color: var(--accent-green);
 }
+
 .status-offline {
     background: rgba(148, 163, 184, 0.15);
     color: var(--text-secondary);
     border-color: rgba(148, 163, 184, 0.25);
 }
-.table-controls{
+
+.table-controls {
     border-bottom: 1px solid var(--border-color);
     background: rgba(15, 23, 42, 0.35);
 }
+
 .table-empty {
     text-align: center;
     padding: 2rem;
     color: var(--text-secondary);
 }
-.mode-hint{
+
+.mode-hint {
     color: #93c5fd;
     font-size: 0.86rem;
 }
+
 .modal-content {
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.72) 100%);
     border: 1px solid var(--border-color);
     border-radius: 1rem;
     padding: 1.5rem;
 }
-.modal-header, .modal-footer {
+
+.modal-header,
+.modal-footer {
     border-color: var(--border-color);
+}
+
+.form-control,
+.form-select {
+    background: rgba(15, 23, 42, 0.95);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
 }
