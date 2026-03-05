@@ -282,7 +282,6 @@ h6 {
     background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.72) 100%);
     border: 1px solid var(--border-color);
     border-radius: 1rem;
-    padding: 1.5rem;
 }
 
 .modal-header,

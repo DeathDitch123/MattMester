@@ -7,20 +7,19 @@
         content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MattMester</title>
-    <!--!Bootstrap-->
-    <link rel="stylesheet" href="../bootstrap/css/bootstrap.min.css" />
     <!--?Popper: dropdowns, popovers, tooltips-->
     <script src="../bootstrap/js/popper.min.js"></script>
     <script src="../bootstrap/js/bootstrap.min.js"></script>
     <!--!CSS-->
     <link rel="stylesheet" href="../css/index.css" />
+    <!--? Bootstrap + ikonok + betűtípus -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
         rel="stylesheet">
     <!--!JavaScript-->
-    <script src="../javascript/index.js"></script>
+    <script src="../javascript/index.js" defer></script>
 </head>
 
 <body>
@@ -170,7 +169,7 @@
                     </div>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-dark table-hover mb-0">
+                    <table class="table mb-0">
                         <thead>
                             <tr>
                                 <th>#</th>
@@ -312,6 +311,16 @@
                         </div>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+    <!-- Toast -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="appToastBody">Kész.</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
         </div>
     </div>
