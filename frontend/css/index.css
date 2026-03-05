@@ -122,3 +122,23 @@ h6 {
     position: relative;
     overflow: hidden;
 }
+.hero-card::before {
+    content: '';
+    position: absolute;
+    top: -90px;
+    right: -90px;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(212, 175, 55, 0.2), transparent 70%);
+    /* animation: rotate 20s linear infinite; */
+}
+.badge-soft {
+    background: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+.section-title {
+    color: var(--text-primary);
+    margin-bottom: 0;
+}
