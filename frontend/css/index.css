@@ -108,3 +108,17 @@ h6 {
     background: var(--accent-gold);
     color: #000;
 }
+.hero{
+    padding: 110px 0 70px;
+}
+.hero-card,.content-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 1rem;
+    backdrop-filter: blur(10px);
+}
+.hero-card {
+    padding: 2rem;
+    position: relative;
+    overflow: hidden;
+}
