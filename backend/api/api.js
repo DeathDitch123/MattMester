@@ -175,7 +175,7 @@ router.post('/register', async (request, response) => {
 
                                             request.session.userId = result.insertId;
                                             request.session.username = username;
-                                            request.session.role = 'player';
+                                            request.session.role = 'user';
                                             request.session.elo = 1200;
                                             request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
 
@@ -191,7 +191,7 @@ router.post('/register', async (request, response) => {
                                                     return response.status(statusCode).json({
                                                         message: 'Sikeres regisztráció',
                                                         elo: 1200,
-                                                        role: 'player'
+                                                        role: 'user'
                                                     });
                                                 }
                                             });
@@ -212,6 +212,17 @@ router.post('/register', async (request, response) => {
         console.error('Regisztrációs hiba:', error);
         const FinalStatusCode = statusCode === 200 ? 500 : statusCode;
         return response.status(FinalStatusCode).json({ message: error.message });
+    }
+});
+
+// ?GET /api/leaderboard - top 10 játékos ELO alapján
+router.get('/leaderboard', async (request, response) => {
+    try {
+        const rows = await sql.getLeaderBoard();
+        return response.status(200).json(rows);
+    } catch (error) {
+        console.error('Leaderboard hiba:', error);
+        return response.status(500).json({ message: 'Nem sikerült lekérni a ranglistát.' });
     }
 });
 
