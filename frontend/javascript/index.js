@@ -17,7 +17,6 @@ async function pageInit() {
         console.error('Hiba a lap inicializálásakor:', error);
     }
 }
-
 async function fetchSessionInfo() {
     try {
         const response = await fetch('/api/sessionInfo');
@@ -28,7 +27,6 @@ async function fetchSessionInfo() {
         return null;
     }
 }
-
 async function login() {
     const loginForm = document.getElementById('loginForm');
 
