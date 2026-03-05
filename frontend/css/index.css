@@ -1,12 +1,21 @@
-        :root {
-            --bg-dark: #0f172a;
-            --bg-card: #1e293b;
-            --bg-sidebar: #020617;
-            --accent-gold: #d4af37;
-            --accent-gold-hover: #b8941f;
-            --accent-blue: #3b82f6;
-            --accent-green: #10b981;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --border-color: #334155;
-        }
+:root {
+    --bg-dark: #0f172a;
+    --bg-card: #1e293b;
+    --bg-sidebar: #020617;
+    --accent-gold: #d4af37;
+    --accent-gold-hover: #b8941f;
+    --accent-blue: #3b82f6;
+    --accent-green: #10b981;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border-color: #334155;
+}
+* {
+    box-sizing: border-box;
+}
+body {
+    font-family: 'Inter', sans-serif;
+    background: radial-gradient(circle at top right, rgba(212, 175, 55, 0.06), transparent 30%), var(--bg-dark);
+    color: var(--text-primary);
+    min-height: 100vh;
+}
