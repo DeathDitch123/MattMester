@@ -307,12 +307,33 @@ h6 {
 
 .login-panel .form-label,
 .login-panel .form-check-label,
-.login-panel .login-heading{
+.login-panel .login-heading {
     color: var(--text-primary);
 }
-.footer{
+
+.footer {
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);
     margin-top: 70px;
     padding: 20px 0 30px;
+}
+
+.toast {
+    --bs-toast-bg: rgba(15, 23, 42, 0.95);
+    --bs-toast-border-color: var(--border-color);
+    --bs-toast-color: var(--text-primary);
+}
+
+@media (max-width: 767.98px) {
+    .hero {
+        padding-top: 90px;
+    }
+
+    .hero-card {
+        padding: 1.25rem;
+    }
+
+    .hide-mobile {
+        display: none !important;
+    }
 }
