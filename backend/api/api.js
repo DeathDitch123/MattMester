@@ -62,6 +62,8 @@ router.post('/login', async (request, response) => {
                     request.session.username = user.username;
                     request.session.role = user.role;
                     request.session.elo = user.elo;
+                    request.session.elo_MM = user.elo_MM;
+                    request.session.elo_bullet = user.elo_bullet;
                     if (remember) {
                         request.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7; // 7 nap
                     } else {
@@ -71,14 +73,22 @@ router.post('/login', async (request, response) => {
             }
         }
         return response.status(statusCode).json({
+            success: true,
             message: 'Sikeres bejelentkezés.',
-            elo: currentUser.elo,
-            role: currentUser.role
+            user: {
+                id: currentUser.id,
+                username: currentUser.username,
+                email: currentUser.email,
+                role: currentUser.role,
+                elo: currentUser.elo,
+                elo_MM: currentUser.elo_MM,
+                elo_bullet: currentUser.elo_bullet
+            },
         });
     } catch (error) {
         console.error('Login hiba:', error);
         const finalStatusCode = statusCode === 200 ? 500 : statusCode;
-        return response.status(finalStatusCode).json({ message: error.message });
+        return response.status(finalStatusCode).json({ success: false, message: error.message });
     }
 });
 // ?GET /api/logout - session lezárása és cookie törlése
@@ -87,7 +97,7 @@ const logoutHandler = async (request, response) => {
     let message = 'Sikeres kijelentkezés.';
 
     try {
-        if (!request.session.userId || !request.session) {
+        if (!request.session || !request.session.userId) {
             message = 'Nincs aktív session.';
         }
         else {
@@ -106,10 +116,10 @@ const logoutHandler = async (request, response) => {
                 });
             });
         }
-        response.status(statusCode).json({ message });
+        response.status(statusCode).json({ success: statusCode < 400, message });
     } catch (error) {
         console.error('Logout hiba:', error);
-        return response.status(500).json({ message: 'Szerverhiba a kijelentkezés során.' });
+        return response.status(500).json({ success: false, message: 'Szerverhiba a kijelentkezés során.' });
     }
 };
 router.get('/logout', logoutHandler);
@@ -179,6 +189,8 @@ router.post('/register', async (request, response) => {
                                             request.session.username = username;
                                             request.session.role = 'player';
                                             request.session.elo = 1200;
+                                            request.session.elo_MM = 1200;
+                                            request.session.elo_bullet = 1200;
                                             request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
 
                                             statusCode = 201;
@@ -186,14 +198,22 @@ router.post('/register', async (request, response) => {
                                             request.session.save((err) => {
                                                 if (err) {
                                                     console.error('Session mentési hiba:', err);
-                                                    return response.status(500).json({ message: 'Sikertelen regisztráció.' });
+                                                    return response.status(500).json({ success: false, message: 'Sikertelen regisztráció.' });
                                                 }
                                                 else {
                                                     console.log('Session sikeresen mentése a regisztráció után.');
                                                     return response.status(statusCode).json({
+                                                        success: true,
                                                         message: 'Sikeres regisztráció',
-                                                        elo: 1200,
-                                                        role: 'player'
+                                                        user: {
+                                                            id: result.insertId,
+                                                            username,
+                                                            email,
+                                                            role: 'player',
+                                                            elo: 1200,
+                                                            elo_MM: 1200,
+                                                            elo_bullet: 1200
+                                                        },
                                                     });
                                                 }
                                             });
@@ -213,25 +233,71 @@ router.post('/register', async (request, response) => {
     } catch (error) {
         console.error('Regisztrációs hiba:', error);
         const FinalStatusCode = statusCode === 200 ? 500 : statusCode;
-        return response.status(FinalStatusCode).json({ message: error.message });
+        return response.status(FinalStatusCode).json({ success: false, message: error.message });
     }
 });
 
 // ?GET /api/sessioninfo - aktuális session információk lekérdezése
-router.get('/sessionInfo', (request, response) => {
-    if (request.session.userId) {
-        return response.status(200).json({
-            loggedIn: true,
-            user: {
-                username: request.session.username,
-                role: request.session.role,
-                elo: request.session.elo,
-                sessionMaxAge: request.session.cookie.maxAge,
-                sessionExpires: request.session.cookie.expires
+router.get('/sessionInfo', async (request, response) => {
+    let statusCode = 200;
+    let result = { loggedIn: false, user: null };
+    try {
+        if (request.session?.userId) {
+            const dbUser = await sql.getSessionUserById(request.session.userId);
+
+            if (dbUser) {
+                // Frissítjük a session adatait a legfrissebb adatbázis értékekkel, hogy mindig naprakészek legyenek
+                Object.assign(request.session, dbUser);
+
+                result.loggedIn = true;
+                result.user = {
+                    id: dbUser.id,
+                    username: dbUser.username,
+                    email: dbUser.email,
+                    role: dbUser.role,
+                    elo: dbUser.elo,
+                    elo_MM: dbUser.elo_MM,
+                    elo_bullet: dbUser.elo_bullet,
+                    is_banned: dbUser.is_banned,
+                    ban_reason: dbUser.ban_reason,
+                    banned_until: dbUser.banned_until,
+                    last_active: dbUser.last_active,
+                    is_email_verified: dbUser.is_email_verified,
+                    created_at: dbUser.created_at,
+                    stats: {
+                        wins: dbUser.wins,
+                        losses: dbUser.losses,
+                        draws: dbUser.draws,
+                        abilities_used: dbUser.abilities_used
+                    },
+                    session: {
+                        maxAge: request.session.cookie.maxAge,
+                        expires: request.session.cookie.expires,
+                        secure: request.session.cookie.secure,
+                        httpOnly: request.session.cookie.httpOnly,
+                        sameSite: request.session.cookie.sameSite
+                    }
+                };
             }
-        });
-    } else {
-        return response.status(200).json({ loggedIn: false });
+            else {
+                statusCode = 404;
+                request.session.destroy(() => {
+                    console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
+                });
+                throw new Error('A sessionhöz tartozó felhasználó nem található.');
+            }
+        }
+    } catch (error) {
+        console.error('Session info hiba:', error);
+        statusCode = 500;
+        result = {
+            success: false,
+            loggedIn: false,
+            user: null,
+            message: 'Szerverhiba a session információ lekérdezése során.'
+        };
+    } finally {
+        return response.status(statusCode).json(result);
     }
 });
 module.exports = router;

@@ -61,9 +61,74 @@ async function getLeaderBoard() {
     }
 }
 
+async function getSessionUserById(userId) {
+    const pool = getPool();
+    const query = `
+        SELECT
+            u.id,
+            u.username,
+            u.email,
+            u.role,
+            u.elo,
+            u.elo_MM,
+            u.elo_bullet,
+            u.is_banned,
+            u.ban_reason,
+            u.banned_until,
+            u.last_active,
+            u.is_email_verified,
+            u.created_at,
+            COALESCE(s.wins, 0) AS wins,
+            COALESCE(s.losses, 0) AS losses,
+            COALESCE(s.draws, 0) AS draws,
+            COALESCE(s.abilities_used, 0) AS abilities_used
+        FROM users u
+        LEFT JOIN statistics s ON s.user_id = u.id
+        WHERE u.id = ?
+        LIMIT 1
+    `;
+
+    const fallbackQuery = `
+        SELECT
+            u.id,
+            u.username,
+            u.email,
+            u.role,
+            u.elo,
+            NULL AS elo_MM,
+            NULL AS elo_bullet,
+            FALSE AS is_banned,
+            NULL AS ban_reason,
+            NULL AS banned_until,
+            NULL AS last_active,
+            FALSE AS is_email_verified,
+            u.created_at,
+            COALESCE(s.wins, 0) AS wins,
+            COALESCE(s.losses, 0) AS losses,
+            0 AS draws,
+            COALESCE(s.abilities_used, 0) AS abilities_used
+        FROM users u
+        LEFT JOIN statistics s ON s.user_id = u.id
+        WHERE u.id = ?
+        LIMIT 1
+    `;
+
+    try {
+        const [rows] = await pool.execute(query, [userId]);
+        return rows[0];
+    } catch (error) {
+        if (error.code === 'ER_BAD_FIELD_ERROR') {
+            const [rows] = await pool.execute(fallbackQuery, [userId]);
+            return rows[0];
+        }
+        throw new Error('Hiba a session felhasznalo lekerdezese soran.');
+    }
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
     getUserByEmail,
-    getLeaderBoard
+    getLeaderBoard,
+    getSessionUserById
 };

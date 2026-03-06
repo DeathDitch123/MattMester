@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
+        content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MattMester</title>
@@ -59,12 +59,11 @@
                         <span class="nav-link" id="welcomeMessage"></span>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/profile'">Profil
+                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'">Profil
                             beállítás</button>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
-                            onclick="logout()">Kijelentkezés</button>
+                        <button class="btn btn-outline-gold btn-sm" id="logoutBtn">Kijelentkezés</button>
                     </li>
                 </ul>
             </div>

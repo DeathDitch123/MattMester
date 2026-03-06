@@ -11,7 +11,7 @@ const router = express.Router();
 const ip = '127.0.0.1';
 const port = 3000;
 
-// Admin_Password = lj@YXaßasHZ27G]|akn&&yDKM=+!af=sa
+const sessionSecret = process.env.SESSION_SECRET || 'chu+)2_23iIa6sou&>#o79247r9Xbsibv%';
 
 app.use(express.json()); //?Middleware JSON
 app.set('trust proxy', 1); //?Middleware Proxy
@@ -19,7 +19,7 @@ app.set('trust proxy', 1); //?Middleware Proxy
 //!Session beállítása:
 app.use(
     session({
-        secret: 'chu+)2_23iIa6sou&>#o79247r9Xbsibv%', //?Ezt generálni kell a későbbiekben
+        secret: sessionSecret, //?Elesben SESSION_SECRET env var hasznalata javasolt
         resave: false,
         saveUninitialized: true,
         cookie: {
