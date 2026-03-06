@@ -189,7 +189,8 @@ async function refreshAuthUi() {
     try {
         const data = await fetchSessionInfo();
         const loggedIn = Boolean(data && data.loggedIn && data.user);
-
+        console.clear();
+        console.log('Session info:', data);
         if (guestActions) {
             guestActions.classList.toggle('d-none', loggedIn);
         }
@@ -200,9 +201,7 @@ async function refreshAuthUi() {
 
         if (welcomeMessage) {
             if (loggedIn) {
-                const eloValue = Number(data.user.elo);
-                const elo = Number.isFinite(eloValue) ? ` | ELO: ${eloValue}` : '';
-                welcomeMessage.innerText = `Szia, ${data.user.username}!${elo}`;
+                welcomeMessage.innerText = `Szia, ${data.user.username}!`;
             } else {
                 welcomeMessage.innerText = '';
             }
