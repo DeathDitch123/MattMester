@@ -240,53 +240,58 @@ router.post('/register', async (request, response) => {
 // ?GET /api/sessioninfo - aktuális session információk lekérdezése
 router.get('/sessionInfo', async (request, response) => {
     let statusCode = 200;
-    let result = { loggedIn: false, user: null };
+    let result = { success: true, loggedIn: false, user: null };
     try {
-        if (request.session?.userId) {
-            const dbUser = await sql.getSessionUserById(request.session.userId);
-
-            if (dbUser) {
-                // Frissítjük a session adatait a legfrissebb adatbázis értékekkel, hogy mindig naprakészek legyenek
-                Object.assign(request.session, dbUser);
-
-                result.loggedIn = true;
-                result.user = {
-                    id: dbUser.id,
-                    username: dbUser.username,
-                    email: dbUser.email,
-                    role: dbUser.role,
-                    elo: dbUser.elo,
-                    elo_MM: dbUser.elo_MM,
-                    elo_bullet: dbUser.elo_bullet,
-                    is_banned: dbUser.is_banned,
-                    ban_reason: dbUser.ban_reason,
-                    banned_until: dbUser.banned_until,
-                    last_active: dbUser.last_active,
-                    is_email_verified: dbUser.is_email_verified,
-                    created_at: dbUser.created_at,
-                    stats: {
-                        wins: dbUser.wins,
-                        losses: dbUser.losses,
-                        draws: dbUser.draws,
-                        abilities_used: dbUser.abilities_used
-                    },
-                    session: {
-                        maxAge: request.session.cookie.maxAge,
-                        expires: request.session.cookie.expires,
-                        secure: request.session.cookie.secure,
-                        httpOnly: request.session.cookie.httpOnly,
-                        sameSite: request.session.cookie.sameSite
-                    }
-                };
-            }
-            else {
-                statusCode = 404;
-                request.session.destroy(() => {
-                    console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
-                });
-                throw new Error('A sessionhöz tartozó felhasználó nem található.');
-            }
+        if (!request.session?.userId) {
+            return response.status(statusCode).json(result);
         }
+
+        const dbUser = await sql.getSessionUserById(request.session.userId);
+
+        if (!dbUser) {
+            request.session.destroy(() => {
+                console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
+            });
+            return response.status(statusCode).json(result);
+        }
+
+        // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
+        request.session.userId = dbUser.id;
+        request.session.username = dbUser.username;
+        request.session.role = dbUser.role;
+        request.session.elo = dbUser.elo;
+
+        result.loggedIn = true;
+        result.user = {
+            id: dbUser.id,
+            username: dbUser.username,
+            email: dbUser.email,
+            role: dbUser.role,
+            elo: dbUser.elo,
+            elo_MM: dbUser.elo_MM,
+            elo_bullet: dbUser.elo_bullet,
+            is_banned: dbUser.is_banned,
+            ban_reason: dbUser.ban_reason,
+            banned_until: dbUser.banned_until,
+            last_active: dbUser.last_active,
+            is_email_verified: dbUser.is_email_verified,
+            created_at: dbUser.created_at,
+            stats: {
+                wins: dbUser.wins,
+                losses: dbUser.losses,
+                draws: dbUser.draws,
+                abilities_used: dbUser.abilities_used
+            },
+            session: {
+                maxAge: request.session.cookie.maxAge,
+                expires: request.session.cookie.expires,
+                secure: request.session.cookie.secure,
+                httpOnly: request.session.cookie.httpOnly,
+                sameSite: request.session.cookie.sameSite
+            }
+        };
+
+        return response.status(statusCode).json(result);
     } catch (error) {
         console.error('Session info hiba:', error);
         statusCode = 500;
@@ -296,7 +301,6 @@ router.get('/sessionInfo', async (request, response) => {
             user: null,
             message: 'Szerverhiba a session információ lekérdezése során.'
         };
-    } finally {
         return response.status(statusCode).json(result);
     }
 });
