@@ -65,7 +65,7 @@ async function createTables() {
         )`,
 
         `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
-            VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
         `,
 
         `CREATE TABLE IF NOT EXISTS login_history (

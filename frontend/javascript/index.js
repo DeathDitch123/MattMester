@@ -20,8 +20,8 @@ async function parseJson(response) {
 }
 
 async function fetchSessionInfo() {
-    let result = {success : false, loggedIn: false};
-    try{
+    let result = { success: false, loggedIn: false };
+    try {
         const response = await fetch('/api/sessionInfo');
         const data = await parseJson(response);
         if (response.ok) {
@@ -30,7 +30,7 @@ async function fetchSessionInfo() {
     } catch (error) {
         console.error('Hiba a session informacio lekerdezese soran:', error);
     }
-    finally{
+    finally {
         return result;
     }
 }
@@ -184,27 +184,27 @@ function bindLogoutButton() {
 async function refreshAuthUi() {
     const guestActions = document.getElementById('guestActions');
     const userActions = document.getElementById('userActions');
+    const adminActions = document.getElementById('adminActions');
     const welcomeMessage = document.getElementById('welcomeMessage');
 
     try {
         const data = await fetchSessionInfo();
-        const loggedIn = Boolean(data && data.loggedIn && data.user);
-        console.clear();
-        console.log('Session info:', data);
-        if (guestActions) {
-            guestActions.classList.toggle('d-none', loggedIn);
-        }
 
-        if (userActions) {
-            userActions.classList.toggle('d-none', !loggedIn);
+        if (!data || !data.success) {
+            throw new Error('Nem sikerult lekerdezni a session informaciot.');
         }
+        const user = data.user;
+        const loggedIn = Boolean(user);
+        const isAdmin = loggedIn && user.role === 'admin';
+
+        console.log('Session info:', data);
+
+        if (guestActions) guestActions.classList.toggle('d-none', loggedIn);
+        if (userActions) userActions.classList.toggle('d-none', !loggedIn || isAdmin);
+        if (adminActions) adminActions.classList.toggle('d-none', !isAdmin);
 
         if (welcomeMessage) {
-            if (loggedIn) {
-                welcomeMessage.innerText = `Szia, ${data.user.username}!`;
-            } else {
-                welcomeMessage.innerText = '';
-            }
+            welcomeMessage.innerText = loggedIn ? `Szia, ${user.username}!` : '';
         }
     } catch (error) {
         console.error('Hiba az auth allapot frissitesekor:', error);
