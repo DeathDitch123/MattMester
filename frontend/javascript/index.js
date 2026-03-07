@@ -6,7 +6,8 @@ document.addEventListener('DOMContentLoaded', () => {
     installModalFocusGuards();
     bindLoginForm();
     bindRegisterForm();
-    bindLogoutButton();
+    bindLogoutButtonUser();
+    bindLogoutButtonAdmin();
     restoreLastMode();
     refreshAuthUi();
 });
@@ -154,8 +155,35 @@ function validateRegisterInput(username, email, password) {
     return message;
 }
 
-function bindLogoutButton() {
-    const logoutButton = document.getElementById('logoutBtn');
+function bindLogoutButtonUser() {
+    const logoutButton = document.getElementById('logoutBtnUser');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', async () => {
+            try {
+                const response = await fetch('/api/logout', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+
+                const result = await parseJson(response);
+
+                if (!response.ok) {
+                    showToast(result.message || 'Sikertelen kijelentkezes.');
+                }
+                else {
+                    await refreshAuthUi();
+                    showToast(result.message || 'Sikeres kijelentkezes.');
+                }
+            } catch (error) {
+                console.error('Hiba a kijelentkezes soran:', error);
+                showToast(error.message || 'Sikertelen kijelentkezes.');
+            }
+        });
+    }
+}
+
+function bindLogoutButtonAdmin() {
+    const logoutButton = document.getElementById('logoutBtnAdmin');
     if (logoutButton) {
         logoutButton.addEventListener('click', async () => {
             try {
@@ -197,6 +225,7 @@ async function refreshAuthUi() {
         const loggedIn = Boolean(user);
         const isAdmin = loggedIn && user.role === 'admin';
 
+        console.clear();
         console.log('Session info:', data);
 
         if (guestActions) guestActions.classList.toggle('d-none', loggedIn);
