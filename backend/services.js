@@ -93,10 +93,42 @@ const services = {
     }
 };
 
+let leaderboardCache = {
+    elo: [],
+    mm: [],
+    bullet: [],
+    winRate: [],
+    lastUpdated: null
+};
+
 const leaderboardService = {
     async updateLeaderboardCache() {
-        
+        try {
+            const newEloCache = await sql.getLeaderBoardByElo();
+            const newMMCache = await sql.getLeaderBoardByMM();
+            const newBulletCache = await sql.getLeaderBoardByBullet();
+            const newWinRateCache = await sql.getLeaderBoardByWinRate();
+            leaderboardCache = {
+                elo: newEloCache,
+                mm: newMMCache,
+                bullet: newBulletCache,
+                winRate: newWinRateCache,
+                lastUpdated: new Date()
+            };
+            console.log(`[Cache] Ranglista frissítve: ${new Date().toLocaleString()}`);
+        } catch (error) {
+            console.error('Error occurred while updating leaderboard cache:', error);   
+        }
+    },
+    handleLeaderBoardCache() {
+        this.updateLeaderboardCache();
+        setInterval(() => {
+            this.updateLeaderboardCache();
+        }, 86400000); //?naponta frissítjük a ranglista cache-t
+    },
+    getLeaderBoard() {
+        return leaderboardCache;
     }
-}
+};
 
 module.exports = services;
