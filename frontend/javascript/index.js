@@ -226,7 +226,21 @@ async function refreshAuthUi() {
         const isAdmin = loggedIn && user.role === 'admin';
 
         console.clear();
+        console.log('--- Auth Status Report ---');
         console.log('Session info:', data);
+
+        if (typeof socket !== 'undefined') {
+            console.log('SocketInfo:', {
+                socketId: socket.id,
+                connected: socket.connected,
+                // Itt láthatod, hogy a szerver felismerte-e a session-t a socketen keresztül
+                sessionBound: socket.connected ? "Active" : "Disconnected/Pending"
+            });
+        }
+        else{
+            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+        }
+        console.log('--------------------------');
 
         if (guestActions) guestActions.classList.toggle('d-none', loggedIn);
         if (userActions) userActions.classList.toggle('d-none', !loggedIn || isAdmin);
