@@ -1,7 +1,7 @@
 // --HearthBeat--
 // Ez a fájl a Socket.io kapcsolat szívverés szerű adatküldésére kezelésére szolgál (SSE csak socket-al), hogy a szerver tudja, mely kliensek aktívak és elérhetőek stb...
 const { getPool } = require('./sql/database');
-const sql = require('../sql/sql_funtions.js');
+const sql = require('./sql/sql_funtions.js');
 
 let currentStats = {
     public: {

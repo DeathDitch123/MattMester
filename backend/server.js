@@ -50,7 +50,7 @@ io.on('connection', (socket) => {
     console.log('Új Socket.io kapcsolat létrejött:', socket.id);
     services.handleConnection(socket, io);
 
-    socket.on('heartbeat', (socket) => {
+    socket.on('heartbeat', () => {
         // services.refreshStats(io); //?Statisztikák frissítése minden kliensnek a heartbeat eseményre
     });
 
