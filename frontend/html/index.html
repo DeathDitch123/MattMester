@@ -124,6 +124,39 @@
     </header>
     <!-- Main -->
     <main class="container">
+        <!--Elo display-->
+        <section class="mb-4 d-none" id="eloDisplay">
+            <div class="row g-3" id="eloStats">
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Klasszikus</div>
+                        <div class="stat-value" data-stat="user_elo">0</div>
+                        <div class="stat-sub">ELO</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">MattMester</div>
+                        <div class="stat-value" data-stat="user_MM_elo">0</div>
+                        <div class="stat-sub">ELO</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Bullet</div>
+                        <div class="stat-value" data-stat="user_bullet_elo">0</div>
+                        <div class="stat-sub">ELO</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">WinRate</div>
+                        <div class="stat-value" data-stat="winRate">0%</div>
+                        <div class="stat-sub">Nyert játszmák aránya</div>
+                    </div>
+                </div>
+            </div>
+        </section>
         <!--? Gyors statisztikák -->
         <section class="mb-4">
             <div class="row g-3" id="quickStats">
