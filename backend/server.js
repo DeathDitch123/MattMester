@@ -5,7 +5,7 @@ const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
-const services = require('./services.js');
+const { services, leaderboardService } = require('./services.js');
 
 //!Beállítások
 const app = express();
@@ -46,6 +46,7 @@ app.get('/', (req, res) => {
 
 //Socket.io események
 services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
+leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
 io.on('connection', (socket) => {
     services.handleConnection(socket, io);
     socket.on('heartbeat', () => {
