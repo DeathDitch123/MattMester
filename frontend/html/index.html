@@ -3,8 +3,7 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self';
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self';
             connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
             script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
             style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
@@ -107,14 +106,17 @@
                             Vendégként azonnal elkezdheted,
                             fiókkal pedig követheted az ELO fejlődésedet</p>
 
-                        <div class="d-flex flex-wrap gap-2">
-                            <button class="btn btn-gold btn-lg" data-bs-toggle="modal" data-bs-target="#playModal"><i
-                                    class="bi bi-play-fill me-1"></i> Játék</button>
+                        <div class="d-flex justify-content-around">
+                            <div class="d-flex flex-wrap gap-2">
+                                <button class="btn btn-gold btn-lg" data-bs-toggle="modal"
+                                    data-bs-target="#playModal"><i class="bi bi-play-fill me-1"></i> Játék</button>
+                            </div>
+                            <a href="#ranglista" class="btn btn-outline-gold btn-lg"><i
+                                    class="bi bi-trophy-fill me-1"></i>Ranglista</a>
                         </div>
-                        <a href="#ranglista" class="btn btn-outline-gold btn-lg"><i
-                                class="bi bi-trophy-fill me-1"></i>Ranglista</a>
                         <div class="mode-hint mt-3">Utolsó választott mód: <span id="lastModeLabel">Nincs
-                                kiválasztva</span></div>
+                                kiválasztva</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -166,23 +168,16 @@
                 </div>
                 <!-- itt ezt meg kell csinálni, hogy a backendről jön a frissítés ideje, és ne csak statikusan legyen kiírva, hogy "ma" -->
                 <div class="table-controls p-3">
-                    <div class="row g-2">
-                        <div class="col-12 col-md-4">
-                            <input type="text" id="leaderboardSearch" class="form-control"
-                                placeholder="Keresés játékosra...">
-                        </div>
+                    <div class="row g-2 d-flex justify-content-around align-items-center">
                         <div class="col-6 col-md-3">
-                            <select id="leaderboardStatus" class="form-select">
-                                <option value="all">Minden állapot</option>
-                                <option value="online">Csak online</option>
-                                <option value="offline">Csak offline</option>
-                            </select>
+                            Rendezés:
                         </div>
                         <div class="col-6 col-md-3">
                             <select id="leaderboardSort" class="form-select">
-                                <option value="elo">Rendezés: ELO</option>
-                                <option value="elo_MM">Rendezés: ELO MattMester</option>
-                                <option value="elo_bullet">Rendezés: ELO Bullet</option>
+                                <option value="elo">ELO</option>
+                                <option value="elo_MM">ELO MattMester</option>
+                                <option value="elo_bullet">ELO Bullet</option>
+                                <option value="winRate">WinRate</option>
                             </select>
                         </div>
                         <div class="col-12 col-md-2">
@@ -197,12 +192,9 @@
                 <div class="table-responsive">
                     <table class="table mb-0">
                         <thead>
-                            <tr>
-                                <th>#</th>
+                            <tr class="align-items-center">
                                 <th>Játékos</th>
-                                <th>ELO</th>
-                                <th>ELO MattMester</th>
-                                <th>ELO Bullet</th>
+                                <th id="elo_type">ELO</th>
                                 <th>Állapot</th>
                                 <th>Felhasználó ezóta</th>
                             </tr>

@@ -90,9 +90,21 @@ h6 {
 }
 
 @keyframes stat-pulse {
-    0% { transform: scale(1); text-shadow: none; }
-    50% { transform: scale(1.1); text-shadow: 0 0 10px rgba(255, 215, 0, 0.8); color: #ffd700; }
-    100% { transform: scale(1); text-shadow: none; }
+    0% {
+        transform: scale(1);
+        text-shadow: none;
+    }
+
+    50% {
+        transform: scale(1.1);
+        text-shadow: 0 0 10px rgba(255, 215, 0, 0.8);
+        color: #ffd700;
+    }
+
+    100% {
+        transform: scale(1);
+        text-shadow: none;
+    }
 }
 
 .stat-update-anim {
@@ -191,11 +203,22 @@ h6 {
 
 .table {
     margin-bottom: 0;
-    --bs-table-bg: transparent; 
+    --bs-table-bg: transparent;
     --bs-table-color: var(--text-primary);
 }
-.table thead th {
+
+.table thead tr {
     background-color: var(--accent-gold);
+    color: var(--bg-dark);
+    display: flex;
+    justify-content: space-around;
+}
+
+.table thead tr:hover {
+    background-color: var(--accent-gold-hover);
+}
+
+.table thead th {
     color: var(--bg-dark);
     border-bottom: 2px solid var(--accent-gold-hover);
     font-size: 0.85rem;
@@ -205,6 +228,7 @@ h6 {
     padding: 1rem 0.75rem;
     white-space: nowrap;
 }
+
 .table tbody td {
     border-bottom: 1px solid var(--border-color);
     vertical-align: middle;
@@ -213,15 +237,18 @@ h6 {
 }
 
 .table tbody tr {
-    background-color: rgba(15, 23, 42, 0.4); 
+    background-color: rgba(15, 23, 42, 0.4);
     transition: background-color 0.2s ease;
 }
+
 .table tbody tr:hover {
     background-color: rgba(212, 175, 55, 0.08);
 }
+
 .table tbody tr:last-child td {
     border-bottom: none;
 }
+
 .table tbody td.text-warning,
 .table tbody td.text-light {
     color: var(--text-primary) !important;
