@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindRegisterForm();
     bindLogoutButtonUser();
     bindLogoutButtonAdmin();
+    bindLeaderBoardControls();
     restoreLastMode();
     loadLeaderBoard();
     socketHandler();
@@ -49,28 +50,65 @@ async function fetchSessionInfo() {
 async function loadLeaderBoard() {
     try {
         const response = await fetch('/api/leaderboard');
-        LeaderboardData = await parseJson(response);
+        const payload = await parseJson(response);
+
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.message || 'Nem sikerült betölteni a ranglistát.');
+        }
+
+        LeaderboardData = payload.data || {
+            elo: [],
+            elo_MM: [],
+            elo_bullet: [],
+            winRate: [],
+            lastUpdated: null
+        };
         renderLeaderBoard();
     } catch (error) {
         console.error('Hiba a ranglista lekérdezése során:', error);
     }
 }
 
+function bindLeaderBoardControls() {
+    const filterElement = document.getElementById('leaderboardEloFilter');
+    const limitElement = document.getElementById('leaderboardLimit');
+
+    if (filterElement) {
+        filterElement.addEventListener('change', renderLeaderBoard);
+    }
+
+    if (limitElement) {
+        limitElement.addEventListener('change', renderLeaderBoard);
+    }
+}
+
 function renderLeaderBoard() {
-    const filter = document.getElementById('leaderboardEloFilter').value;
-    const limit = document.getElementById('leaderboardLimit').value;
+    const filterElement = document.getElementById('leaderboardEloFilter');
+    const limitElement = document.getElementById('leaderboardLimit');
     const tbody = document.getElementById('leaderboardBody');
+    const emptyElement = document.getElementById('leaderboardEmpty');
+
+    if (!filterElement || !limitElement || !tbody) {
+        return;
+    }
+
+    const filter = filterElement.value;
+    const limit = Number(limitElement.value);
 
     try {
-        if (tbody) {
-            tbody.innerHTML = '';
+        tbody.innerHTML = '';
 
-            const sortedData = [...(LeaderboardData[filter] || [])].slice(0, limit);
+        const sortedData = [...(LeaderboardData[filter] || [])].slice(0, limit);
 
-            tbody.innerHTML = sortedData.map((player, index) => {
-                const val = filter === 'winRate' ? player.winrate_percent + '%' : player[filter];
+        if (emptyElement) {
+            emptyElement.classList.toggle('d-none', sortedData.length > 0);
+        }
 
-                return `
+        tbody.innerHTML = sortedData.map((player, index) => {
+            const val = filter === 'winRate' ? player.winrate_percent + '%' : player[filter];
+            const joinedAt = player.joined_at || player.created_at;
+
+            return `
                 <tr>
                     <td class="ps-4 fw-bold ${index < 3 ? 'text-warning' : 'text-secondary'}">#${index + 1}</td>
                     <td>
@@ -81,11 +119,10 @@ function renderLeaderBoard() {
                     </td>
                     <td class="text-center fw-bold text-info">${val}</td>
                     <td class="text-center small text-muted">${new Date(player.last_active).toLocaleDateString('hu-HU')}</td>
-                    <td class="text-end pe-4 small text-muted">${new Date(player.joined_at).toLocaleDateString('hu-HU')}</td>
+                    <td class="text-end pe-4 small text-muted">${new Date(joinedAt).toLocaleDateString('hu-HU')}</td>
                 </tr>
                 `;
-            }).join('');
-        }
+        }).join('');
     } catch (error) {
         console.error('Hiba a ranglista megjelenítése során:', error);
     }
