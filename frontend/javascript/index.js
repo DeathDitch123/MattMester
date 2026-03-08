@@ -163,7 +163,7 @@ function validateRegisterInput(username, email, password) {
 //közös kijelentkezés kezelése user és admin részére, hogy ne kelljen duplikálni a kódot
 async function handleLogout() {
     try {
-        const response = await fetch('/api/logout', { 
+        const response = await fetch('/api/logout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
@@ -236,14 +236,10 @@ async function refreshAuthUi() {
         }
     } catch (error) {
         console.error('Hiba az auth allapot frissitesekor:', error);
-
-        if (guestActions) {
-            guestActions.classList.remove('d-none');
-        }
-
-        if (userActions) {
-            userActions.classList.add('d-none');
-        }
+        if (guestActions) guestActions.classList.remove('d-none');
+        if (userActions) userActions.classList.add('d-none');
+        if (adminActions) adminActions.classList.add('d-none');
+        if (welcomeMessage) welcomeMessage.innerText = '';
     }
 }
 
