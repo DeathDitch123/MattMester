@@ -241,6 +241,39 @@ async function logLoginAttempt(userId, ipAddress, userAgent) {
         connection.release();
     }
 }
+async function ipCollisionCheck(ipAddress) {
+    const pool = getPool();
+    const query = `SELECT user_id, COUNT(*) AS attempts FROM login_history WHERE ip_address = ? AND login_time > (NOW() - INTERVAL 1 HOUR) GROUP BY user_id HAVING attempts > 5`;
+    try {
+        const [rows] = await pool.execute(query, [ipAddress]);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba az IP cím ütközés ellenőrzése során.');
+    }
+}
+async function ipCollisions(){
+    const pool = getPool();
+    const query = `
+        SELECT 
+            ip_address, 
+            COUNT(DISTINCT user_id) AS user_count, 
+            GROUP_CONCAT(DISTINCT u.username SEPARATOR ', ') AS shared_accounts
+        FROM 
+            login_history lh
+        JOIN 
+            users u ON lh.user_id = u.id
+        GROUP BY 
+            ip_address
+        HAVING 
+            user_count > 1;
+        `;
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba az IP cím ütközések lekérdezése során.');
+    }
+}
 
 module.exports = {
     insertUser,
@@ -253,5 +286,7 @@ module.exports = {
     getOnlineGamesCount,
     getAllUsers,
     getAllRooms,
-    logLoginAttempt
+    logLoginAttempt,
+    ipCollisionCheck,
+    ipCollisions
 };
