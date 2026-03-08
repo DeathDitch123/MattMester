@@ -248,7 +248,6 @@ function validateRegisterInput(username, email, password) {
 
     return message;
 }
-//közös kijelentkezés kezelése user és admin részére, hogy ne kelljen duplikálni a kódot
 async function handleLogout() {
     try {
         const response = await fetch('/api/logout', {
@@ -286,6 +285,7 @@ async function refreshAuthUi() {
     const guestActions = document.getElementById('guestActions');
     const userActions = document.getElementById('userActions');
     const adminActions = document.getElementById('adminActions');
+    const eloDisplay = document.getElementById('eloDisplay');
     const welcomeMessage = document.querySelectorAll(".welcomeMessage");
 
     try {
@@ -318,21 +318,52 @@ async function refreshAuthUi() {
         if (guestActions) guestActions.classList.toggle('d-none', loggedIn);
         if (userActions) userActions.classList.toggle('d-none', !loggedIn || isAdmin);
         if (adminActions) adminActions.classList.toggle('d-none', !isAdmin);
+        if (eloDisplay) eloDisplay.classList.toggle('d-none', !loggedIn);
 
         if (welcomeMessage) {
             welcomeMessage.forEach(el => {
                 el.innerText = loggedIn ? `Szia, ${user.username}!` : '';
             });
         }
+        if (loggedIn && user.elo !== undefined && eloDisplay) {
+            eloDisplayrefresh(user);
+        }
     } catch (error) {
         console.error('Hiba az auth allapot frissitesekor:', error);
         if (guestActions) guestActions.classList.remove('d-none');
         if (userActions) userActions.classList.add('d-none');
         if (adminActions) adminActions.classList.add('d-none');
+        if (eloDisplay) eloDisplay.classList.add('d-none');
         if (welcomeMessage) welcomeMessage.forEach(el => el.innerText = '');
     }
 }
-
+function eloDisplayrefresh(user) {
+    try {
+        if (user || user.stats) {
+            const eloMap = {
+                'user_elo': user.elo,
+                'user_MM_elo': user.elo_MM,
+                'user_bullet_elo': user.elo_bullet
+            };
+            for (const [key, value] of Object.entries(eloMap)) {
+                const element = document.querySelector(`[data-stat="${key}"]`);
+                if (element) element.textContent = value !== undefined ? value : '1200';
+            }
+            const stats = user.stats || {};
+            const totalGames = (stats.wins || 0) + (stats.losses || 0) + (stats.draws || 0);
+            let winRate = 0;
+            if (totalGames > 0) {
+                winRate = ((stats.wins || 0) / totalGames * 100).toFixed(2) + '%';
+            }
+            const winRateElement = document.querySelector(`[data-stat="user_winRate"]`);
+            if (winRateElement) winRateElement.textContent = winRate;
+        } else {
+            console.warn('ELO display refresh: Nincs elérhető user adat a megjelenítéshez.');
+        }
+    } catch (error) {
+        console.error('Hiba az ELO display frissítésekor:', error);
+    }
+}
 function socketHandler() {
     if (typeof socket !== 'undefined') {
         socket.on('stats:public', (stats) => {
