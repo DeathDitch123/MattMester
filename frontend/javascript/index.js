@@ -32,9 +32,7 @@ async function fetchSessionInfo() {
     } catch (error) {
         console.error('Hiba a session informacio lekerdezese soran:', error);
     }
-    finally {
-        return result;
-    }
+    return result;
 }
 
 function bindLoginForm() {
@@ -149,9 +147,6 @@ function validateRegisterInput(username, email, password) {
     else if (!EMAIL_REGEX.test(email)) {
         message = 'Érvénytelen email cím formátum.';
     }
-    else if (password.includes('\\')) {
-        message = 'A jelszó nem megengedett karaktert tartalmaz.';
-    }
     else if (password.length < 8) {
         message = 'A jelszónak legalább 8 karakter hosszú kell legyen.';
     }
@@ -199,12 +194,12 @@ async function refreshAuthUi() {
     const guestActions = document.getElementById('guestActions');
     const userActions = document.getElementById('userActions');
     const adminActions = document.getElementById('adminActions');
-    const welcomeMessage = document.getElementById('welcomeMessage');
+    const welcomeMessage = document.querySelectorAll(".welcomeMessage");
 
     try {
         const data = await fetchSessionInfo();
 
-        if (!data || !data.success) {
+        if (!data.success) {
             throw new Error('Nem sikerult lekerdezni a session informaciot.');
         }
         const user = data.user;
@@ -233,14 +228,16 @@ async function refreshAuthUi() {
         if (adminActions) adminActions.classList.toggle('d-none', !isAdmin);
 
         if (welcomeMessage) {
-            welcomeMessage.innerText = loggedIn ? `Szia, ${user.username}!` : '';
+            welcomeMessage.forEach(el => {
+                el.innerText = loggedIn ? `Szia, ${user.username}!` : '';
+            });
         }
     } catch (error) {
         console.error('Hiba az auth allapot frissitesekor:', error);
         if (guestActions) guestActions.classList.remove('d-none');
         if (userActions) userActions.classList.add('d-none');
         if (adminActions) adminActions.classList.add('d-none');
-        if (welcomeMessage) welcomeMessage.innerText = '';
+        if (welcomeMessage) welcomeMessage.forEach(el => el.innerText = '');
     }
 }
 
@@ -253,17 +250,41 @@ function socketHandler() {
     }
 }
 
-function updateGlobalStats(stats) {
-    const totalUsersElem = document.querySelector('[data-stat="players"]');
-    const onlineGamesElem = document.querySelector('[data-stat="liveGames"]');
-    const onlineUsersElem = document.querySelector('[data-stat="online"]');
-    const totalGamesElem = document.querySelector('[data-stat="allGames"]');
+const statsElements = {
+    players: document.querySelector('[data-stat="players"]'),
+    liveGames: document.querySelector('[data-stat="liveGames"]'),
+    online: document.querySelector('[data-stat="online"]'),
+    allGames: document.querySelector('[data-stat="allGames"]')
+};
 
-    // Értékek átírása a szerverről érkező adatokkal
-    if (totalUsersElem) totalUsersElem.textContent = stats.totalUsers ?? 0;
-    if (onlineGamesElem) onlineGamesElem.textContent = stats.onlineGames ?? 0;
-    if (onlineUsersElem) onlineUsersElem.textContent = stats.onlineUsers ?? 0;
-    if (totalGamesElem) totalGamesElem.textContent = stats.totalGames ?? 0;
+function updateGlobalStats(stats) {
+    const mapping = {
+        players: stats.totalUsers,
+        liveGames: stats.onlineGames,
+        online: stats.onlineUsers,
+        allGames: stats.totalGames
+    };
+
+    Object.keys(mapping).forEach(key => {
+
+        const el = statsElements[key];
+        const newValue = mapping[key] ?? 0;
+
+        if (!el) return;
+
+        if (el.textContent != newValue) {
+
+            el.textContent = newValue;
+
+            el.classList.remove('stat-update-anim');
+            void el.offsetWidth;
+            el.classList.add('stat-update-anim');
+
+            setTimeout(() => {
+                el.classList.remove('stat-update-anim');
+            }, 600);
+        }
+    });
 }
 
 function clearFormMessage(messageElement) {

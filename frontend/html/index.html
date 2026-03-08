@@ -4,8 +4,12 @@
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
-
+        content="
+        default-src 'self';
+        connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+        script-src 'self' https://cdn.jsdelivr.net;
+        style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com;
+        font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MattMester</title>
 
@@ -61,7 +65,7 @@
                         <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
                     </li> -->
                     <li class="nav-item hide-mobile">
-                        <span class="nav-link" id="welcomeMessage"></span>
+                        <span class="nav-link welcomeMessage"></span>
                     </li>
                     <li class="nav-item">
                         <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'">Profil
@@ -77,7 +81,7 @@
                         <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
                     </li> -->
                     <li class="nav-item hide-mobile">
-                        <span class="nav-link" id="welcomeMessage"></span>
+                        <span class="nav-link welcomeMessage"></span>
                     </li>
                     <li class="nav-item">
                         <button class="btn btn-outline-gold btn-sm"
@@ -101,7 +105,7 @@
             <div class="row g-4 align-items-center">
                 <div class="col-lg-12">
                     <div class="hero-card h-100">
-                        <span class="badge badge-soft mb-3"><i class="bi bi-lightning-charge-fill me-1"></i>Elő
+                        <span class="badge badge-soft mb-3"><i class="bi bi-lightning-charge-fill me-1"></i>Élő
                             közösségi sakk platform</span>
                         <h1 class="display-5 fw-bold mb-3">Játssz, fejlődj, lépj a ranglétra élére</h1>
                         <p class="text-secondary mb-4">Versenyezz Mattmester, Klasszikus vagy Gép elleni módban.

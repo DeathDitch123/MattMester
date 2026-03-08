@@ -89,6 +89,16 @@ h6 {
     }
 }
 
+@keyframes stat-pulse {
+    0% { transform: scale(1); text-shadow: none; }
+    50% { transform: scale(1.1); text-shadow: 0 0 10px rgba(255, 215, 0, 0.8); color: #ffd700; }
+    100% { transform: scale(1); text-shadow: none; }
+}
+
+.stat-update-anim {
+    animation: stat-pulse 0.6s ease-out;
+}
+
 .btn-gold {
     background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-hover));
     border: none;
