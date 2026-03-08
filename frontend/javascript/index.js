@@ -9,6 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindLogoutButtonUser();
     bindLogoutButtonAdmin();
     restoreLastMode();
+    socketHandler();
     refreshAuthUi();
 });
 // Ez parsol
@@ -241,6 +242,28 @@ async function refreshAuthUi() {
         if (adminActions) adminActions.classList.add('d-none');
         if (welcomeMessage) welcomeMessage.innerText = '';
     }
+}
+
+function socketHandler() {
+    if (typeof socket !== 'undefined') {
+        socket.on('stats:public', (stats) => {
+            // stats tartalma: { onlineUsers, totalUsers, totalGames, onlineGames }
+            updateGlobalStats(stats);
+        });
+    }
+}
+
+function updateGlobalStats(stats) {
+    const totalUsersElem = document.querySelector('[data-stat="players"]');
+    const onlineGamesElem = document.querySelector('[data-stat="liveGames"]');
+    const onlineUsersElem = document.querySelector('[data-stat="online"]');
+    const totalGamesElem = document.querySelector('[data-stat="allGames"]');
+
+    // Értékek átírása a szerverről érkező adatokkal
+    if (totalUsersElem) totalUsersElem.textContent = stats.totalUsers ?? 0;
+    if (onlineGamesElem) onlineGamesElem.textContent = stats.onlineGames ?? 0;
+    if (onlineUsersElem) onlineUsersElem.textContent = stats.onlineUsers ?? 0;
+    if (totalGamesElem) totalGamesElem.textContent = stats.totalGames ?? 0;
 }
 
 function clearFormMessage(messageElement) {
