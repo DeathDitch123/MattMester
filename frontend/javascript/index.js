@@ -4,6 +4,14 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
 const socket = io();
 
+let LeaderboardData = {
+    elo: [],
+    mm: [],
+    bullet: [],
+    winRate: [],
+    lastUpdated: null
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     installModalFocusGuards();
     bindLoginForm();
@@ -35,6 +43,22 @@ async function fetchSessionInfo() {
         console.error('Hiba a session informacio lekerdezese soran:', error);
     }
     return result;
+}
+
+async function loadLeaderBoard() {
+    try {
+        const response = await fetch('/api/leaderboard');
+        LeaderboardData = await parseJson(response);
+        renderLeaderBoard(LeaderboardData);
+    } catch (error) {
+        console.error('Hiba a ranglista lekérdezése során:', error);
+    }
+}
+
+async function renderLeaderBoard(data) {
+    const eloFilter = document.getElementById('leaderboardEloFilter').value;
+    const limit = document.getElementById('leaderboardLimit').value;
+    
 }
 
 function bindLoginForm() {

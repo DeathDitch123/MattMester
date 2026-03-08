@@ -131,4 +131,7 @@ const leaderboardService = {
     }
 };
 
-module.exports = services;
+module.exports = {
+    services,
+    leaderboardService
+};

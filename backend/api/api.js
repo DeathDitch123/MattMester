@@ -28,7 +28,6 @@ router.get('/test', isAdmin, (request, response) => {
         message: 'Ez a végpont működik.'
     });
 });
-
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
 router.post('/login', async (request, response) => {
     let statusCode = 200;
@@ -139,7 +138,6 @@ const logoutHandler = async (request, response) => {
 };
 router.get('/logout', logoutHandler);
 router.post('/logout', logoutHandler);
-
 // ?POST /api/register - új felhasználó regisztrációja
 router.post('/register', async (request, response) => {
     let statusCode = 200;
@@ -257,7 +255,6 @@ router.post('/register', async (request, response) => {
         return response.status(FinalStatusCode).json({ success: false, message: error.message });
     }
 });
-
 // ?GET /api/sessioninfo - aktuális session információk lekérdezése
 router.get('/sessionInfo', async (request, response) => {
     let statusCode = 200;
@@ -323,6 +320,15 @@ router.get('/sessionInfo', async (request, response) => {
             message: 'Szerverhiba a session információ lekérdezése során.'
         };
         return response.status(statusCode).json(result);
+    }
+});
+router.get('/leaderboard', async (request, response) => {
+    try {
+        const leaderboardData = leaderboardService.getLeaderBoard();
+        return response.status(200).json({ success: true, data: leaderboardData });
+    } catch (error) {
+        console.error('Leaderboard hiba:', error);
+        return response.status(500).json({ success: false, message: 'Szerverhiba a ranglista lekérdezése során.' });
     }
 });
 module.exports = router;
