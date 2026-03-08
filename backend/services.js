@@ -53,8 +53,8 @@ const services = {
                     memoryUsage: (process.memoryUsage().rss / (1024 * 1024)).toFixed(2) + ' MB'
                 };
                 //?Statisztikák frissítése minden kliensnek
-                io.to('general-room').emit('update:stats', currentStats.public);
-                io.to('admin-room').emit('update:adminStats', currentStats.admin);
+                io.to('general-room').emit('stats:public', currentStats.public);
+                io.to('admin-room').emit('stats:admin', currentStats.admin);
             }
             else {
                 console.error('Nincs elérhető adatbázis kapcsolat a statisztikák frissítéséhez.');
@@ -64,7 +64,7 @@ const services = {
         }
     },
 
-    handleConnetion(socket, io) {
+    handleConnection(socket, io) {
         console.log('Új Socket.io kapcsolat létrejött:', socket.id);
 
         socket.join('general-room'); //?Mindenki csatlakozik egy "general" nevű szobához, ahol általános értesítéseket lehet küldeni

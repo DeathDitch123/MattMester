@@ -45,7 +45,7 @@ app.get('/', (req, res) => {
 });
 
 //Socket.io események
-services.startHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
+services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
 io.on('connection', (socket) => {
     console.log('Új Socket.io kapcsolat létrejött:', socket.id);
     services.handleConnection(socket, io);
