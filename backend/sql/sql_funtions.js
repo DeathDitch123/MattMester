@@ -224,6 +224,23 @@ async function getAllRooms() {
         throw new Error('Hiba a szobák lekérdezése során.');
     }
 }
+//később ip csaláshoz esetleges szűréshez, vagy csak simán statisztikához, hogy melyik ip címről hány account van stb... bár ez utóbbi lehet, hogy nem annyira fontos, de majd meglátjuk
+async function logLoginAttempt(userId, ipAddress, userAgent) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const query = 'INSERT INTO login_history (user_id, ip_address, user_agent) VALUES (?, ?, ?)';
+    try {
+        await connection.beginTransaction();
+        await connection.execute(query, [userId, ipAddress, userAgent]);
+        await connection.commit();
+    } catch (error) {
+        await connection.rollback();
+        console.error('Hiba a login kísérlet naplózása során:', error);
+    }
+    finally {
+        connection.release();
+    }
+}
 
 module.exports = {
     insertUser,
@@ -235,5 +252,6 @@ module.exports = {
     getTotalGames,
     getOnlineGamesCount,
     getAllUsers,
-    getAllRooms
+    getAllRooms,
+    logLoginAttempt
 };

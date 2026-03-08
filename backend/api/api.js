@@ -69,22 +69,37 @@ router.post('/login', async (request, response) => {
                     } else {
                         request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
                     }
+                    const ipAdress = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
+                    console.log(`Bejelentkezés: ${user.username} - IP: ${ipAdress}`);
+                    const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+                    console.log(`User Agent: ${userAgent}`);
+
+                    await sql.logLoginAttempt(user.id, ipAdress, userAgent);
+
+                    return request.session.save((err) => {
+                        if (err) {
+                            console.error('Session mentési hiba:', err);
+                            return response.status(500).json({ success: false, message: 'Hiba a munkamenet mentésekor.' });
+                        }
+
+                        // Csak a sikeres mentés után küldjük el a JSON választ
+                        return response.status(statusCode).json({
+                            success: true,
+                            message: 'Sikeres bejelentkezés.',
+                            user: {
+                                id: currentUser.id,
+                                username: currentUser.username,
+                                email: currentUser.email,
+                                role: currentUser.role,
+                                elo: currentUser.elo,
+                                elo_MM: currentUser.elo_MM,
+                                elo_bullet: currentUser.elo_bullet
+                            },
+                        });
+                    });
                 }
             }
         }
-        return response.status(statusCode).json({
-            success: true,
-            message: 'Sikeres bejelentkezés.',
-            user: {
-                id: currentUser.id,
-                username: currentUser.username,
-                email: currentUser.email,
-                role: currentUser.role,
-                elo: currentUser.elo,
-                elo_MM: currentUser.elo_MM,
-                elo_bullet: currentUser.elo_bullet
-            },
-        });
     } catch (error) {
         console.error('Login hiba:', error);
         const finalStatusCode = statusCode === 200 ? 500 : statusCode;
@@ -193,15 +208,21 @@ router.post('/register', async (request, response) => {
                                             request.session.elo_bullet = 1200;
                                             request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
 
+                                            const ipAdress = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
+                                            console.log(`Új regisztráció: ${username} (${email}) - IP: ${ipAdress}`);
+                                            const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+                                            console.log(`User Agent: ${userAgent}`);
+
                                             statusCode = 201;
 
-                                            request.session.save((err) => {
+                                            request.session.save(async (err) => {
                                                 if (err) {
                                                     console.error('Session mentési hiba:', err);
                                                     return response.status(500).json({ success: false, message: 'Sikertelen regisztráció.' });
                                                 }
                                                 else {
                                                     console.log('Session sikeresen mentése a regisztráció után.');
+                                                    await sql.logLoginAttempt(result.insertId, ipAdress, userAgent);
                                                     return response.status(statusCode).json({
                                                         success: true,
                                                         message: 'Sikeres regisztráció',
