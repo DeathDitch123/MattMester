@@ -125,10 +125,115 @@ async function getSessionUserById(userId) {
     }
 }
 
+async function getTotalUsers() {
+    const pool = getPool();
+    const query = 'SELECT COUNT(*) AS total FROM users';
+    try {
+        const [rows] = await pool.execute(query);
+        return rows[0].total;
+    } catch (error) {
+        throw new Error('Hiba a felhasználók lekérdezése során.');
+    }
+}
+async function getTotalGames() {
+    const pool = getPool();
+    const query = 'SELECT COUNT(*) AS total FROM games';
+    try {
+        const [rows] = await pool.execute(query);
+        return rows[0].total;
+    } catch (error) {
+        throw new Error('Hiba a játékok lekérdezése során.');
+    }
+}
+async function getOnlineGamesCount() {
+    const pool = getPool();
+    const query = 'SELECT COUNT(*) AS total FROM games WHERE status = "ongoing"';
+    try {
+        const [rows] = await pool.execute(query);
+        return rows[0].total;
+    } catch (error) {
+        throw new Error('Hiba a játékok lekérdezése során.');
+    }
+}
+async function getAllUsers() {
+    const pool = getPool();
+    const query = `
+        SELECT 
+            u.id,
+            u.username,
+            u.email,
+            u.role,
+            u.elo,
+            u.elo_MM,
+            u.elo_bullet,
+            u.is_banned,
+            u.banned_until,
+            u.last_active,
+            u.created_at,
+            COALESCE(s.wins, 0) AS wins,
+            COALESCE(s.losses, 0) AS losses,
+            COALESCE(s.draws, 0) AS draws,
+            COALESCE(s.abilities_used, 0) AS total_abilities,
+            IFNULL(ROUND((s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 1), 0) AS win_rate_percent,
+            (SELECT ip_address FROM login_history WHERE user_id = u.id ORDER BY login_time DESC LIMIT 1) AS last_ip
+        FROM 
+            users u
+        LEFT JOIN 
+            statistics s ON u.id = s.user_id
+        ORDER BY 
+            u.last_active DESC;
+        `;
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba a felhasználók lekérdezése során.');
+    }
+}
+async function getAllRooms() {
+    const pool = getPool();
+    const query = `
+        SELECT 
+            g.id AS game_id,
+            w.username AS white_player,
+            b.username AS black_player,
+            win.username AS winner,
+            g.status,
+            g.time_control,
+            g.start_time,
+            g.end_time,
+            (SELECT COUNT(*) FROM ability_log al 
+             JOIN moves m ON al.move_id = m.id 
+             WHERE m.game_id = g.id) AS abilities_used_in_game,
+            (SELECT GROUP_CONCAT(CONCAT(sender.username, ': ', gc.message) SEPARATOR ' | ') 
+             FROM game_chats gc 
+             JOIN users sender ON gc.sender_id = sender.id 
+             WHERE gc.game_id = g.id) AS chat_history
+        FROM 
+            games g
+        JOIN users w ON g.white_player_id = w.id
+        JOIN users b ON g.black_player_id = b.id
+        LEFT JOIN users win ON g.winner_id = win.id
+        WHERE 
+            g.id = ?;
+        `;
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba a szobák lekérdezése során.');
+    }
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
     getUserByEmail,
     getLeaderBoard,
-    getSessionUserById
+    getSessionUserById,
+    getTotalUsers,
+    getTotalGames,
+    getOnlineGamesCount,
+    getAllUsers,
+    getAllRooms
 };
