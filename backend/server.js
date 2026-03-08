@@ -45,8 +45,6 @@ app.get('/', (req, res) => {
 });
 
 //Socket.io események
-services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
-leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
 io.on('connection', (socket) => {
     services.handleConnection(socket, io);
     socket.on('heartbeat', () => {
@@ -60,6 +58,8 @@ io.on('connection', (socket) => {
 // Adatbázis inicializálása, majd szerver indítása
 initDatabase()
     .then(() => {
+        services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
+        leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
         server.listen(port, ip, () => {
             console.log(`Szerver és Socket elérhetősége: http://${ip}:${port}`);
         });

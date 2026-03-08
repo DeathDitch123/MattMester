@@ -1,4 +1,3 @@
-const { get } = require('../api/api.js');
 const { getPool } = require('./database.js');
 
 async function insertUser(username, passwordHash, email) {
