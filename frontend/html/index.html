@@ -4,12 +4,11 @@
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy"
-        content="
-        default-src 'self';
-        connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
-        script-src 'self' https://cdn.jsdelivr.net;
-        style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com;
-        font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
+        content="default-src 'self';
+            connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+            script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
+            style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MattMester</title>
 
