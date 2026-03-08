@@ -69,8 +69,14 @@ function bindLoginForm() {
                         showFormMessage(messageElement, 'success', result.message || 'Sikeres bejelentkezes.');
                         loginForm.reset();
                         hideModalById('loginModal');
-                        await refreshAuthUi();
                         showToast('Sikeres bejelentkezes.');
+
+                        if (typeof socket !== 'undefined') {
+                            console.log('Login form successful, refreshing stats via socket...');
+                            socket.disconnect(); //?Először bontjuk a kapcsolatot, hogy a szerver felismerje a session változást
+                            socket.connect(); //?Újra csatlakoztatjuk a socketet, hogy a szerver felismerje az új session-t és frissítse a statisztikákat
+                        }
+                        await refreshAuthUi();
                     }
                 } catch (error) {
                     showFormMessage(messageElement, 'danger', 'Nem sikerult csatlakozni a szerverhez.');
@@ -154,59 +160,38 @@ function validateRegisterInput(username, email, password) {
 
     return message;
 }
-
-function bindLogoutButtonUser() {
-    const logoutButton = document.getElementById('logoutBtnUser');
-    if (logoutButton) {
-        logoutButton.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/logout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                const result = await parseJson(response);
-
-                if (!response.ok) {
-                    showToast(result.message || 'Sikertelen kijelentkezes.');
-                }
-                else {
-                    await refreshAuthUi();
-                    showToast(result.message || 'Sikeres kijelentkezes.');
-                }
-            } catch (error) {
-                console.error('Hiba a kijelentkezes soran:', error);
-                showToast(error.message || 'Sikertelen kijelentkezes.');
-            }
+//közös kijelentkezés kezelése user és admin részére, hogy ne kelljen duplikálni a kódot
+async function handleLogout() {
+    try {
+        const response = await fetch('/api/logout', { 
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
         });
+        const result = await parseJson(response);
+
+        if (response.ok) {
+            showToast(result.message || 'Sikeres kijelentkezés.');
+            if (typeof socket !== 'undefined') {
+                socket.disconnect();
+                socket.connect();
+            }
+            await refreshAuthUi();
+        } else {
+            showToast(result.message || 'Sikertelen kijelentkezés.');
+        }
+    } catch (error) {
+        console.error('Hiba a kijelentkezés során:', error);
     }
 }
 
+function bindLogoutButtonUser() {
+    const btn = document.getElementById('logoutBtnUser');
+    if (btn) btn.addEventListener('click', handleLogout);
+}
+
 function bindLogoutButtonAdmin() {
-    const logoutButton = document.getElementById('logoutBtnAdmin');
-    if (logoutButton) {
-        logoutButton.addEventListener('click', async () => {
-            try {
-                const response = await fetch('/api/logout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                const result = await parseJson(response);
-
-                if (!response.ok) {
-                    showToast(result.message || 'Sikertelen kijelentkezes.');
-                }
-                else {
-                    await refreshAuthUi();
-                    showToast(result.message || 'Sikeres kijelentkezes.');
-                }
-            } catch (error) {
-                console.error('Hiba a kijelentkezes soran:', error);
-                showToast(error.message || 'Sikertelen kijelentkezes.');
-            }
-        });
-    }
+    const btn = document.getElementById('logoutBtnAdmin');
+    if (btn) btn.addEventListener('click', handleLogout);
 }
 
 async function refreshAuthUi() {
@@ -237,7 +222,7 @@ async function refreshAuthUi() {
                 sessionBound: socket.connected ? "Active" : "Disconnected/Pending"
             });
         }
-        else{
+        else {
             console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
         }
         console.log('--------------------------');
