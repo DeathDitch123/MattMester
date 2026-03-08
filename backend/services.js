@@ -95,8 +95,8 @@ const services = {
 
 let leaderboardCache = {
     elo: [],
-    mm: [],
-    bullet: [],
+    elo_MM: [],
+    elo_bullet: [],
     winRate: [],
     lastUpdated: null
 };
@@ -110,8 +110,8 @@ const leaderboardService = {
             const newWinRateCache = await sql.getLeaderBoardByWinRate();
             leaderboardCache = {
                 elo: newEloCache,
-                mm: newMMCache,
-                bullet: newBulletCache,
+                elo_MM: newMMCache,
+                elo_bullet: newBulletCache,
                 winRate: newWinRateCache,
                 lastUpdated: new Date()
             };
