@@ -214,8 +214,7 @@ async function getAllRooms() {
         JOIN users w ON g.white_player_id = w.id
         JOIN users b ON g.black_player_id = b.id
         LEFT JOIN users win ON g.winner_id = win.id
-        WHERE 
-            g.id = ?;
+        ORDER BY g.start_time DESC; -- Legfrissebbek elöl
         `;
     try {
         const [rows] = await pool.execute(query);
