@@ -102,7 +102,7 @@ function bindRegisterForm() {
             clearFormMessage(messageElement);
 
             const validationMessage = validateRegisterInput(username, email, password);
-            if (validationMessage) {
+            if (validationMessage != "") {
                 showFormMessage(messageElement, 'danger', validationMessage);
             }
             else {

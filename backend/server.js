@@ -47,15 +47,12 @@ app.get('/', (req, res) => {
 //Socket.io események
 services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
 io.on('connection', (socket) => {
-    console.log('Új Socket.io kapcsolat létrejött:', socket.id);
     services.handleConnection(socket, io);
-
     socket.on('heartbeat', () => {
         // services.refreshStats(io); //?Statisztikák frissítése minden kliensnek a heartbeat eseményre
     });
 
     socket.on('disconnect', () => {
-        console.log('Socket.io kapcsolat megszakadt:', socket.id);
     });
 });
 
