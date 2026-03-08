@@ -5,6 +5,7 @@ const path = require('path');
 const http = require('http');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
+const services = require('./services.js');
 
 //!Beállítások
 const app = express();
@@ -16,8 +17,23 @@ const router = express.Router();
 const ip = '127.0.0.1';
 const port = 3000;
 
-const sessionSecret = process.env.SESSION_SECRET || 'chu+)2_23iIa6sou&>#o79247r9Xbsibv%';
+//?Szívverés indítása a statisztikák frissítéséhez
+services.startHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
+io.on('connection', (socket) => {
+    console.log('Új Socket.io kapcsolat létrejött:', socket.id);
+    services.handleConnection(socket, io);
 
+    socket.on('heartbeat', (socket) => {
+        // services.refreshStats(io); //?Statisztikák frissítése minden kliensnek a heartbeat eseményre
+    });
+
+    socket.on('disconnect', () => {
+        console.log('Socket.io kapcsolat megszakadt:', socket.id);
+    });
+});
+
+//?Session beállítása
+const sessionSecret = process.env.SESSION_SECRET || 'chu+)2_23iIa6sou&>#o79247r9Xbsibv%';
 const sessionMiddleware = session({
     secret: sessionSecret,
     resave: false,
