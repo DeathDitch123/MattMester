@@ -63,7 +63,7 @@ async function getLeaderBoardByElo() {
 
 async function getLeaderBoardByMM() {
     const pool = getPool();
-    const query = 'SELECT users.username, users.elo_MM, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo DESC LIMIT 100';
+    const query = 'SELECT users.username, users.elo_MM, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo_MM DESC LIMIT 100';
     try {
         const [rows] = await pool.execute(query);
         return rows;
@@ -74,7 +74,7 @@ async function getLeaderBoardByMM() {
 
 async function getLeaderBoardByBullet() {
     const pool = getPool();
-    const query = 'SELECT users.username, users.elo_bullet, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo DESC LIMIT 100';
+    const query = 'SELECT users.username, users.elo_bullet, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo_bullet DESC LIMIT 100';
     try {
         const [rows] = await pool.execute(query);
         return rows;

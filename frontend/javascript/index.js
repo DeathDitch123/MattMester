@@ -110,16 +110,15 @@ function renderLeaderBoard() {
 
             return `
                 <tr>
-                    <td class="ps-4 fw-bold ${index < 3 ? 'text-warning' : 'text-secondary'}">#${index + 1}</td>
+                    <td class="fw-bold ${index < 3 ? 'text-warning' : 'text-secondary'}">#${index + 1}</td>
                     <td>
                         <div class="d-flex align-items-center">
-                            <img src="https://ui-avatars.com/api/?name=${player.username}&background=random&size=32" class="rounded-circle me-2">
                             <span class="text-white">${player.username}</span>
                         </div>
                     </td>
                     <td class="text-center fw-bold text-info">${val}</td>
-                    <td class="text-center small text-muted">${new Date(player.last_active).toLocaleDateString('hu-HU')}</td>
-                    <td class="text-end pe-4 small text-muted">${new Date(joinedAt).toLocaleDateString('hu-HU')}</td>
+                    <td class="text-center small text-white">${new Date(player.last_active).toLocaleDateString('hu-HU')}</td>
+                    <td class="text-center small text-white">${new Date(joinedAt).toLocaleDateString('hu-HU')}</td>
                 </tr>
                 `;
         }).join('');

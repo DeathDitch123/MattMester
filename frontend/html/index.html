@@ -169,10 +169,9 @@
                 <!-- itt ezt meg kell csinálni, hogy a backendről jön a frissítés ideje, és ne csak statikusan legyen kiírva, hogy "ma" -->
                 <div class="table-controls p-3">
                     <div class="row g-2 d-flex justify-content-around align-items-center">
-                        <div class="col-6 col-md-3">
-                            Rendezés:
-                        </div>
-                        <div class="col-6 col-md-3">
+                        <div class="col-12 col-md-6">
+                            <label class="me-2 text-secondary small text-uppercase fw-bold"
+                                style="min-width: 80px;">Rendezés:</label>
                             <select id="leaderboardEloFilter" class="form-select">
                                 <option value="elo" selected>ELO</option>
                                 <option value="elo_MM">ELO MattMester</option>
@@ -181,6 +180,8 @@
                             </select>
                         </div>
                         <div class="col-12 col-md-2">
+                            <label class="me-2 text-secondary small text-uppercase fw-bold"
+                                style="min-width: 80px;">Limit:</label>
                             <select id="leaderboardLimit" class="form-select">
                                 <option value="10" selected>Top 10</option>
                                 <option value="25">Top 25</option>
@@ -190,16 +191,18 @@
                     </div>
                 </div>
                 <div class="table-responsive">
-                    <table class="table mb-0">
+                    <table class="table mb-0 leaderboard-table">
                         <thead>
                             <tr class="align-items-center">
+                                <th>#</th>
                                 <th>Játékos</th>
-                                <th>ELO</th>
-                                <th>Utoljára itt járt</th>
-                                <th>Felhasználó ezóta</th>
+                                <th class="text-center">ELO</th>
+                                <th class="text-center">Utoljára itt járt</th>
+                                <th class="text-center">Felhasználó ezóta</th>
                             </tr>
                         </thead>
-                        <tbody id="leaderboardBody"></tbody>
+                        <tbody id="leaderboardBody">
+                        </tbody>
                     </table>
                 </div>
                 <div id="leaderboardEmpty" class="table-empty d-none">Nincs találat a megadott szűrőkkel.</div>

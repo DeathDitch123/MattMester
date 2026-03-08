@@ -207,11 +207,24 @@ h6 {
     --bs-table-color: var(--text-primary);
 }
 
+.leaderboard-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.leaderboard-table thead th,
+.leaderboard-table tbody td {
+    text-align: center;
+}
+
+.leaderboard-table thead th:nth-child(2),
+.leaderboard-table tbody td:nth-child(2) {
+    text-align: left;
+}
+
 .table thead tr {
     background-color: var(--accent-gold);
     color: var(--bg-dark);
-    display: flex;
-    justify-content: space-around;
 }
 
 .table thead tr:hover {
