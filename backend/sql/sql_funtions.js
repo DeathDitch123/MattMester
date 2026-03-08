@@ -1,3 +1,4 @@
+const { get } = require('../api/api.js');
 const { getPool } = require('./database.js');
 
 async function insertUser(username, passwordHash, email) {
@@ -50,9 +51,67 @@ async function getUserByEmail(mailAdress) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
 }
-async function getLeaderBoard() {
+async function getLeaderBoardByElo() {
     const pool = getPool();
-    const query = 'SELECT users.username, users.elo FROM users ORDER BY elo DESC LIMIT 10';
+    const query = 'SELECT users.username, users.elo, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo DESC LIMIT 100';
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba a felhasználó lekérdezése során.');
+    }
+}
+
+async function getLeaderBoardByMM() {
+    const pool = getPool();
+    const query = 'SELECT users.username, users.elo_MM, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo DESC LIMIT 100';
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba a felhasználó lekérdezése során.');
+    }
+}
+
+async function getLeaderBoardByBullet() {
+    const pool = getPool();
+    const query = 'SELECT users.username, users.elo_bullet, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo DESC LIMIT 100';
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba a felhasználó lekérdezése során.');
+    }
+}
+
+async function getLeaderBoardByWinRate() {
+    const pool = getPool();
+    const query = `
+        SELECT 
+            u.username,
+            u.elo,
+            ROUND(
+                IFNULL(
+                    (s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 
+                    0
+                ), 2
+            ) AS winrate_percent,
+            s.wins,
+            s.losses,
+            s.draws,
+            u.last_active,
+            u.created_at AS joined_at
+        FROM 
+            users u
+        JOIN 
+            statistics s ON u.id = s.user_id
+        WHERE 
+            u.is_banned = FALSE
+        ORDER BY 
+            u.elo DESC,
+            winrate_percent DESC
+        LIMIT 100;
+        `;
     try {
         const [rows] = await pool.execute(query);
         return rows;
@@ -278,8 +337,11 @@ module.exports = {
     insertUser,
     getUserByUsername,
     getUserByEmail,
-    getLeaderBoard,
+    getLeaderBoardByElo,
+    getLeaderBoardByMM,
+    getLeaderBoardByBullet,
     getSessionUserById,
+    getLeaderBoardByWinRate,
     getTotalUsers,
     getTotalGames,
     getOnlineGamesCount,

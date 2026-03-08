@@ -93,4 +93,10 @@ const services = {
     }
 };
 
+const leaderboardService = {
+    async updateLeaderboardCache() {
+        
+    }
+}
+
 module.exports = services;
