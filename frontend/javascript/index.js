@@ -11,7 +11,7 @@ document.addEventListener('DOMContentLoaded', () => {
     restoreLastMode();
     refreshAuthUi();
 });
-
+// Ez parsol
 async function parseJson(response) {
     try {
         return await response.json();
@@ -19,7 +19,7 @@ async function parseJson(response) {
         return {};
     }
 }
-
+//sessionInfo
 async function fetchSessionInfo() {
     let result = { success: false, loggedIn: false };
     try {
