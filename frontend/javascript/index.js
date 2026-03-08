@@ -2,6 +2,8 @@ const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
+const socket = io();
+
 document.addEventListener('DOMContentLoaded', () => {
     installModalFocusGuards();
     bindLoginForm();
