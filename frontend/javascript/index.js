@@ -293,8 +293,12 @@ async function refreshAuthUi() {
     const adminActions = document.getElementById('adminActions');
     const eloDisplay = document.getElementById('eloDisplay');
     const welcomeMessage = document.querySelectorAll(".welcomeMessage");
+    const loginModalMessage = document.getElementById('loginMessage');
+    const registerModalMessage = document.getElementById('registerMessage');
 
     try {
+        clearFormMessage(loginModalMessage);
+        clearFormMessage(registerModalMessage);
         const data = await fetchSessionInfo();
 
         if (!data.success) {
