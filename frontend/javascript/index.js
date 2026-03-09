@@ -87,6 +87,7 @@ function renderLeaderBoard() {
     const limitElement = document.getElementById('leaderboardLimit');
     const tbody = document.getElementById('leaderboardBody');
     const emptyElement = document.getElementById('leaderboardEmpty');
+    const lastUpdatedElement = document.getElementById('lastUpdated');
 
     if (!filterElement || !limitElement || !tbody) {
         return;
@@ -102,6 +103,11 @@ function renderLeaderBoard() {
 
         if (emptyElement) {
             emptyElement.classList.toggle('d-none', sortedData.length > 0);
+        }
+        if (lastUpdatedElement) {
+            if (LeaderboardData.lastUpdated) {
+                lastUpdatedElement.textContent = `frissítve: ${new Date(LeaderboardData.lastUpdated).toLocaleString('hu-HU')}`;
+            }
         }
 
         tbody.innerHTML = sortedData.map((player, index) => {
@@ -343,7 +349,7 @@ function eloDisplayrefresh(user) {
             const eloMap = {
                 'user_elo': user.elo,
                 'user_MM_elo': user.elo_MM,
-                'user_bullet_elo': user.elo_bullet
+                'user_bullet_elo': user.elo_bullet,
             };
             for (const [key, value] of Object.entries(eloMap)) {
                 const element = document.querySelector(`[data-stat="${key}"]`);
