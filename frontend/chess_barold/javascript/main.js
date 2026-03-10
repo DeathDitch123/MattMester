@@ -12,7 +12,7 @@ let ervenyesLepesek = [];
  */
 function init() {
     // Gombok eseménykezelői
-    const ujJatekGomb = document.getElementById("new-game-btn");
+    const ujJatekGomb = document.getElementById("resetBtn");
     if (ujJatekGomb) {
         ujJatekGomb.addEventListener("click", () => {
             jatekUjraIndit();
@@ -31,11 +31,11 @@ function init() {
     modalPieces.forEach(pieceDiv => {
         pieceDiv.addEventListener("click", () => {
             if (jatek.atvaltozasVar) {
-                const választottTípus = pieceDiv.dataset.type; // queen, rook, stb.
+                const valasztottTipus = pieceDiv.dataset.type; // queen, rook, stb.
                 const { piece, move } = jatek.atvaltozasVar;
 
                 // Végrehajtjuk a lépést az új típussal
-                lepesHajt(piece, move, választottTípus);
+                lepesHajt(piece, move, valasztottTipus);
 
                 // Modal elrejtése és állapot törlése
                 document.getElementById("promotion-modal").classList.add("hidden");
