@@ -1,183 +1,140 @@
 import { jatek, mezoKeres } from './state.js';
 import { szabLepKeres } from './logika.js';
 import { lepesHajt, jatekUjraIndit } from './engine.js';
-import { tablaRajzol, atvaltozasModal } from './UI-megjelenites.js';
-
-// --- BELSŐ ÁLLAPOT A KATTINTÁSOKHOZ ---
-let kijeloltMezo = null;
-let ervenyesLepesek = [];
-let aktivHuzas = null;
+import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt, huzasKiemel, huzasKiemelTorol } from './UI-megjelenites.js';
 
 /**
- * Inicializálás: Ez fut le az oldal betöltésekor
+ * Inicializálás — 1:1 a chess.js DOMContentLoaded blokkjával
  */
 function init() {
-    // Gombok eseménykezelői
-    const ujJatekGomb = document.getElementById("resetBtn");
-    if (ujJatekGomb) {
-        ujJatekGomb.addEventListener("click", () => {
-            jatekUjraIndit();
-            kijeloltMezo = null;
-            ervenyesLepesek = [];
-        });
-    }
+    document.getElementById("resetBtn").addEventListener("click", jatekUjraIndit);
 
-    // Tábla kattintás kezelése
-    const tablaElem = document.getElementById("board");
-    if (tablaElem) {
-        tablaElem.addEventListener("click", kattintasKezeles);
-        tablaElem.addEventListener("dragstart", huzasIndit);
-        tablaElem.addEventListener("dragover", huzasFelett);
-        tablaElem.addEventListener("drop", huzasEjt);
-        tablaElem.addEventListener("dragend", huzasVege);
-    }
-    
-    const modalPieces = document.querySelectorAll(".promotion-piece");
-    modalPieces.forEach(pieceDiv => {
-        pieceDiv.addEventListener("click", () => {
+    // Átváltozás modal bábuk eseménykezelői
+    const valasztek = document.querySelectorAll(".promotion-piece");
+    for (let i = 0; i < valasztek.length; i++) {
+        valasztek[i].addEventListener("click", function () {
+            const tipus = this.dataset.type;
+            atvaltozasModalElrejt();
             if (jatek.atvaltozasVar) {
-                const valasztottTipus = pieceDiv.dataset.type; // queen, rook, stb.
-                const { piece, move } = jatek.atvaltozasVar;
-
-                // Végrehajtjuk a lépést az új típussal
-                lepesHajt(piece, move, valasztottTipus);
-
-                // Modal elrejtése és állapot törlése
-                document.getElementById("promotion-modal").classList.add("hidden");
+                lepesHajt(jatek.atvaltozasVar.piece, jatek.atvaltozasVar.move, tipus);
                 jatek.atvaltozasVar = null;
             }
         });
-    });
+    }
 
     jatekUjraIndit();
 }
 
 /**
- * Kezeli a mezőkre való kattintást
+ * Húzás hozzáadása — meghívódik tablaRajzol után minden bábura (export, UI hívja)
+ * 1:1 a chess.js huzasHozzaad() függvényével, moduláris adaptáció.
  */
-function kattintasKezeles(esemeny) {
-    if (aktivHuzas) return;
-    if (jatek.vege || jatek.atvaltozasVar) return;
+export function huzasHozzaadMinden() {
+    const babuElemek = document.querySelectorAll(".piece");
+    for (let i = 0; i < babuElemek.length; i++) {
+        const babuElem = babuElemek[i];
+        const mezoElem = babuElem.parentElement;
+        const x = parseInt(mezoElem.dataset.x, 10);
+        const y = parseInt(mezoElem.dataset.y, 10);
+        const mezo = mezoKeres(x, y);
+        if (!mezo || !mezo.piece) continue;
+        huzasHozzaad(babuElem, mezo.piece);
+    }
+}
 
-    // Megkeressük melyik mezőre kattintottak (HTML attribútumok alapján)
-    const mezoElem = esemeny.target.closest(".square");
-    if (!mezoElem) return;
+function huzasHozzaad(babuElem, babu) {
+    babuElem.addEventListener("mousedown", function (e) {
+        if (jatek.vege === true) return;
+        if (babu.color !== jatek.koronLevo) return;
 
-    const x = parseInt(mezoElem.dataset.x);
-    const y = parseInt(mezoElem.dataset.y);
-    const kattintottMezo = mezoKeres(x, y);
+        e.preventDefault();
+        e.stopPropagation();
 
-    // 1. HA MÁR VAN KIJELÖLT BÁBU -> Megpróbálunk lépni
-    if (kijeloltMezo && ervenyesLepesek.some(l => l.to === kattintottMezo)) {
-        const lepes = ervenyesLepesek.find(l => l.to === kattintottMezo);
+        // Klón létrehozása — 1:1 chess.js
+        const klon = babuElem.cloneNode(true);
+        klon.className = "piece dragging";
+        klon.style.position = "fixed";
+        klon.style.zIndex = 9999;
+        klon.style.pointerEvents = "none";
+        klon.style.width = babuElem.offsetWidth + "px";
+        klon.style.height = babuElem.offsetHeight + "px";
+        const eltX = babuElem.offsetWidth / 2;
+        const eltY = babuElem.offsetHeight / 2;
+        document.body.appendChild(klon);
 
-        // Gyalogátváltozás ellenőrzése
-        if (kijeloltMezo.piece.type === "pawn" && (kattintottMezo.y === 0 || kattintottMezo.y === 7)) {
-            jatek.atvaltozasVar = { piece: kijeloltMezo.piece, move: lepes };
-            atvaltozasModal(kijeloltMezo.piece.color);
-        } else {
-            lepesHajt(kijeloltMezo.piece, lepes);
+        // Eredeti bábu halvány
+        babuElem.style.opacity = "0.3";
+
+        // Szabályos lépések kiszámítása és kiemelés
+        const lepesek = szabLepKeres(babu);
+        huzasKiemel(babu, lepesek);
+
+        // Klón kezdő pozíció
+        babuKlonMozgat(e.clientX, e.clientY, klon, eltX, eltY);
+
+        // Mozgatás
+        function egerMozogKezelo(em) {
+            babuKlonMozgat(em.clientX, em.clientY, klon, eltX, eltY);
         }
 
-        kijeloltMezo = null;
-        ervenyesLepesek = [];
-    }
-    // 2. HA SAJÁT BÁBURA KATTINTUNK -> Kijelöljük
-    else if (kattintottMezo.piece && kattintottMezo.piece.color === jatek.koronLevo) {
-        kijeloltMezo = kattintottMezo;
-        ervenyesLepesek = szabLepKeres(kattintottMezo.piece);
-    }
-    // 3. ÜRES MEZŐ VAGY ÉRVÉNYTELEN -> Kijelölés törlése
-    else {
-        kijeloltMezo = null;
-        ervenyesLepesek = [];
-    }
-
-    // UI frissítése a kijelölésekkel
-    tablaRajzol(kijeloltMezo, ervenyesLepesek);
-}
-
-function huzasIndit(esemeny) {
-    if (jatek.vege || jatek.atvaltozasVar) {
-        esemeny.preventDefault();
-        return;
-    }
-
-    const pieceElem = esemeny.target.closest(".piece");
-    const mezoElem = esemeny.target.closest(".square");
-    if (!pieceElem || !mezoElem) {
-        esemeny.preventDefault();
-        return;
-    }
-
-    const x = parseInt(mezoElem.dataset.x, 10);
-    const y = parseInt(mezoElem.dataset.y, 10);
-    const forrasMezo = mezoKeres(x, y);
-    if (!forrasMezo?.piece || forrasMezo.piece.color !== jatek.koronLevo) {
-        esemeny.preventDefault();
-        return;
-    }
-
-    const lepesek = szabLepKeres(forrasMezo.piece);
-    if (lepesek.length === 0) {
-        esemeny.preventDefault();
-        return;
-    }
-
-    aktivHuzas = { piece: forrasMezo.piece, lepesek };
-    kijeloltMezo = forrasMezo;
-    ervenyesLepesek = lepesek;
-    tablaRajzol(kijeloltMezo, ervenyesLepesek);
-
-    esemeny.dataTransfer.effectAllowed = "move";
-    esemeny.dataTransfer.setData("text/plain", `${x},${y}`);
-}
-
-function huzasFelett(esemeny) {
-    if (!aktivHuzas) return;
-    esemeny.preventDefault();
-    esemeny.dataTransfer.dropEffect = "move";
-}
-
-function huzasEjt(esemeny) {
-    if (!aktivHuzas) return;
-    esemeny.preventDefault();
-
-    const mezoElem = esemeny.target.closest(".square");
-    if (!mezoElem) {
-        huzasAllapotTorol();
-        tablaRajzol(kijeloltMezo, ervenyesLepesek);
-        return;
-    }
-
-    const x = parseInt(mezoElem.dataset.x, 10);
-    const y = parseInt(mezoElem.dataset.y, 10);
-    const celMezo = mezoKeres(x, y);
-    const lepes = aktivHuzas.lepesek.find(l => l.to === celMezo);
-
-    if (lepes) {
-        if (aktivHuzas.piece.type === "pawn" && (celMezo.y === 0 || celMezo.y === 7)) {
-            jatek.atvaltozasVar = { piece: aktivHuzas.piece, move: lepes };
-            atvaltozasModal(aktivHuzas.piece.color);
-        } else {
-            lepesHajt(aktivHuzas.piece, lepes);
+        // Felengedés
+        function egerFelKezelo(ef) {
+            document.removeEventListener("mousemove", egerMozogKezelo);
+            document.removeEventListener("mouseup", egerFelKezelo);
+            babuHuzasEgerFel(ef, klon, babuElem, lepesek, babu);
         }
+
+        document.addEventListener("mousemove", egerMozogKezelo);
+        document.addEventListener("mouseup", egerFelKezelo);
+    });
+}
+
+function babuKlonMozgat(mx, my, klon, eltX, eltY) {
+    klon.style.left = (mx - eltX) + "px";
+    klon.style.top = (my - eltY) + "px";
+}
+
+function babuHuzasEgerFel(ef, klon, babuElem, lepesek, babu) {
+    const elemAlatt = document.elementFromPoint(ef.clientX, ef.clientY);
+    const celMezoElem = elemAlatt ? elemAlatt.closest(".square") : null;
+    klon.remove();
+    babuElem.style.opacity = "";
+
+    if (celMezoElem) {
+        const cx = parseInt(celMezoElem.dataset.x, 10);
+        const cy = parseInt(celMezoElem.dataset.y, 10);
+        const celMezo = mezoKeres(cx, cy);
+        let talaltLepes = null;
+
+        for (let i = 0; i < lepesek.length; i++) {
+            if (lepesek[i].to === celMezo) {
+                talaltLepes = lepesek[i];
+                break;
+            }
+        }
+
+        if (talaltLepes) {
+            // Gyalog átváltozás ellenőrzése
+            if (babu.type === "pawn") {
+                const utSor = (babu.color === "white") ? 0 : 7;
+                if (talaltLepes.to.y === utSor) {
+                    jatek.atvaltozasVar = { piece: babu, move: talaltLepes };
+                    atvaltozasModal(babu.color);
+                    huzasKiemelTorol();
+                    return;
+                }
+            }
+            lepesHajt(babu, talaltLepes);
+        } else {
+            tablaRajzol();
+            huzasHozzaadMinden();
+        }
+    } else {
+        tablaRajzol();
+        huzasHozzaadMinden();
     }
 
-    huzasAllapotTorol();
-    tablaRajzol(kijeloltMezo, ervenyesLepesek);
-}
-
-function huzasVege() {
-    if (!aktivHuzas) return;
-    huzasAllapotTorol();
-    tablaRajzol(kijeloltMezo, ervenyesLepesek);
-}
-
-function huzasAllapotTorol() {
-    aktivHuzas = null;
-    kijeloltMezo = null;
-    ervenyesLepesek = [];
+    huzasKiemelTorol();
 }
 
 // Start!
