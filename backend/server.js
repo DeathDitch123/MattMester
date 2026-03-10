@@ -56,6 +56,9 @@ router.get('/login', (request, response) => {
 app.use('/', router);
 const endpoints = require('./api/api.js');
 app.use('/api', endpoints);
+//chess_api.js bekötés
+const chessRoutes = require('./api/chess_api.js');
+app.use('/api/chess', chessRoutes);
 
 
 //!Szerver futtatása
