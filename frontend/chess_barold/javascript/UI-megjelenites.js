@@ -15,7 +15,8 @@ export function tablaRajzol(kijeloltMezo = null, ervenyesLepesek = []) {
             
             // Mező színe (sakktábla minta)
             const isLight = (x + y) % 2 === 0;
-            mezoDiv.className = `square ${isLight ? 'light' : 'dark'}`;
+            mezoDiv.className = "square";
+            mezoDiv.setAttribute("role", isLight ? "light" : "dark");
             mezoDiv.dataset.x = x;
             mezoDiv.dataset.y = y;
 
@@ -27,10 +28,13 @@ export function tablaRajzol(kijeloltMezo = null, ervenyesLepesek = []) {
             // 2. Lépéslehetőségek (pöttyök/körök)
             const lepes = ervenyesLepesek.find(l => l.to === mezo);
             if (lepes) {
-                const marker = document.createElement("div");
-                // Ha ütés, kap egy külön classt (pl. pirosas kör), egyébként sima pötty
-                marker.className = lepes.capture ? "possible-capture" : "possible-move";
-                mezoDiv.appendChild(marker);
+                if (lepes.special === "enpassant") {
+                    mezoDiv.classList.add("enpassant");
+                } else if (lepes.special === "castle-ks" || lepes.special === "castle-qs") {
+                    mezoDiv.classList.add("castle");
+                } else {
+                    mezoDiv.classList.add(lepes.capture ? "capture" : "move");
+                }
             }
 
             // 3. Bábuk megjelenítése a te fájlneveid alapján
@@ -39,7 +43,7 @@ export function tablaRajzol(kijeloltMezo = null, ervenyesLepesek = []) {
                 // Útvonal: ../images/szin_tipus.png
                 img.src = `../images/${mezo.piece.color}_${mezo.piece.type}.png`;
                 img.className = "piece";
-                img.draggable = false; // Ne lehessen böngészőből "elhúzni" a képet
+                img.draggable = true;
                 mezoDiv.appendChild(img);
             }
 
@@ -50,7 +54,7 @@ export function tablaRajzol(kijeloltMezo = null, ervenyesLepesek = []) {
     // UI szöveges elemek frissítése
     const turnElem = document.getElementById("turn-name");
     if (turnElem) {
-        turnElem.textContent = jatek.koronLevo === "white" ? "fehér" : "fekete";
+        turnElem.textContent = jatek.koronLevo;
     }
 }
 
