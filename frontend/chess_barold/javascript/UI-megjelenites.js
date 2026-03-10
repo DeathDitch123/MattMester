@@ -1,17 +1,22 @@
-import { jatek, mezoKeres } from './state.js';
+// ============================================================
+// UI-MEGJELENITES — Frontend renderelés szerver-állapotból
+// ============================================================
+// NINCS state.js / logika.js import — minden adat a szervertől jön.
+// A szerver JSON-t ad (allapot objektum), ebből rajzolunk.
+// ============================================================
 
 /**
- * Kirajzolja a táblát, a bábukat és a jelölőket.
- * Paraméterek megegyeznek a chess.js viselkedéssel.
+ * Kirajzolja a táblát a szerver által küldött állapotból.
+ * @param {object} allapot - szerver válasz: { tabla, koronLevo, vege, utolsoLepes, sakkPoz, ido }
  */
-export function tablaRajzol() {
+export function tablaRajzol(allapot) {
     const boardElem = document.getElementById("board");
     if (!boardElem) return;
     boardElem.innerHTML = "";
 
     for (let y = 0; y < 8; y++) {
         for (let x = 0; x < 8; x++) {
-            const mezo = mezoKeres(x, y);
+            const mezo = allapot.tabla.find(m => m.x === x && m.y === y);
             const mezoDiv = document.createElement("div");
 
             const isLight = (x + y) % 2 === 0;
@@ -20,7 +25,6 @@ export function tablaRajzol() {
             mezoDiv.dataset.x = x;
             mezoDiv.dataset.y = y;
             mezoDiv.dataset.pos = mezo.pos;
-            mezo.el = mezoDiv;
 
             if (mezo.piece) {
                 const pDiv = document.createElement("div");
@@ -33,53 +37,46 @@ export function tablaRajzol() {
         }
     }
 
-    kiemelFrissit();
-    koronLevoFrissit();
+    kiemelFrissit(allapot);
+    koronLevoFrissit(allapot);
+    idoFrissit(allapot);
 }
 
 /**
  * Frissíti az utolsó lépés (sárga) és sakk (piros) kiemeléseket.
- * 1:1 a chess.js kiemelFrissit() függvényével.
+ * Az adatok a szerver állapotából jönnek — NEM frontenden számolunk.
  */
-function kiemelFrissit() {
+function kiemelFrissit(allapot) {
     const mezok = document.querySelectorAll(".square");
     for (let i = 0; i < mezok.length; i++) {
         mezok[i].classList.remove("from", "to", "check");
     }
 
-    if (jatek.utolsoLepes) {
-        const honnan = jatek.utolsoLepes.from;
-        const hova = jatek.utolsoLepes.to;
-        if (honnan && honnan.el) honnan.el.classList.add("from");
-        if (hova && hova.el)     hova.el.classList.add("to");
+    // Utolsó lépés sárga kiemelés (from/to)
+    if (allapot.utolsoLepes) {
+        const fromEl = mezoElemKeres(allapot.utolsoLepes.from.x, allapot.utolsoLepes.from.y);
+        const toEl = mezoElemKeres(allapot.utolsoLepes.to.x, allapot.utolsoLepes.to.y);
+        if (fromEl) fromEl.classList.add("from");
+        if (toEl) toEl.classList.add("to");
     }
 
-    for (let i = 0; i < jatek.tabla.length; i++) {
-        const m = jatek.tabla[i];
-        if (m.piece && m.piece.type === "king") {
-            const ellenSzin = (m.piece.color === "white") ? "black" : "white";
-            if (mezoTamadvaGyors(m.x, m.y, ellenSzin)) {
-                m.el.classList.add("check");
-            }
-        }
+    // Sakk jelzés (piros) — a szerver megmondja melyik király van sakkban
+    if (allapot.sakkPoz) {
+        const sakkEl = mezoElemKeres(allapot.sakkPoz.x, allapot.sakkPoz.y);
+        if (sakkEl) sakkEl.classList.add("check");
     }
 }
 
 /**
- * Gyors ellenőrzés: támadott-e a mező. Importáljuk a logikából.
- */
-import { mezoTamadva as mezoTamadvaGyors } from './logika.js';
-
-/**
  * Frissíti a körön lévő játékos szövegét.
  */
-function koronLevoFrissit() {
+function koronLevoFrissit(allapot) {
     const turnElem = document.getElementById("turn-name");
     if (turnElem) {
-        turnElem.textContent = jatek.koronLevo;
+        turnElem.textContent = allapot.koronLevo;
     }
     const statusElem = document.getElementById("status");
-    if (statusElem && !jatek.vege) {
+    if (statusElem && !allapot.vege) {
         statusElem.textContent = "játékon";
     }
 }
@@ -87,15 +84,15 @@ function koronLevoFrissit() {
 /**
  * Frissíti a két játékos óráját a HTML-ben.
  */
-export function uiFrissitIdo() {
+function idoFrissit(allapot) {
+    if (!allapot.ido) return;
     const format = (mp) => {
         const perc = Math.floor(mp / 60);
         const masodperc = mp % 60;
         return `${perc}:${masodperc.toString().padStart(2, '0')}`;
     };
-    
-    document.getElementById("clock-white").textContent = format(jatek.jatekosok.white.ido);
-    document.getElementById("clock-black").textContent = format(jatek.jatekosok.black.ido);
+    document.getElementById("clock-white").textContent = format(allapot.ido.white);
+    document.getElementById("clock-black").textContent = format(allapot.ido.black);
 }
 
 /**
@@ -107,7 +104,7 @@ export function uiJatekVegeMegjelenit(uzenet) {
 }
 
 /**
- * Megjeleníti a gyalog átváltozás választó popup-ot. 1:1 chess.js.
+ * Megjeleníti a gyalog átváltozás választó popup-ot.
  */
 export function atvaltozasModal(szin) {
     const modal = document.getElementById("promotion-modal");
@@ -128,37 +125,35 @@ export function atvaltozasModalElrejt() {
 }
 
 /**
- * Húzás közbeni kiemelés — 1:1 a chess.js huzasKiemel()-ével.
+ * Húzás közbeni kiemelés — a szerver által adott lépéslistából.
+ * @param {string} babuType - 'pawn', 'king', stb.
+ * @param {string} babuColor - 'white' | 'black'
+ * @param {Array} lepesek - szerver válasz: [{toX, toY, tipus, promotion}]
  */
-export function huzasKiemel(babu, lepesek) {
+export function huzasKiemel(babuType, babuColor, lepesek) {
     for (let i = 0; i < lepesek.length; i++) {
         const l = lepesek[i];
+        const celEl = mezoElemKeres(l.toX, l.toY);
+        if (!celEl) continue;
 
-        if (l.special === "enpassant") {
-            l.to.el.classList.add("enpassant");
-        } else if (l.special === "castle-ks" || l.special === "castle-qs") {
-            if (babu.type === "king" && l.rookFrom) {
-                l.rookFrom.el.classList.add("castle");
-            } else if (babu.type === "rook") {
-                const hazSor = (babu.color === "white") ? 7 : 0;
-                const kirMezo = mezoKeres(4, hazSor);
-                if (kirMezo && kirMezo.el) kirMezo.el.classList.add("castle");
-            }
-        } else if (l.capture === true) {
-            l.to.el.classList.add("capture");
+        if (l.tipus === "enpassant") {
+            celEl.classList.add("enpassant");
+        } else if (l.tipus === "castle") {
+            celEl.classList.add("castle");
+        } else if (l.tipus === "capture") {
+            celEl.classList.add("capture");
         } else {
-            l.to.el.classList.add("move");
+            celEl.classList.add("move");
         }
 
-        if (babu.type === "pawn") {
-            const utSor = (babu.color === "white") ? 0 : 7;
-            if (l.to.y === utSor) l.to.el.classList.add("promotion-target");
+        if (l.promotion) {
+            celEl.classList.add("promotion-target");
         }
     }
 }
 
 /**
- * Húzás kiemelések törlése — 1:1 a chess.js huzasKiemelTorol()-ével.
+ * Húzás kiemelések törlése.
  */
 export function huzasKiemelTorol() {
     const mezok = document.querySelectorAll(".square");
@@ -166,3 +161,11 @@ export function huzasKiemelTorol() {
         mezok[i].classList.remove("move", "capture", "enpassant", "castle", "promotion-target");
     }
 }
+
+/**
+ * Segédfüggvény — mező DOM elem keresése koordináta alapján.
+ */
+function mezoElemKeres(x, y) {
+    return document.querySelector(`.square[data-x="${x}"][data-y="${y}"]`);
+}
+export { mezoElemKeres };
