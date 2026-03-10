@@ -29,8 +29,17 @@ export function jatekUjraIndit() {
     }
 
     alapfelallasHelyez();
+    const statusElem = document.getElementById("status");
+    if (statusElem) {
+        statusElem.textContent = "játékon";
+    }
+    const gameOverElem = document.getElementById("game-over-msg");
+    if (gameOverElem) {
+        gameOverElem.remove();
+    }
     uiFrissitIdo();
     tablaRajzol();
+    idoFut(jatek.koronLevo);
 }
 
 function alapfelallasHelyez() {
