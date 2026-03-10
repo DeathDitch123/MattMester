@@ -1,5 +1,6 @@
 import { jatek, mezoKeres } from './state.js';
 import { tablaRajzol, uiFrissitIdo, uiJatekVegeMegjelenit } from './UI-megjelenites.js';
+import { huzasHozzaadMinden } from './main.js';
 import { idoFut, idoLeall } from './timer.js';
 import { jatekAllapotEllenor } from './logika.js';
 
@@ -29,16 +30,9 @@ export function jatekUjraIndit() {
     }
 
     alapfelallasHelyez();
-    const statusElem = document.getElementById("status");
-    if (statusElem) {
-        statusElem.textContent = "játékon";
-    }
-    const gameOverElem = document.getElementById("game-over-msg");
-    if (gameOverElem) {
-        gameOverElem.remove();
-    }
     uiFrissitIdo();
     tablaRajzol();
+    huzasHozzaadMinden();
     idoFut(jatek.koronLevo);
 }
 
@@ -127,11 +121,12 @@ export function lepesHajt(babu, lepes, atvalTipus = "queen") {
         jatek.vege = true;
         idoLeall();
         let uzenet;
-        if (allapot.ok === "matt")    uzenet = `Matt! ${allapot.nyertes === "white" ? "Fehér" : "Fekete"} nyert.`;
-        else if (allapot.ok === "patt") uzenet = "Patt! Döntetlen.";
+        if (allapot.ok === "matt")    uzenet = `${jatek.koronLevo} matt — ${allapot.nyertes} nyert`;
+        else if (allapot.ok === "patt") uzenet = "Döntetlen (Stalemate)";
         else if (allapot.ok === "50lepes") uzenet = "50 lépés szabály — Döntetlen.";
         uiJatekVegeMegjelenit(uzenet);
     }
 
-    tablaRajzol(null, [], jatek.utolsoLepes, allapot.sakkban ? jatek.koronLevo : null);
+    tablaRajzol();
+    huzasHozzaadMinden();
 }
