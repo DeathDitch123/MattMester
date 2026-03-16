@@ -178,3 +178,7 @@ h6 {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--accent-gold), transparent);
 }
+.sidebar .nav {
+    flex: 1;
+    padding: 0.5rem 0;
+}
