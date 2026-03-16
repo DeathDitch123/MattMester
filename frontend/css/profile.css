@@ -344,3 +344,15 @@ h6 {
     border-radius: 50%;
     border: 2px solid var(--bg-card);
 }
+
+.top-bar-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 12px 4px 4px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
