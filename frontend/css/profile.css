@@ -327,3 +327,9 @@ h6 {
     transition: all 0.2s ease;
     position: relative;
 }
+
+.top-bar-btn:hover {
+    background: rgba(212, 175, 55, 0.1);
+    color: var(--accent-gold);
+    border-color: rgba(212, 175, 55, 0.3);
+}
