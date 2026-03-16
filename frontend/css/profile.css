@@ -365,3 +365,15 @@ h6 {
     border-radius: 50%;
     object-fit: cover;
 }
+.top-bar-user-info{
+    line-height: 1.2;
+}
+.top-bar-user-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+.top-bar-user-role {
+    font-size: 0.7rem;
+    color: var(--accent-gold);
+}   
