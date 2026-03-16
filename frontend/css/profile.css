@@ -209,3 +209,14 @@ h6 {
     opacity: 0;
     transition: opacity 0.25s ease;
 }
+
+.nav-link:hover::before,
+.nav-link.active::before {
+    opacity: 1;
+}
+
+.nav-link:hover,
+.nav-link.active {
+    color: var(--accent-gold);
+    border-left-color: var(--accent-gold);
+}
