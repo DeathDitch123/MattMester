@@ -24,6 +24,7 @@
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../javascript/profile.js" defer></script>
 </head>
+
 <body>
     <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
 
@@ -32,6 +33,7 @@
             <i data-lucide="crown"></i>
             <span>MattMester</span>
         </div>
+        <div class="nav flex-column">
             <a href="#dashboard" class="nav-link active">
                 <i data-lucide="layout-dashboard"></i>
                 Dashboard
@@ -64,6 +66,15 @@
                 <i data-lucide="settings"></i>
                 Settings
             </a>
+        </div>
+        <div class="mt-auto p-4 border-top border-secondary" style="border-color: var(--border-color) !important;">
+            <button class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2"
+                type="button" data-bs-toggle="modal" data-bs-target="#logoutModal">
+                <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                Logout
+            </button>
+        </div>
     </nav>
 </body>
+
 </html>
