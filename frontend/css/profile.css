@@ -115,3 +115,31 @@ h6 {
         box-shadow: 0 0 15px var(--glow-gold), 0 0 30px var(--glow-gold);
     }
 }
+
+.animate-in {
+    animation: fadeInUp 0.5s ease-out both;
+}
+
+.animate-in-1 {
+    animation-delay: 0.05s;
+}
+
+.animate-in-2 {
+    animation-delay: 0.1s;
+}
+
+.animate-in-3 {
+    animation-delay: 0.15s;
+}
+
+.animate-in-4 {
+    animation-delay: 0.2s;
+}
+
+.animate-in-5 {
+    animation-delay: 0.25s;
+}
+
+.animate-in-6 {
+    animation-delay: 0.3s;
+}
