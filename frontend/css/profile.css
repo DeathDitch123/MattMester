@@ -220,3 +220,8 @@ h6 {
     color: var(--accent-gold);
     border-left-color: var(--accent-gold);
 }
+.nav-link i {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
