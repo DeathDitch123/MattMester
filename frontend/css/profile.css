@@ -257,3 +257,16 @@ h6 {
     color: var(--text-secondary);
     background: linear-gradient(135deg, rgba(2, 6, 23, 0.45), rgba(2, 6, 23, 0.2));
 }
+
+.top-bar {
+    background: rgba(30, 41, 59, 0.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
