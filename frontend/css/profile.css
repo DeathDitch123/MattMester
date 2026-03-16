@@ -156,7 +156,8 @@ h6 {
     flex-direction: column;
     backdrop-filter: blur(20px);
 }
-.sidebar-brand{
+
+.sidebar-brand {
     color: var(--accent-gold);
     font-size: 1.5rem;
     font-weight: 700;
@@ -169,6 +170,7 @@ h6 {
     letter-spacing: 0.5px;
     position: relative;
 }
+
 .sidebar-brand::after {
     content: '';
     position: absolute;
@@ -178,11 +180,13 @@ h6 {
     height: 1px;
     background: linear-gradient(90deg, transparent, var(--accent-gold), transparent);
 }
+
 .sidebar .nav {
     flex: 1;
     padding: 0.5rem 0;
 }
-.nav-link{
+
+.nav-link {
     color: var(--text-secondary);
     padding: 11px 22px;
     border-radius: 0;
@@ -195,4 +199,13 @@ h6 {
     font-weight: 500;
     position: relative;
     overflow: hidden;
+}
+
+.nav-link::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.1), transparent);
+    opacity: 0;
+    transition: opacity 0.25s ease;
 }
