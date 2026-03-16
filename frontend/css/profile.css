@@ -270,3 +270,19 @@ h6 {
     top: 0;
     z-index: 100;
 }
+
+.top-bar-search {
+    position: relative;
+    width: 280px;
+}
+
+.top-bar-search input {
+    background: var(--bg-dark);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 12px 8px 38px;
+    border-radius: 10px;
+    width: 100%;
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+}
