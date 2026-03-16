@@ -391,3 +391,19 @@ h6 {
     box-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.3);
     transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
+
+.card:hover {
+    border-color: rgba(212, 175, 55, 0.3);
+    box-shadow: 0 8px 32px -4px rgba(0, 0, 0, 0.4);
+}
+
+.card-header {
+    background: rgba(2, 6, 23, 0.4);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--accent-gold);
+    font-weight: 600;
+    padding: 16px 20px;
+    border-radius: 16px 16px 0 0 !important;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9rem;
+}
