@@ -333,3 +333,14 @@ h6 {
     color: var(--accent-gold);
     border-color: rgba(212, 175, 55, 0.3);
 }
+
+.notification-dot {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 8px;
+    height: 8px;
+    background: var(--accent-red);
+    border-radius: 50%;
+    border: 2px solid var(--bg-card);
+}
