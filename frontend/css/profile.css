@@ -143,3 +143,16 @@ h6 {
 .animate-in-6 {
     animation-delay: 0.3s;
 }
+
+.sidebar {
+    background: linear-gradient(180deg, var(--bg-sidebar) 0%, #0a0f1e 100%);
+    min-height: 100vh;
+    border-right: 1px solid var(--border-color);
+    position: fixed;
+    width: 272px;
+    z-index: 1000;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+    backdrop-filter: blur(20px);
+}
