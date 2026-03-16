@@ -286,3 +286,8 @@ h6 {
     font-size: 0.875rem;
     transition: all 0.3s ease;
 }
+.top-bar-search input:focus {
+    border-color: var(--accent-gold);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+}
