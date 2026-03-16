@@ -306,3 +306,8 @@ h6 {
     width: 16px;
     height: 16px;
 }
+.top-bar-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
