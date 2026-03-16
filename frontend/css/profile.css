@@ -356,3 +356,12 @@ h6 {
     cursor: pointer;
     transition: all 0.2s ease;
 }
+.top-bar-user:hover {
+    border-color: rgba(212, 175, 55, 0.3);
+}
+.top-bar-user img {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    object-fit: cover;
+}
