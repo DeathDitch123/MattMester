@@ -466,6 +466,80 @@
                     </div>
                 </div>
             </div>
+            <!-- Dashboard row 5 - Settings -->
+              <div class="row mb-4" id="settings">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <i data-lucide="settings" class="me-2"></i>Profile Settings
+                        </div>
+                        <div class="card-body">
+                            <form id="profileSettingsForm">
+                                <div class="row g-4">
+                                    <div class="col-md-12 d-flex align-items-center gap-4 border-bottom pb-4"
+                                        style="border-color: var(--border-color) !important;">
+                                        <img src="https://ui-avatars.com/api/?name=GrandMaster_99&background=1e293b&color=d4af37&size=240"
+                                            alt="Current Avatar" id="profileAvatarSettings" class="profile-avatar"
+                                            style="width: 80px; height: 80px;">
+                                        <div>
+                                            <h6 class="text-white mb-2">Profile Picture</h6>
+                                            <div class="d-flex gap-2">
+                                                <input type="file" class="d-none" id="avatarUpload">
+                                                <label for="avatarUpload" class="btn btn-gold btn-sm m-0">Upload
+                                                    New</label>
+                                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#removeAvatarModal">Remove</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label class="form-label">Username</label>
+                                        <input type="text" class="form-control" value="GrandMaster_99">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Email Address</label>
+                                        <input type="email" class="form-control" value="admin@mattmester.com">
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label class="form-label">New Password</label>
+                                        <input type="password" class="form-control"
+                                            placeholder="Leave blank to keep current">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Confirm New Password</label>
+                                        <input type="password" class="form-control" placeholder="Confirm new password">
+                                    </div>
+
+                                    <div class="col-12 text-end mt-4">
+                                        <button type="submit" class="btn btn-gold px-5">Save Changes</button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <div class="danger-zone">
+                                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                                    <div>
+                                        <h6 class="danger-zone-title">
+                                            <i data-lucide="triangle-alert" style="width: 16px; height: 16px;"
+                                                class="me-1"></i>
+                                            Danger Zone
+                                        </h6>
+                                        <p class="danger-zone-text mb-0">Deleting your profile is permanent and cannot
+                                            be undone.</p>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-danger" id="openDeleteProfileModal"
+                                        data-bs-toggle="modal" data-bs-target="#deleteProfileModal">
+                                        Delete Profile
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </main>
 </body>
