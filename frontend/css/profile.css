@@ -433,11 +433,24 @@ h6 {
     opacity: 0;
     transition: opacity 0.3s ease;
 }
+
 .stat-card:hover::before {
     opacity: 1;
 }
-.stat-card:hover{
+
+.stat-card:hover {
     transform: translateY(-4px);
-    box-shadow:  0 12px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(212, 175, 55, 0.15);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(212, 175, 55, 0.15);
     border-color: rgba(212, 175, 55, 0.3);
+}
+
+.stat-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    transition: transform 0.3s ease;
 }
