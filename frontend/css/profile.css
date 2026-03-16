@@ -225,3 +225,16 @@ h6 {
     height: 20px;
     flex-shrink: 0;
 }
+.main-content {
+    margin-left: 272px;
+    padding: 0;
+    min-height: 100vh;
+    position: relative;
+    z-index: 1;
+}
+.main-content-inner{
+    padding: 24px;
+}
+.section-block{
+    margin-bottom: 24px;
+}
