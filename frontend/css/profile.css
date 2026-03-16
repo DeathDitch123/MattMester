@@ -169,3 +169,12 @@ h6 {
     letter-spacing: 0.5px;
     position: relative;
 }
+.sidebar-brand::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 1.25rem;
+    width: 1.25rem;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-gold), transparent);
+}
