@@ -220,11 +220,13 @@ h6 {
     color: var(--accent-gold);
     border-left-color: var(--accent-gold);
 }
+
 .nav-link i {
     width: 20px;
     height: 20px;
     flex-shrink: 0;
 }
+
 .main-content {
     margin-left: 272px;
     padding: 0;
@@ -232,9 +234,26 @@ h6 {
     position: relative;
     z-index: 1;
 }
-.main-content-inner{
+
+.main-content-inner {
     padding: 24px;
 }
-.section-block{
+
+.section-block {
     margin-bottom: 24px;
+}
+
+.main-content-inner [id] {
+    scroll-margin-top: 96px;
+}
+
+.chart-placeholder {
+    min-height: 260px;
+    border: 1px dashed rgba(212, 175, 55, 0.35);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    background: linear-gradient(135deg, rgba(2, 6, 23, 0.45), rgba(2, 6, 23, 0.2));
 }
