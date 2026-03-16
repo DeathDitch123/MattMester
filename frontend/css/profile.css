@@ -356,24 +356,38 @@ h6 {
     cursor: pointer;
     transition: all 0.2s ease;
 }
+
 .top-bar-user:hover {
     border-color: rgba(212, 175, 55, 0.3);
 }
+
 .top-bar-user img {
     width: 32px;
     height: 32px;
     border-radius: 50%;
     object-fit: cover;
 }
-.top-bar-user-info{
+
+.top-bar-user-info {
     line-height: 1.2;
 }
+
 .top-bar-user-name {
     font-size: 0.8rem;
     font-weight: 600;
     color: var(--text-primary);
 }
+
 .top-bar-user-role {
     font-size: 0.7rem;
     color: var(--accent-gold);
-}   
+}
+
+.card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px -4px rgba(0, 0, 0, 0.3);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
