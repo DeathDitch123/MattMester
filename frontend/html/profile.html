@@ -198,6 +198,247 @@
                     </div>
                 </div>
             </div>
+            <!-- Dashboard row 3 -->
+            <div class="row">
+
+                <div class="col-lg-8">
+
+                    <div class="card mb-4 section-block">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="activity" class="me-2"></i>Rating History</span>
+                            <select class="form-select form-select-sm w-auto bg-transparent border-secondary text-light"
+                                style="width: 120px !important;">
+                                <option>Klasszikus</option>
+                                <option>MattMester</option>
+                                <option>Bullet</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-placeholder">
+                                <span class="d-flex align-items-center gap-2">
+                                    <i data-lucide="chart-line"></i>
+                                    Rating Chart Placeholder
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 section-block" id="games">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="history" class="me-2"></i>Recent Games</span>
+                            <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
+                                data-bs-target="#allGamesModal">View All</button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Opponent</th>
+                                            <th>Result</th>
+                                            <th>Moves</th>
+                                            <th>Time Control</th>
+                                            <th>Date</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Sample game rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Képességek -->
+                    <div class="card mb-4 section-block" id="abilities">
+                        <div class="card-header">
+                            <i data-lucide="zap" class="me-2"></i>Special Abilities Usage
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="flame"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Double Move</h6>
+                                            <small class="text-secondary">Used 45 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="shield"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Shield Pawn</h6>
+                                            <small class="text-secondary">Used 23 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="eye"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Vision</h6>
+                                            <small class="text-secondary">Used 67 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="refresh-cw"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Undo Move</h6>
+                                            <small class="text-secondary">Used 12 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card mb-4 section-block" id="friends">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="d-flex align-items-center"><i data-lucide="users"
+                                    class="me-2"></i>Friends</span>
+                            <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
+                                data-bs-target="#addFriendModal">
+                                <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="friend-list">
+                                <div class="friend-item d-flex align-items-center gap-2 p-3">
+                                    <div class="position-relative flex-shrink-0">
+                                        <img src="https://ui-avatars.com/api/?name=ChessMaster_Pro&background=0f172a&color=d4af37&size=40"
+                                            alt="Friend" class="friend-avatar rounded-circle"
+                                            style="width: 40px; height: 40px; object-fit: cover;">
+                                        <span class="friend-status online"></span>
+                                    </div>
+
+                                    <div class="flex-grow-1 min-width-0">
+                                        <h6 class="mb-0 text-white text-truncate" style="font-size: 0.9rem;">
+                                            ChessMaster_Pro</h6>
+                                        <small class="text-success d-block text-truncate">In Game</small>
+                                    </div>
+
+                                    <div class="flex-shrink-0">
+                                        <button class="btn btn-sm btn-outline-gold py-1 px-2 open-message-modal"
+                                            type="button" data-friend="ChessMaster_Pro" data-bs-toggle="modal"
+                                            data-bs-target="#messagesModal">
+                                            <i data-lucide="message-square" style="width: 16px; height: 16px;"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 section-block" id="security-overview">
+                        <div class="card-header">
+                            <i data-lucide="shield-check" class="me-2"></i>Recent Logins
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i data-lucide="monitor"
+                                                        style="width: 16px; color: var(--accent-gold);"></i>
+                                                    <span>Chrome - Windows</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <small class="text-secondary">Now</small>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i data-lucide="smartphone"
+                                                        style="width: 16px; color: var(--accent-gold);"></i>
+                                                    <span>iPhone App</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <small class="text-secondary">2h ago</small>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i data-lucide="tablet"
+                                                        style="width: 16px; color: var(--accent-gold);"></i>
+                                                    <span>iPad Safari</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <small class="text-secondary">1d ago</small>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 section-block">
+                        <div class="card-header">
+                            <i data-lucide="user-check" class="me-2"></i>Account Status
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary">Email Verification</span>
+                                <span class="badge bg-success">Verified</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary">Account Type</span>
+                                <span class="badge badge-admin">Administrator</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary">Status</span>
+                                <span class="badge bg-success">Active</span>
+                            </div>
+                            <hr style="border-color: var(--border-color);">
+                            <div class="d-flex align-items-center gap-3 mb-3">
+                                <div class="ability-icon"
+                                    style="color: var(--accent-green); background-color: rgba(16, 185, 129, 0.1);">
+                                    <i data-lucide="mail-check"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 text-white">Email Verified</h6>
+                                    <small class="text-secondary">Your account is fully secured</small>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="ability-icon"
+                                    style="color: var(--text-secondary); background-color: rgba(148, 163, 184, 0.1);">
+                                    <i data-lucide="calendar"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 text-white">Member Since</h6>
+                                    <small class="text-secondary">October 12, 2023</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 4 -->
+             
         </div>
     </main>
 </body>
