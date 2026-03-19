@@ -5,6 +5,7 @@
 //   - Több játékot kezel egyszerre (Map: gameId -> jatek)
 //   - Nincs DOM referencia (nincs .el property)
 //   - CommonJS module (require/module.exports)
+//   - Bot játék mezők: botSzin, nehezseg, botAktiv
 // ============================================================
 
 const jatekok = new Map(); // gameId -> jatek objektum
@@ -31,7 +32,13 @@ function jatekLetrehoz() {
         jatekosok: {
             white: { ido: 600, timer: null },
             black: { ido: 600, timer: null }
-        }
+        },
+        // ── BOT MEZŐK ──
+        botAktiv: false,        // ez bot játék?
+        botSzin: null,          // 'white' | 'black' — melyik oldalon játszik a bot
+        nehezseg: null,         // 1-8 nehézségi szint
+        dbGameId: null,         // DB games.id
+        idoVegeUzenet: null     // időlejárat üzenet
     };
     jatekok.set(gameId, jatek);
     return { gameId, jatek };
@@ -116,7 +123,11 @@ function jatekAllapotKliens(jatek) {
         ido: {
             white: jatek.jatekosok.white.ido,
             black: jatek.jatekosok.black.ido
-        }
+        },
+        // ── BOT INFÓ A KLIENSNEK ──
+        botAktiv: jatek.botAktiv,
+        botSzin: jatek.botSzin,
+        nehezseg: jatek.nehezseg
     };
 }
 
