@@ -12,9 +12,36 @@ const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens } = require('.
 const { jatekUjraIndit, legalLepesekKliens, lepesKoordinataval } = require('../chess/engine.js');
 const { idoLeall } = require('../chess/timer.js');
 const chessSql = require('../chess/chess_sql_functions.js');
+const { botLepesValaszt, nehezsegiSzintInfo, osszesNehezsegiSzint } = require('../chess/bot.js');
+const { eloSzamit, KEZDO_ELO } = require('../chess/elo.js');
 
 // ────────────────────────────────────────────
-// POST /api/chess/new — Új játék indítása
+// GET /api/chess/difficulties — Nehézségi szintek lekérdezése
+// ────────────────────────────────────────────
+router.get('/difficulties', (req, res) => {
+    return res.status(200).json({ szintek: osszesNehezsegiSzint() });
+});
+
+// ────────────────────────────────────────────
+// GET /api/chess/user-elo — Játékos ELO lekérdezése
+// (FONTOS: a /:id route-ok ELŐTT kell legyen!)
+// ────────────────────────────────────────────
+router.get('/user-elo', async (req, res) => {
+    try {
+        const userId = req.session?.userId || null;
+        if (!userId) {
+            return res.status(200).json({ elo: KEZDO_ELO, bejelentkezve: false });
+        }
+        const elo = await chessSql.eloLekerdezDb(userId);
+        return res.status(200).json({ elo: elo || KEZDO_ELO, bejelentkezve: true });
+    } catch (err) {
+        console.error('ELO lekérdezés hiba:', err);
+        return res.status(500).json({ error: 'Hiba az ELO lekérdezésekor.' });
+    }
+});
+
+// ────────────────────────────────────────────
+// POST /api/chess/new — Új játék indítása (PvP / lokális)
 // ────────────────────────────────────────────
 router.post('/new', async (req, res) => {
     try {
@@ -37,7 +64,6 @@ router.post('/new', async (req, res) => {
                 jatek.dbGameId = dbGameId;
             } catch (dbErr) {
                 console.error('Chess DB játék mentési hiba:', dbErr);
-                // Játék megy tovább DB nélkül is
             }
         }
 
@@ -48,6 +74,58 @@ router.post('/new', async (req, res) => {
     } catch (err) {
         console.error('Chess new game hiba:', err);
         return res.status(500).json({ error: 'Nem sikerült új játékot indítani.' });
+    }
+});
+
+// ────────────────────────────────────────────
+// POST /api/chess/new-bot — Új játék robot ellen
+// ────────────────────────────────────────────
+router.post('/new-bot', async (req, res) => {
+    try {
+        const { difficulty } = req.body;
+        const nehezseg = parseInt(difficulty, 10);
+
+        if (!nehezseg || nehezseg < 1 || nehezseg > 8) {
+            return res.status(400).json({ error: 'Érvénytelen nehézségi szint (1-8).' });
+        }
+
+        const { gameId, jatek } = jatekLetrehoz();
+        const userId = req.session?.userId || null;
+        const botInfo = nehezsegiSzintInfo(nehezseg);
+
+        // Bot beállítás: user = fehér, bot = fekete
+        jatek.botAktiv = true;
+        jatek.botSzin = "black";
+        jatek.nehezseg = nehezseg;
+
+        jatek.jatekosok.white.userId = userId;
+        jatek.jatekosok.black.userId = null; // bot
+
+        // Tábla inicializálás
+        const allapot = jatekUjraIndit(jatek);
+
+        // DB mentés
+        if (userId) {
+            try {
+                const dbGameId = await chessSql.jatekMentDb(userId, userId); // bot-nak nincs userId
+                jatek.dbGameId = dbGameId;
+            } catch (dbErr) {
+                console.error('Chess DB bot játék mentési hiba:', dbErr);
+            }
+        }
+
+        return res.status(200).json({
+            gameId,
+            allapot,
+            botInfo: {
+                nev: botInfo.nev,
+                elo: botInfo.elo,
+                szint: nehezseg
+            }
+        });
+    } catch (err) {
+        console.error('Chess new bot game hiba:', err);
+        return res.status(500).json({ error: 'Nem sikerült bot játékot indítani.' });
     }
 });
 
