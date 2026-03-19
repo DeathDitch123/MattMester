@@ -311,6 +311,58 @@ router.post('/:id/reset', (req, res) => {
 });
 
 // ────────────────────────────────────────────
+// POST /api/chess/:id/surrender — Feladás ELO-változással
+// ────────────────────────────────────────────
+router.post('/:id/surrender', async (req, res) => {
+    try {
+        const gameId = parseInt(req.params.id, 10);
+        const jatek = jatekKeres(gameId);
+        if (!jatek) return res.status(404).json({ error: 'Játék nem található.' });
+        if (jatek.vege) return res.status(200).json({ message: 'Játék már véget ért.', uzenet: 'Feladtad a játékot.' });
+
+        jatek.vege = true; // timer leáll a következő tikknél
+
+        let uzenet = 'Feladtad a játékot.';
+
+        if (jatek.botAktiv) {
+            const jatekosSzin = jatek.botSzin === 'white' ? 'black' : 'white';
+            uzenet = `Feladás — ${jatek.botSzin} nyert`;
+
+            const jatekosId = jatek.jatekosok[jatekosSzin].userId;
+            if (jatekosId) {
+                try {
+                    const botInfo = nehezsegiSzintInfo(jatek.nehezseg);
+                    const jatekosElo = await chessSql.eloLekerdezDb(jatekosId);
+                    if (jatekosElo !== null) {
+                        const meccsek = await chessSql.meccsekSzamDb(jatekosId);
+                        const { ujElo, valtozas } = eloSzamit(jatekosElo, botInfo.elo, 0, meccsek);
+                        await chessSql.eloFrissitDb(jatekosId, ujElo);
+                        await chessSql.veresegMentDb(jatekosId);
+                        console.log(`[ELO] Feladás — User #${jatekosId}: ${jatekosElo} → ${ujElo} (${valtozas >= 0 ? '+' : ''}${valtozas})`);
+                    }
+                } catch (err) {
+                    console.error('ELO frissítés hiba feladásnál:', err);
+                }
+            }
+        }
+
+        if (jatek.dbGameId) {
+            try {
+                await chessSql.jatekVegeMentDb(jatek.dbGameId, null, 'abandoned');
+            } catch (dbErr) {
+                console.error('Chess DB surrender mentési hiba:', dbErr);
+            }
+        }
+
+        jatekTorol(gameId);
+        return res.status(200).json({ message: 'Játék feladva.', uzenet });
+    } catch (err) {
+        console.error('Surrender hiba:', err);
+        return res.status(500).json({ error: 'Szerverhiba feladásnál.' });
+    }
+});
+
+// ────────────────────────────────────────────
 // DELETE /api/chess/:id — Játék törlése (feladás / disconnect)
 // ────────────────────────────────────────────
 router.delete('/:id', async (req, res) => {
