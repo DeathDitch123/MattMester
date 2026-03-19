@@ -391,3 +391,87 @@ function minimax(jatek, melyseg, alfa, beta, maximaloSzin) {
         return legjobb;
     }
 }
+
+// ────────────────────────────────────────────
+// BOT LÉPÉS VÁLASZTÁS
+// ────────────────────────────────────────────
+
+/**
+ * Kiválasztja a bot lépését a nehézségi szint alapján.
+ * @param {object} jatek - a játék objektum
+ * @param {number} nehezseg - 1-8 nehézségi szint
+ * @returns {{ from: {x,y}, to: {x,y}, promotion: string|null } | null}
+ */
+function botLepesValaszt(jatek, nehezseg) {
+    const config = NEHEZSEGEK[nehezseg] || NEHEZSEGEK[4];
+    const botSzin = jatek.koronLevo;
+
+    // Összes legális lépés gyűjtés
+    let lepesek = [];
+    for (let i = 0; i < jatek.tabla.length; i++) {
+        const m = jatek.tabla[i];
+        if (m.piece && m.piece.color === botSzin) {
+            const babuLepesek = szabLepKeres(jatek, m.piece);
+            for (let j = 0; j < babuLepesek.length; j++) {
+                lepesek.push(babuLepesek[j]);
+            }
+        }
+    }
+
+    if (lepesek.length === 0) return null;
+
+    // Random lépés esélye (gyengébb szintek hibáznak)
+    if (config.randomPct > 0 && Math.random() * 100 < config.randomPct) {
+        const randomLepes = lepesek[Math.floor(Math.random() * lepesek.length)];
+        return lepesFormaz(randomLepes, botSzin);
+    }
+
+    // Minimax keresés
+    lepesekRendez(lepesek);
+
+    let legjobbLepes = null;
+    let legjobbErtek = -Infinity;
+
+    for (let i = 0; i < lepesek.length; i++) {
+        const undo = botLepesCsinal(jatek, lepesek[i]);
+        const ertek = minimax(jatek, config.melyseg - 1, -Infinity, Infinity, botSzin);
+        botLepesVisszavon(jatek, lepesek[i], undo);
+
+        if (ertek > legjobbErtek) {
+            legjobbErtek = ertek;
+            legjobbLepes = lepesek[i];
+        }
+    }
+
+    if (!legjobbLepes) return null;
+
+    return lepesFormaz(legjobbLepes, botSzin);
+}
+
+/**
+ * A belső lépés objektumot API-kompatibilis formátumra alakítja.
+ */
+function lepesFormaz(lepes, szin) {
+    let promotion = null;
+    if (lepes.from.piece && lepes.from.piece.type === "pawn") {
+        const utSor = (szin === "white") ? 0 : 7;
+        if (lepes.to.y === utSor) {
+            promotion = "queen";
+        }
+    }
+
+    return {
+        fromX: lepes.from.x,
+        fromY: lepes.from.y,
+        toX: lepes.to.x,
+        toY: lepes.to.y,
+        promotion
+    };
+}
+
+module.exports = {
+    botLepesValaszt,
+    nehezsegiSzintInfo,
+    osszesNehezsegiSzint,
+    NEHEZSEGEK
+};
