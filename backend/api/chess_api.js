@@ -208,7 +208,8 @@ router.post('/:id/move', async (req, res) => {
         // ── BOT VÁLASZLÉPÉS ──
         let botLepes = null;
         if (jatek.botAktiv && !jatek.vege && jatek.koronLevo === jatek.botSzin) {
-            const botValasz = botLepesValaszt(jatek, jatek.nehezseg);
+            await new Promise(r => setTimeout(r, 1000)); // 1 mp várakozás → bot órája tikkel
+            const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
             if (botValasz) {
                 const botEredmeny = await lepesKoordinataval(
                     jatek,
