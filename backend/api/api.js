@@ -40,7 +40,6 @@ router.post('/login', async (request, response) => {
             throw new Error("Nincs megadva username/email vagy jelszó");
         }
         else {
-            // erre itt még rá kell nézni, hogy a sql függvények jól vannak-e megírva, mert lehet, hogy nem jól keresnek rá a username-re és emailre
             let user = await sql.getUserByUsername(usernameOrMail);
             if (!user) {
                 user = await sql.getUserByEmail(usernameOrMail);
@@ -194,14 +193,13 @@ router.post('/register', async (request, response) => {
                                             throw new Error('A felhasználónév már foglalt!');
                                         }
                                         else {
-                                            // Ha minden ellenőrzés sikeres, akkor folytatjuk a regisztrációt
                                             const saltRounds = 10;
                                             const passwordHash = await bcrypt.hash(password, saltRounds);
                                             const result = await sql.insertUser(username, passwordHash, email);
 
                                             request.session.userId = result.insertId;
                                             request.session.username = username;
-                                            request.session.role = 'player';
+                                            request.session.role = 'user';
                                             request.session.elo = 1200;
                                             request.session.elo_MM = 1200;
                                             request.session.elo_bullet = 1200;

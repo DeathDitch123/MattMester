@@ -12,10 +12,6 @@ const dbConfig = {
 
 let pool;
 
-/**
- * JAVÍTÁS:
- * Az adatbázist külön hozzuk létre, mielőtt pool-t csinálunk
- */
 async function ensureDatabaseExists() {
     let connection;
     try {
@@ -47,7 +43,7 @@ async function createTables() {
     const queries = [
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) BINARY UNIQUE NOT NULL, 
+            username VARCHAR(50) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
             elo INT DEFAULT 1200,
