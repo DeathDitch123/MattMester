@@ -146,6 +146,18 @@ async function eloLekerdezDb(userId) {
     return rows[0] ? rows[0].elo : null;
 }
 
+/**
+ * Játékos befejezett meccseinek száma (K-faktor számításhoz).
+ */
+async function meccsekSzamDb(userId) {
+    const pool = getPool();
+    const query = `SELECT COUNT(*) AS db FROM games 
+                   WHERE (white_player_id = ? OR black_player_id = ?) 
+                   AND status = 'finished'`;
+    const [rows] = await pool.execute(query, [userId, userId]);
+    return rows[0] ? rows[0].db : 0;
+}
+
 module.exports = {
     jatekMentDb,
     jatekVegeMentDb,
@@ -155,5 +167,6 @@ module.exports = {
     gyozelemMentDb,
     veresegMentDb,
     eloFrissitDb,
-    eloLekerdezDb
+    eloLekerdezDb,
+    meccsekSzamDb
 };
