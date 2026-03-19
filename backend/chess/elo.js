@@ -37,3 +37,40 @@ function eloSzamit(jatekosElo, ellenfelElo, eredmeny, osszMeccs = 99) {
 
     return { ujElo, valtozas };
 }
+
+
+/**
+ * Meccs végén mindkét játékos ELO-ját kiszámítja.
+   @param {number} feherElo
+   @param {number} feketeElo
+   @param {string} eredmeny - 'white' | 'black' | 'draw'
+   @param {number} feherMeccsek - fehér eddigi meccsszáma
+   @param {number} feketeMeccsek - fekete eddigi meccsszáma
+   @returns {{ feher: { ujElo, valtozas }, fekete: { ujElo, valtozas } }}
+*/
+
+function eloMeccsEredmeny(feherElo, feketeElo, eredmeny, feherMeccsek = 99, feketeMeccsek = 99) {
+    let feherPont, feketePont;
+
+    if (eredmeny === 'white') {
+        feherPont = 1;
+        feketePont = 0;
+    } else if (eredmeny === 'black') {
+        feherPont = 0;
+        feketePont = 1;
+    } else {
+        feherPont = 0.5;
+        feketePont = 0.5;
+    }
+
+    const feher = eloSzamit(feherElo, feketeElo, feherPont, feherMeccsek);
+    const fekete = eloSzamit(feketeElo, feherElo, feketePont, feketeMeccsek);
+
+    return { feher, fekete };
+}
+
+module.exports = {
+    KEZDO_ELO,
+    eloSzamit,
+    eloMeccsEredmeny
+};
