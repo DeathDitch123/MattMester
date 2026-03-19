@@ -295,3 +295,99 @@ function lepesekRendez(lepesek) {
         return bScore - aScore;
     });
 }
+
+function lepesRendezErtek(lepes) {
+    let ertek = 0;
+
+    // Ütések előre
+    if (lepes.capture && lepes.to.piece) {
+        const aldozat = BABU_ERTEK[lepes.to.piece.type] || 0;
+        const tamado = BABU_ERTEK[lepes.from.piece.type] || 0;
+        ertek += 10000 + aldozat - tamado;
+    } else if (lepes.special === "enpassant") {
+        ertek += 10100; // gyalog üt gyalogot
+    }
+
+    // Gyalog átváltozás magas prioritás
+    if (lepes.from.piece.type === "pawn") {
+        const utSor = (lepes.from.piece.color === "white") ? 0 : 7;
+        if (lepes.to.y === utSor) ertek += 9000;
+    }
+
+    return ertek;
+}
+
+// ────────────────────────────────────────────
+// MINIMAX + ALFA-BÉTA
+// ────────────────────────────────────────────
+
+/**
+ * @param {object} jatek
+ * @param {number} melyseg - keresési mélység
+ * @param {number} alfa - alfa-béta alsó határ
+ * @param {number} beta - alfa-béta felső határ
+ * @param {string} maximaloSzin - a bot színe (max-ot akarjuk)
+ * @returns {number} értékelés centipawn-ban
+ */
+function minimax(jatek, melyseg, alfa, beta, maximaloSzin) {
+    // Levélcsomópont
+    if (melyseg === 0) {
+        return tablaErtekel(jatek, maximaloSzin);
+    }
+
+    // Játékvége ellenőrzés
+    const aktSzin = jatek.koronLevo;
+    const allapot = jatekAllapotEllenor(jatek, aktSzin);
+    if (allapot.vege) {
+        if (allapot.ok === "matt") {
+            // A köron lévő kapott mattot
+            if (aktSzin === maximaloSzin) {
+                return -100000 - melyseg; // minél mélyebben találja, annál rosszabb
+            } else {
+                return 100000 + melyseg; // minél hamarabb matt, annál jobb
+            }
+        }
+        // Patt / 50 lépés = döntetlen
+        return 0;
+    }
+
+    const maximalo = (aktSzin === maximaloSzin);
+
+    // Összes legális lépés generálás
+    let lepesek = [];
+    for (let i = 0; i < jatek.tabla.length; i++) {
+        const m = jatek.tabla[i];
+        if (m.piece && m.piece.color === aktSzin) {
+            const babuLepesek = szabLepKeres(jatek, m.piece);
+            lepesek.push(...babuLepesek);
+        }
+    }
+
+    lepesekRendez(lepesek);
+
+    if (maximalo) {
+        let legjobb = -Infinity;
+        for (let i = 0; i < lepesek.length; i++) {
+            const undo = botLepesCsinal(jatek, lepesek[i]);
+            const ertek = minimax(jatek, melyseg - 1, alfa, beta, maximaloSzin);
+            botLepesVisszavon(jatek, lepesek[i], undo);
+
+            if (ertek > legjobb) legjobb = ertek;
+            if (ertek > alfa) alfa = ertek;
+            if (alfa >= beta) break; // béta vágás
+        }
+        return legjobb;
+    } else {
+        let legjobb = Infinity;
+        for (let i = 0; i < lepesek.length; i++) {
+            const undo = botLepesCsinal(jatek, lepesek[i]);
+            const ertek = minimax(jatek, melyseg - 1, alfa, beta, maximaloSzin);
+            botLepesVisszavon(jatek, lepesek[i], undo);
+
+            if (ertek < legjobb) legjobb = ertek;
+            if (ertek < beta) beta = ertek;
+            if (alfa >= beta) break; // alfa vágás
+        }
+        return legjobb;
+    }
+}
