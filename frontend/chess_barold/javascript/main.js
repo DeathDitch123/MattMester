@@ -152,11 +152,11 @@ async function apiLepes(fromX, fromY, toX, toY, promotion) {
     return data;
 }
 
-async function apiReset() {
-    const res = await fetch(`/api/chess/${gameId}/reset`, { method: 'POST' });
+async function apiFeladMagat() {
+    const res = await fetch(`/api/chess/${gameId}/surrender`, { method: 'POST' });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Hiba');
-    return data.allapot;
+    return data;
 }
 
 // ────────────────────────────────────────────
@@ -253,6 +253,69 @@ function nevekFrissit() {
 // ÁLLAPOT FRISSÍTÉS + RENDERELÉS
 // ────────────────────────────────────────────
 
+// ────────────────────────────────────────────
+// FELADÁS LOGIKA
+// ────────────────────────────────────────────
+
+let surrenderHoldTimer = null;
+const FELADAS_HOLD_MS = 1500;
+
+function feladasModalMegjelenit() {
+    document.getElementById('surrender-modal').classList.remove('hidden');
+}
+
+function feladasModalElrejt() {
+    document.getElementById('surrender-modal').classList.add('hidden');
+}
+
+async function doFeladJatek() {
+    if (!gameId) return;
+    try {
+        const data = await apiFeladMagat();
+        jatekVegeUI(data.uzenet || 'Feladtad a játékot.');
+        idoPollingLeall();
+        integritasEllenorzesLeall();
+        gameId = null;
+    } catch (e) {
+        console.error('Feladás hiba:', e);
+    }
+}
+
+function surrenderModalEsemenyekKot() {
+    document.getElementById('surrenderCancelBtn').onclick = feladasModalElrejt;
+
+    const confirmBtn = document.getElementById('surrenderConfirmBtn');
+    const startHold = () => {
+        confirmBtn.classList.add('holding');
+        surrenderHoldTimer = setTimeout(async () => {
+            confirmBtn.classList.remove('holding');
+            feladasModalElrejt();
+            await doFeladJatek();
+        }, FELADAS_HOLD_MS);
+    };
+    const stopHold = () => {
+        clearTimeout(surrenderHoldTimer);
+        surrenderHoldTimer = null;
+        confirmBtn.classList.remove('holding');
+    };
+    confirmBtn.addEventListener('mousedown', startHold);
+    confirmBtn.addEventListener('mouseup', stopHold);
+    confirmBtn.addEventListener('mouseleave', stopHold);
+    confirmBtn.addEventListener('touchstart', e => { e.preventDefault(); startHold(); });
+    confirmBtn.addEventListener('touchend', stopHold);
+}
+
+function jatekVegeUI(uzenet) {
+    uiJatekVegeMegjelenit(uzenet);
+    integritasEllenorzesLeall();
+    const feladBtn = document.getElementById('feladBtn');
+    const newGameBtn = document.getElementById('newGameBtn');
+    if (feladBtn) feladBtn.classList.add('hidden');
+    if (newGameBtn) newGameBtn.classList.remove('hidden');
+}
+
+// ────────────────────────────────────────────
+
 function allapotFrissit(allapot) {
     utolsoAllapot = allapot;
     try { if (appObserver) appObserver.disconnect(); } catch(e) {}
@@ -264,7 +327,7 @@ function allapotFrissit(allapot) {
     try { observerIndit(); } catch(e) { console.error("Observer indítás hiba:", e); }
 
     if (allapot.uzenet) {
-        uiJatekVegeMegjelenit(allapot.uzenet);
+        jatekVegeUI(allapot.uzenet);
     }
 }
 
@@ -292,7 +355,7 @@ function oldalSerult(allapot) {
         ".sidebar .status-row",
         "#turn-name",
         "#status",
-        "#resetBtn",
+        "#feladBtn",
         ".sidebar .legend",
         "footer.bottombar",
         ".player-white",
@@ -310,7 +373,7 @@ function oldalSerult(allapot) {
     const szovegEllenorzesek = [
         { sel: ".player-black .name", min: 1 },
         { sel: "#clock-black", min: 1 },
-        { sel: "#resetBtn", min: 1 },
+        { sel: "#feladBtn", min: 1 },
         { sel: "#turn-name", min: 1 },
         { sel: "#status", min: 1 },
         { sel: ".player-white .name", min: 1 },
@@ -459,7 +522,7 @@ function idoPollingIndit() {
             }
 
             if (allapot.vege && allapot.uzenet) {
-                uiJatekVegeMegjelenit(allapot.uzenet);
+                jatekVegeUI(allapot.uzenet);
                 idoPollingLeall();
             }
         } catch (e) {
@@ -483,21 +546,14 @@ function idoPollingLeall() {
  * Eseménykezelők újrakötése — reset, new game, promotion.
  */
 function esemenyekUjraKot() {
-    // Reset gomb
-    const resetBtn = document.getElementById("resetBtn");
-    if (resetBtn) {
-        const ujBtn = resetBtn.cloneNode(true);
-        resetBtn.parentNode.replaceChild(ujBtn, resetBtn);
-        ujBtn.addEventListener("click", async () => {
-            try {
-                if (gameId) {
-                    const allapot = await apiReset();
-                    allapotFrissit(allapot);
-                    idoPollingIndit();
-                }
-            } catch (e) {
-                console.error('Reset hiba:', e);
-            }
+    // Feladás gomb
+    const feladBtn = document.getElementById("feladBtn");
+    if (feladBtn) {
+        const ujBtn = feladBtn.cloneNode(true);
+        feladBtn.parentNode.replaceChild(ujBtn, feladBtn);
+        ujBtn.addEventListener("click", () => {
+            if (!gameId || (utolsoAllapot && utolsoAllapot.vege)) return;
+            feladasModalMegjelenit();
         });
     }
 
@@ -533,7 +589,7 @@ function esemenyekUjraKot() {
                     const eredmeny = await apiLepes(d.fromX, d.fromY, d.toX, d.toY, tipus);
                     allapotFrissit(eredmeny.allapot);
                     if (eredmeny.uzenet) {
-                        uiJatekVegeMegjelenit(eredmeny.uzenet);
+                        jatekVegeUI(eredmeny.uzenet);
                         idoPollingLeall();
                     }
                 } catch (e) {
@@ -547,6 +603,16 @@ function esemenyekUjraKot() {
 
 async function init() {
     console.log("[INIT] Mattmester indítás...");
+
+    // Feladás modal eseménykezelők (csak egyszer kell kötni)
+    surrenderModalEsemenyekKot();
+
+    // Oldal bezárás = feladás + ELO veszteség
+    window.addEventListener('beforeunload', () => {
+        if (gameId && utolsoAllapot && !utolsoAllapot.vege) {
+            fetch(`/api/chess/${gameId}/surrender`, { method: 'POST', keepalive: true });
+        }
+    });
 
     // Játékmód választó megjelenítés
     modValasztoMegjelenit();
@@ -668,7 +734,7 @@ async function babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek
         const eredmeny = await apiLepes(fromX, fromY, toX, toY);
         allapotFrissit(eredmeny.allapot);
         if (eredmeny.uzenet) {
-            uiJatekVegeMegjelenit(eredmeny.uzenet);
+            jatekVegeUI(eredmeny.uzenet);
             idoPollingLeall();
         }
     } catch (e) {
