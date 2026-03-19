@@ -46,7 +46,7 @@ async function createTables() {
             username VARCHAR(50) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) NOT NULL UNIQUE,
-            elo INT DEFAULT 1200,
+            elo INT DEFAULT 800,
             role ENUM('user', 'admin') DEFAULT 'user',
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );`,
