@@ -66,8 +66,8 @@ const OLDAL_VAZ = `
                 </div>
                 <div id="status" class="status">játékon</div>
                 <div id="elo-change" class="elo-change hidden"></div>
-                <button id="resetBtn">Újra</button>
-                <button id="newGameBtn" class="new-game-btn">Új játék</button>
+                <button id="feladBtn" class="felad-btn">Feladás</button>
+                <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
                 <div class="legend">
                     <div><span class="legend-sq from"></span> Utolsó lépés</div>
                     <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
