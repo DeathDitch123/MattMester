@@ -40,6 +40,8 @@ app.use(express.static(path.join(__dirname, '../frontend'))); //?frontend mappa 
 //?Főoldal:
 const endpoints = require('./api/api.js');
 app.use('/api', endpoints);
+const chessEndpoints = require('./api/chess_api.js');
+app.use('/api/chess', chessEndpoints);
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/html/index.html'));
 });
