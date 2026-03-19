@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel</title>
+    <!--!Bootstrap-->
+    <link rel="stylesheet" href="../bootstrap/css/bootstrap.min.css" />
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- Google Fonts -->
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+        rel="stylesheet">
+    <!--?Popper: dropdowns, popovers, tooltips-->
+    <script src="../bootstrap/js/popper.min.js"></script>
+    <script src="../bootstrap/js/bootstrap.min.js"></script>
+    <!--!CSS-->
+    <link rel="stylesheet" href="../css/adminPanel.css" />
+    <!--!JavaScript-->
+    <script src="../javascript/adminPanel.js"></script>
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <a href="#" class="sidebar-brand">
+                <i class="bi bi-king-fill"></i>
+                <span>MattAdmin</span>
+            </a>
+        </div>
+        <!-- Navigation Links -->
+        <div class="sidebar-menu">
+            <div class="menu-category">Overview</div>
+            <a href="#" class="nav-link active" onclick="showSection('dashboard')">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span>Dashboard</span>
+            </a>
+            <a href="#" class="nav-link" onclick="showSection('analytics')">
+                <i class="bi bi-graph-up-arrow"></i>
+                <span>Analytics</span>
+            </a>
+
+            <div class="menu-category">Management</div>
+            <a href="#" class="nav-link" onclick="showSection('users')">
+                <i class="bi bi-people-fill"></i>
+                <span>Users</span>
+                <span class="badge bg-primary ms-auto">2.4k</span>
+            </a>
+            <a href="#" class="nav-link" onclick="showSection('games')">
+                <i class="bi bi-knight-fill"></i>
+                <span>Games</span>
+            </a>
+            <a href="#" class="nav-link" onclick="showSection('chats')">
+                <i class="bi bi-chat-dots-fill"></i>
+                <span>Chat Moderation</span>
+                <span class="badge bg-danger ms-auto">12</span>
+            </a>
+            <a href="#" class="nav-link" onclick="showSection('abilities')">
+                <i class="bi bi-magic"></i>
+                <span>Abilities</span>
+            </a>
+            <a href="#" class="nav-link" onclick="showSection('friends')">
+                <i class="bi bi-heart-fill"></i>
+                <span>Social Graph</span>
+            </a>
+
+            <div class="menu-category">Security</div>
+            <a href="#" class="nav-link" onclick="showSection('security')">
+                <i class="bi bi-shield-check"></i>
+                <span>Login History</span>
+            </a>
+            <a href="#" class="nav-link" onclick="showSection('bans')">
+                <i class="bi bi-ban"></i>
+                <span>Banned Users</span>
+                <span class="badge bg-warning text-dark ms-auto">5</span>
+            </a>
+
+            <div class="menu-category">System</div>
+            <a href="#" class="nav-link" onclick="showSection('settings')">
+                <i class="bi bi-gear-fill"></i>
+                <span>Settings</span>
+            </a>
+            <a href="#" class="nav-link text-danger" onclick="logout()">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Logout</span>
+            </a>
+        </div>
+    </nav>
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <!-- Top Navbar -->
+        <div class="top-navbar">
+            <div class="d-flex align-items-center gap-3">
+                <button class="toggle-sidebar" onclick="toggleSidebar()">
+                    <i class="bi bi-list"></i>
+                </button>
+                <div class="search-box">
+                    <i class="bi bi-search"></i>
+                    <input type="text" placeholder="Search players, games...">
+                </div>
+            </div>
+
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-gold position-relative">
+                    <i class="bi bi-bell-fill"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
+                        3
+                    </span>
+                </button>
+                <div class="user-profile dropdown">
+                    <div data-bs-toggle="dropdown">
+                        <img src="https://ui-avatars.com/api/?name=Admin+User&background=d4af37&color=000" alt="Admin"
+                            class="user-avatar">
+                        <div class="d-none d-md-block">
+                            <div class="fw-bold text-white">Grandmaster Admin</div>
+                            <small class="text-muted">ELO: 1500</small>
+                        </div>
+                        <i class="bi bi-chevron-down text-secondary ms-2"></i>
+                    </div>
+                    <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary">
+                        <li><a class="dropdown-item text-light" href="#"><i class="bi bi-person me-2"></i>Profile</a>
+                        </li>
+                        <li><a class="dropdown-item text-light" href="#"><i class="bi bi-gear me-2"></i>Settings</a>
+                        </li>
+                        <li>
+                            <hr class="dropdown-divider border-secondary">
+                        </li>
+                        <li><a class="dropdown-item text-danger" href="#"><i
+                                    class="bi bi-box-arrow-right me-2"></i>Logout</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <!-- Dashboard Sections -->
+        <!-- Each section is hidden by default and shown when the corresponding nav link is clicked -->
+        <div class="section-content animate-slide-in" id="dashboard">
+
+            <!-- Dashboard Row -->
+
+            <div class="row g-4 mb-4">
+                <!-- Dashboard Players-->
+                <div class="col-md-6 col-xl-3">
+                    <div class="stat-card">
+                        <div class="stat-icon bg-primary-soft">
+                            <i class="bi bi-people-fill"></i>
+                        </div>
+                        <div class="stat-value">2,234</div>
+                        <div class="stat-label">Active Players</div>
+                        <small class="text-success"><i class="bi bi-arrow-up"></i>+12% this week??</small>
+                    </div>
+                </div>
+                <!-- Dashboard Games-->
+                <div class="col-md-6 col-xl-3">
+                    <div class="stat-card">
+                        <div class="stat-icon bg-warning-soft">
+                            <i class="bi bi-trophy-fill"></i>
+                        </div>
+                        <div class="stat-value">1,567</div>
+                        <div class="stat-label">Games Played</div>
+                        <small class="text-muted">total all time</small>
+                    </div>
+                </div>
+                <!-- Dashboard Banned Users-->
+                <div class="col-md-6 col-xl-3">
+                    <div class="stat-card">
+                        <div class="stat-icon bg-danger-soft">
+                            <i class="bi bi-ban"></i>
+                        </div>
+                        <div class="stat-value">42</div>
+                        <div class="stat-label">Banned Users</div>
+                        <small class="text-danger"><i class="bi bi-exclamation-triangle"></i>Requires review</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dashboard Row -->
+
+            <div class="row g-4">
+                <!-- Dashboard Activity Chart -->
+                <div class="col-xl-8">
+                    <div class="content-card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="bi bi-activity me-2 text-gold"></i>Platform Activity</h5>
+                            <button class="btn btn-sm btn-outline-gold">View Report</button>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="activityChart" height="150"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <!-- Dashboard Recent Activity -->
+                <div class="col-xl-4">
+                    <div class="content-card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="bi bi-lightning-charge me-2 text-warning"></i>Recent
+                                Activity</h5>
+                        </div>
+                        <div class="card-body">
+
+                            <div class="activity-item">
+                                <div class="activity-icon bg-success text-white">
+                                    <i class="bi bi-person-plus-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-white">New User Registration</div>
+                                    <small class="text-secondary">ChessMaster99 joined (ELO: 1200)</small>
+                                    <div class="small text-muted">2 minutes ago</div>
+                                </div>
+                            </div>
+
+                            <div class="activity-item">
+                                <div class="activity-icon bg-primary text-white">
+                                    <i class="bi bi-knight-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-white">Game Completed</div>
+                                    <small class="text-secondary">Grandmaster vs. ProPlayer1</small>
+                                    <div class="small text-muted">5 minutes ago</div>
+                                </div>
+                            </div>
+
+                            <div class="activity-item">
+                                <div class="activity-icon bg-danger text-white">
+                                    <i class="bi bi-exclamation-triangle-fill"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-white">Report Submitted</div>
+                                    <small class="text-secondary">Inappropriate chat behavior</small>
+                                    <div class="small text-muted">12 minutes ago</div>
+                                </div>
+                            </div>
+
+                            <div class="activity-item">
+                                <div class="activity-icon bg-warning text-dark">
+                                    <i class="bi bi-magic"></i>
+                                </div>
+                                <div>
+                                    <div class="fw-bold text-white">Ability Used</div>
+                                    <small class="text-secondary">"Time Warp" in Game #4921</small>
+                                    <div class="small text-muted">23 minutes ago</div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Users Section -->
+        <div id="users" class="section-content d-none">
+            <!-- Users Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0"><i class="bi bi-people-fill me-2 text-gold"></i>User Management</h2>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-gold" onclick="exportUsers()">
+                        <i class="bi bi-download me-2"></i>Export
+                    </button>
+                    <button class="btn btn-gold" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                        <i class="bi bi-plus-lg me-2"></i>Add User
+                    </button>
+                </div>
+            </div>
+
+            <!-- Users Filters-->
+            <div class="content-card">
+                <div class="card-header">
+                    <div class="d-flex gap-2 w-100">
+                        <input type="text" class="form-control w-auto" placeholder="Search users..."
+                            style="max-width: 300px;">
+                        <select class="form-select w-auto" style="max-width: 150px;">
+                            <option value="">All Roles</option>
+                            <option value="player">Player</option>
+                            <option value="moderator">Moderator</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                        <select class="form-select w-auto" style="max-width: 150px;">
+                            <option value="">All Statuses</option>
+                            <option value="active">Active</option>
+                            <option value="banned">Banned</option>
+                            <option value="pending">Pending</option>
+                        </select>
+                        <select class="form-select w-auto" style="max-width: 150px;">
+                            <option value="">Order By...</option>
+                            <option value="username">Username</option>
+                            <option value="elo">ELO</option>
+                            <option value="memberSince">Member Since</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- Users Table -->
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>ELO Rating</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Last Active</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <!-- Users will be populated here dynamically but here's some examples -->
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <img src="https://ui-avatars.com/api/?name=Magnus+Carlsen&background=random"
+                                            class="rounded-circle" width="32" height="32">
+                                        <div>
+                                            <div class="fw-bold text-white">Magnus Carlsen</div>
+                                            <small class="text-secondary">magnus@chess.com</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="fw-bold text-gold">2847</span></td>
+                                <td><span class="badge badge-role-admin">Admin</span></td>
+                                <td><span class="badge badge-status-active">Active</span></td>
+                                <td>2 mins ago</td>
+                                <td>2023-01-15</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-light btn-icon me-1" onclick="viewUser(1)"><i
+                                            class="bi bi-eye"></i></button>
+                                    <button class="btn btn-sm btn-outline-gold btn-icon me-1"><i
+                                            class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger btn-icon"><i
+                                            class="bi bi-ban"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <img src="https://ui-avatars.com/api/?name=Hikaru+Nakamura&background=random"
+                                            class="rounded-circle" width="32" height="32">
+                                        <div>
+                                            <div class="fw-bold text-white">Hikaru Nakamura</div>
+                                            <small class="text-secondary">hikaru@chess.com</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="fw-bold text-gold">2768</span></td>
+                                <td><span class="badge badge-role-player">Player</span></td>
+                                <td><span class="badge badge-status-active">Active</span></td>
+                                <td>5 hours ago</td>
+                                <td>2023-02-20</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-light btn-icon me-1" onclick="viewUser(2)"><i
+                                            class="bi bi-eye"></i></button>
+                                    <button class="btn btn-sm btn-outline-gold btn-icon me-1"><i
+                                            class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger btn-icon"><i
+                                            class="bi bi-ban"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <img src="https://ui-avatars.com/api/?name=Anish+Giri&background=random"
+                                            class="rounded-circle" width="32" height="32">
+                                        <div>
+                                            <div class="fw-bold text-white text-decoration-line-through opacity-75">
+                                                Anish Giri</div>
+                                            <small class="text-secondary">anish@chess.com</small>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="fw-bold text-secondary">0</span></td>
+                                <td><span class="badge badge-role-player">Player</span></td>
+                                <td><span class="badge badge-status-banned">Banned</span></td>
+                                <td>-</td>
+                                <td>2023-03-10</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-light btn-icon me-1" onclick="viewUser(3)"><i
+                                            class="bi bi-eye"></i></button>
+                                    <button class="btn btn-sm btn-outline-success btn-icon me-1"><i
+                                            class="bi bi-check-circle"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger btn-icon"><i
+                                            class="bi bi-trash"></i></button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <!-- Pagination just exaple not yet functional-->
+                <div
+                    class="card-footer bg-transparent border-top border-secondary d-flex justify-content-between align-items-center">
+                    <small class="text-secondary">Showing 1-3 of 2,451 users</small>
+                    <nav>
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item disabled"><a class="page-link bg-dark border-secondary text-secondary"
+                                    href="#">Previous</a></li>
+                            <li class="page-item active"><a class="page-link bg-gold border-gold text-dark"
+                                    href="#">1</a></li>
+                            <li class="page-item"><a class="page-link bg-dark border-secondary text-light"
+                                    href="#">2</a></li>
+                            <li class="page-item"><a class="page-link bg-dark border-secondary text-light"
+                                    href="#">3</a></li>
+                            <li class="page-item"><a class="page-link bg-dark border-secondary text-light"
+                                    href="#">Next</a></li>
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <!-- Games Section-->
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</body>
+
+</html>

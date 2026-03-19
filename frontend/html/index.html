@@ -3,60 +3,380 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+            connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+            script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
+            style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MattMester</title>
-    <!--!Bootstrap-->
-    <link rel="stylesheet" href="../bootstrap/css/bootstrap.min.css" />
-    <!--?Popper: dropdowns, popovers, tooltips-->
-    <script src="../bootstrap/js/popper.min.js"></script>
-    <script src="../bootstrap/js/bootstrap.min.js"></script>
-    <!--!CSS-->
-    <link rel="stylesheet" href="../css/index.css" />
-    <!--!JavaScript-->
-    <script src="../javascript/index.js"></script>
-</head>
-<body>
-    <div class="container py-4">
-        <div class="main-bubble shadow">
-            <div class="d-flex justify-content-center gap-3 mb-4 flex-wrap">
-                <button class="menu-btn active">GÉP ELLEN</button>
-                <button class="menu-btn">MATT MESTER</button>
-                <button class="menu-btn">TRADICIONÁLIS</button>
-            </div>
 
-            <div class="row align-items-center gy-4">
-                <div class="col-lg-3 col-md-4">
-                    <div class="panel p-3 bg-light rounded shadow-sm">
-                        <h5 class="text-center fw-bold">Ranglista</h5>
-                        <hr>
-                        <div id="leaderboard">
-                            Betöltés...
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="../css/index.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/index.js" defer></script>
+</head>
+
+<body>
+    <!--Navbar-->
+    <nav class="navbar navbar-expand-lg navbar-dark navbar-glass fixed-top">
+        <div class="container">
+            <a class="navbar-brand brand d-flex align-items-center gap-2" href="#">
+                <i class="bi bi-king-fill"></i>
+                <span>MATTMESTER</span>
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="mainNav">
+                <!--? Vendég menü + talán később élő óra funkció -->
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2" id="guestActions">
+                    <!-- <li class="nav-item me-lg-2">
+                        <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
+                    </li> -->
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
+                            data-bs-target="#loginModal">Bejelentkezés</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
+                            data-bs-target="#registerModal">Regisztráció</button>
+                    </li>
+                </ul>
+                <!--? Bejelentkezett felhasználó menü -->
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2 d-none" id="userActions">
+                    <!-- <li class="nav-item me-lg-2">
+                        <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
+                    </li> -->
+                    <li class="nav-item hide-mobile">
+                        <span class="nav-link welcomeMessage"></span>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'">Profil
+                            beállítás</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" id="logoutBtnUser">Kijelentkezés</button>
+                    </li>
+                </ul>
+                <!-- Bejelentkezett admin -->
+                <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-2 d-none" id="adminActions">
+                    <!-- <li class="nav-item me-lg-2">
+                        <span class="live-chip"><span class="live-dot"></span><span id="liveClock">--:--:--</span></span>
+                    </li> -->
+                    <li class="nav-item hide-mobile">
+                        <span class="nav-link welcomeMessage"></span>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm"
+                            onclick="location.href='/html/adminPanel.html'">Admin felület</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'">Profil
+                            beállítás</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="btn btn-outline-gold btn-sm" id="logoutBtnAdmin">Kijelentkezés</button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <header class="hero">
+        <div class="container">
+            <div class="row g-4 align-items-center">
+                <div class="col-lg-12">
+                    <div class="hero-card h-100">
+                        <span class="badge badge-soft mb-3"><i class="bi bi-lightning-charge-fill me-1"></i>Élő
+                            közösségi sakk platform</span>
+                        <h1 class="display-5 fw-bold mb-3">Játssz, fejlődj, lépj a ranglétra élére</h1>
+                        <p class="text-secondary mb-4">Versenyezz Mattmester, Klasszikus vagy Gép elleni módban.
+                            Vendégként azonnal elkezdheted,
+                            fiókkal pedig követheted az ELO fejlődésedet</p>
+
+                        <div class="d-flex justify-content-around">
+                            <div class="d-flex flex-wrap gap-2">
+                                <button class="btn btn-gold btn-lg" data-bs-toggle="modal"
+                                    data-bs-target="#playModal"><i class="bi bi-play-fill me-1"></i> Játék</button>
+                            </div>
+                            <a href="#ranglista" class="btn btn-outline-gold btn-lg"><i
+                                    class="bi bi-trophy-fill me-1"></i>Ranglista</a>
+                        </div>
+                        <div class="mode-hint mt-3">Utolsó választott mód: <span id="lastModeLabel">Nincs
+                                kiválasztva</span>
                         </div>
                     </div>
                 </div>
-
-                <div class="col-lg-6 col-md-8 text-center">
-                    <h1 class="outlined-text display-3 fw-bold">MATT MESTER</h1>
+            </div>
+        </div>
+    </header>
+    <!-- Main -->
+    <main class="container">
+        <!--Elo display-->
+        <section class="mb-4 d-none" id="eloDisplay">
+            <div class="row g-3" id="eloStats">
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Klasszikus</div>
+                        <div class="stat-value" data-stat="user_elo">0</div>
+                        <div class="stat-sub">ELO</div>
+                    </div>
                 </div>
-
-                <div class="col-lg-3 d-none d-lg-block">
-                    <div id="user-status-panel" class="panel p-3 text-center border rounded shadow-sm hidden">
-                        <h6 class="fw-bold mb-1" id="display-username">Username</h6>
-                        <p class="small mb-2">ELO: <span id="display-elo" class="badge bg-primary">1200</span></p>
-                        <button class="btn btn-warning hidden" id="adminPage">Admin Panel</button>
-                        <button class="btn btn-success hidden" id="settingsBtn">Beállítások</button>
-                        <button class="btn btn-danger" id="logoutBtn">Kijelentkezés</button>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">MattMester</div>
+                        <div class="stat-value" data-stat="user_MM_elo">0</div>
+                        <div class="stat-sub">ELO</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Bullet</div>
+                        <div class="stat-value" data-stat="user_bullet_elo">0</div>
+                        <div class="stat-sub">ELO</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">WinRate</div>
+                        <div class="stat-value" data-stat="winRate">0%</div>
+                        <div class="stat-sub">Nyert játszmák aránya</div>
                     </div>
                 </div>
             </div>
+        </section>
+        <!--? Gyors statisztikák -->
+        <section class="mb-4">
+            <div class="row g-3" id="quickStats">
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Összes játékos</div>
+                        <div class="stat-value" data-stat="players">0</div>
+                        <div class="stat-sub">regisztrált fiók</div>
+                    </div>
+                </div>
+                                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Online játékosok</div>
+                        <div class="stat-value" data-stat="online">0</div>
+                        <div class="stat-sub">most aktív</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Élő játszmák</div>
+                        <div class="stat-value" data-stat="liveGames">0</div>
+                        <div class="stat-sub">jelenleg fut</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-label">Összes játszma</div>
+                        <div class="stat-value" data-stat="allGames">0</div>
+                        <div class="stat-sub">Ennyiszer játszottak már velünk</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!--? ranglista -->
+        <section id="ranglista" class="mb-4">
+            <div class="content-card">
+                <div class="d-flex justify-content-between align-items-center p-3 p-md-4 border-bottom"
+                    style="border-color: var(--border-color) !important;">
+                    <h2 class="section-title h4"><i class="bi bi-trophy-fill me-2"
+                            style="color: var(--accent-gold);"></i>Top játékosok ELO szerint</h2>
+                    <span id="lastUpdated" class="text-secondary small">Frissítve: ma</span>
+                </div>
+                <!-- itt ezt meg kell csinálni, hogy a backendről jön a frissítés ideje, és ne csak statikusan legyen kiírva, hogy "ma" -->
+                <div class="table-controls p-3">
+                    <div class="row g-2 d-flex justify-content-around align-items-center">
+                        <div class="col-12 col-md-6">
+                            <label class="me-2 text-secondary small text-uppercase fw-bold"
+                                style="min-width: 80px;">Rendezés:</label>
+                            <select id="leaderboardEloFilter" class="form-select">
+                                <option value="elo" selected>ELO</option>
+                                <option value="elo_MM">ELO MattMester</option>
+                                <option value="elo_bullet">ELO Bullet</option>
+                                <option value="winRate">WinRate</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <label class="me-2 text-secondary small text-uppercase fw-bold"
+                                style="min-width: 80px;">Limit:</label>
+                            <select id="leaderboardLimit" class="form-select">
+                                <option value="10" selected>Top 10</option>
+                                <option value="25">Top 25</option>
+                                <option value="100">Top 100</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table mb-0 leaderboard-table">
+                        <thead>
+                            <tr class="align-items-center">
+                                <th>#</th>
+                                <th>Játékos</th>
+                                <th class="text-center">ELO</th>
+                                <th class="text-center">Utoljára itt járt</th>
+                                <th class="text-center">Felhasználó ezóta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="leaderboardBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div id="leaderboardEmpty" class="table-empty d-none">Nincs találat a megadott szűrőkkel.</div>
+            </div>
+        </section>
+    </main>
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
+            <div><span class="brand">MATTMESTER</span> &middot; Modern sakkélmény</div>
+            <small>2026 MattMester</small>
+        </div>
+    </footer>
+    <!-- Modals -->
 
-            <div id="auth-section" class="d-flex justify-content-center gap-3 mt-5 flex-wrap">
-                <button class="auth-btn signin" onclick="location.href='/login'">Bejelentkezés</button>
-                <button class="play-btn">Játék<br><small>vendégként</small></button>
-                <button class="auth-btn signup" onclick="location.href='/register'">Regisztráció</button>
+    <!-- Player Info Modal -->
+    <div class="modal fade" id="playModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-play-fill me-2"></i>Válassz játékmódot</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary">Válaszd ki, milyen módban szeretnél játszani.</p>
+                    <div class="d-grid gap-2">
+                        <button onclick="selectGame('MattMester')" class="btn btn-outline-gold mode-btn"
+                            data-mode="MattMester">MattMester</button>
+                        <button onclick="selectGame('MattMester10')" class="btn btn-outline-gold mode-btn"
+                            data-mode="MattMester10">Mattmester 10p</button>
+                        <button onclick="selectGame('Klasszikus')" class="btn btn-outline-gold mode-btn"
+                            data-mode="Klasszikus">Klasszikus</button>
+                        <button onclick="selectGame('Klasszikus10')" class="btn btn-outline-gold mode-btn"
+                            data-mode="Klasszikus10">Klasszikus 10p</button>
+                        <button onclick="selectGame('Bullet')" class="btn btn-outline-gold mode-btn"
+                            data-mode="Bullet">Bullet</button>
+                        <button onclick="selectGame('Gepellen')" class="btn btn-outline-gold mode-btn"
+                            data-mode="Gepellen">Gép ellen</button>
+                    </div>
+                    <small class="text-secondary d-block mt-3">Vendég módban is elérhető.</small>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!--? Bejelentkezés -->
+    <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i>Bejelentkezés</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="loginForm">
+                    <div class="modal-body">
+                        <div class="container-fluid px-0">
+                            <div class="row justify-content-center">
+                                <div class="col-12">
+                                    <div class="card shadow p-4 login-panel">
+                                        <h1 class="text-center mb-4 h4 login-heading">Bejelentkezés</h1>
+                                        <div>
+                                            <div class="mb-3">
+                                                <label for="loginUsername"
+                                                    class="form-label">Felhasználónév/Email:</label>
+                                                <input class="form-control" type="text" id="loginUsername"
+                                                    placeholder="Mattmester / mattmester@gmail.com" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="loginPassword" class="form-label">Jelszó:</label>
+                                                <input class="form-control" type="password" id="loginPassword"
+                                                    placeholder="Jelszó" required>
+                                            </div>
+                                            <div class="mb-3 form-check">
+                                                <input type="checkbox" class="form-check-input" id="rememberMe">
+                                                <label class="form-check-label" for="rememberMe">Emlékezz rám:</label>
+                                            </div>
+                                            <button type="submit" class="btn btn-gold w-100">Bejelentkezés</button>
+                                            <div id="loginMessage" class="mt-3 text-center alert d-none"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!--? Regisztráció -->
+    <div class="modal fade" id="registerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i>Regisztráció</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="registerForm">
+                    <div class="modal-body">
+                        <div class="container-fluid px-0">
+                            <div class="row justify-content-center">
+                                <div class="col-12">
+                                    <div class="card shadow p-4 login-panel">
+                                        <h1 class="text-center mb-4 h4 login-heading">Regisztráció</h1>
+                                        <div>
+                                            <div class="mb-3">
+                                                <label for="registerUsername" class="form-label">Felhasználónév</label>
+                                                <input class="form-control" type="text" id="registerUsername"
+                                                    placeholder="Mattmester" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="registerEmail" class="form-label">Email:</label>
+                                                <input class="form-control" type="email" id="registerEmail"
+                                                    placeholder="mattmester@gmail.com" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label for="registerPassword" class="form-label">Jelszó:</label>
+                                                <input class="form-control" type="password" id="registerPassword"
+                                                    placeholder="Jelszó" minlength="8" required>
+                                                <small class="text-secondary" style="opacity: 0.75;">Min. 8 karakter,
+                                                    legalább egy szám.</small>
+                                            </div>
+                                            <button type="submit" class="btn btn-gold w-100">Regisztráció</button>
+                                            <div id="registerMessage" class="mt-3 text-center alert d-none"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- Toast -->
+    <div class="toast-container position-fixed bottom-0 end-0 p-3">
+        <div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="appToastBody">Kész.</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
         </div>
     </div>
 </body>
+
 </html>

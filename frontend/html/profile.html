@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+            connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+            script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
+            style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profil</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="../css/profile.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/profile.js" defer></script>
+</head>
+
+<body>
+    <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <i data-lucide="crown"></i>
+            <span>MattMester</span>
+        </div>
+        <div class="nav flex-column">
+            <a href="#dashboard" class="nav-link active">
+                <i data-lucide="layout-dashboard"></i>
+                Dashboard
+            </a>
+            <a href="#profile" class="nav-link">
+                <i data-lucide="user"></i>
+                Profile
+            </a>
+            <a href="#games" class="nav-link">
+                <i data-lucide="gamepad-2"></i>
+                Game History
+            </a>
+            <a href="#statistics" class="nav-link">
+                <i data-lucide="bar-chart-3"></i>
+                Statistics
+            </a>
+            <a href="#friends" class="nav-link">
+                <i data-lucide="users"></i>
+                Friends
+            </a>
+            <a href="#abilities" class="nav-link">
+                <i data-lucide="zap"></i>
+                Abilities
+            </a>
+            <a href="#security" class="nav-link">
+                <i data-lucide="shield"></i>
+                Security
+            </a>
+            <a href="#settings" class="nav-link">
+                <i data-lucide="settings"></i>
+                Settings
+            </a>
+        </div>
+        <div class="mt-auto p-4 border-top border-secondary" style="border-color: var(--border-color) !important;">
+            <button class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2"
+                type="button" data-bs-toggle="modal" data-bs-target="#logoutModal">
+                <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                Logout
+            </button>
+        </div>
+    </nav>
+
+    <main class="main-content">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="d-flex align-items-center gap-3">
+                <button class="btn btn-outline-gold d-lg-none py-1 px-2" onclick="toggleSidebar()">
+                    <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
+                </button>
+                <div class="top-bar-search d-none d-md-block">
+                    <i data-lucide="search"></i>
+                    <input type="text" placeholder="Search games, players...">
+                </div>
+            </div>
+
+            <div class="top-bar-actions">
+                <!-- talán fényes sötét mód?-->
+                <!-- <div class="theme-toggle" data-tooltip="Toggle Theme">
+                    <div class="theme-toggle-knob">
+                        <i data-lucide="moon" style="width: 12px; height: 12px; color: var(--bg-sidebar);"></i>
+                    </div>
+                </div> -->
+                <button class="top-bar-btn" type="button" data-tooltip="Notifications" data-bs-toggle="modal"
+                    data-bs-target="#notificationsModal">
+                    <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
+                    <span class="notification-dot"></span>
+                </button>
+                <div class="top-bar-user">
+                    <div class="top-bar-user-info">
+                        <div class="top-bar-user-name">GrandMaster_99</div>
+                        <div class="top-bar-user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content dashboard -->
+        <div class="main-content-inner" id="dashboard">
+            <!-- Dashboard row 1 -->
+            <div class="profile-header animate-in animate-in-1 section-block" id="profile">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <div class="d-flex flex-wrap align-items-center gap-4">
+                            <div class="position-relative">
+                                <img src="https://ui-avatars.com/api/?name=GrandMaster_99&background=1e293b&color=d4af37&size=240"
+                                    alt="Profile" class="profile-avatar" id="profileAvatarMain">
+                                <span class="position-absolute bottom-0 end-0 p-1">
+                                    <span class="status-dot"></span>
+                                </span>
+                            </div>
+                            <div>
+                                <div class="d-flex align-items-center gap-3 mb-2">
+                                    <h1 class="h3 mb-0 text-white">GrandMaster_99</h1>
+                                    <span class="role-badge admin">Admin</span>
+                                </div>
+                                <p class="text-secondary mb-2">admin@mattmester.com</p>
+                                <div class="profile-status">
+                                    <span class="status-dot"></span>
+                                    Online
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-5 mt-4 mt-md-0">
+                        <div class="d-flex justify-content-md-end flex-wrap gap-3">
+                            <div class="elo-display text-center">
+                                <div class="elo-number">1,500</div>
+                                <div class="elo-label">Klasszikus</div>
+                                <div class="elo-rank rank-master">Master</div>
+                            </div>
+                            <div class="elo-display text-center">
+                                <div class="elo-number">1,650</div>
+                                <div class="elo-label">MattMester</div>
+                                <div class="elo-rank rank-master">Master</div>
+                            </div>
+                            <div class="elo-display text-center">
+                                <div class="elo-number">1,420</div>
+                                <div class="elo-label">Bullet</div>
+                                <div class="elo-rank rank-master">Master</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 2 -->
+            <div class="row g-4 mb-4 animate-in animate-in-2 section-block" id="statistics">
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i data-lucide="trophy"></i>
+                        </div>
+                        <div class="stat-value text-success">247</div>
+                        <div class="stat-label">Total Wins</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i data-lucide="x-circle"></i>
+                        </div>
+                        <div class="stat-value text-danger">89</div>
+                        <div class="stat-label">Total Losses</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i data-lucide="minus-circle"></i>
+                        </div>
+                        <div class="stat-value" style="color: var(--accent-blue)">34</div>
+                        <div class="stat-label">Draws</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon gold">
+                            <i data-lucide="percent"></i>
+                        </div>
+                        <div class="stat-value" style="color: var(--accent-gold)">68%</div>
+                        <div class="stat-label">Win Rate</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 3 -->
+            <div class="row">
+
+                <div class="col-lg-8">
+
+                    <div class="card mb-4 section-block">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="activity" class="me-2"></i>Rating History</span>
+                            <select class="form-select form-select-sm w-auto bg-transparent border-secondary text-light"
+                                style="width: 120px !important;">
+                                <option>Klasszikus</option>
+                                <option>MattMester</option>
+                                <option>Bullet</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-placeholder">
+                                <span class="d-flex align-items-center gap-2">
+                                    <i data-lucide="chart-line"></i>
+                                    Rating Chart Placeholder
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 section-block" id="games">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="history" class="me-2"></i>Recent Games</span>
+                            <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
+                                data-bs-target="#allGamesModal">View All</button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Opponent</th>
+                                            <th>Result</th>
+                                            <th>Moves</th>
+                                            <th>Time Control</th>
+                                            <th>Date</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Sample game rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Képességek -->
+                    <div class="card mb-4 section-block" id="abilities">
+                        <div class="card-header">
+                            <i data-lucide="zap" class="me-2"></i>Special Abilities Usage
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="flame"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Double Move</h6>
+                                            <small class="text-secondary">Used 45 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="shield"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Shield Pawn</h6>
+                                            <small class="text-secondary">Used 23 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="eye"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Vision</h6>
+                                            <small class="text-secondary">Used 67 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="ability-card d-flex align-items-center gap-3">
+                                        <div class="ability-icon">
+                                            <i data-lucide="refresh-cw"></i>
+                                        </div>
+                                        <div>
+                                            <h6 class="mb-1 text-white">Undo Move</h6>
+                                            <small class="text-secondary">Used 12 times</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card mb-4 section-block" id="friends">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span class="d-flex align-items-center"><i data-lucide="users"
+                                    class="me-2"></i>Friends</span>
+                            <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
+                                data-bs-target="#addFriendModal">
+                                <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
+                            </button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="friend-list">
+                                <div class="friend-item d-flex align-items-center gap-2 p-3">
+                                    <div class="position-relative flex-shrink-0">
+                                        <img src="https://ui-avatars.com/api/?name=ChessMaster_Pro&background=0f172a&color=d4af37&size=40"
+                                            alt="Friend" class="friend-avatar rounded-circle"
+                                            style="width: 40px; height: 40px; object-fit: cover;">
+                                        <span class="friend-status online"></span>
+                                    </div>
+
+                                    <div class="flex-grow-1 min-width-0">
+                                        <h6 class="mb-0 text-white text-truncate" style="font-size: 0.9rem;">
+                                            ChessMaster_Pro</h6>
+                                        <small class="text-success d-block text-truncate">In Game</small>
+                                    </div>
+
+                                    <div class="flex-shrink-0">
+                                        <button class="btn btn-sm btn-outline-gold py-1 px-2 open-message-modal"
+                                            type="button" data-friend="ChessMaster_Pro" data-bs-toggle="modal"
+                                            data-bs-target="#messagesModal">
+                                            <i data-lucide="message-square" style="width: 16px; height: 16px;"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 section-block" id="security-overview">
+                        <div class="card-header">
+                            <i data-lucide="shield-check" class="me-2"></i>Recent Logins
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <tbody>
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i data-lucide="monitor"
+                                                        style="width: 16px; color: var(--accent-gold);"></i>
+                                                    <span>Chrome - Windows</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <small class="text-secondary">Now</small>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i data-lucide="smartphone"
+                                                        style="width: 16px; color: var(--accent-gold);"></i>
+                                                    <span>iPhone App</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <small class="text-secondary">2h ago</small>
+                                            </td>
+                                        </tr>
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i data-lucide="tablet"
+                                                        style="width: 16px; color: var(--accent-gold);"></i>
+                                                    <span>iPad Safari</span>
+                                                </div>
+                                            </td>
+                                            <td class="text-end">
+                                                <small class="text-secondary">1d ago</small>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 section-block">
+                        <div class="card-header">
+                            <i data-lucide="user-check" class="me-2"></i>Account Status
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary">Email Verification</span>
+                                <span class="badge bg-success">Verified</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary">Account Type</span>
+                                <span class="badge badge-admin">Administrator</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary">Status</span>
+                                <span class="badge bg-success">Active</span>
+                            </div>
+                            <hr style="border-color: var(--border-color);">
+                            <div class="d-flex align-items-center gap-3 mb-3">
+                                <div class="ability-icon"
+                                    style="color: var(--accent-green); background-color: rgba(16, 185, 129, 0.1);">
+                                    <i data-lucide="mail-check"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 text-white">Email Verified</h6>
+                                    <small class="text-secondary">Your account is fully secured</small>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="ability-icon"
+                                    style="color: var(--text-secondary); background-color: rgba(148, 163, 184, 0.1);">
+                                    <i data-lucide="calendar"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 text-white">Member Since</h6>
+                                    <small class="text-secondary">October 12, 2023</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 4 -->
+            <div class="row mb-4" id="security">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="shield" class="me-2"></i>Security & Login History</span>
+                            <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal"
+                                data-bs-target="#logoutAllDevicesModal">Log Out All Devices</button>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Date & Time</th>
+                                            <th>IP Address</th>
+                                            <th>Device / Browser</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Sample login history rows -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 5 - Settings -->
+            <div class="row mb-4" id="settings">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <i data-lucide="settings" class="me-2"></i>Profile Settings
+                        </div>
+                        <div class="card-body">
+                            <form id="profileSettingsForm">
+                                <div class="row g-4">
+                                    <div class="col-md-12 d-flex align-items-center gap-4 border-bottom pb-4"
+                                        style="border-color: var(--border-color) !important;">
+                                        <img src="https://ui-avatars.com/api/?name=GrandMaster_99&background=1e293b&color=d4af37&size=240"
+                                            alt="Current Avatar" id="profileAvatarSettings" class="profile-avatar"
+                                            style="width: 80px; height: 80px;">
+                                        <div>
+                                            <h6 class="text-white mb-2">Profile Picture</h6>
+                                            <div class="d-flex gap-2">
+                                                <input type="file" class="d-none" id="avatarUpload">
+                                                <label for="avatarUpload" class="btn btn-gold btn-sm m-0">Upload
+                                                    New</label>
+                                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#removeAvatarModal">Remove</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label class="form-label">Username</label>
+                                        <input type="text" class="form-control" value="GrandMaster_99">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Email Address</label>
+                                        <input type="email" class="form-control" value="admin@mattmester.com">
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label class="form-label">New Password</label>
+                                        <input type="password" class="form-control"
+                                            placeholder="Leave blank to keep current">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Confirm New Password</label>
+                                        <input type="password" class="form-control" placeholder="Confirm new password">
+                                    </div>
+
+                                    <div class="col-12 text-end mt-4">
+                                        <button type="submit" class="btn btn-gold px-5">Save Changes</button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <div class="danger-zone">
+                                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                                    <div>
+                                        <h6 class="danger-zone-title">
+                                            <i data-lucide="triangle-alert" style="width: 16px; height: 16px;"
+                                                class="me-1"></i>
+                                            Danger Zone
+                                        </h6>
+                                        <p class="danger-zone-text mb-0">Deleting your profile is permanent and cannot
+                                            be undone.</p>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-danger" id="openDeleteProfileModal"
+                                        data-bs-toggle="modal" data-bs-target="#deleteProfileModal">
+                                        Delete Profile
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="site-footer">
+        <div class="footer-brand">
+            <i data-lucide="crown" style="width: 18px; height: 18px; display: inline;"></i>
+            MattMester
+        </div>
+        <div class="footer-links">
+            <a href="#">Home</a>
+            <a href="#">Leaderboard</a>
+            <a href="#">Help Center</a>
+        </div>
+        <div class="footer-copy">&copy; 2026 MattMester</div>
+    </footer>
+
+    <button class="fab-chat" type="button" data-bs-toggle="modal" data-bs-target="#messagesModal">
+        <span class="fab-tooltip">Messenger</span>
+        <i data-lucide="message-circle" style="width: 26px; height: 26px;"></i>
+    </button>
+
+    <button class="fab-quick-play" type="button" data-bs-toggle="modal" data-bs-target="#quickPlayModal">
+        <span class="fab-tooltip">Quick Play</span>
+        <i data-lucide="swords" style="width: 26px; height: 26px;"></i>
+    </button>
+</body>
+
+</html>

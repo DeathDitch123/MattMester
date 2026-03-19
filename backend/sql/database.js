@@ -45,21 +45,40 @@ async function createTables() {
             id INT AUTO_INCREMENT PRIMARY KEY,
             username VARCHAR(50) NOT NULL UNIQUE,
             password_hash VARCHAR(255) NOT NULL,
-            email VARCHAR(100) NOT NULL UNIQUE,
-            elo INT DEFAULT 800,
-            role ENUM('user', 'admin') DEFAULT 'user',
+            email VARCHAR(100) UNIQUE,
+            elo INT DEFAULT 1200,
+            elo_MM INT DEFAULT 1200,
+            elo_bullet INT DEFAULT 1200,
+            role ENUM('player', 'admin') DEFAULT 'player',
+            is_banned BOOLEAN DEFAULT FALSE,
+            ban_reason VARCHAR(255),
+            banned_until TIMESTAMP NULL,
+            last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            is_email_verified BOOLEAN DEFAULT FALSE,
+            reset_password_token VARCHAR(255),
+            reset_token_expires TIMESTAMP NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );`,
+        )`,
 
-        `INSERT IGNORE INTO users (username, password_hash, email, elo, role) 
-            VALUES ('admin', '$2b$10$eIBn3ePwTf8.rEh28Vr1O.IsuyQPVIl1g7xAOKQnb3EhsBgdGYK2O', 'admin@mattmester.com', 1500, 'admin');
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
         `,
+
+        `CREATE TABLE IF NOT EXISTS login_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            user_agent VARCHAR(255),
+            login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`,
 
         `CREATE TABLE IF NOT EXISTS statistics (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT UNIQUE NOT NULL,
             wins INT DEFAULT 0,
             losses INT DEFAULT 0,
+            draws INT DEFAULT 0,
             abilities_used INT DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
@@ -79,13 +98,26 @@ async function createTables() {
             white_player_id INT NOT NULL,
             black_player_id INT NOT NULL,
             winner_id INT,
+            time_control VARCHAR(20) DEFAULT '10+0',
+            initial_fen VARCHAR(100) DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
             start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             end_time TIMESTAMP NULL,
-            status ENUM('ongoing', 'finished', 'abandoned') DEFAULT 'ongoing',
+            status ENUM('ongoing', 'finished', 'abandoned', 'draw') DEFAULT 'ongoing',
             FOREIGN KEY (white_player_id) REFERENCES users(id),
             FOREIGN KEY (black_player_id) REFERENCES users(id),
             FOREIGN KEY (winner_id) REFERENCES users(id)
         )`,
+
+        `CREATE TABLE IF NOT EXISTS game_chats (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            game_id INT NOT NULL,
+            sender_id INT NOT NULL,
+            message TEXT NOT NULL,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
+        )`,
+
         `CREATE TABLE IF NOT EXISTS moves (
             id INT AUTO_INCREMENT PRIMARY KEY,
             game_id INT NOT NULL,
