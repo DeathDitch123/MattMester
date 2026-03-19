@@ -114,3 +114,128 @@ const PST = {
         [ 20, 30, 10,  0,  0, 10, 30, 20],
     ],
 };
+
+// ────────────────────────────────────────────
+// TÁBLA ÉRTÉKELÉS
+// ────────────────────────────────────────────
+
+/**
+ * Értékeli a tábla állapotát a megadott szín szemszögéből.
+ * Pozitív = előnyben van, negatív = hátrányban.
+ * @param {object} jatek
+ * @param {string} szin - 'white' | 'black'
+ * @returns {number} centipawn értékelés
+ */
+function tablaErtekel(jatek, szin) {
+    let ertek = 0;
+
+    for (let i = 0; i < jatek.tabla.length; i++) {
+        const mezo = jatek.tabla[i];
+        if (!mezo.piece) continue;
+
+        const babu = mezo.piece;
+        const babuErtek = BABU_ERTEK[babu.type] || 0;
+
+        // Piece-square tábla érték
+        const pst = PST[babu.type];
+        let pstErtek = 0;
+        if (pst) {
+            if (babu.color === "white") {
+                pstErtek = pst[mezo.y][mezo.x];
+            } else {
+                // Fekete: y tükrözés
+                pstErtek = pst[7 - mezo.y][mezo.x];
+            }
+        }
+
+        // Hozzáadás vagy kivonás a szín alapján
+        if (babu.color === szin) {
+            ertek += babuErtek + pstErtek;
+        } else {
+            ertek -= babuErtek + pstErtek;
+        }
+    }
+
+    return ertek;
+}
+
+// ────────────────────────────────────────────
+// MAKE / UNMAKE (ideiglenes lépés a kereséshez)
+// ────────────────────────────────────────────
+
+/**
+ * Ideiglenesen végrehajtja a lépést a keresőfában.
+ * Visszaadja az undo objektumot a visszavonáshoz.
+ */
+function botLepesCsinal(jatek, lepes) {
+    const babu = lepes.from.piece;
+
+    const undo = {
+        fromPiece: lepes.from.piece,
+        toPiece: lepes.to.piece,
+        toPieceSquare: lepes.to.piece ? lepes.to.piece.square : null,
+        enPassant: jatek.enPassant ? { ...jatek.enPassant } : null,
+        koronLevo: jatek.koronLevo,
+        felLepes: jatek.felLepes,
+        babuHasMoved: babu.hasMoved,
+        babuType: babu.type,
+        // Sáncolás adatok
+        rookFromPiece: null,
+        rookToPiece: null,
+        rookHasMoved: null,
+        // En passant ütés
+        epMezo: null,
+        epBabu: null,
+    };
+
+    // En passant ütés
+    if (lepes.special === "enpassant" && lepes.captured) {
+        undo.epMezo = lepes.captured;
+        undo.epBabu = lepes.captured.piece;
+        lepes.captured.piece = null;
+    }
+
+    // Sáncolás bástya mozgatás
+    if (lepes.special === "castle-ks" || lepes.special === "castle-qs") {
+        const rook = lepes.rookFrom.piece;
+        undo.rookFromPiece = rook;
+        undo.rookToPiece = lepes.rookTo.piece;
+        undo.rookHasMoved = rook.hasMoved;
+        undo.rookSquare = rook.square;
+        lepes.rookTo.piece = rook;
+        rook.square = lepes.rookTo;
+        rook.hasMoved = true;
+        lepes.rookFrom.piece = null;
+    }
+
+    // Bábu mozgatása
+    lepes.from.piece = null;
+    lepes.to.piece = babu;
+    babu.square = lepes.to;
+    babu.hasMoved = true;
+
+    // En passant célmező frissítés
+    if (lepes.special === "double") {
+        const irany = (babu.color === "white") ? -1 : 1;
+        jatek.enPassant = { x: lepes.from.x, y: lepes.from.y + irany };
+    } else {
+        jatek.enPassant = null;
+    }
+
+    // Gyalog átváltozás (keresésben mindig vezér)
+    if (babu.type === "pawn" && (lepes.to.y === 0 || lepes.to.y === 7)) {
+        babu.type = "queen";
+    }
+
+    // Féllépes számláló
+    if (undo.babuType === "pawn" || undo.toPiece) {
+        jatek.felLepes = 0;
+    } else {
+        jatek.felLepes++;
+    }
+
+    // Játékosváltás
+    jatek.koronLevo = (jatek.koronLevo === "white") ? "black" : "white";
+
+    return undo;
+}
