@@ -239,3 +239,59 @@ function botLepesCsinal(jatek, lepes) {
 
     return undo;
 }
+
+/**
+ * Visszavonja az ideiglenesen végrehajtott lépést.
+ */
+function botLepesVisszavon(jatek, lepes, undo) {
+    const babu = lepes.to.piece;
+
+    // Típus visszaállítás (átváltozás undo)
+    babu.type = undo.babuType;
+
+    // Bábu visszamozgatás
+    lepes.from.piece = babu;
+    babu.square = lepes.from;
+    babu.hasMoved = undo.babuHasMoved;
+
+    // Célmező visszaállítás (ütött bábu visszarakás)
+    lepes.to.piece = undo.toPiece;
+    if (undo.toPiece) {
+        undo.toPiece.square = lepes.to;
+    }
+
+    // Sáncolás visszavonás
+    if (lepes.special === "castle-ks" || lepes.special === "castle-qs") {
+        lepes.rookFrom.piece = undo.rookFromPiece;
+        if (undo.rookFromPiece) {
+            undo.rookFromPiece.square = lepes.rookFrom;
+            undo.rookFromPiece.hasMoved = undo.rookHasMoved;
+        }
+        lepes.rookTo.piece = undo.rookToPiece;
+    }
+
+    // En passant ütés visszavonás
+    if (undo.epMezo) {
+        undo.epMezo.piece = undo.epBabu;
+    }
+
+    // Játékállapot visszaállítás
+    jatek.enPassant = undo.enPassant;
+    jatek.koronLevo = undo.koronLevo;
+    jatek.felLepes = undo.felLepes;
+}
+
+// ────────────────────────────────────────────
+// LÉPÉS RENDEZÉS (alfa-béta hatékonysághoz)
+// ────────────────────────────────────────────
+
+/**
+ * MVV-LVA rendezés: ütések előre, értékesebb áldozat és kevésbé értékes támadó elöl.
+ */
+function lepesekRendez(lepesek) {
+    return lepesek.sort((a, b) => {
+        const aScore = lepesRendezErtek(a);
+        const bScore = lepesRendezErtek(b);
+        return bScore - aScore;
+    });
+}
