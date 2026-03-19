@@ -1,74 +1,504 @@
-document.addEventListener('DOMContentLoaded', async () => {
-    const authSection = document.getElementById('auth-section');
-    const userPanel = document.getElementById('user-status-panel');
-    const displayUsername = document.getElementById('display-username');
-    const displayElo = document.getElementById('display-elo');
-    const adminPageBtn = document.getElementById('adminPage');
-    const settingsBtn = document.getElementById('settingsBtn');
+const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
-    // Ranglista betöltése
+const socket = io();
+
+let LeaderboardData = {
+    elo: [],
+    elo_MM: [],
+    elo_bullet: [],
+    winRate: [],
+    lastUpdated: null
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    installModalFocusGuards();
+    bindLoginForm();
+    bindRegisterForm();
+    bindLogoutButtonUser();
+    bindLogoutButtonAdmin();
+    bindLeaderBoardControls();
+    restoreLastMode();
+    loadLeaderBoard();
+    socketHandler();
+    refreshAuthUi();
+});
+// Ez parsol
+async function parseJson(response) {
     try {
-        const lbResponse = await fetch('/api/leaderboard');
-        const lbData = await lbResponse.json();
-        const leaderboardDiv = document.getElementById('leaderboard');
-        if (leaderboardDiv && Array.isArray(lbData) && lbData.length > 0) {
-            leaderboardDiv.innerHTML = lbData
-                .map((player, i) => `#${i + 1} ${player.username} - ${player.elo}`)
-                .join('<br>');
-        } else if (leaderboardDiv) {
-            leaderboardDiv.innerHTML = 'Nincs adat.';
-        }
+        return await response.json();
     } catch (error) {
-        console.error('Ranglista betöltési hiba:', error);
+        return {};
     }
-
+}
+//sessionInfo
+async function fetchSessionInfo() {
+    let result = { success: false, loggedIn: false };
     try {
         const response = await fetch('/api/sessionInfo');
-        const data = await response.json();
+        const data = await parseJson(response);
+        if (response.ok) {
+            result = data;
+        }
+    } catch (error) {
+        console.error('Hiba a session informacio lekerdezese soran:', error);
+    }
+    return result;
+}
 
-        if (data.loggedIn) {
-            console.log("Bejelentkezett felhasználó mód:", data.user.role);
-            let authHTML = `<button class="play-btn">PLAY NOW<br><small>Ranked Match</small></button>`;
+async function loadLeaderBoard() {
+    try {
+        const response = await fetch('/api/leaderboard');
+        const payload = await parseJson(response);
 
-            settingsBtn.classList.remove('hidden');
-            settingsBtn.addEventListener('click', () => {
-                window.location.href = '/html/profile.html';
-            });
+        if (!response.ok || !payload.success) {
+            throw new Error(payload.message || 'Nem sikerült betölteni a ranglistát.');
+        }
 
-            if (data.user.role === 'admin') {
-                if (data.user.role === 'admin') {
-                    adminPageBtn.classList.remove('hidden');
-                }
-                adminPageBtn.addEventListener('click', () => {
-                    window.location.href = '/html/adminPanel.html';
-                });
-            }
+        LeaderboardData = payload.data || {
+            elo: [],
+            elo_MM: [],
+            elo_bullet: [],
+            winRate: [],
+            lastUpdated: null
+        };
+        renderLeaderBoard();
+    } catch (error) {
+        console.error('Hiba a ranglista lekérdezése során:', error);
+    }
+}
 
-            authSection.innerHTML = authHTML;
+function bindLeaderBoardControls() {
+    const filterElement = document.getElementById('leaderboardEloFilter');
+    const limitElement = document.getElementById('leaderboardLimit');
 
-            // Panel megjelenítése és adatok betöltése
-            userPanel.classList.remove('hidden');
-            displayUsername.innerText = data.user.username;
-            displayElo.innerText = data.user.elo;
+    if (filterElement) {
+        filterElement.addEventListener('change', renderLeaderBoard);
+    }
 
-            document.getElementById('logoutBtn').addEventListener('click', async () => {
-                await fetch('/api/logout', { method: 'POST' });
-                window.location.reload();
-            });
+    if (limitElement) {
+        limitElement.addEventListener('change', renderLeaderBoard);
+    }
+}
 
-        } else {
-            console.log("Vendég mód");
+function renderLeaderBoard() {
+    const filterElement = document.getElementById('leaderboardEloFilter');
+    const limitElement = document.getElementById('leaderboardLimit');
+    const tbody = document.getElementById('leaderboardBody');
+    const emptyElement = document.getElementById('leaderboardEmpty');
+    const lastUpdatedElement = document.getElementById('lastUpdated');
 
-            // Vendég módban létező gombhoz esemény hozzáadása
-            const guestBtn = document.querySelector('.play-btn');
-            if (guestBtn) {
-                guestBtn.addEventListener('click', () => {
-                    window.location.href = '../chess_barold/html/chess.html';
-                });
+    if (!filterElement || !limitElement || !tbody) {
+        return;
+    }
+
+    const filter = filterElement.value;
+    const limit = Number(limitElement.value);
+
+    try {
+        tbody.innerHTML = '';
+
+        const sortedData = [...(LeaderboardData[filter] || [])].slice(0, limit);
+
+        if (emptyElement) {
+            emptyElement.classList.toggle('d-none', sortedData.length > 0);
+        }
+        if (lastUpdatedElement) {
+            if (LeaderboardData.lastUpdated) {
+                lastUpdatedElement.textContent = `frissítve: ${new Date(LeaderboardData.lastUpdated).toLocaleString('hu-HU')}`;
             }
         }
 
+        tbody.innerHTML = sortedData.map((player, index) => {
+            const val = filter === 'winRate' ? player.winrate_percent + '%' : player[filter];
+            const joinedAt = player.joined_at || player.created_at;
+
+            return `
+                <tr>
+                    <td class="fw-bold ${index < 3 ? 'text-warning' : 'text-secondary'}">#${index + 1}</td>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <span class="text-white">${player.username}</span>
+                        </div>
+                    </td>
+                    <td class="text-center fw-bold text-info">${val}</td>
+                    <td class="text-center small text-white">${new Date(player.last_active).toLocaleDateString('hu-HU')}</td>
+                    <td class="text-center small text-white">${new Date(joinedAt).toLocaleDateString('hu-HU')}</td>
+                </tr>
+                `;
+        }).join('');
     } catch (error) {
-        console.error('Hiba a státusz lekérésekor:', error);
+        console.error('Hiba a ranglista megjelenítése során:', error);
     }
-});
+}
+
+function bindLoginForm() {
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const messageElement = document.getElementById('loginMessage');
+            const usernameOrMail = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const rememberElement = document.getElementById('rememberMe');
+            const remember = rememberElement ? rememberElement.checked : false;
+
+            clearFormMessage(messageElement);
+
+            if (!usernameOrMail || !password) {
+                showFormMessage(messageElement, 'danger', 'Minden mező kitöltése kötelező.');
+            } else {
+                try {
+                    const response = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ usernameOrMail, password, remember })
+                    });
+                    const result = await parseJson(response);
+
+                    if (!response.ok) {
+                        showFormMessage(messageElement, 'danger', result.message || 'Sikertelen bejelentkezes.');
+                        return;
+                    }
+                    else {
+                        showFormMessage(messageElement, 'success', result.message || 'Sikeres bejelentkezes.');
+                        loginForm.reset();
+                        hideModalById('loginModal');
+                        showToast('Sikeres bejelentkezes.');
+
+                        if (typeof socket !== 'undefined') {
+                            console.log('Login form successful, refreshing stats via socket...');
+                            socket.disconnect(); //?Először bontjuk a kapcsolatot, hogy a szerver felismerje a session változást
+                            socket.connect(); //?Újra csatlakoztatjuk a socketet, hogy a szerver felismerje az új session-t és frissítse a statisztikákat
+                        }
+                        await refreshAuthUi();
+                    }
+                } catch (error) {
+                    showFormMessage(messageElement, 'danger', 'Nem sikerult csatlakozni a szerverhez.');
+                    console.error('Hiba a bejelentkezes soran:', error);
+                }
+            }
+        });
+    }
+}
+
+function bindRegisterForm() {
+    const registerForm = document.getElementById('registerForm');
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+
+            const messageElement = document.getElementById('registerMessage');
+            const username = document.getElementById('registerUsername').value.trim();
+            const email = document.getElementById('registerEmail').value.trim();
+            const password = document.getElementById('registerPassword').value;
+
+            clearFormMessage(messageElement);
+
+            const validationMessage = validateRegisterInput(username, email, password);
+            if (validationMessage != "") {
+                showFormMessage(messageElement, 'danger', validationMessage);
+            }
+            else {
+                try {
+                    const response = await fetch('/api/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, email, password })
+                    });
+
+                    const result = await parseJson(response);
+
+                    if (!response.ok) {
+                        showFormMessage(messageElement, 'danger', result.message || 'Sikertelen regisztráció.');
+                    }
+                    else {
+                        showFormMessage(messageElement, 'success', result.message || 'Sikeres regisztráció.');
+                        registerForm.reset();
+                        hideModalById('registerModal');
+                        await refreshAuthUi();
+                        showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
+                    }
+                } catch (error) {
+                    showFormMessage(messageElement, 'danger', 'Nem sikerult csatlakozni a szerverhez.');
+                    console.error('Hiba a regisztráció soran:', error);
+                }
+            }
+        });
+    }
+}
+
+function validateRegisterInput(username, email, password) {
+    let message = "";
+
+    if (!username || !email || !password) {
+        message = 'Minden mező kitöltése kötelező.';
+    }
+    else if (username.length < 3 || username.length > 50) {
+        message = 'A felhasználónévnek 3 és 50 karakter között kell lennie.';
+    }
+    else if (!USERNAME_REGEX.test(username)) {
+        message = 'A felhasználónév csak alfanumerikus karaktereket, pontot, aláhúzást és kötőjelet tartalmazhat.';
+    }
+    else if (!EMAIL_REGEX.test(email)) {
+        message = 'Érvénytelen email cím formátum.';
+    }
+    else if (password.length < 8) {
+        message = 'A jelszónak legalább 8 karakter hosszú kell legyen.';
+    }
+    else if (!PASSWORD_REGEX.test(password)) {
+        message = 'A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot.';
+    }
+
+    return message;
+}
+async function handleLogout() {
+    try {
+        const response = await fetch('/api/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await parseJson(response);
+
+        if (response.ok) {
+            showToast(result.message || 'Sikeres kijelentkezés.');
+            if (typeof socket !== 'undefined') {
+                socket.disconnect();
+                socket.connect();
+            }
+            await refreshAuthUi();
+        } else {
+            showToast(result.message || 'Sikertelen kijelentkezés.');
+        }
+    } catch (error) {
+        console.error('Hiba a kijelentkezés során:', error);
+    }
+}
+
+function bindLogoutButtonUser() {
+    const btn = document.getElementById('logoutBtnUser');
+    if (btn) btn.addEventListener('click', handleLogout);
+}
+
+function bindLogoutButtonAdmin() {
+    const btn = document.getElementById('logoutBtnAdmin');
+    if (btn) btn.addEventListener('click', handleLogout);
+}
+
+async function refreshAuthUi() {
+    const guestActions = document.getElementById('guestActions');
+    const userActions = document.getElementById('userActions');
+    const adminActions = document.getElementById('adminActions');
+    const eloDisplay = document.getElementById('eloDisplay');
+    const welcomeMessage = document.querySelectorAll(".welcomeMessage");
+    const loginModalMessage = document.getElementById('loginMessage');
+    const registerModalMessage = document.getElementById('registerMessage');
+
+    try {
+        clearFormMessage(loginModalMessage);
+        clearFormMessage(registerModalMessage);
+        const data = await fetchSessionInfo();
+
+        if (!data.success) {
+            throw new Error('Nem sikerult lekerdezni a session informaciot.');
+        }
+        const user = data.user;
+        const loggedIn = Boolean(user);
+        const isAdmin = loggedIn && user.role === 'admin';
+
+        console.clear();
+        console.log('--- Auth Status Report ---');
+        console.log('Session info:', data);
+
+        if (typeof socket !== 'undefined') {
+            console.log('SocketInfo:', {
+                socketId: socket.id,
+                connected: socket.connected,
+                // Itt láthatod, hogy a szerver felismerte-e a session-t a socketen keresztül
+                sessionBound: socket.connected ? "Active" : "Disconnected/Pending"
+            });
+        }
+        else {
+            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+        }
+        console.log('--------------------------');
+
+        if (guestActions) guestActions.classList.toggle('d-none', loggedIn);
+        if (userActions) userActions.classList.toggle('d-none', !loggedIn || isAdmin);
+        if (adminActions) adminActions.classList.toggle('d-none', !isAdmin);
+        if (eloDisplay) eloDisplay.classList.toggle('d-none', !loggedIn);
+
+        if (welcomeMessage) {
+            welcomeMessage.forEach(el => {
+                el.innerText = loggedIn ? `Szia, ${user.username}!` : '';
+            });
+        }
+        if (loggedIn && user.elo !== undefined && eloDisplay) {
+            eloDisplayrefresh(user);
+        }
+    } catch (error) {
+        console.error('Hiba az auth allapot frissitesekor:', error);
+        if (guestActions) guestActions.classList.remove('d-none');
+        if (userActions) userActions.classList.add('d-none');
+        if (adminActions) adminActions.classList.add('d-none');
+        if (eloDisplay) eloDisplay.classList.add('d-none');
+        if (welcomeMessage) welcomeMessage.forEach(el => el.innerText = '');
+    }
+}
+function eloDisplayrefresh(user) {
+    try {
+        if (user || user.stats) {
+            const eloMap = {
+                'user_elo': user.elo,
+                'user_MM_elo': user.elo_MM,
+                'user_bullet_elo': user.elo_bullet,
+            };
+            for (const [key, value] of Object.entries(eloMap)) {
+                const element = document.querySelector(`[data-stat="${key}"]`);
+                if (element) element.textContent = value !== undefined ? value : '1200';
+            }
+            const stats = user.stats || {};
+            const totalGames = (stats.wins || 0) + (stats.losses || 0) + (stats.draws || 0);
+            let winRate = 0;
+            if (totalGames > 0) {
+                winRate = ((stats.wins || 0) / totalGames * 100).toFixed(2) + '%';
+            }
+            const winRateElement = document.querySelector(`[data-stat="user_winRate"]`);
+            if (winRateElement) winRateElement.textContent = winRate;
+        } else {
+            console.warn('ELO display refresh: Nincs elérhető user adat a megjelenítéshez.');
+        }
+    } catch (error) {
+        console.error('Hiba az ELO display frissítésekor:', error);
+    }
+}
+function socketHandler() {
+    if (typeof socket !== 'undefined') {
+        socket.on('stats:public', (stats) => {
+            // stats tartalma: { onlineUsers, totalUsers, totalGames, onlineGames }
+            updateGlobalStats(stats);
+        });
+    }
+}
+
+const statsElements = {
+    players: document.querySelector('[data-stat="players"]'),
+    liveGames: document.querySelector('[data-stat="liveGames"]'),
+    online: document.querySelector('[data-stat="online"]'),
+    allGames: document.querySelector('[data-stat="allGames"]')
+};
+
+function updateGlobalStats(stats) {
+    const mapping = {
+        players: stats.totalUsers,
+        liveGames: stats.onlineGames,
+        online: stats.onlineUsers,
+        allGames: stats.totalGames
+    };
+
+    Object.keys(mapping).forEach(key => {
+
+        const el = statsElements[key];
+        const newValue = mapping[key] ?? 0;
+
+        if (!el) return;
+
+        if (el.textContent != newValue) {
+
+            el.textContent = newValue;
+
+            el.classList.remove('stat-update-anim');
+            void el.offsetWidth;
+            el.classList.add('stat-update-anim');
+
+            setTimeout(() => {
+                el.classList.remove('stat-update-anim');
+            }, 600);
+        }
+    });
+}
+
+function clearFormMessage(messageElement) {
+    if (!messageElement) {
+        return;
+    }
+
+    messageElement.className = 'mt-3 text-center alert d-none';
+    messageElement.textContent = '';
+}
+
+function showFormMessage(messageElement, type, message) {
+    if (!messageElement) {
+        return;
+    }
+
+    messageElement.className = `mt-3 text-center alert alert-${type}`;
+    messageElement.textContent = message;
+}
+
+function hideModalById(modalId) {
+    const modalElement = document.getElementById(modalId);
+    if (!modalElement || !window.bootstrap || !window.bootstrap.Modal) {
+        return;
+    }
+
+    if (modalElement.contains(document.activeElement)) {
+        document.activeElement.blur();
+    }
+
+    const modalInstance = window.bootstrap.Modal.getOrCreateInstance(modalElement);
+    modalInstance.hide();
+}
+
+function installModalFocusGuards() {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach((modal) => {
+        modal.addEventListener('hide.bs.modal', () => {
+            if (modal.contains(document.activeElement)) {
+                document.activeElement.blur();
+            }
+        });
+    });
+}
+
+function showToast(message) {
+    const toastBody = document.getElementById('appToastBody');
+    const toastElement = document.getElementById('appToast');
+
+    if (toastBody) {
+        toastBody.textContent = message;
+    }
+
+    if (!toastElement || !window.bootstrap || !window.bootstrap.Toast) {
+        return;
+    }
+
+    const toast = window.bootstrap.Toast.getOrCreateInstance(toastElement);
+    toast.show();
+}
+
+function restoreLastMode() {
+    const lastModeLabel = document.getElementById('lastModeLabel');
+    if (!lastModeLabel) {
+        return;
+    }
+
+    const storedMode = localStorage.getItem('selectedGameMode');
+    if (storedMode) {
+        lastModeLabel.textContent = storedMode;
+    }
+}
+
+function selectGame(mode) {
+    const lastModeLabel = document.getElementById('lastModeLabel');
+    if (lastModeLabel) {
+        lastModeLabel.textContent = mode;
+    }
+
+    localStorage.setItem('selectedGameMode', mode);
+    window.location.href = `../chess_barold/html/chess.html?mode=${encodeURIComponent(mode)}`;
+}
+
+window.selectGame = selectGame;
