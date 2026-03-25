@@ -653,3 +653,31 @@ h6 {
     background: linear-gradient(135deg, #10b981, #059669);
     color: #fff;
 }
+
+.rank-beginner {
+    background: linear-gradient(135deg, #e94560, #be123c);
+    color: #fff;
+}
+
+.rank-grandmaster {
+    background: linear-gradient(135deg, #ba37d4, #b8941f);
+    color: #000;
+}
+
+.table {
+    color: var(--text-primary);
+    margin-bottom: 0;
+    font-size: 0.9rem;
+}
+
+.table thead th {
+    background-color: rgba(2, 6, 23, 0.5);
+    color: var(--accent-gold);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    border-top: none;
+    padding: 14px 16px;
+}
