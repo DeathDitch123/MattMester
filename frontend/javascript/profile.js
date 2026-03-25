@@ -6,7 +6,7 @@ const socket = io();
 lucide.createIcons();
 
 document.addEventListener('DOMContentLoaded', () => {
-    logSessionAndSocketInfo();
+    refreshAuthUi();
 });
 // Ez parsol
 async function parseJson(response) {
@@ -57,6 +57,7 @@ async function logSessionAndSocketInfo() {
 
 async function refreshAuthUi() {
     const sessionInfo = await fetchSessionInfo();
+    logSessionAndSocketInfo();
     
 }
 

@@ -33,6 +33,19 @@ io.engine.use(sessionMiddleware); //?Socket.io session kezelés
 app.use(express.json()); //?Middleware JSON
 app.set('trust proxy', 1); //?Middleware Proxy
 
+// Belepett felhasznalo ellenorzese vedett oldalakhoz
+function requireAuth(req, res, next) {
+    if (!req.session || !req.session.userId) {
+        return res.redirect('/');
+    }
+    next();
+}
+
+// Vedett oldalak: ha nincs session, visszadob az indexre
+app.get('/html/profile.html', requireAuth, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/html/profile.html'));
+});
+
 //!Szerver futtatása
 app.use(express.static(path.join(__dirname, '../frontend'))); //?frontend mappa tartalmának betöltése az oldal működéséhez
 
