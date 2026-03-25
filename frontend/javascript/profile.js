@@ -6,7 +6,7 @@ const socket = io();
 lucide.createIcons();
 
 document.addEventListener('DOMContentLoaded', () => {
-
+    logSessionAndSocketInfo();
 });
 // Ez parsol
 async function parseJson(response) {
@@ -29,6 +29,30 @@ async function fetchSessionInfo() {
         console.error('Hiba a session informacio lekerdezese soran:', error);
     }
     return result;
+}
+
+async function logSessionAndSocketInfo() {
+    try {
+        const sessionInfo = await fetchSessionInfo();
+
+        console.clear();
+        console.log('--- Auth Status Report ---');
+        console.log('Session info:', sessionInfo);
+
+        if (typeof socket !== 'undefined') {
+            console.log('SocketInfo:', {
+                socketId: socket.id,
+                connected: socket.connected,
+                sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
+            });
+        } else {
+            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+        }
+
+        console.log('--------------------------');
+    } catch (error) {
+        console.error('Hiba a session/socket informacio naplozasakor:', error);
+    }
 }
 
 // Mobile Sidebar Toggle
