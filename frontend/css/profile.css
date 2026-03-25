@@ -1146,3 +1146,51 @@ h6 {
 .friend-status.ingame {
     background-color: var(--accent-gold);
 }
+
+.ability-card {
+    background: linear-gradient(135deg, rgba(2, 6, 23, 0.6) 0%, rgba(2, 6, 23, 0.3) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 18px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.ability-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-gold);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.ability-card:hover {
+    border-color: rgba(212, 175, 55, 0.3);
+    transform: translateX(4px);
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.05) 0%, rgba(2, 6, 23, 0.4) 100%);
+}
+
+.ability-card:hover::before {
+    opacity: 1;
+}
+
+.ability-icon {
+    width: 44px;
+    height: 44px;
+    background-color: rgba(212, 175, 55, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-gold);
+    transition: transform 0.3s ease;
+}
+
+.ability-card:hover .ability-icon {
+    transform: rotate(5deg) scale(1.05);
+}
