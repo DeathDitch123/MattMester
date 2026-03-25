@@ -1194,3 +1194,27 @@ h6 {
 .ability-card:hover .ability-icon {
     transform: rotate(5deg) scale(1.05);
 }
+
+.security-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.security-item:last-child {
+    border-bottom: none;
+}
+
+.text-success {
+    color: var(--accent-green) !important;
+}
+
+.text-danger {
+    color: var(--accent-red) !important;
+}
+
+.text-warning {
+    color: var(--accent-gold) !important;
+}
