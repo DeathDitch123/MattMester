@@ -199,7 +199,7 @@ router.post('/register', async (request, response) => {
 
                                             request.session.userId = result.insertId;
                                             request.session.username = username;
-                                            request.session.role = 'user';
+                                            request.session.role = 'player';
                                             request.session.elo = 1200;
                                             request.session.elo_MM = 1200;
                                             request.session.elo_bullet = 1200;

@@ -349,7 +349,7 @@ async function refreshAuthUi() {
 }
 function eloDisplayrefresh(user) {
     try {
-        if (user || user.stats) {
+        if (user && user.stats) {
             const eloMap = {
                 'user_elo': user.elo,
                 'user_MM_elo': user.elo_MM,

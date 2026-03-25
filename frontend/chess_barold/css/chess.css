@@ -559,3 +559,131 @@ body
 .new-game-btn:hover {
     background: #6a8a4e;
 }
+
+.new-game-btn.hidden {
+    display: none;
+}
+
+/* FELADÁS GOMB */
+.felad-btn {
+    background: #c0392b;
+    color: white;
+    border: 0;
+    padding: 10px;
+    border-radius: 8px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+}
+
+.felad-btn:hover {
+    background: #e74c3c;
+}
+
+.felad-btn.hidden {
+    display: none;
+}
+
+/* FELADÁS MEGERŐSÍTŐ MODAL */
+.surrender-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+}
+
+.surrender-modal.hidden {
+    display: none;
+}
+
+.surrender-modal-content {
+    background: #2b2926;
+    border: 2px solid #c0392b;
+    border-radius: 16px;
+    padding: 36px 32px;
+    max-width: 360px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+}
+
+.surrender-title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #f4f4f4;
+    margin: 0 0 4px 0;
+}
+
+.surrender-subtitle {
+    font-size: 0.9rem;
+    color: #aaa;
+    margin: 0 0 20px 0;
+}
+
+.surrender-confirm-btn {
+    width: 100%;
+    padding: 14px;
+    background: #c0392b;
+    color: white;
+    border: 0;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    margin-bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+}
+
+.surrender-confirm-btn small {
+    font-size: 0.75rem;
+    font-weight: 400;
+    opacity: 0.8;
+}
+
+/* Hosszan nyomás progress csík */
+.surrender-confirm-btn::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.7);
+    width: 0%;
+    transition: none;
+}
+
+.surrender-confirm-btn.holding::after {
+    width: 100%;
+    transition: width 1.5s linear;
+}
+
+.surrender-cancel-btn {
+    width: 100%;
+    padding: 10px;
+    background: none;
+    color: #aaa;
+    border: 1px solid #555;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.surrender-cancel-btn:hover {
+    color: #f4f4f4;
+    border-color: #999;
+}

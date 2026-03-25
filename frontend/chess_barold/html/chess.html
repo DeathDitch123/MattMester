@@ -8,10 +8,43 @@
     <script type="module" src="../javascript/main.js"></script>
 </head>
 <body>
+    <!-- JÁTÉKMÓD VÁLASZTÓ MODAL -->
+    <div id="mode-modal" class="mode-modal">
+        <div class="mode-modal-content">
+            <h2 class="mode-title">Mattmester</h2>
+            <p class="mode-subtitle">Válassz játékmódot</p>
+
+            <!-- 1. LÉPÉS: Mód választás -->
+            <div id="mode-step1" class="mode-step">
+                <button class="mode-btn" id="mode-bot">
+                    <span class="mode-icon">🤖</span>
+                    <span class="mode-label">Robot ellen</span>
+                </button>
+                <button class="mode-btn mode-btn-disabled" id="mode-pvp" disabled>
+                    <span class="mode-icon">👥</span>
+                    <span class="mode-label">Játékos ellen</span>
+                    <span class="mode-soon">Hamarosan</span>
+                </button>
+            </div>
+
+            <!-- 2. LÉPÉS: Nehézség választás -->
+            <div id="mode-step2" class="mode-step hidden">
+                <p class="mode-subtitle">Robot nehézség</p>
+                <div id="difficulty-list" class="difficulty-list"></div>
+                <button class="mode-back-btn" id="mode-back">← Vissza</button>
+            </div>
+
+            <!-- ELO kijelzés -->
+            <div id="user-elo-display" class="user-elo-display">
+                Az ELO-d: <strong id="user-elo-value">800</strong>
+            </div>
+        </div>
+    </div>
+
     <div class="app">
         <header class="topbar">
             <div class="player player-black">
-                <div class="name">Magnus</div>
+                <div class="name" id="name-black">Ellenfél</div>
                 <div class="clock" id="clock-black">10:00</div>
             </div>
         </header>
@@ -36,7 +69,12 @@
                     Aktív: <strong id="turn-name">fehér</strong>
                 </div>
                 <div id="status" class="status">játékon</div>
-                <button id="resetBtn">Újra</button>
+
+                <!-- ELO változás kijelzés -->
+                <div id="elo-change" class="elo-change hidden"></div>
+
+                <button id="feladBtn" class="felad-btn">Feladás</button>
+                <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
                 <div class="legend">
                     <div><span class="legend-sq from"></span> Utolsó lépés</div>
                     <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
@@ -50,10 +88,22 @@
 
         <footer class="bottombar">
             <div class="player player-white">
-                <div class="name">Orlan</div>
+                <div class="name" id="name-white">Te</div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
         </footer>
+    </div>
+    <!-- FELADÁS MEGERŐSÍTŐ MODAL -->
+    <div id="surrender-modal" class="surrender-modal hidden">
+        <div class="surrender-modal-content">
+            <p class="surrender-title">Biztos fel akarod adni?</p>
+            <p class="surrender-subtitle">Nyomd hosszan:</p>
+            <button id="surrenderConfirmBtn" class="surrender-confirm-btn">
+                Feladás
+                <small>(Nyomja hosszan)</small>
+            </button>
+            <button id="surrenderCancelBtn" class="surrender-cancel-btn">Mégse</button>
+        </div>
     </div>
 </body>
 </html>
