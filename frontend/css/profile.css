@@ -690,9 +690,47 @@ h6 {
     transition: background-color 0.2s ease;
 }
 
-.table tbody tr{
+.table tbody tr {
     transition: background-color 0.2s ease;
 }
+
 .table tbody tr:hover {
     background-color: rgba(2, 6, 23, 0.3);
+}
+
+.table tbody tr:hover td {
+    color: var(--text-primary);
+}
+
+.badge-custom {
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.badge-win {
+    background-color: rgba(16, 185, 129, 0.15);
+    color: var(--accent-green);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.badge-loss {
+    background-color: rgba(233, 69, 96, 0.15);
+    color: var(--accent-red);
+    border: 1px solid rgba(233, 69, 96, 0.2);
+}
+
+.badge-draw {
+    background-color: rgba(148, 163, 184, 0.15);
+    color: var(--text-secondary);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+}
+
+.badge-ongoing {
+    background-color: rgba(59, 130, 246, 0.15);
+    color: var(--accent-blue);
+    border: 1px solid rgba(59, 130, 246, 0.2);
 }
