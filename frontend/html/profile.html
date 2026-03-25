@@ -125,38 +125,42 @@
         <div class="main-content-inner" id="dashboard">
             <!-- Dashboard row 1 -->
             <div class="profile-header animate-in animate-in-1 section-block" id="profile">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <div class="d-flex flex-wrap align-items-center gap-4">
+                <div class="row align-items-center gy-4">
+                    <div class="col-12 col-md-7">
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-4">
                             <div class="position-relative">
-                                <img src="https://ui-avatars.com/api/?name=GrandMaster_99&background=1e293b&color=d4af37&size=240"
-                                    alt="Profile" class="profile-avatar" id="profileAvatarMain">
+                                <img class="profile-avatar"
+                                    src="https://ui-avatars.com/api/?name=Grand+Master&background=d4af37&color=000&size=128"
+                                    alt="GrandMaster_99">
                                 <span class="position-absolute bottom-0 end-0 p-1">
-                                    <span class="status-dot"></span>
+                                    <span class="status-dot shadow-glow"></span>
                                 </span>
                             </div>
-                            <div>
-                                <div class="d-flex align-items-center gap-3 mb-2">
-                                    <h1 class="h3 mb-0 text-white">GrandMaster_99</h1>
+
+                            <div class="text-center text-md-start">
+                                <div
+                                    class="d-flex align-items-center justify-content-center justify-content-md-start gap-3 mb-2">
+                                    <h1 class="h3 mb-0 text-white fw-bold">GrandMaster_99</h1>
                                     <span class="role-badge admin">Admin</span>
                                 </div>
-                                <p class="text-secondary mb-2">admin@mattmester.com</p>
-                                <div class="profile-status">
+                                <p class="text-secondary mb-2 opacity-75">admin@mattmester.com</p>
+                                <div
+                                    class="profile-status d-flex align-items-center justify-content-center justify-content-md-start gap-2">
                                     <span class="status-dot"></span>
-                                    Online
+                                    <span class="text-uppercase small fw-bold tracking-wider">Online</span>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-md-5 mt-4 mt-md-0">
-                        <div class="d-flex justify-content-md-end flex-wrap gap-3">
+                    <div class="col-12 col-md-5">
+                        <div class="d-flex justify-content-center justify-content-md-end flex-wrap gap-3">
                             <div class="elo-display text-center">
                                 <div class="elo-number">1,500</div>
                                 <div class="elo-label">Klasszikus</div>
                                 <div class="elo-rank rank-master">Master</div>
                             </div>
-                            <div class="elo-display text-center">
+                            <div class="elo-display text-center highlighted">
                                 <div class="elo-number">1,650</div>
                                 <div class="elo-label">MattMester</div>
                                 <div class="elo-rank rank-master">Master</div>
@@ -559,9 +563,7 @@
             MattMester
         </div>
         <div class="footer-links">
-            <a href="#">Home</a>
-            <a href="#">Leaderboard</a>
-            <a href="#">Help Center</a>
+            <a href="/">Home</a>
         </div>
         <div class="footer-copy">&copy; 2026 MattMester</div>
     </footer>
