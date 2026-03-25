@@ -81,29 +81,39 @@
     <main class="main-content">
         <!-- Top Bar -->
         <div class="top-bar">
-            <div class="d-flex align-items-center gap-3">
-                <button class="btn btn-outline-gold d-lg-none py-1 px-2" onclick="toggleSidebar()">
+            <div class="top-bar-left">
+                <button
+                    class="btn btn-outline-gold d-lg-none py-1 px-2 d-flex align-items-center justify-content-center"
+                    onclick="toggleSidebar()" style="height: 40px; width: 40px; border-radius: 12px;">
                     <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
                 </button>
-                <div class="top-bar-search d-none d-md-block">
-                    <input type="text" placeholder="Search games, players...">
+                <div class="top-bar-search d-none d-lg-block">
+                    <input type="text" placeholder="Keresés játékosokra, meccsekre...">
                 </div>
             </div>
 
-            <div class="top-bar-actions">
-                <!-- talán fényes sötét mód?-->
-                <!-- <div class="theme-toggle" data-tooltip="Toggle Theme">
-                    <div class="theme-toggle-knob">
-                        <i data-lucide="moon" style="width: 12px; height: 12px; color: var(--bg-sidebar);"></i>
-                    </div>
-                </div> -->
-                <button class="top-bar-btn" type="button" data-tooltip="Notifications" data-bs-toggle="modal"
+            <div class="top-bar-center d-lg-none">
+                <i data-lucide="crown" style="color: var(--accent-gold); width: 22px; height: 22px;"></i>
+                <span
+                    style="font-family: 'Playfair Display', serif; font-weight: 700; color: var(--text-primary); font-size: 1.1rem; letter-spacing: 0.5px;">MattMester</span>
+            </div>
+
+            <div class="top-bar-right">
+                <div class="d-none d-md-flex align-items-center gap-2">
+                    <button class="top-bar-btn" id="openMessagesModal" type="button" data-tooltip="Üzenetek"
+                        data-bs-toggle="modal" data-bs-target="#messagesModal">
+                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                    </button>
+                </div>
+
+                <button class="top-bar-btn" type="button" data-tooltip="Értesítések" data-bs-toggle="modal"
                     data-bs-target="#notificationsModal">
                     <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
                     <span class="notification-dot"></span>
                 </button>
+
                 <div class="top-bar-user">
-                    <div class="top-bar-user-info">
+                    <div class="top-bar-user-info d-none d-sm-block">
                         <div class="top-bar-user-name">GrandMaster_99</div>
                         <div class="top-bar-user-role">Admin</div>
                     </div>

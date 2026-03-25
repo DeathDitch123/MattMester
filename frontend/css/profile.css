@@ -258,10 +258,13 @@ h6 {
     background: linear-gradient(135deg, rgba(2, 6, 23, 0.45), rgba(2, 6, 23, 0.2));
 }
 
+/* Top Bar - Újradolgozott, szimmetrikus verzió */
 .top-bar {
-    background: rgba(30, 41, 59, 0.8);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--border-color);
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+    /* Finom arany csík */
     padding: 12px 24px;
     display: flex;
     justify-content: space-between;
@@ -269,6 +272,32 @@ h6 {
     position: sticky;
     top: 0;
     z-index: 100;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.top-bar-left,
+.top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 2;
+}
+
+.top-bar-right {
+    justify-content: flex-end;
+}
+
+/* Középső elem (Mobilon a logó) - Abszolút középre igazítva a szimmetria miatt */
+.top-bar-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    z-index: 1;
+    white-space: nowrap;
 }
 
 .top-bar-search {
@@ -277,20 +306,21 @@ h6 {
 }
 
 .top-bar-search input {
-    background: var(--bg-dark);
+    background: rgba(2, 6, 23, 0.6);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
     padding: 8px 12px 8px 38px;
-    border-radius: 10px;
+    border-radius: 12px;
     width: 100%;
     font-size: 0.875rem;
     transition: all 0.3s ease;
 }
 
 .top-bar-search input:focus {
-    border-color: var(--accent-gold);
     outline: none;
+    border-color: var(--accent-gold);
     box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+    background: var(--bg-dark);
 }
 
 .top-bar-search input::placeholder {
@@ -307,19 +337,13 @@ h6 {
     height: 16px;
 }
 
-.top-bar-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
 .top-bar-btn {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -332,40 +356,49 @@ h6 {
     background: rgba(212, 175, 55, 0.1);
     color: var(--accent-gold);
     border-color: rgba(212, 175, 55, 0.3);
+    transform: translateY(-2px);
 }
 
 .notification-dot {
     position: absolute;
-    top: 6px;
-    right: 6px;
+    top: 8px;
+    right: 8px;
     width: 8px;
     height: 8px;
     background: var(--accent-red);
     border-radius: 50%;
     border: 2px solid var(--bg-card);
+    box-shadow: 0 0 5px var(--accent-red);
 }
 
 .top-bar-user {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 4px 12px 4px 4px;
+    padding: 4px 14px 4px 4px;
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid var(--border-color);
-    border-radius: 12px;
+    border-radius: 14px;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .top-bar-user:hover {
     border-color: rgba(212, 175, 55, 0.3);
+    background: rgba(212, 175, 55, 0.05);
 }
 
 .top-bar-user img {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
     object-fit: cover;
+    border: 2px solid transparent;
+    transition: border-color 0.2s ease;
+}
+
+.top-bar-user:hover img {
+    border-color: var(--accent-gold);
 }
 
 .top-bar-user-info {
@@ -381,6 +414,32 @@ h6 {
 .top-bar-user-role {
     font-size: 0.7rem;
     color: var(--accent-gold);
+}
+
+/* Responsive kiigazítások a Top Bar-hoz */
+@media (max-width: 991.98px) {
+    .top-bar {
+        padding: 10px 16px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .top-bar-user {
+        padding: 0;
+        border: none;
+        background: transparent;
+    }
+
+    .top-bar-user img {
+        width: 40px;
+        height: 40px;
+        border-radius: 12px;
+    }
+
+    .top-bar-user:hover {
+        background: transparent;
+        border-color: transparent;
+    }
 }
 
 .card {
