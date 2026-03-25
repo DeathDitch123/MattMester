@@ -578,7 +578,8 @@ h6 {
         opacity: 0.5;
     }
 }
-.role-badge{
+
+.role-badge {
     background-color: var(--accent-gold);
     color: var(--bg-sidebar);
     padding: 4px 12px;
@@ -587,4 +588,28 @@ h6 {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.role-badge.admin {
+    background-color: var(--accent-red);
+    color: white;
+}
+
+/* ELO Rating Display */
+.elo-display {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.12) 0%, rgba(212, 175, 55, 0.04) 100%);
+    border: 2px solid var(--accent-gold);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+    min-width: 160px;
+    position: relative;
+    animation: glowPulse 3s ease infinite;
+}
+.elo-number {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--accent-gold);
+    font-family: 'Playfair Display', serif;
+    line-height: 1;
 }
