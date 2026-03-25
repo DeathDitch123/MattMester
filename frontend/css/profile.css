@@ -595,7 +595,6 @@ h6 {
     color: white;
 }
 
-/* ELO Rating Display */
 .elo-display {
     background: linear-gradient(135deg, rgba(212, 175, 55, 0.12) 0%, rgba(212, 175, 55, 0.04) 100%);
     border: 2px solid var(--accent-gold);
@@ -606,10 +605,31 @@ h6 {
     position: relative;
     animation: glowPulse 3s ease infinite;
 }
+
 .elo-number {
     font-size: 2.5rem;
     font-weight: 800;
     color: var(--accent-gold);
     font-family: 'Playfair Display', serif;
     line-height: 1;
+}
+
+.elo-label {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+.elo-rank {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
 }
