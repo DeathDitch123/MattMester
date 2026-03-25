@@ -785,3 +785,30 @@ h6 {
     border-radius: 10px;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+
+.btn-outline-gold:hover {
+    background-color: var(--accent-gold);
+    color: var(--bg-sidebar);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(212, 175, 55, 0.25);
+}
+
+.danger-zone {
+    margin-top: 28px;
+    padding: 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(233, 69, 96, 0.45);
+    background: linear-gradient(135deg, rgba(233, 69, 96, 0.12), rgba(2, 6, 23, 0.25));
+}
+
+.danger-zone-title {
+    color: #fecdd3;
+    font-weight: 700;
+    margin-bottom: 6px;
+}
+
+.danger-zone-text {
+    color: #fda4af;
+    font-size: 0.86rem;
+    margin-bottom: 12px;
+}
