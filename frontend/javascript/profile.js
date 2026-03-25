@@ -55,6 +55,11 @@ async function logSessionAndSocketInfo() {
     }
 }
 
+async function refreshAuthUi() {
+    const sessionInfo = await fetchSessionInfo();
+    
+}
+
 // Mobile Sidebar Toggle
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
