@@ -41,9 +41,20 @@ function requireAuth(req, res, next) {
     next();
 }
 
+function requireAdmin(req, res, next) {
+    if (!req.session || !req.session.userId || req.session.role !== 'admin') {
+        return res.redirect('/');
+    }
+    next();
+}
+
 // Vedett oldalak: ha nincs session, visszadob az indexre
 app.get('/html/profile.html', requireAuth, (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/html/profile.html'));
+});
+
+app.get('/html/adminPanel.html', requireAdmin, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/html/adminPanel.html'));
 });
 
 //!Szerver futtatása
