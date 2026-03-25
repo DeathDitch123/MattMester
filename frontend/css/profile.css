@@ -681,3 +681,18 @@ h6 {
     border-top: none;
     padding: 14px 16px;
 }
+
+.table tbody td {
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    color: var(--text-secondary);
+    padding: 14px 16px;
+    vertical-align: middle;
+    transition: background-color 0.2s ease;
+}
+
+.table tbody tr{
+    transition: background-color 0.2s ease;
+}
+.table tbody tr:hover {
+    background-color: rgba(2, 6, 23, 0.3);
+}
