@@ -744,3 +744,44 @@ h6 {
     background-color: var(--accent-gold);
     color: var(--bg-sidebar);
 }
+
+.btn-gold {
+    background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-hover));
+    border: none;
+    color: var(--bg-sidebar);
+    font-weight: 600;
+    padding: 8px 20px;
+    border-radius: 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-gold::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), transparent);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.btn-gold:hover::before {
+    opacity: 1;
+}
+
+.btn-gold:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(212, 175, 55, 0.35);
+    color: var(--bg-sidebar);
+}
+
+.btn-outline-gold {
+    background-color: transparent;
+    border: 1px solid rgba(212, 175, 55, 0.5);
+    color: var(--accent-gold);
+    font-weight: 600;
+    padding: 8px 20px;
+    border-radius: 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
