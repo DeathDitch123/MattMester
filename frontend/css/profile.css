@@ -1218,3 +1218,77 @@ h6 {
 .text-warning {
     color: var(--accent-gold) !important;
 }
+
+@media (max-width: 991.98px) {
+    .sidebar {
+        transform: translateX(-100%);
+        width: 280px;
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .mobile-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 999;
+        backdrop-filter: blur(4px);
+    }
+
+    .mobile-overlay.show {
+        display: block;
+    }
+
+    .top-bar-search {
+        width: 180px;
+    }
+
+    .fab-quick-play {
+        bottom: 20px;
+        right: 20px;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+    }
+
+    .fab-chat {
+        bottom: 84px;
+        right: 20px;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .top-bar-search {
+        display: none;
+    }
+
+    .top-bar-user-info {
+        display: none;
+    }
+
+    .main-content-inner {
+        padding: 16px;
+    }
+
+    .profile-header {
+        padding: 20px;
+    }
+
+    .profile-avatar {
+        width: 80px;
+        height: 80px;
+    }
+}
