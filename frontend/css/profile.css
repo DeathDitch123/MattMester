@@ -734,3 +734,13 @@ h6 {
     color: var(--accent-blue);
     border: 1px solid rgba(59, 130, 246, 0.2);
 }
+
+.badge-admin {
+    background-color: var(--accent-red);
+    color: white;
+}
+
+.badge-player {
+    background-color: var(--accent-gold);
+    color: var(--bg-sidebar);
+}
