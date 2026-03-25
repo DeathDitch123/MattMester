@@ -1,5 +1,35 @@
-// Initialize Lucide Icons
+const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
+const socket = io();
 lucide.createIcons();
+
+document.addEventListener('DOMContentLoaded', () => {
+
+});
+// Ez parsol
+async function parseJson(response) {
+    try {
+        return await response.json();
+    } catch (error) {
+        return {};
+    }
+}
+//sessionInfo
+async function fetchSessionInfo() {
+    let result = { success: false, loggedIn: false };
+    try {
+        const response = await fetch('/api/sessionInfo');
+        const data = await parseJson(response);
+        if (response.ok) {
+            result = data;
+        }
+    } catch (error) {
+        console.error('Hiba a session informacio lekerdezese soran:', error);
+    }
+    return result;
+}
 
 // Mobile Sidebar Toggle
 function toggleSidebar() {
