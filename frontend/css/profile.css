@@ -1077,3 +1077,72 @@ h6 {
     margin-bottom: 8px;
     font-size: 0.875rem;
 }
+
+.progress {
+    background-color: rgba(2, 6, 23, 0.5);
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.progress-bar {
+    background: linear-gradient(90deg, var(--accent-gold), var(--accent-gold-hover));
+    border-radius: 3px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Friends List */
+.friend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 0;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    cursor: pointer;
+}
+
+.friend-item:last-child {
+    border-bottom: none;
+}
+
+.friend-item:hover {
+    background-color: rgba(212, 175, 55, 0.05);
+    padding-left: 20px;
+}
+
+.friend-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--bg-sidebar);
+    border: 2px solid var(--border-color);
+    transition: border-color 0.2s ease;
+}
+
+.friend-item:hover .friend-avatar {
+    border-color: var(--accent-gold);
+}
+
+.friend-status {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    border: 2px solid var(--bg-card);
+}
+
+.friend-status.online {
+    background-color: var(--accent-green);
+}
+
+.friend-status.offline {
+    background-color: var(--text-secondary);
+}
+
+.friend-status.ingame {
+    background-color: var(--accent-gold);
+}
