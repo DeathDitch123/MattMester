@@ -545,3 +545,16 @@ h6 {
 .profile-avatar:hover {
     transform: scale(1.05);
 }
+
+.profile-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(16, 185, 129, 0.1);
+    color: var(--accent-green);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-top: 8px;
+}
