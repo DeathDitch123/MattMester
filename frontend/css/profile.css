@@ -633,3 +633,23 @@ h6 {
     letter-spacing: 0.5px;
     text-transform: uppercase;
 }
+
+.rank-master {
+    background: linear-gradient(135deg, #d4af37, #b8941f);
+    color: #000;
+}
+
+.rank-expert {
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    color: #fff;
+}
+
+.rank-advanced {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: #fff;
+}
+
+.rank-intermediate {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+}
