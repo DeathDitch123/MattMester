@@ -454,3 +454,27 @@ h6 {
     margin-bottom: 16px;
     transition: transform 0.3s ease;
 }
+
+.stat-card:hover .stat-icon {
+    transform: scale(1.1);
+}
+
+.stat-icon.gold {
+    background-color: rgba(212, 175, 55, 0.2);
+    color: var(--accent-gold);
+}
+
+.stat-icon.green {
+    background-color: rgba(16, 185, 129, 0.2);
+    color: var(--accent-green);
+}
+
+.stat-icon.red {
+    background-color: rgba(233, 69, 96, 0.2);
+    color: var(--accent-red);
+}
+
+.stat-icon.blue {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: var(--accent-blue);
+}
