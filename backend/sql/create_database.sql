@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS profile_image_uploads (
     reviewed_by INT,
     review_time TIMESTAMP NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (reviewed_by) REFERENCES users(id)
+    FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL 
 );
 
 -- 2. Bejelentkezési előzmények
@@ -64,8 +64,9 @@ SELECT id FROM users WHERE username = 'admin';
 -- 4. Képességek tábla
 CREATE TABLE IF NOT EXISTS abilities (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    description TEXT
+    name VARCHAR(100) NOT NULL UNIQUE, 
+    description TEXT,
+    cooldown_turns INT DEFAULT 0
 );
 
 -- 5. Játékok tábla
@@ -76,6 +77,8 @@ CREATE TABLE IF NOT EXISTS games (
     winner_id INT,
     time_control VARCHAR(20) DEFAULT '10+0',
     initial_fen VARCHAR(100) DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    current_fen VARCHAR(100), -- Az aktuális állás tárolása. Így oldalfrissítéskor nem kell az összes lépésből kiszámolni a táblát.
+    pgn TEXT, --  A teljes meccs PGN formátumban való tárolása a meccs végén. Exportáláshoz elengedhetetlen.
     start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     end_time TIMESTAMP NULL,
     status ENUM('ongoing', 'finished', 'abandoned', 'draw') DEFAULT 'ongoing',
@@ -100,10 +103,12 @@ CREATE TABLE IF NOT EXISTS moves (
     id INT AUTO_INCREMENT PRIMARY KEY,
     game_id INT NOT NULL,
     player_id INT NOT NULL,
-    move_number INT NOT NULL,
+    ply_number INT NOT NULL, -- move_number helyett ply_number (fél-lépés), ez a standard a sakk motoroknál.
+    san VARCHAR(10) NOT NULL, -- Standard Algebraic Notation (pl. "Nxf3+"). Létfontosságú a felhasználói felülethez és a PGN generáláshoz.
     piece VARCHAR(10),
     from_pos VARCHAR(5),
     to_pos VARCHAR(5),
+    fen_after VARCHAR(100) NOT NULL, -- Eltároljuk a tábla állapotát a lépés után. Visszajátszáshoz (replay) kötelező!
     is_capture BOOLEAN DEFAULT FALSE,
     is_check BOOLEAN DEFAULT FALSE,
     is_checkmate BOOLEAN DEFAULT FALSE,
@@ -116,22 +121,30 @@ CREATE TABLE IF NOT EXISTS moves (
 -- 8. Képességhasználati napló
 CREATE TABLE IF NOT EXISTS ability_log (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    move_id INT NOT NULL,
+    game_id INT NOT NULL, -- Hozzáadtam a game_id-t a gyorsabb lekérdezésekhez (hogy ne kelljen JOIN-olni a moves táblát, ha egy meccs összes képességére vagyunk kíváncsiak).
+    move_id INT, -- Lehet NULL, ha egy képességet nem konkrét lépéshez kötve használnak el (pl. passzív pajzs aktiválása a kör elején).
+    player_id INT NOT NULL, -- Tudnunk kell, ki használta, anélkül is, hogy a move_id-ből fejtenénk vissza.
     ability_id INT NOT NULL,
+    used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
     FOREIGN KEY (move_id) REFERENCES moves(id) ON DELETE CASCADE,
+    FOREIGN KEY (player_id) REFERENCES users(id),
     FOREIGN KEY (ability_id) REFERENCES abilities(id)
 );
 
 -- 9. Barátok tábla
 CREATE TABLE IF NOT EXISTS friends (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    user_init_id INT NOT NULL,
-    user_recv_id INT NOT NULL,
+    user1_id INT NOT NULL, -- user_init_id helyett. Ide MINDIG a kisebb ID kerül.
+    user2_id INT NOT NULL, -- user_recv_id helyett. Ide MINDIG a nagyobb ID kerül.
+    action_user_id INT NOT NULL, -- Ő az, aki valójában kezdeményezte a jelölést (hogy tudjuk, kinek kell elfogadnia).
     status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
     invite_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE KEY unique_friendship (user_init_id, user_recv_id),
-    FOREIGN KEY (user_init_id) REFERENCES users(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_recv_id) REFERENCES users(id) ON DELETE CASCADE
+    UNIQUE KEY unique_friendship (user1_id, user2_id),
+    CHECK (user1_id < user2_id), -- Ez a zseniális trükk megakadályozza a (1, 2) és (2, 1) duplikációkat adatbázis szinten!
+    FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (action_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
 
