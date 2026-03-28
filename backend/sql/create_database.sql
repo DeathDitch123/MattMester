@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) BINARY UNIQUE NOT NULL, 
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
+    profile_image VARCHAR(255) DEFAULT NULL,
     elo INT DEFAULT 1200,
     elo_MM INT DEFAULT 1200,
     elo_bullet INT DEFAULT 1200,
@@ -21,6 +22,19 @@ CREATE TABLE IF NOT EXISTS users (
 -- Admin felhasználó beszúrása (ha még nem létezik) - a jelszó "chu+)2_23iIa6sou&>#o79247r9Xbsibv%" (bcrypt hash: $2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq)
 INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
 VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
+
+CREATE TABLE IF NOT EXISTS profile_image_uploads (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    filename VARCHAR(255) NOT NULL,
+    upload_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+    review_note TEXT,
+    reviewed_by INT,
+    review_time TIMESTAMP NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (reviewed_by) REFERENCES users(id)
+);
 
 -- 2. Bejelentkezési előzmények
 CREATE TABLE IF NOT EXISTS login_history (
