@@ -620,6 +620,40 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="deleteProfileModal" tabindex="-1" aria-labelledby="deleteProfileModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-delete">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="deleteProfileModalLabel">
+                        <i data-lucide="trash-2" style="width: 18px; height: 18px; color: var(--accent-red);"></i>
+                        Delete Profile Confirmation
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3 text-secondary">This action will remove your profile data from this browser
+                        session.</p>
+                    <p class="mb-2">Type your username to confirm: <strong
+                            id="deleteProfileName">GrandMaster_99</strong></p>
+                    <input type="text" class="form-control mb-3" id="deleteProfileConfirmInput"
+                        placeholder="Type your username exactly">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="deleteProfileAcknowledge">
+                        <label class="form-check-label text-secondary" for="deleteProfileAcknowledge">
+                            I understand this action is permanent.
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteProfileBtn" disabled>Delete
+                        Profile</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
