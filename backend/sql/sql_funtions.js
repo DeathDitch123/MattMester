@@ -32,7 +32,11 @@ async function insertUser(username, passwordHash, email) {
 }
 async function getUserByUsername(username) {
     const pool = getPool();
-    const query = 'SELECT * FROM users WHERE username = ?';
+    const query = `SELECT id, username, email, password_hash, profile_image,
+                          elo, elo_MM, elo_bullet, role, is_banned,
+                          ban_reason, banned_until, last_active,
+                          is_email_verified, created_at
+                   FROM users WHERE username = ?`;
     try {
         const [rows] = await pool.execute(query, [username]);
         return rows[0];
@@ -42,7 +46,11 @@ async function getUserByUsername(username) {
 }
 async function getUserByEmail(mailAdress) {
     const pool = getPool();
-    const query = 'SELECT * FROM users WHERE email = ?';
+    const query = `SELECT id, username, email, password_hash, profile_image,
+                          elo, elo_MM, elo_bullet, role, is_banned,
+                          ban_reason, banned_until, last_active,
+                          is_email_verified, created_at
+                   FROM users WHERE email = ?`;
     try {
         const [rows] = await pool.execute(query, [mailAdress]);
         return rows[0];
@@ -52,7 +60,11 @@ async function getUserByEmail(mailAdress) {
 }
 async function getLeaderBoardByElo() {
     const pool = getPool();
-    const query = 'SELECT users.username, users.elo, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo DESC LIMIT 100';
+    const query = `SELECT id, username, elo, profile_image, last_active, created_at
+                   FROM users
+                   WHERE is_banned = FALSE
+                   ORDER BY elo DESC
+                   LIMIT 100`;
     try {
         const [rows] = await pool.execute(query);
         return rows;
@@ -63,7 +75,11 @@ async function getLeaderBoardByElo() {
 
 async function getLeaderBoardByMM() {
     const pool = getPool();
-    const query = 'SELECT users.username, users.elo_MM, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo_MM DESC LIMIT 100';
+    const query = `SELECT id, username, elo_MM, profile_image, last_active, created_at
+                   FROM users
+                   WHERE is_banned = FALSE
+                   ORDER BY elo_MM DESC
+                   LIMIT 100`;
     try {
         const [rows] = await pool.execute(query);
         return rows;
@@ -74,7 +90,11 @@ async function getLeaderBoardByMM() {
 
 async function getLeaderBoardByBullet() {
     const pool = getPool();
-    const query = 'SELECT users.username, users.elo_bullet, users.last_active, users.created_at FROM users WHERE users.is_banned = FALSE ORDER BY elo_bullet DESC LIMIT 100';
+    const query = `SELECT id, username, elo_bullet, profile_image, last_active, created_at
+                   FROM users
+                   WHERE is_banned = FALSE
+                   ORDER BY elo_bullet DESC
+                   LIMIT 100`;
     try {
         const [rows] = await pool.execute(query);
         return rows;
@@ -87,8 +107,10 @@ async function getLeaderBoardByWinRate() {
     const pool = getPool();
     const query = `
         SELECT 
+            u.id,
             u.username,
             u.elo,
+            u.profile_image,
             ROUND(
                 IFNULL(
                     (s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 
@@ -127,6 +149,7 @@ async function getSessionUserById(userId) {
             u.username,
             u.email,
             u.role,
+            u.profile_image,
             u.elo,
             u.elo_MM,
             u.elo_bullet,
@@ -152,6 +175,7 @@ async function getSessionUserById(userId) {
             u.username,
             u.email,
             u.role,
+            u.profile_image,
             u.elo,
             NULL AS elo_MM,
             NULL AS elo_bullet,
@@ -221,6 +245,7 @@ async function getAllUsers() {
             u.username,
             u.email,
             u.role,
+            u.profile_image,
             u.elo,
             u.elo_MM,
             u.elo_bullet,
@@ -253,16 +278,20 @@ async function getAllRooms() {
     const query = `
         SELECT 
             g.id AS game_id,
+            g.white_player_id,
+            g.black_player_id,
+            g.winner_id,
             w.username AS white_player,
             b.username AS black_player,
             win.username AS winner,
             g.status,
             g.time_control,
+            g.initial_fen,
+            g.current_fen,
+            g.pgn,
             g.start_time,
             g.end_time,
-            (SELECT COUNT(*) FROM ability_log al 
-             JOIN moves m ON al.move_id = m.id 
-             WHERE m.game_id = g.id) AS abilities_used_in_game,
+            (SELECT COUNT(*) FROM ability_log WHERE game_id = g.id) AS abilities_used_in_game,
             (SELECT GROUP_CONCAT(CONCAT(sender.username, ': ', gc.message) SEPARATOR ' | ') 
              FROM game_chats gc 
              JOIN users sender ON gc.sender_id = sender.id 
@@ -332,6 +361,110 @@ async function ipCollisions(){
     }
 }
 
+async function uploadProfileImage(userId, filename) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const query = `INSERT INTO profile_image_uploads (user_id, filename, status)
+                       VALUES (?, ?, 'pending')`;
+        const [result] = await connection.execute(query, [userId, filename]);
+
+        await connection.commit();
+        return result.insertId;
+    } catch (error) {
+        await connection.rollback();
+        throw new Error('Hiba a profil kep feltoltese soran.');
+    } finally {
+        connection.release();
+    }
+}
+
+async function getPendingProfileImages() {
+    const pool = getPool();
+    const query = `
+        SELECT
+            piu.id, piu.user_id, piu.filename, piu.upload_time, piu.status,
+            u.username, u.profile_image AS current_image
+        FROM profile_image_uploads piu
+        JOIN users u ON piu.user_id = u.id
+        WHERE piu.status = 'pending'
+        ORDER BY piu.upload_time ASC
+    `;
+    try {
+        const [rows] = await pool.execute(query);
+        return rows;
+    } catch (error) {
+        throw new Error('Hiba a fuggo kepek lekerdezese soran.');
+    }
+}
+
+async function approveProfileImage(uploadId, adminUserId) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [uploadRows] = await connection.execute(
+            `SELECT user_id, filename FROM profile_image_uploads WHERE id = ?`,
+            [uploadId]
+        );
+
+        if (!uploadRows.length) {
+            throw new Error('Upload rekord nem talalhato');
+        }
+
+        const { user_id, filename } = uploadRows[0];
+
+        await connection.execute(
+            `UPDATE profile_image_uploads
+             SET status = 'approved', reviewed_by = ?, review_time = NOW()
+             WHERE id = ?`,
+            [adminUserId, uploadId]
+        );
+
+        await connection.execute(
+            `UPDATE users SET profile_image = ? WHERE id = ?`,
+            [filename, user_id]
+        );
+
+        await connection.commit();
+        return true;
+    } catch (error) {
+        await connection.rollback();
+        throw new Error(`Hiba a kep jovahagyasa soran: ${error.message}`);
+    } finally {
+        connection.release();
+    }
+}
+
+async function rejectProfileImage(uploadId, adminUserId, reviewNote = null) {
+    const pool = getPool();
+    const query = `
+        UPDATE profile_image_uploads
+        SET status = 'rejected', reviewed_by = ?, review_time = NOW(), review_note = ?
+        WHERE id = ?
+    `;
+    try {
+        await pool.execute(query, [adminUserId, reviewNote, uploadId]);
+        return true;
+    } catch (error) {
+        throw new Error('Hiba a kep elutasitasa soran.');
+    }
+}
+
+async function getUserProfileImage(userId) {
+    const pool = getPool();
+    const query = `SELECT profile_image FROM users WHERE id = ?`;
+    try {
+        const [rows] = await pool.execute(query, [userId]);
+        return rows[0]?.profile_image || null;
+    } catch (error) {
+        throw new Error('Hiba a profil kep lekerdezese soran.');
+    }
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
@@ -348,5 +481,10 @@ module.exports = {
     getAllRooms,
     logLoginAttempt,
     ipCollisionCheck,
-    ipCollisions
+    ipCollisions,
+    uploadProfileImage,
+    getPendingProfileImages,
+    approveProfileImage,
+    rejectProfileImage,
+    getUserProfileImage
 };
