@@ -598,6 +598,28 @@
             </div>
         </div>
     </div>
+    <div class="modal fade" id="addFriendModal" tabindex="-1" aria-labelledby="addFriendModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="addFriendModalLabel">
+                        <i data-lucide="user-plus" style="width: 18px; height: 18px;"></i>
+                        Add Friend
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="friendNameInput" class="form-label">Username</label>
+                    <input type="text" id="friendNameInput" class="form-control" placeholder="e.g. ChessWizard88">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-gold" id="sendFriendRequestBtn">Send Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
