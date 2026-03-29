@@ -20,8 +20,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 
 -- Admin felhasználó beszúrása (ha még nem létezik) - a jelszó "chu+)2_23iIa6sou&>#o79247r9Xbsibv%" (bcrypt hash: $2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq)
-INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
-VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
+INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
+VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin')
+ON DUPLICATE KEY UPDATE id = id;
 
 CREATE TABLE IF NOT EXISTS profile_image_uploads (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -171,7 +172,7 @@ CREATE TABLE IF NOT EXISTS user_logs (
 
 
 /* test felhasználók */
-INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, created_at) VALUES
+INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, created_at) VALUES
 ('SakkKirály', '$2b$10$7R.x/8z9z...', 'kiraly@example.com', 2150, 2100, 2200, '2023-01-15 10:00:00'),
 ('GyalogGalopp', '$2b$10$7R.x/8z9z...', 'galopp@example.com', 1450, 1400, 1380, '2023-02-20 11:30:00'),
 ('VezérVágta', '$2b$10$7R.x/8z9z...', 'vezerv@example.com', 1890, 1920, 1850, '2023-03-05 09:15:00'),
@@ -196,7 +197,8 @@ INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bulle
 ('GrandMasterHope', '$2b$10$7R.x/8z9z...', 'gmhope@example.com', 2010, 2000, 2030, '2023-05-15 08:30:00'),
 ('RapidRóbert', '$2b$10$7R.x/8z9z...', 'rapid@example.com', 1690, 1720, 1650, '2023-06-20 12:45:00'),
 ('BulletBéla', '$2b$10$7R.x/8z9z...', 'bulletb@example.com', 1320, 1280, 1550, '2023-07-15 21:00:00'),
-('ProfiPistike', '$2b$10$7R.x/8z9z...', 'pistike@example.com', 1150, 1100, 1180, '2023-08-30 16:15:00');
+('ProfiPistike', '$2b$10$7R.x/8z9z...', 'pistike@example.com', 1150, 1100, 1180, '2023-08-30 16:15:00')
+ON DUPLICATE KEY UPDATE id = id;
 
 -- 11. Statisztikák feltöltése minden felhasználóra
 INSERT IGNORE INTO statistics (user_id)

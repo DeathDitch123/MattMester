@@ -179,6 +179,27 @@ async function createTables() {
             review_time TIMESTAMP NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS user_logs (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            event_type VARCHAR(100) NOT NULL,
+            event_category ENUM('auth', 'game', 'social', 'profile', 'ability', 'security', 'system', 'admin') DEFAULT 'system',
+            severity ENUM('info', 'warning', 'error', 'critical') DEFAULT 'info',
+            source VARCHAR(50) DEFAULT 'backend',
+            success BOOLEAN NULL,
+            metric_key VARCHAR(100) NULL, 
+            metric_value DECIMAL(14, 4) NULL, 
+            metric_delta DECIMAL(14, 4) NULL, 
+            message VARCHAR(255) NULL,
+            metadata JSON NULL, 
+            occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_logs_user_time (user_id, occurred_at),
+            INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
+            INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
+            INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
         )`
     ];
 
