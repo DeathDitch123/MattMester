@@ -375,22 +375,23 @@ JOIN users u2 ON u2.username = 'RapidRóbert'
 WHERE u1.username = 'BulletBéla';
 
 -- 17. Profilkep feltoltesek seed
+
+-- 17a. Default profilkepek - default statusszal
 INSERT INTO profile_image_uploads (user_id, filename, upload_time, status, review_note, reviewed_by, review_time)
 SELECT
     u.id,
-    'admin_avatar_v2.png',
-    '2024-01-08 09:10:00',
-    'approved',
-    'Jovahagyva teszt seed soran.',
-    r.id,
-    '2024-01-08 09:40:00'
+    'default.png',
+    NOW(),
+    'default',
+    'Alapértelmezett profilkép',
+    NULL,
+    NULL
 FROM users u
-JOIN users r ON r.username = 'admin'
-WHERE u.username = 'admin'
-AND NOT EXISTS (
-    SELECT 1 FROM profile_image_uploads piu WHERE piu.user_id = u.id AND piu.filename = 'admin_avatar_v2.png'
+WHERE NOT EXISTS (
+    SELECT 1 FROM profile_image_uploads piu WHERE piu.user_id = u.id AND piu.filename = 'default.png'
 );
 
+-- 17b. Teszt képfeltöltések - pending statusszal
 INSERT INTO profile_image_uploads (user_id, filename, upload_time, status, review_note, reviewed_by, review_time)
 SELECT
     u.id,

@@ -262,7 +262,9 @@ async function getSessionUserById(userId) {
         );
 
         dbUser.profile_image = normalizedProfileImage;
-        dbUser.profile_image_status = dbUser.profile_image_status || 'approved';
+        dbUser.profile_image_status = normalizedProfileImage === DEFAULT_PROFILE_IMAGE_PATH
+            ? 'default'
+            : (dbUser.profile_image_status || 'approved');
         return dbUser;
     } catch (error) {
         if (error.code === 'ER_BAD_FIELD_ERROR') {
@@ -280,7 +282,9 @@ async function getSessionUserById(userId) {
             );
 
             dbUser.profile_image = normalizedProfileImage;
-            dbUser.profile_image_status = 'approved';
+            dbUser.profile_image_status = normalizedProfileImage === DEFAULT_PROFILE_IMAGE_PATH
+                ? 'default'
+                : 'approved';
             return dbUser;
         }
         throw new Error('Hiba a session felhasznalo lekerdezese soran.');
