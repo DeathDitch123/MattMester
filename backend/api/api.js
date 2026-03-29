@@ -685,6 +685,38 @@ router.post('/profile/upload-image', (request, response) => {
     });
 });
 
+router.post('/profile/remove-image', async (request, response) => {
+    let statusCode = 200;
+    try {
+        if (!request.session?.userId) {
+            statusCode = 401;
+            throw new Error('Bejelentkezés szükséges.');
+        }
+
+        const removeResult = await sql.resetUserProfileImageToDefault(request.session.userId);
+
+        return response.status(200).json({
+            success: true,
+            message: 'A profilkép visszaállítva az alapértelmezett képre.',
+            profile_image: removeResult.profileImage,
+            profile_image_status: removeResult.profileImageStatus
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        if (error.message === 'A felhasználó nem található.') {
+            statusCode = 404;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a profilkép eltávolítása közben.'
+        });
+    }
+});
+
 router.get('/leaderboard', async (request, response) => {
     try {
         const leaderboardData = leaderboardService.getLeaderBoard();

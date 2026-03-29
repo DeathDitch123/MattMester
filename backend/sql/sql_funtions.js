@@ -723,6 +723,43 @@ async function getUserProfileImage(userId) {
     }
 }
 
+async function resetUserProfileImageToDefault(userId) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [result] = await connection.execute(
+            'UPDATE users SET profile_image = ? WHERE id = ?',
+            [DEFAULT_PROFILE_IMAGE_PATH, userId]
+        );
+
+        if (!result.affectedRows) {
+            throw new Error('A felhasználó nem található.');
+        }
+
+        await connection.execute(
+            'UPDATE profile_image_uploads SET status = "rejected", reviewed_by = NULL, review_time = NOW(), review_note = ? WHERE user_id = ? AND status = "pending"',
+            ['A felhasználó eltávolította a profilképét.', userId]
+        );
+
+        await connection.commit();
+
+        return {
+            profileImage: DEFAULT_PROFILE_IMAGE_PATH,
+            profileImageStatus: 'approved'
+        };
+    } catch (error) {
+        await connection.rollback();
+        if (error.message === 'A felhasználó nem található.') {
+            throw error;
+        }
+        throw new Error('Hiba a profilkép eltávolítása során.');
+    } finally {
+        connection.release();
+    }
+}
+
 async function deleteUserProfileWithTransaction(userId) {
     const pool = getPool();
     const connection = await pool.getConnection();
@@ -804,5 +841,6 @@ module.exports = {
     approveProfileImage,
     rejectProfileImage,
     getUserProfileImage,
+    resetUserProfileImageToDefault,
     deleteUserProfileWithTransaction
 };

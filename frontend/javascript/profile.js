@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindLogoutButton();
     bindProfileDeleteModalEvents();
     bindProfileImageUploadEvents();
+    bindRemoveAvatarEvents();
     refreshAuthUi().catch((error) => {
         console.error('Hiba az auth UI frissitesekor:', error);
     });
@@ -171,7 +172,8 @@ function applyProfileImagePresentation(user) {
     const profileImagePath = (user?.profile_image || '').trim() || '/profile_pictures/default.png';
     const username = user?.username || 'Felhasznalo';
     const statusMeta = getProfileImageStatusMeta(user?.profile_image_status);
-    const isPending = statusMeta.normalizedStatus === 'pending';
+    const normalizedImagePath = profileImagePath.toLowerCase();
+    const isPending = statusMeta.normalizedStatus === 'pending' && normalizedImagePath !== '/profile_pictures/default.png';
 
     const avatars = [
         document.getElementById('profileAvatarDashboard'),
@@ -1495,6 +1497,86 @@ function bindProfileImageUploadEvents() {
             return;
         }
         renderProfileImageEditor();
+    });
+}
+
+function getRemoveAvatarElements() {
+    return {
+        modal: document.getElementById('removeAvatarModal'),
+        confirmButton: document.getElementById('confirmRemoveAvatarButton'),
+        message: document.getElementById('removeAvatarMessage')
+    };
+}
+
+function setRemoveAvatarMessage(type, message) {
+    const { message: messageElement } = getRemoveAvatarElements();
+    if (!messageElement) {
+        return;
+    }
+
+    if (!message) {
+        messageElement.className = 'alert d-none mb-0';
+        messageElement.textContent = '';
+        return;
+    }
+
+    messageElement.className = `alert alert-${type} mb-0`;
+    messageElement.textContent = message;
+}
+
+async function submitRemoveAvatar() {
+    const elements = getRemoveAvatarElements();
+    if (!elements.confirmButton) {
+        return;
+    }
+
+    elements.confirmButton.disabled = true;
+    elements.confirmButton.textContent = 'Eltávolítás...';
+    setRemoveAvatarMessage('danger', '');
+
+    try {
+        const response = await fetch('/api/profile/remove-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await parseJson(response);
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || 'A profilkép eltávolítása nem sikerült.');
+        }
+
+        setProfileSettingsMessage('success', result.message || 'A profilkép visszaállítva az alapértelmezett képre.');
+
+        if (elements.modal) {
+            const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
+            modal.hide();
+        }
+
+        await refreshAuthUi();
+    } catch (error) {
+        setRemoveAvatarMessage('danger', error.message || 'Hiba történt a profilkép eltávolítása közben.');
+    } finally {
+        elements.confirmButton.disabled = false;
+        elements.confirmButton.textContent = 'Eltávolítás';
+    }
+}
+
+function bindRemoveAvatarEvents() {
+    const elements = getRemoveAvatarElements();
+    if (!elements.modal || !elements.confirmButton) {
+        return;
+    }
+
+    elements.confirmButton.addEventListener('click', async () => {
+        await submitRemoveAvatar();
+    });
+
+    elements.modal.addEventListener('show.bs.modal', () => {
+        setRemoveAvatarMessage('danger', '');
+    });
+
+    elements.modal.addEventListener('hidden.bs.modal', () => {
+        setRemoveAvatarMessage('danger', '');
     });
 }
 

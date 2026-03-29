@@ -672,6 +672,28 @@
         </div>
     </div>
 
+    <div class="modal fade" id="removeAvatarModal" tabindex="-1" aria-labelledby="removeAvatarModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="removeAvatarModalLabel">
+                        <i data-lucide="image-minus" style="width: 18px; height: 18px;"></i>
+                        Profilkép eltávolítása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2 text-secondary">Biztosan visszaállítod a profilképet az alapértelmezett képre?</p>
+                    <div id="removeAvatarMessage" class="alert d-none mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmRemoveAvatarButton">Eltávolítás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="profileImageEditorModal" tabindex="-1" aria-labelledby="profileImageEditorModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
