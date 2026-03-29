@@ -587,8 +587,8 @@ async function uploadProfileImage(userId, filename) {
         }
 
         const [insertResult] = await connection.execute(
-            'INSERT INTO profile_image_uploads (user_id, filename, status) VALUES (?, ?, "pending")',
-            [userId, filename]
+            'INSERT INTO profile_image_uploads (user_id, filename, status, review_note) VALUES (?, ?, "pending", ?)',
+            [userId, filename, 'Elbírálásra vár.']
         );
 
         await connection.execute('UPDATE users SET profile_image = ? WHERE id = ?', [filename, userId]);
@@ -733,6 +733,17 @@ async function resetUserProfileImageToDefault(userId) {
     try {
         await connection.beginTransaction();
 
+        const [userRows] = await connection.execute(
+            'SELECT profile_image FROM users WHERE id = ? LIMIT 1 FOR UPDATE',
+            [userId]
+        );
+
+        if (!userRows.length) {
+            throw new Error('A felhasználó nem található.');
+        }
+
+        const currentProfileImage = userRows[0].profile_image;
+
         const [result] = await connection.execute(
             'UPDATE users SET profile_image = ? WHERE id = ?',
             [DEFAULT_PROFILE_IMAGE_PATH, userId]
@@ -740,6 +751,13 @@ async function resetUserProfileImageToDefault(userId) {
 
         if (!result.affectedRows) {
             throw new Error('A felhasználó nem található.');
+        }
+
+        if (isAllowedProfileImagePath(currentProfileImage) && currentProfileImage !== DEFAULT_PROFILE_IMAGE_PATH) {
+            await connection.execute(
+                'UPDATE profile_image_uploads SET status = "discarded", review_time = NOW(), review_note = ? WHERE user_id = ? AND filename = ? AND status IN ("pending", "approved")',
+                ['A felhasználó eltávolította a profilképét.', userId, currentProfileImage]
+            );
         }
 
         await connection.execute(

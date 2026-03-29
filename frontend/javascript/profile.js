@@ -201,7 +201,7 @@ function applyProfileImagePresentation(user) {
     ].filter(Boolean);
 
     statusElements.forEach((statusElement) => {
-        statusElement.classList.remove('text-secondary', 'text-success', 'text-warning', 'text-danger');
+        statusElement.classList.remove('text-secondary', 'text-success', 'text-warning', 'text-danger', 'text-info');
         statusElement.classList.add(statusMeta.textClass);
         statusElement.textContent = `Profilkép státusz: ${statusMeta.label}`;
     });

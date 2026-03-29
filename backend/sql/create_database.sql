@@ -398,7 +398,7 @@ SELECT
     'rapid_profile_candidate.jpg',
     '2024-01-08 10:05:00',
     'pending',
-    NULL,
+    'Elbírálásra vár.',
     NULL,
     NULL
 FROM users u
