@@ -11,7 +11,12 @@ const profileSettingsState = {
     initial: null,
     pendingPayload: null,
     countdownTimer: null,
-    countdownLeft: PROFILE_SETTINGS_CONFIRM_SECONDS
+    countdownLeft: PROFILE_SETTINGS_CONFIRM_SECONDS,
+    countdownFinished: false,
+    requiresPasswordCheck: false,
+    passwordVerified: false,
+    verifyTimer: null,
+    verifyRequestId: 0
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -43,9 +48,9 @@ async function fetchSessionInfo() {
     return result;
 }
 
-async function logSessionAndSocketInfo() {
+async function logSessionAndSocketInfo(sessionInfoInput = null) {
     try {
-        const sessionInfo = await fetchSessionInfo();
+        const sessionInfo = sessionInfoInput || await fetchSessionInfo();
 
         console.clear();
         console.log('--- Auth Status Report ---');
@@ -72,7 +77,7 @@ async function refreshAuthUi() {
         const sessionInfo = await fetchSessionInfo();
         showStats(sessionInfo);
         handleProfileSettings(sessionInfo);
-        logSessionAndSocketInfo();
+        logSessionAndSocketInfo(sessionInfo);
     } catch (error) {
         console.error('refreshAuthUi hiba:', error);
     }
@@ -326,7 +331,7 @@ function bindProfileSettingsEvents() {
         }
 
         profileSettingsState.pendingPayload = validation.payload;
-        openProfileSettingsConfirmModal(validation.changedFieldLabels);
+        openProfileSettingsConfirmModal(validation.changedFieldLabels, validation.hasPasswordChangeIntent);
     });
 
     if (elements.confirmSaveButton) {
@@ -335,8 +340,31 @@ function bindProfileSettingsEvents() {
         });
     }
 
+    if (elements.modalCurrentPasswordInput) {
+        elements.modalCurrentPasswordInput.addEventListener('input', () => {
+            if (profileSettingsState.verifyTimer) {
+                clearTimeout(profileSettingsState.verifyTimer);
+            }
+            profileSettingsState.verifyTimer = setTimeout(() => {
+                verifyModalCurrentPassword();
+            }, 250);
+        });
+
+        elements.modalCurrentPasswordInput.addEventListener('blur', () => {
+            verifyModalCurrentPassword();
+        });
+    }
+
     if (elements.confirmModal) {
         elements.confirmModal.addEventListener('hidden.bs.modal', () => {
+            profileSettingsState.pendingPayload = null;
+            profileSettingsState.passwordVerified = false;
+            profileSettingsState.requiresPasswordCheck = false;
+            if (profileSettingsState.verifyTimer) {
+                clearTimeout(profileSettingsState.verifyTimer);
+                profileSettingsState.verifyTimer = null;
+            }
+            profileSettingsState.verifyRequestId += 1;
             resetProfileSettingsConfirmState();
         });
     }
@@ -358,7 +386,10 @@ function getProfileSettingsElements() {
         confirmModal: document.getElementById('confirmProfileSettingsModal'),
         confirmSaveButton: document.getElementById('profileSettingsConfirmSaveButton'),
         confirmHint: document.getElementById('profileSettingsConfirmHint'),
-        changesList: document.getElementById('profileSettingsChangesList')
+        changesList: document.getElementById('profileSettingsChangesList'),
+        modalPasswordBlock: document.getElementById('profileSettingsModalPasswordBlock'),
+        modalCurrentPasswordInput: document.getElementById('modalCurrentPassword'),
+        modalCurrentPasswordFeedback: document.getElementById('modalCurrentPasswordFeedback')
     };
 }
 
@@ -421,7 +452,6 @@ function validateProfileSettingsForm() {
     const hasUsernameChanged = values.username !== profileSettingsState.initial.username;
     const hasEmailChanged = values.email !== profileSettingsState.initial.email;
     const hasPasswordChangeIntent = values.newPassword.length > 0 || values.confirmPassword.length > 0;
-
     if (!values.username) {
         fieldErrors.username = 'A felhasznalonev kotelezo.';
     } else if (values.username.length < 3 || values.username.length > 50) {
@@ -531,6 +561,7 @@ function resetProfileSettingsConfirmState() {
     }
 
     profileSettingsState.countdownLeft = PROFILE_SETTINGS_CONFIRM_SECONDS;
+    profileSettingsState.countdownFinished = false;
 
     if (elements.confirmSaveButton) {
         elements.confirmSaveButton.disabled = true;
@@ -540,19 +571,41 @@ function resetProfileSettingsConfirmState() {
     if (elements.confirmHint) {
         elements.confirmHint.textContent = `A mentes gomb ${PROFILE_SETTINGS_CONFIRM_SECONDS} masodperc mulva lesz aktiv.`;
     }
+
+    if (elements.modalCurrentPasswordInput) {
+        elements.modalCurrentPasswordInput.value = '';
+    }
+
+    setModalCurrentPasswordFeedback('neutral', '');
+
 }
 
-function openProfileSettingsConfirmModal(changedFieldLabels) {
+function openProfileSettingsConfirmModal(changedFieldLabels, requiresPasswordCheck) {
     const elements = getProfileSettingsElements();
     if (!elements.confirmModal || !elements.changesList) {
         return;
     }
 
-    elements.changesList.innerHTML = changedFieldLabels
-        .map((label) => `<li class="text-light mb-1">${label}</li>`)
-        .join('');
+    profileSettingsState.requiresPasswordCheck = Boolean(requiresPasswordCheck);
+    profileSettingsState.passwordVerified = !profileSettingsState.requiresPasswordCheck;
+
+    elements.changesList.innerHTML = '';
+    changedFieldLabels.forEach((label) => {
+        const item = document.createElement('li');
+        item.className = 'text-light mb-1';
+        item.textContent = label;
+        elements.changesList.appendChild(item);
+    });
 
     resetProfileSettingsConfirmState();
+
+    if (elements.modalPasswordBlock) {
+        elements.modalPasswordBlock.classList.toggle('d-none', !profileSettingsState.requiresPasswordCheck);
+    }
+
+    if (profileSettingsState.requiresPasswordCheck) {
+        setModalCurrentPasswordFeedback('neutral', 'A menteshez add meg a jelenlegi jelszavad.');
+    }
 
     const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
     modal.show();
@@ -564,8 +617,9 @@ function openProfileSettingsConfirmModal(changedFieldLabels) {
             if (profileSettingsState.countdownLeft > 0) {
                 elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
             } else {
-                elements.confirmSaveButton.disabled = false;
+                profileSettingsState.countdownFinished = true;
                 elements.confirmSaveButton.textContent = 'Mentes';
+                updateModalSaveButtonState();
             }
         }
 
@@ -582,6 +636,94 @@ function openProfileSettingsConfirmModal(changedFieldLabels) {
     }, 1000);
 }
 
+function setModalCurrentPasswordFeedback(state, message) {
+    const { modalCurrentPasswordInput, modalCurrentPasswordFeedback } = getProfileSettingsElements();
+    if (!modalCurrentPasswordInput || !modalCurrentPasswordFeedback) {
+        return;
+    }
+
+    modalCurrentPasswordInput.classList.remove('is-valid', 'is-invalid');
+    modalCurrentPasswordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
+    modalCurrentPasswordFeedback.textContent = message;
+
+    if (state === 'success') {
+        modalCurrentPasswordInput.classList.add('is-valid');
+        modalCurrentPasswordFeedback.classList.add('text-success');
+    } else if (state === 'error') {
+        modalCurrentPasswordInput.classList.add('is-invalid');
+        modalCurrentPasswordFeedback.classList.add('text-danger');
+    } else {
+        modalCurrentPasswordFeedback.classList.add('text-secondary');
+    }
+}
+
+function updateModalSaveButtonState() {
+    const { confirmSaveButton } = getProfileSettingsElements();
+    if (!confirmSaveButton) {
+        return;
+    }
+
+    const readyByPassword = profileSettingsState.requiresPasswordCheck ? profileSettingsState.passwordVerified : true;
+    confirmSaveButton.disabled = !(profileSettingsState.countdownFinished && readyByPassword);
+}
+
+async function verifyModalCurrentPassword() {
+    const elements = getProfileSettingsElements();
+    if (!profileSettingsState.requiresPasswordCheck || !elements.modalCurrentPasswordInput) {
+        return;
+    }
+
+    const currentPassword = elements.modalCurrentPasswordInput.value;
+    if (!currentPassword) {
+        profileSettingsState.passwordVerified = false;
+        setModalCurrentPasswordFeedback('error', 'A jelenlegi jelszo kotelezo.');
+        updateModalSaveButtonState();
+        return;
+    }
+
+    if (currentPassword.length < 8) {
+        profileSettingsState.passwordVerified = false;
+        setModalCurrentPasswordFeedback('error', 'A jelszo formatuma ervenytelen.');
+        updateModalSaveButtonState();
+        return;
+    }
+
+    const requestId = ++profileSettingsState.verifyRequestId;
+    setModalCurrentPasswordFeedback('neutral', 'Jelszo ellenorzese...');
+
+    try {
+        const response = await fetch('/api/profile/verify-current-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword })
+        });
+        const result = await parseJson(response);
+
+        if (requestId !== profileSettingsState.verifyRequestId) {
+            return;
+        }
+
+        if (!response.ok || !result.success || result.valid !== true) {
+            profileSettingsState.passwordVerified = false;
+            setModalCurrentPasswordFeedback('error', result.message || 'A jelenlegi jelszo hibas.');
+            updateModalSaveButtonState();
+            return;
+        }
+
+        profileSettingsState.passwordVerified = true;
+        setModalCurrentPasswordFeedback('success', 'A jelenlegi jelszo helyes.');
+        updateModalSaveButtonState();
+    } catch (error) {
+        if (requestId !== profileSettingsState.verifyRequestId) {
+            return;
+        }
+
+        profileSettingsState.passwordVerified = false;
+        setModalCurrentPasswordFeedback('error', 'Nem sikerult ellenorizni a jelszot.');
+        updateModalSaveButtonState();
+    }
+}
+
 async function submitProfileSettingsChanges() {
     const elements = getProfileSettingsElements();
     if (!profileSettingsState.pendingPayload || !elements.confirmSaveButton) {
@@ -595,7 +737,12 @@ async function submitProfileSettingsChanges() {
         const response = await fetch('/api/profile/settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(profileSettingsState.pendingPayload)
+            body: JSON.stringify({
+                ...profileSettingsState.pendingPayload,
+                currentPassword: profileSettingsState.requiresPasswordCheck
+                    ? (elements.modalCurrentPasswordInput?.value || '')
+                    : ''
+            })
         });
 
         const result = await parseJson(response);
@@ -612,7 +759,6 @@ async function submitProfileSettingsChanges() {
         if (elements.confirmPasswordInput) {
             elements.confirmPasswordInput.value = '';
         }
-
         if (elements.confirmModal) {
             const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
             modal.hide();

@@ -679,6 +679,11 @@
                 <div class="modal-body">
                     <p class="mb-2 text-secondary">Biztosan menteni szeretnéd az alábbi változásokat?</p>
                     <ul id="profileSettingsChangesList" class="mb-0 ps-3"></ul>
+                    <div id="profileSettingsModalPasswordBlock" class="mt-3 d-none">
+                        <label class="form-label">Jelenlegi jelszó</label>
+                        <input id="modalCurrentPassword" type="password" class="form-control" placeholder="A mentéshez add meg a jelenlegi jelszavad">
+                        <div id="modalCurrentPasswordFeedback" class="form-text text-secondary mt-1"></div>
+                    </div>
                     <div class="mt-3">
                         <small id="profileSettingsConfirmHint" class="text-secondary">A mentés gomb 10 másodperc múlva lesz aktív.</small>
                     </div>

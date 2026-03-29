@@ -324,6 +324,34 @@ router.get('/sessionInfo', async (request, response) => {
     }
 });
 
+router.post('/profile/verify-current-password', async (request, response) => {
+    try {
+        if (!request.session?.userId) {
+            return response.status(401).json({ success: false, valid: false, message: 'Bejelentkezes szukseges.' });
+        }
+
+        const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
+        if (!currentPassword) {
+            return response.status(400).json({ success: false, valid: false, message: 'A jelenlegi jelszo kotelezo.' });
+        }
+
+        const user = await sql.getUserAuthById(request.session.userId);
+        if (!user) {
+            return response.status(404).json({ success: false, valid: false, message: 'A felhasznalo nem talalhato.' });
+        }
+
+        const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+        if (!isMatch) {
+            return response.status(200).json({ success: true, valid: false, message: 'A jelenlegi jelszo hibas.' });
+        }
+
+        return response.status(200).json({ success: true, valid: true, message: 'A jelenlegi jelszo helyes.' });
+    } catch (error) {
+        console.error('Current password verify hiba:', error);
+        return response.status(500).json({ success: false, valid: false, message: 'Szerverhiba az ellenorzes soran.' });
+    }
+});
+
 router.post('/profile/settings', async (request, response) => {
     let statusCode = 200;
     try {
@@ -339,6 +367,7 @@ router.post('/profile/settings', async (request, response) => {
         const body = request.body || {};
         const username = typeof body.username === 'string' ? body.username.trim() : '';
         const email = typeof body.email === 'string' ? body.email.trim() : '';
+        const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
         const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
 
         if (!username || !email) {
@@ -362,6 +391,11 @@ router.post('/profile/settings', async (request, response) => {
         }
 
         if (newPassword) {
+            if (!currentPassword) {
+                statusCode = 400;
+                throw new Error('Jelszo modositasahoz add meg a jelenlegi jelszavad.');
+            }
+
             if (newPassword.includes('\\')) {
                 statusCode = 400;
                 throw new Error('A jelszo nem megengedett karaktert tartalmaz.');
@@ -378,15 +412,23 @@ router.post('/profile/settings', async (request, response) => {
             }
         }
 
-        const currentUser = await sql.getSessionUserById(request.session.userId);
-        if (!currentUser) {
+        const currentAuthUser = await sql.getUserAuthById(request.session.userId);
+        if (!currentAuthUser) {
             statusCode = 404;
             throw new Error('A felhasznalo nem talalhato.');
         }
 
-        const hasUsernameChanged = username !== currentUser.username;
-        const hasEmailChanged = email !== currentUser.email;
+        const hasUsernameChanged = username !== currentAuthUser.username;
+        const hasEmailChanged = email !== currentAuthUser.email;
         const hasPasswordChanged = newPassword.length > 0;
+
+        if (hasPasswordChanged) {
+            const isCurrentPasswordValid = await bcrypt.compare(currentPassword, currentAuthUser.password_hash);
+            if (!isCurrentPasswordValid) {
+                statusCode = 401;
+                throw new Error('A jelenlegi jelszo hibas.');
+            }
+        }
 
         if (!hasUsernameChanged && !hasEmailChanged && !hasPasswordChanged) {
             statusCode = 400;
@@ -428,6 +470,22 @@ router.post('/profile/settings', async (request, response) => {
             changedFields.push('password');
         }
 
+        try {
+            await sql.insertUserLog(request.session.userId, {
+                eventType: 'profile_settings_update',
+                eventCategory: 'profile',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Profil beallitasok frissitve.',
+                metadata: {
+                    changedFields
+                }
+            });
+        } catch (logError) {
+            console.warn('Profile settings log hiba:', logError.message);
+        }
+
         return response.status(statusCode).json({
             success: true,
             message: 'A profil beallitasok sikeresen frissultek.',
@@ -440,7 +498,7 @@ router.post('/profile/settings', async (request, response) => {
             statusCode = 500;
         }
 
-        if (error.message?.includes('foglalt')) {
+        if (error?.code === 'ER_DUP_ENTRY' || error.message?.includes('foglalt')) {
             statusCode = 409;
         }
 

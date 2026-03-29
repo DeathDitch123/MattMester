@@ -19,7 +19,8 @@ async function insertUser(username, passwordHash, email) {
     } catch (error) {
         await connection.rollback();
         if (error.code === 'ER_DUP_ENTRY') {
-            const message = error.sqlMessage.includes('email')
+            const duplicateMessage = error.sqlMessage || '';
+            const message = duplicateMessage.includes('email')
                 ? 'Ez az email cím már foglalt.'
                 : 'Ez a felhasználónév már foglalt.';
             throw new Error(message);
@@ -207,107 +208,136 @@ async function getSessionUserById(userId) {
     }
 }
 
+async function getUserAuthById(userId) {
+    const pool = getPool();
+    const query = 'SELECT id, username, email, password_hash FROM users WHERE id = ? LIMIT 1';
+    try {
+        const [rows] = await pool.execute(query, [userId]);
+        return rows[0] || null;
+    } catch (error) {
+        throw new Error('Hiba a felhasznalo auth adatok lekerdezese soran.');
+    }
+}
+
 async function updateUserProfileSettings(userId, updates) {
     const pool = getPool();
-    const connection = await pool.getConnection();
+    const [currentRows] = await pool.execute('SELECT username, email FROM users WHERE id = ? LIMIT 1', [userId]);
+    if (!currentRows.length) {
+        return {
+            changed: false,
+            usernameChanged: false,
+            emailChanged: false,
+            passwordChanged: false,
+        };
+    }
+
+    const currentUser = currentRows[0];
+    const fields = [];
+    const params = [];
+    const hasUsernameUpdate = Object.prototype.hasOwnProperty.call(updates, 'username')
+        && typeof updates.username === 'string'
+        && updates.username !== currentUser.username;
+    const hasEmailUpdate = Object.prototype.hasOwnProperty.call(updates, 'email')
+        && typeof updates.email === 'string'
+        && updates.email !== currentUser.email;
+    const hasPasswordUpdate = Object.prototype.hasOwnProperty.call(updates, 'passwordHash')
+        && typeof updates.passwordHash === 'string'
+        && updates.passwordHash.length > 0;
+
+    if (hasUsernameUpdate) {
+        fields.push('username = ?');
+        params.push(updates.username);
+    }
+
+    if (hasEmailUpdate) {
+        fields.push('email = ?');
+        params.push(updates.email);
+    }
+
+    if (hasPasswordUpdate) {
+        fields.push('password_hash = ?');
+        params.push(updates.passwordHash);
+    }
+
+    if (fields.length === 0) {
+        return {
+            changed: false,
+            usernameChanged: false,
+            emailChanged: false,
+            passwordChanged: false,
+            username: currentUser.username,
+            email: currentUser.email,
+        };
+    }
+
+    const query = `UPDATE users SET ${fields.join(', ')} WHERE id = ?`;
+    params.push(userId);
 
     try {
-        await connection.beginTransaction();
-
-        const [currentRows] = await connection.execute(
-            'SELECT id, username, email FROM users WHERE id = ? LIMIT 1',
-            [userId]
-        );
-
-        if (!currentRows.length) {
-            throw new Error('A felhasznalo nem talalhato.');
-        }
-
-        const currentUser = currentRows[0];
-        const nextUsername = typeof updates.username === 'string' ? updates.username.trim() : currentUser.username;
-        const nextEmail = typeof updates.email === 'string' ? updates.email.trim() : currentUser.email;
-        const nextPasswordHash = updates.passwordHash || null;
-
-        let usernameChanged = false;
-        let emailChanged = false;
-        let passwordChanged = false;
-
-        if (nextUsername !== currentUser.username) {
-            const [duplicateUsernameRows] = await connection.execute(
-                'SELECT id FROM users WHERE username = ? AND id <> ? LIMIT 1',
-                [nextUsername, userId]
-            );
-
-            if (duplicateUsernameRows.length) {
-                throw new Error('A felhasznalonev mar foglalt.');
-            }
-            usernameChanged = true;
-        }
-
-        if (nextEmail !== currentUser.email) {
-            const [duplicateEmailRows] = await connection.execute(
-                'SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1',
-                [nextEmail, userId]
-            );
-
-            if (duplicateEmailRows.length) {
-                throw new Error('Az email cim mar foglalt.');
-            }
-            emailChanged = true;
-        }
-
-        const updateFields = [];
-        const updateParams = [];
-
-        if (usernameChanged) {
-            updateFields.push('username = ?');
-            updateParams.push(nextUsername);
-        }
-
-        if (emailChanged) {
-            updateFields.push('email = ?');
-            updateParams.push(nextEmail);
-        }
-
-        if (nextPasswordHash) {
-            updateFields.push('password_hash = ?');
-            updateParams.push(nextPasswordHash);
-            passwordChanged = true;
-        }
-
-        if (updateFields.length === 0) {
-            await connection.rollback();
-            return {
-                changed: false,
-                usernameChanged: false,
-                emailChanged: false,
-                passwordChanged: false,
-                username: currentUser.username,
-                email: currentUser.email
-            };
-        }
-
-        updateParams.push(userId);
-        await connection.execute(
-            `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
-            updateParams
-        );
-
-        await connection.commit();
+        const [result] = await pool.execute(query, params);
 
         return {
-            changed: true,
-            usernameChanged,
-            emailChanged,
-            passwordChanged,
-            username: nextUsername,
-            email: nextEmail
+            changed: result.changedRows > 0,
+            usernameChanged: hasUsernameUpdate && result.changedRows > 0,
+            emailChanged: hasEmailUpdate && result.changedRows > 0,
+            passwordChanged: hasPasswordUpdate && result.changedRows > 0,
+            username: updates.username,
+            email: updates.email
         };
     } catch (error) {
-        await connection.rollback();
+        if (error?.code === 'ER_DUP_ENTRY') {
+            if (error.sqlMessage?.includes('username')) {
+                throw new Error('A felhasznalonev mar foglalt.');
+            }
+            if (error.sqlMessage?.includes('email')) {
+                throw new Error('Az email cim mar foglalt.');
+            }
+            throw new Error('Duplikalt adat, a modositas nem mentheto.');
+        }
         throw error;
-    } finally {
-        connection.release();
+    }
+}
+
+async function insertUserLog(userId, logData) {
+    const pool = getPool();
+    const metadataValue = logData.metadata == null ? null : JSON.stringify(logData.metadata);
+
+    const query = `
+        INSERT INTO user_logs (
+            user_id,
+            event_type,
+            event_category,
+            severity,
+            source,
+            success,
+            metric_key,
+            metric_value,
+            metric_delta,
+            details,
+            metadata,
+            occurred_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+
+    const params = [
+        userId,
+        logData.eventType || 'profile_update',
+        logData.eventCategory || 'profile',
+        logData.severity || 'info',
+        logData.source || 'backend',
+        typeof logData.success === 'boolean' ? logData.success : null,
+        logData.metricKey || null,
+        typeof logData.metricValue === 'number' ? logData.metricValue : null,
+        typeof logData.metricDelta === 'number' ? logData.metricDelta : null,
+        logData.message || null,
+        metadataValue,
+        logData.occurredAt || new Date()
+    ];
+
+    try {
+        await pool.execute(query, params);
+    } catch (error) {
+        throw new Error('Hiba a felhasznaloi log mentese soran.');
     }
 }
 
@@ -417,18 +447,11 @@ async function getAllRooms() {
 //később ip csaláshoz esetleges szűréshez, vagy csak simán statisztikához, hogy melyik ip címről hány account van stb... bár ez utóbbi lehet, hogy nem annyira fontos, de majd meglátjuk
 async function logLoginAttempt(userId, ipAddress, userAgent) {
     const pool = getPool();
-    const connection = await pool.getConnection();
     const query = 'INSERT INTO login_history (user_id, ip_address, user_agent) VALUES (?, ?, ?)';
     try {
-        await connection.beginTransaction();
-        await connection.execute(query, [userId, ipAddress, userAgent]);
-        await connection.commit();
+        await pool.execute(query, [userId, ipAddress, userAgent]);
     } catch (error) {
-        await connection.rollback();
         console.error('Hiba a login kísérlet naplózása során:', error);
-    }
-    finally {
-        connection.release();
     }
 }
 async function ipCollisionCheck(ipAddress) {
@@ -467,21 +490,12 @@ async function ipCollisions(){
 
 async function uploadProfileImage(userId, filename) {
     const pool = getPool();
-    const connection = await pool.getConnection();
+    const query = 'INSERT INTO profile_image_uploads (user_id, filename, status) VALUES (?, ?, "pending")';
     try {
-        await connection.beginTransaction();
-
-        const query = `INSERT INTO profile_image_uploads (user_id, filename, status)
-                       VALUES (?, ?, 'pending')`;
-        const [result] = await connection.execute(query, [userId, filename]);
-
-        await connection.commit();
+        const [result] = await pool.execute(query, [userId, filename]);
         return result.insertId;
     } catch (error) {
-        await connection.rollback();
         throw new Error('Hiba a profil kep feltoltese soran.');
-    } finally {
-        connection.release();
     }
 }
 
@@ -510,27 +524,28 @@ async function approveProfileImage(uploadId, adminUserId) {
     try {
         await connection.beginTransaction();
 
-        const [uploadRows] = await connection.execute(
-            `SELECT user_id, filename FROM profile_image_uploads WHERE id = ?`,
+        const [rows] = await connection.execute(
+            'SELECT user_id, filename, status FROM profile_image_uploads WHERE id = ? FOR UPDATE',
             [uploadId]
         );
 
-        if (!uploadRows.length) {
-            throw new Error('Upload rekord nem talalhato');
+        if (!rows.length) {
+            throw new Error('A feltoltes nem talalhato.');
         }
 
-        const { user_id, filename } = uploadRows[0];
+        const upload = rows[0];
+        if (upload.status !== 'pending') {
+            throw new Error('Csak fuggo allapotu kep hagyhato jova.');
+        }
 
         await connection.execute(
-            `UPDATE profile_image_uploads
-             SET status = 'approved', reviewed_by = ?, review_time = NOW()
-             WHERE id = ?`,
-            [adminUserId, uploadId]
+            'UPDATE users SET profile_image = ? WHERE id = ?',
+            [upload.filename, upload.user_id]
         );
 
         await connection.execute(
-            `UPDATE users SET profile_image = ? WHERE id = ?`,
-            [filename, user_id]
+            'UPDATE profile_image_uploads SET status = "approved", reviewed_by = ?, review_time = NOW(), review_note = NULL WHERE id = ?',
+            [adminUserId, uploadId]
         );
 
         await connection.commit();
@@ -545,13 +560,16 @@ async function approveProfileImage(uploadId, adminUserId) {
 
 async function rejectProfileImage(uploadId, adminUserId, reviewNote = null) {
     const pool = getPool();
-    const query = `
-        UPDATE profile_image_uploads
-        SET status = 'rejected', reviewed_by = ?, review_time = NOW(), review_note = ?
-        WHERE id = ?
-    `;
     try {
-        await pool.execute(query, [adminUserId, reviewNote, uploadId]);
+        const [result] = await pool.execute(
+            'UPDATE profile_image_uploads SET status = "rejected", reviewed_by = ?, review_time = NOW(), review_note = ? WHERE id = ? AND status = "pending"',
+            [adminUserId, reviewNote, uploadId]
+        );
+
+        if (result.affectedRows === 0) {
+            throw new Error('A kep nem talalhato vagy mar nem fuggo allapotu.');
+        }
+
         return true;
     } catch (error) {
         throw new Error('Hiba a kep elutasitasa soran.');
@@ -578,7 +596,9 @@ module.exports = {
     getLeaderBoardByBullet,
     getLeaderBoardByWinRate,
     getSessionUserById,
+    getUserAuthById,
     updateUserProfileSettings,
+    insertUserLog,
     getTotalUsers,
     getTotalGames,
     getOnlineGamesCount,

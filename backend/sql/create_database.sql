@@ -170,7 +170,6 @@ CREATE TABLE IF NOT EXISTS user_logs (
     INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
 );
 
-
 /* test felhasználók */
 INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, created_at) VALUES
 ('SakkKirály', '$2b$10$7R.x/8z9z...', 'kiraly@example.com', 2150, 2100, 2200, '2023-01-15 10:00:00'),
