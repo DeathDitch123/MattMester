@@ -12,6 +12,7 @@ const path = require('path');
 const { request } = require('http');
 const { stat } = require('fs');
 const { isAdmin } = require('./funtions.js');
+const { profile } = require('console');
 
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
@@ -283,6 +284,7 @@ router.get('/sessionInfo', async (request, response) => {
             id: dbUser.id,
             username: dbUser.username,
             email: dbUser.email,
+            profile_image: dbUser.profile_image,
             role: dbUser.role,
             elo: dbUser.elo,
             elo_MM: dbUser.elo_MM,
