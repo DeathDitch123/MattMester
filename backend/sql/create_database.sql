@@ -147,6 +147,28 @@ CREATE TABLE IF NOT EXISTS friends (
     FOREIGN KEY (action_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- 10. Altalanos felhasznaloi naplo (audit + activity)
+CREATE TABLE IF NOT EXISTS user_logs (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    event_type VARCHAR(100) NOT NULL, -- pl: login, logout, game_finished, elo_update, friend_request
+    event_category ENUM('auth', 'game', 'social', 'profile', 'ability', 'security', 'system', 'admin') DEFAULT 'system',
+    severity ENUM('info', 'warning', 'error', 'critical') DEFAULT 'info',
+    source VARCHAR(50) DEFAULT 'backend', -- pl: backend, frontend, socket, admin
+    success BOOLEAN NULL,
+    metric_key VARCHAR(100) NULL, -- pl: elo_mm, win_streak, avg_move_time
+    metric_value DECIMAL(14, 4) NULL, -- aktualis meresi ertek
+    metric_delta DECIMAL(14, 4) NULL, -- valtozas az elozo allapothoz kepest
+    message VARCHAR(255) NULL,
+    metadata JSON NULL, -- rugalmas extra adat (game_id, endpoint, elo_before, elo_after, stb.)
+    occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_user_logs_user_time (user_id, occurred_at),
+    INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
+    INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
+    INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
+);
+
 
 /* test felhasználók */
 INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, created_at) VALUES
