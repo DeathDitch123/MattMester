@@ -747,7 +747,7 @@ async function resetUserProfileImageToDefault(userId) {
 
         return {
             profileImage: DEFAULT_PROFILE_IMAGE_PATH,
-            profileImageStatus: 'approved'
+            profileImageStatus: 'default'
         };
     } catch (error) {
         await connection.rollback();
@@ -764,12 +764,12 @@ async function getAndDeleteDiscardedProfileImages() {
     const pool = getPool();
     try {
         const [discardedRows] = await pool.execute(
-            'SELECT id, filename FROM profile_image_uploads WHERE status = "discarded"'
+            'SELECT id, filename FROM profile_image_uploads WHERE status IN ("discarded", "rejected")'
         );
 
         return discardedRows;
     } catch (error) {
-        console.error('Hiba a discarded képek lekérdezése során:', error);
+        console.error('Hiba a discarded/rejected képek lekérdezése során:', error);
         return [];
     }
 }
@@ -778,13 +778,13 @@ async function deleteDiscardedProfileImageRecord(uploadId) {
     const pool = getPool();
     try {
         const [result] = await pool.execute(
-            'DELETE FROM profile_image_uploads WHERE id = ? AND status = "discarded"',
+            'DELETE FROM profile_image_uploads WHERE id = ? AND status IN ("discarded", "rejected")',
             [uploadId]
         );
 
         return result.affectedRows > 0;
     } catch (error) {
-        console.error(`Hiba a discarded kép (${uploadId}) törlése során:`, error);
+        console.error(`Hiba a discarded/rejected kép (${uploadId}) törlése során:`, error);
         return false;
     }
 }

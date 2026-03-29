@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS profile_image_uploads (
     user_id INT NOT NULL,
     filename VARCHAR(255) NOT NULL,
     upload_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    status ENUM('pending', 'approved', 'rejected', 'discarded') DEFAULT 'pending',
+    status ENUM('pending', 'approved', 'rejected', 'discarded', 'default') DEFAULT 'pending',
     review_note TEXT,
     reviewed_by INT,
     review_time TIMESTAMP NULL,

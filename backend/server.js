@@ -84,7 +84,7 @@ io.on('connection', (socket) => {
     });
 });
 
-//!Cleanup service: Discarded profilképek törlése periodikusan
+//!Cleanup service: Discarded és elutasított profilképek törlése periodikusan
 async function cleanupDiscardedProfileImages() {
     try {
         const discardedRecords = await sql.getAndDeleteDiscardedProfileImages();
@@ -96,7 +96,7 @@ async function cleanupDiscardedProfileImages() {
                     // Fájl törlése a disk-ről
                     if (fs.existsSync(filePath)) {
                         fs.unlinkSync(filePath);
-                        console.log(`✓ Discarded profilkép törölve: ${record.filename}`);
+                        console.log(`✓ Profilkép törölve (discarded/rejected): ${record.filename}`);
                     }
                 } catch (fileErr) {
                     console.error(`✗ Fájl törlési hiba: ${record.filename}`, fileErr.message);
@@ -110,7 +110,7 @@ async function cleanupDiscardedProfileImages() {
                     console.error(`✗ DB törlési hiba: ${record.id}`, dbErr.message);
                 }
             }
-            console.log(`Cleanup service: ${discardedRecords.length} discarded kép feldolgozva`);
+            console.log(`Cleanup service: ${discardedRecords.length} kép feldolgozva (discarded + rejected)`);
         }
     } catch (err) {
         console.error('Cleanup service hiba:', err.message);

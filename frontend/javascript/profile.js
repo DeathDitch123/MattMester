@@ -161,6 +161,14 @@ function getProfileImageStatusMeta(statusInput) {
         };
     }
 
+    if (normalizedStatus === 'default') {
+        return {
+            normalizedStatus,
+            textClass: 'text-info',
+            label: 'Alapértelmezett'
+        };
+    }
+
     return {
         normalizedStatus: 'approved',
         textClass: 'text-success',
@@ -174,6 +182,7 @@ function applyProfileImagePresentation(user) {
     const statusMeta = getProfileImageStatusMeta(user?.profile_image_status);
     const normalizedImagePath = profileImagePath.toLowerCase();
     const isPending = statusMeta.normalizedStatus === 'pending' && normalizedImagePath !== '/profile_pictures/default.png';
+    const isDefault = normalizedImagePath === '/profile_pictures/default.png';
 
     const avatars = [
         document.getElementById('profileAvatarDashboard'),
@@ -196,6 +205,13 @@ function applyProfileImagePresentation(user) {
         statusElement.classList.add(statusMeta.textClass);
         statusElement.textContent = `Profilkép státusz: ${statusMeta.label}`;
     });
+
+    // Remove gomb letiltása, ha a kép az alapértelmezett
+    const removeButton = document.getElementById('removeAvatarButton');
+    if (removeButton) {
+        removeButton.disabled = isDefault;
+        removeButton.title = isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet' : 'Profilkép eltávolítása';
+    }
 }
 
 function showStats(sessionInfo) {
