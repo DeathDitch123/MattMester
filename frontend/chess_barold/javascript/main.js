@@ -10,7 +10,8 @@
 // ============================================================
 
 import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt,
-         huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres } from './UI-megjelenites.js';
+         huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres,
+         lepesAnimacio } from './UI-megjelenites.js';
 
 // Az aktuális játék ID — a szerver adja
 let gameId = null;
@@ -23,6 +24,9 @@ let idoPollTimer = null;
 
 // Húzás folyamatban flag — ilyenkor NEM renderelünk újra
 let huzasFolyamatban = false;
+
+// Click-to-move: kijelölt bábu adatai
+let kivalasztott = null; // { x, y, piece, lepesek }
 
 // MutationObserver — DOM manipuláció észlelése
 let appObserver = null;
@@ -316,11 +320,15 @@ function jatekVegeUI(uzenet) {
 
 // ────────────────────────────────────────────
 
-function allapotFrissit(allapot) {
+function allapotFrissit(allapot, animald = false) {
     utolsoAllapot = allapot;
+    kivalasztott = null;
     try { if (appObserver) appObserver.disconnect(); } catch(e) {}
     oldalVazVisszaallit();
     tablaRajzol(allapot);
+    if (animald && allapot.utolsoLepes) {
+        lepesAnimacio(allapot.utolsoLepes);
+    }
     huzasHozzaadMinden(allapot);
     esemenyekUjraKot();
     nevekFrissit();
@@ -549,7 +557,7 @@ function botValaszPoll() {
             const allapot = await apiAllapot();
             if (!allapot.botGondolkodik) {
                 clearInterval(timer);
-                allapotFrissit(allapot);
+                allapotFrissit(allapot, true);
                 if (allapot.vege && allapot.uzenet) {
                     jatekVegeUI(allapot.uzenet);
                     idoPollingLeall();
@@ -667,15 +675,45 @@ function huzasHozzaadMinden(allapot) {
 
         huzasHozzaad(babuElem, x, y, mezo.piece, allapot);
     }
+
+    // Click-to-move: kattintás üres/ellenfél mezőre → lépés a kijelölttel
+    const mezok = document.querySelectorAll(".square");
+    for (let i = 0; i < mezok.length; i++) {
+        mezok[i].addEventListener("click", function (e) {
+            if (!kivalasztott) return;
+            // Ha bábura kattintunk, a mousedown kezeli → ne csináljunk semmit
+            if (e.target.closest(".piece")) return;
+
+            const toX = parseInt(this.dataset.x, 10);
+            const toY = parseInt(this.dataset.y, 10);
+            kattintasLep(toX, toY);
+        });
+    }
 }
 
 function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
+    let mozgott = false; // megkülönbözteti a kattintást a húzástól
+
     babuElem.addEventListener("mousedown", async function (e) {
         if (allapot.vege) return;
 
         e.preventDefault();
         e.stopPropagation();
+
+        // Ha már van kijelölt és ERRE a mezőre kattintunk mint célmező (ütés)
+        if (kivalasztott && kivalasztott.piece.color !== piece.color) {
+            kattintasLep(fromX, fromY);
+            return;
+        }
+
+        // Ha ugyanarra a bábura kattintunk: kijelölés törlése
+        if (kivalasztott && kivalasztott.x === fromX && kivalasztott.y === fromY) {
+            kivalasztasTorol();
+            return;
+        }
+
         huzasFolyamatban = true;
+        mozgott = false;
 
         // Legális lépések lekérdezése a SZERVERTŐL
         let lepesek;
@@ -689,6 +727,13 @@ function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
             huzasFolyamatban = false;
             return;
         }
+
+        // Kijelölés beállítása (click-to-move)
+        kivalasztasTorol();
+        kivalasztott = { x: fromX, y: fromY, piece, lepesek };
+        const mezoElem = babuElem.parentElement;
+        mezoElem.classList.add("selected");
+        huzasKiemel(piece.type, piece.color, lepesek);
 
         const klon = babuElem.cloneNode(true);
         klon.className = "piece dragging";
@@ -704,13 +749,11 @@ function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
         // Eredeti bábu halvány
         babuElem.style.opacity = "0.3";
 
-        // Kiemelés megjelenítés
-        huzasKiemel(piece.type, piece.color, lepesek);
-
         // Klón kezdő pozíció
         babuKlonMozgat(e.clientX, e.clientY, klon, eltX, eltY);
 
         function egerMozogKezelo(em) {
+            mozgott = true;
             babuKlonMozgat(em.clientX, em.clientY, klon, eltX, eltY);
         }
 
@@ -718,7 +761,16 @@ function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
             document.removeEventListener("mousemove", egerMozogKezelo);
             document.removeEventListener("mouseup", egerFelKezelo);
             huzasFolyamatban = false;
-            babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek);
+            klon.remove();
+            babuElem.style.opacity = "";
+
+            if (mozgott) {
+                // Drag & drop: lépés a célmezőre
+                huzasKiemelTorol();
+                kivalasztasTorol();
+                babuHuzasEgerFel(ef, fromX, fromY, piece, lepesek);
+            }
+            // Ha nem mozgott (kattintás): kijelölés marad, bogyók maradnak
         }
 
         document.addEventListener("mousemove", egerMozogKezelo);
@@ -726,17 +778,61 @@ function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
     });
 }
 
+/**
+ * Kijelölés törlése (selected class + bogyók eltávolítása)
+ */
+function kivalasztasTorol() {
+    kivalasztott = null;
+    document.querySelectorAll(".square.selected").forEach(el => el.classList.remove("selected"));
+    huzasKiemelTorol();
+}
+
+/**
+ * Click-to-move: lépés a kijelölt bábuval a célmezőre
+ */
+async function kattintasLep(toX, toY) {
+    if (!kivalasztott) return;
+    const { x: fromX, y: fromY, piece, lepesek } = kivalasztott;
+
+    const talaltLepes = lepesek.find(l => l.toX === toX && l.toY === toY);
+    if (!talaltLepes) {
+        kivalasztasTorol();
+        return;
+    }
+
+    kivalasztasTorol();
+
+    // Gyalog átváltozás
+    if (talaltLepes.promotion) {
+        window._atvaltozasVarData = { fromX, fromY, toX, toY };
+        atvaltozasModal(piece.color);
+        return;
+    }
+
+    // Lépés küldése
+    try {
+        const eredmeny = await apiLepes(fromX, fromY, toX, toY);
+        allapotFrissit(eredmeny.allapot);
+        if (eredmeny.uzenet) {
+            jatekVegeUI(eredmeny.uzenet);
+            idoPollingLeall();
+        } else if (eredmeny.allapot.botGondolkodik) {
+            botValaszPoll();
+        }
+    } catch (e) {
+        console.error('Lépés hiba:', e);
+        if (utolsoAllapot) allapotFrissit(utolsoAllapot);
+    }
+}
+
 function babuKlonMozgat(mx, my, klon, eltX, eltY) {
     klon.style.left = (mx - eltX) + "px";
     klon.style.top = (my - eltY) + "px";
 }
 
-async function babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek) {
+async function babuHuzasEgerFel(ef, fromX, fromY, piece, lepesek) {
     const elemAlatt = document.elementFromPoint(ef.clientX, ef.clientY);
     const celMezoElem = elemAlatt ? elemAlatt.closest(".square") : null;
-    klon.remove();
-    babuElem.style.opacity = "";
-    huzasKiemelTorol();
 
     if (!celMezoElem) return;
 
@@ -766,7 +862,6 @@ async function babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek
         }
     } catch (e) {
         console.error('Lépés hiba:', e);
-        // Visszarajzoljuk az aktuális állapotot
         if (utolsoAllapot) allapotFrissit(utolsoAllapot);
     }
 }

@@ -168,4 +168,40 @@ export function huzasKiemelTorol() {
 function mezoElemKeres(x, y) {
     return document.querySelector(`.square[data-x="${x}"][data-y="${y}"]`);
 }
+
+/**
+ * Slide animáció — a bábu csúszik a régi mezőről az újra.
+ * Meghívás UTÁN kell hívni, hogy tablaRajzol() már lefutott (a bábu a célmezőn van).
+ * @param {object} utolsoLepes - { from: {x,y}, to: {x,y} }
+ */
+export function lepesAnimacio(utolsoLepes) {
+    if (!utolsoLepes) return;
+    const toEl = mezoElemKeres(utolsoLepes.to.x, utolsoLepes.to.y);
+    if (!toEl) return;
+    const pieceEl = toEl.querySelector(".piece");
+    if (!pieceEl) return;
+
+    const fromEl = mezoElemKeres(utolsoLepes.from.x, utolsoLepes.from.y);
+    if (!fromEl) return;
+
+    // Pixel eltolás kiszámítása (célból visszafelé a kiindulásra)
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
+    const dx = fromRect.left - toRect.left;
+    const dy = fromRect.top - toRect.top;
+
+    // Bábu vizuálisan a régi pozícióra kerül
+    pieceEl.style.transform = `translate(${dx}px, ${dy}px)`;
+
+    // Következő frame-ben: transition + visszacsúsztatás a helyére
+    requestAnimationFrame(() => {
+        pieceEl.classList.add("sliding");
+        pieceEl.style.transform = "translate(0, 0)";
+        pieceEl.addEventListener("transitionend", () => {
+            pieceEl.classList.remove("sliding");
+            pieceEl.style.transform = "";
+        }, { once: true });
+    });
+}
+
 export { mezoElemKeres };

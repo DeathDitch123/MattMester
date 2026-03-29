@@ -351,6 +351,16 @@ body
   transition: none;  /* Nincs animáció (azonnali követés) */
 }
 
+/* SLIDE ANIMÁCIÓ (bot/ellenfél lépésénél) */
+.piece.sliding {
+  transition: transform 150ms ease-out;
+}
+
+/* KIJELÖLT BÁBU (click-to-move) */
+.square.selected {
+  background: var(--from) !important;
+}
+
 /* 
    ============================================================
    JÁTÉKMÓD VÁLASZTÓ MODAL
