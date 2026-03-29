@@ -205,44 +205,52 @@ router.post('/:id/move', async (req, res) => {
             return res.status(400).json({ error: eredmeny.error });
         }
 
-        // ── BOT VÁLASZLÉPÉS ──
-        let botLepes = null;
-        if (jatek.botAktiv && !jatek.vege && jatek.koronLevo === jatek.botSzin) {
-            await new Promise(r => setTimeout(r, 1000)); // 1 mp várakozás → bot órája tikkel
-            const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
-            if (botValasz) {
-                const botEredmeny = await lepesKoordinataval(
-                    jatek,
-                    botValasz.fromX, botValasz.fromY,
-                    botValasz.toX, botValasz.toY,
-                    botValasz.promotion || "queen"
-                );
-                if (botEredmeny.success) {
-                    botLepes = {
-                        from: { x: botValasz.fromX, y: botValasz.fromY },
-                        to: { x: botValasz.toX, y: botValasz.toY }
-                    };
-                    // Ha a bot lépése véget ér a játék
-                    if (botEredmeny.uzenet) {
-                        eredmeny.uzenet = botEredmeny.uzenet;
-                    }
-                }
-            }
+        // ── BOT VÁLASZLÉPÉS ASZINKRON ──
+        // A bot aszinkron lép a háttérben — a játékos azonnal látja a saját lépését.
+        const botKell = jatek.botAktiv && !jatek.vege && jatek.koronLevo === jatek.botSzin;
+        if (botKell) {
+            jatek.botGondolkodik = true;
         }
 
-        // ── ELO FRISSÍTÉS JÁTÉK VÉGÉN ──
-        if (jatek.vege && jatek.botAktiv) {
+        // Azonnal válaszolunk a játékos lépésével
+        res.status(200).json({
+            allapot: jatekAllapotKliens(jatek),
+            uzenet: eredmeny.uzenet
+        });
+
+        // ELO frissítés ha a JÁTÉKOS lépése véget ért a játéknak (pl. matt)
+        if (!botKell && jatek.vege && jatek.botAktiv) {
             await eloFrissitJatekVegen(jatek, eredmeny.uzenet);
         }
 
-        return res.status(200).json({
-            allapot: jatekAllapotKliens(jatek),
-            uzenet: eredmeny.uzenet,
-            botLepes
-        });
+        // Bot aszinkron lépés (1 mp késleltetés, majd gondolkodik)
+        if (botKell) {
+            setTimeout(async () => {
+                try {
+                    const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
+                    if (botValasz) {
+                        const botEredmeny = await lepesKoordinataval(
+                            jatek,
+                            botValasz.fromX, botValasz.fromY,
+                            botValasz.toX, botValasz.toY,
+                            botValasz.promotion || "queen"
+                        );
+                        if (botEredmeny.success && jatek.vege) {
+                            await eloFrissitJatekVegen(jatek, botEredmeny.uzenet);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Bot aszinkron lépés hiba:', err);
+                } finally {
+                    jatek.botGondolkodik = false;
+                }
+            }, 1000);
+        }
     } catch (err) {
         console.error('Chess move hiba:', err);
-        return res.status(500).json({ error: 'Szerverhiba lépés közben.' });
+        if (!res.headersSent) {
+            return res.status(500).json({ error: 'Szerverhiba lépés közben.' });
+        }
     }
 });
 
