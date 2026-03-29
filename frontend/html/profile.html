@@ -512,24 +512,32 @@
                                     <div class="col-md-6">
                                         <label class="form-label">Username</label>
                                         <input id="settingsUsername" type="text" class="form-control" value="GrandMaster_99">
+                                        <div id="settingsUsernameFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">Email Address</label>
                                         <input id="settingsEmail" type="email" class="form-control" value="admin@mattmester.com">
+                                        <div id="settingsEmailFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
 
                                     <div class="col-md-6">
                                         <label class="form-label">New Password</label>
                                         <input id="settingsNewPassword" type="password" class="form-control"
                                             placeholder="Leave blank to keep current">
+                                        <div id="settingsNewPasswordFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">Confirm New Password</label>
                                         <input id="settingsConfirmPassword" type="password" class="form-control" placeholder="Confirm new password">
+                                        <div id="settingsConfirmPasswordFeedback" class="form-text text-secondary mt-1"></div>
+                                    </div>
+
+                                    <div class="col-12 mt-2">
+                                        <div id="profileSettingsMessage" class="alert d-none mb-0" role="alert"></div>
                                     </div>
 
                                     <div class="col-12 text-end mt-4">
-                                        <button type="submit" class="btn btn-gold px-5">Save Changes</button>
+                                        <button id="profileSettingsSaveButton" type="submit" class="btn btn-gold px-5" disabled>Save Changes</button>
                                     </div>
                                 </div>
                             </form>
@@ -652,6 +660,32 @@
                     <button type="button" class="btn btn-danger" id="confirmDeleteProfileBtn" disabled>
                         Törlés (<span id="deleteTimer">5</span>s)
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="confirmProfileSettingsModal" tabindex="-1" aria-labelledby="confirmProfileSettingsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="confirmProfileSettingsModalLabel">
+                        <i data-lucide="circle-help" style="width: 18px; height: 18px;"></i>
+                        Módosítás megerősítése
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2 text-secondary">Biztosan menteni szeretnéd az alábbi változásokat?</p>
+                    <ul id="profileSettingsChangesList" class="mb-0 ps-3"></ul>
+                    <div class="mt-3">
+                        <small id="profileSettingsConfirmHint" class="text-secondary">A mentés gomb 10 másodperc múlva lesz aktív.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="profileSettingsConfirmSaveButton" disabled>Mentés (10s)</button>
                 </div>
             </div>
         </div>

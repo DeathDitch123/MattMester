@@ -207,6 +207,110 @@ async function getSessionUserById(userId) {
     }
 }
 
+async function updateUserProfileSettings(userId, updates) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        const [currentRows] = await connection.execute(
+            'SELECT id, username, email FROM users WHERE id = ? LIMIT 1',
+            [userId]
+        );
+
+        if (!currentRows.length) {
+            throw new Error('A felhasznalo nem talalhato.');
+        }
+
+        const currentUser = currentRows[0];
+        const nextUsername = typeof updates.username === 'string' ? updates.username.trim() : currentUser.username;
+        const nextEmail = typeof updates.email === 'string' ? updates.email.trim() : currentUser.email;
+        const nextPasswordHash = updates.passwordHash || null;
+
+        let usernameChanged = false;
+        let emailChanged = false;
+        let passwordChanged = false;
+
+        if (nextUsername !== currentUser.username) {
+            const [duplicateUsernameRows] = await connection.execute(
+                'SELECT id FROM users WHERE username = ? AND id <> ? LIMIT 1',
+                [nextUsername, userId]
+            );
+
+            if (duplicateUsernameRows.length) {
+                throw new Error('A felhasznalonev mar foglalt.');
+            }
+            usernameChanged = true;
+        }
+
+        if (nextEmail !== currentUser.email) {
+            const [duplicateEmailRows] = await connection.execute(
+                'SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1',
+                [nextEmail, userId]
+            );
+
+            if (duplicateEmailRows.length) {
+                throw new Error('Az email cim mar foglalt.');
+            }
+            emailChanged = true;
+        }
+
+        const updateFields = [];
+        const updateParams = [];
+
+        if (usernameChanged) {
+            updateFields.push('username = ?');
+            updateParams.push(nextUsername);
+        }
+
+        if (emailChanged) {
+            updateFields.push('email = ?');
+            updateParams.push(nextEmail);
+        }
+
+        if (nextPasswordHash) {
+            updateFields.push('password_hash = ?');
+            updateParams.push(nextPasswordHash);
+            passwordChanged = true;
+        }
+
+        if (updateFields.length === 0) {
+            await connection.rollback();
+            return {
+                changed: false,
+                usernameChanged: false,
+                emailChanged: false,
+                passwordChanged: false,
+                username: currentUser.username,
+                email: currentUser.email
+            };
+        }
+
+        updateParams.push(userId);
+        await connection.execute(
+            `UPDATE users SET ${updateFields.join(', ')} WHERE id = ?`,
+            updateParams
+        );
+
+        await connection.commit();
+
+        return {
+            changed: true,
+            usernameChanged,
+            emailChanged,
+            passwordChanged,
+            username: nextUsername,
+            email: nextEmail
+        };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 async function getTotalUsers() {
     const pool = getPool();
     const query = 'SELECT COUNT(*) AS total FROM users';
@@ -474,6 +578,7 @@ module.exports = {
     getLeaderBoardByBullet,
     getLeaderBoardByWinRate,
     getSessionUserById,
+    updateUserProfileSettings,
     getTotalUsers,
     getTotalGames,
     getOnlineGamesCount,

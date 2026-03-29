@@ -323,6 +323,134 @@ router.get('/sessionInfo', async (request, response) => {
         return response.status(statusCode).json(result);
     }
 });
+
+router.post('/profile/settings', async (request, response) => {
+    let statusCode = 200;
+    try {
+        if (!request.session?.userId) {
+            statusCode = 401;
+            throw new Error('A profil modositasahoz be kell jelentkezni.');
+        }
+
+        const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
+        const body = request.body || {};
+        const username = typeof body.username === 'string' ? body.username.trim() : '';
+        const email = typeof body.email === 'string' ? body.email.trim() : '';
+        const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+
+        if (!username || !email) {
+            statusCode = 400;
+            throw new Error('A felhasznalonev es az email cim kotelezo.');
+        }
+
+        if (username.length < 3 || username.length > 50) {
+            statusCode = 400;
+            throw new Error('A felhasznalonevnek 3 es 50 karakter kozott kell lennie.');
+        }
+
+        if (!usernameRegex.test(username)) {
+            statusCode = 400;
+            throw new Error('A felhasznalonev formatuma ervenytelen.');
+        }
+
+        if (!emailRegex.test(email)) {
+            statusCode = 400;
+            throw new Error('Ervenytelen email formatum.');
+        }
+
+        if (newPassword) {
+            if (newPassword.includes('\\')) {
+                statusCode = 400;
+                throw new Error('A jelszo nem megengedett karaktert tartalmaz.');
+            }
+
+            if (newPassword.length < 8) {
+                statusCode = 400;
+                throw new Error('A jelszonak legalabb 8 karakter hosszu kell legyen.');
+            }
+
+            if (!passwordRegex.test(newPassword)) {
+                statusCode = 400;
+                throw new Error('A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.');
+            }
+        }
+
+        const currentUser = await sql.getSessionUserById(request.session.userId);
+        if (!currentUser) {
+            statusCode = 404;
+            throw new Error('A felhasznalo nem talalhato.');
+        }
+
+        const hasUsernameChanged = username !== currentUser.username;
+        const hasEmailChanged = email !== currentUser.email;
+        const hasPasswordChanged = newPassword.length > 0;
+
+        if (!hasUsernameChanged && !hasEmailChanged && !hasPasswordChanged) {
+            statusCode = 400;
+            throw new Error('Nincs valtozas, nincs mit menteni.');
+        }
+
+        let passwordHash = null;
+        if (hasPasswordChanged) {
+            passwordHash = await bcrypt.hash(newPassword, 10);
+        }
+
+        const updateResult = await sql.updateUserProfileSettings(request.session.userId, {
+            username,
+            email,
+            passwordHash
+        });
+
+        if (updateResult.usernameChanged) {
+            request.session.username = updateResult.username;
+        }
+
+        await new Promise((resolve, reject) => {
+            request.session.save((error) => {
+                if (error) {
+                    return reject(error);
+                }
+                resolve();
+            });
+        });
+
+        const changedFields = [];
+        if (updateResult.usernameChanged) {
+            changedFields.push('username');
+        }
+        if (updateResult.emailChanged) {
+            changedFields.push('email');
+        }
+        if (updateResult.passwordChanged) {
+            changedFields.push('password');
+        }
+
+        return response.status(statusCode).json({
+            success: true,
+            message: 'A profil beallitasok sikeresen frissultek.',
+            changedFields
+        });
+    } catch (error) {
+        console.error('Profile settings hiba:', error);
+
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        if (error.message?.includes('foglalt')) {
+            statusCode = 409;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a profil beallitasok mentese kozben.'
+        });
+    }
+});
+
 router.get('/leaderboard', async (request, response) => {
     try {
         const leaderboardData = leaderboardService.getLeaderBoard();

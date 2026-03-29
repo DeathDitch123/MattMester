@@ -5,9 +5,20 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const socket = io();
 lucide.createIcons();
 
+const PROFILE_SETTINGS_CONFIRM_SECONDS = 10;
+const profileSettingsState = {
+    bound: false,
+    initial: null,
+    pendingPayload: null,
+    countdownTimer: null,
+    countdownLeft: PROFILE_SETTINGS_CONFIRM_SECONDS
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     bindLogoutButton();
-    refreshAuthUi();
+    refreshAuthUi().catch((error) => {
+        console.error('Hiba az auth UI frissitesekor:', error);
+    });
 });
 // Ez parsol
 async function parseJson(response) {
@@ -256,10 +267,10 @@ function handleProfileSettings(sessionInfo) {
         if (!user) {
             throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
         }
-        let settingsUsername = document.getElementById('settingsUsername');
-        let settingsEmail = document.getElementById('settingsEmail');
-        let settingsNewPassword = document.getElementById('settingsNewPassword');
-        let settingsConfirmPassword = document.getElementById('settingsConfirmPassword');
+        const settingsUsername = document.getElementById('settingsUsername');
+        const settingsEmail = document.getElementById('settingsEmail');
+        const settingsNewPassword = document.getElementById('settingsNewPassword');
+        const settingsConfirmPassword = document.getElementById('settingsConfirmPassword');
         if (settingsUsername) {
             settingsUsername.value = user.username;
         }
@@ -272,8 +283,346 @@ function handleProfileSettings(sessionInfo) {
         if (settingsConfirmPassword) {
             settingsConfirmPassword.value = '';
         }
+
+        profileSettingsState.initial = {
+            username: (user.username || '').trim(),
+            email: (user.email || '').trim()
+        };
+
+        if (!profileSettingsState.bound) {
+            bindProfileSettingsEvents();
+            profileSettingsState.bound = true;
+        }
+
+        validateProfileSettingsForm();
     } catch (error) {
         console.error('Hiba a profil beállítások kezelésekor:', error);
+    }
+}
+
+function bindProfileSettingsEvents() {
+    const elements = getProfileSettingsElements();
+    if (!elements.form) {
+        return;
+    }
+
+    const onInputChange = () => {
+        validateProfileSettingsForm();
+    };
+
+    [elements.usernameInput, elements.emailInput, elements.newPasswordInput, elements.confirmPasswordInput]
+        .filter(Boolean)
+        .forEach((element) => {
+            element.addEventListener('input', onInputChange);
+            element.addEventListener('blur', onInputChange);
+        });
+
+    elements.form.addEventListener('submit', (event) => {
+        event.preventDefault();
+
+        const validation = validateProfileSettingsForm();
+        if (!validation.isValid) {
+            return;
+        }
+
+        profileSettingsState.pendingPayload = validation.payload;
+        openProfileSettingsConfirmModal(validation.changedFieldLabels);
+    });
+
+    if (elements.confirmSaveButton) {
+        elements.confirmSaveButton.addEventListener('click', async () => {
+            await submitProfileSettingsChanges();
+        });
+    }
+
+    if (elements.confirmModal) {
+        elements.confirmModal.addEventListener('hidden.bs.modal', () => {
+            resetProfileSettingsConfirmState();
+        });
+    }
+}
+
+function getProfileSettingsElements() {
+    return {
+        form: document.getElementById('profileSettingsForm'),
+        usernameInput: document.getElementById('settingsUsername'),
+        emailInput: document.getElementById('settingsEmail'),
+        newPasswordInput: document.getElementById('settingsNewPassword'),
+        confirmPasswordInput: document.getElementById('settingsConfirmPassword'),
+        usernameFeedback: document.getElementById('settingsUsernameFeedback'),
+        emailFeedback: document.getElementById('settingsEmailFeedback'),
+        newPasswordFeedback: document.getElementById('settingsNewPasswordFeedback'),
+        confirmPasswordFeedback: document.getElementById('settingsConfirmPasswordFeedback'),
+        formMessage: document.getElementById('profileSettingsMessage'),
+        saveButton: document.getElementById('profileSettingsSaveButton'),
+        confirmModal: document.getElementById('confirmProfileSettingsModal'),
+        confirmSaveButton: document.getElementById('profileSettingsConfirmSaveButton'),
+        confirmHint: document.getElementById('profileSettingsConfirmHint'),
+        changesList: document.getElementById('profileSettingsChangesList')
+    };
+}
+
+function applyInputFeedback(inputElement, feedbackElement, state, message) {
+    if (!inputElement || !feedbackElement) {
+        return;
+    }
+
+    inputElement.classList.remove('is-valid', 'is-invalid');
+    feedbackElement.classList.remove('text-secondary', 'text-success', 'text-danger');
+    feedbackElement.textContent = message;
+
+    if (state === 'error') {
+        inputElement.classList.add('is-invalid');
+        feedbackElement.classList.add('text-danger');
+    } else if (state === 'success') {
+        inputElement.classList.add('is-valid');
+        feedbackElement.classList.add('text-success');
+    } else {
+        feedbackElement.classList.add('text-secondary');
+    }
+}
+
+function setProfileSettingsMessage(type, message) {
+    const { formMessage } = getProfileSettingsElements();
+    if (!formMessage) {
+        return;
+    }
+
+    if (!message) {
+        formMessage.className = 'alert d-none mb-0';
+        formMessage.textContent = '';
+        return;
+    }
+
+    formMessage.className = `alert alert-${type} mb-0`;
+    formMessage.textContent = message;
+}
+
+function validateProfileSettingsForm() {
+    const elements = getProfileSettingsElements();
+    if (!elements.form || !profileSettingsState.initial) {
+        return { isValid: false, payload: null, changedFieldLabels: [] };
+    }
+
+    const values = {
+        username: (elements.usernameInput?.value || '').trim(),
+        email: (elements.emailInput?.value || '').trim(),
+        newPassword: elements.newPasswordInput?.value || '',
+        confirmPassword: elements.confirmPasswordInput?.value || ''
+    };
+
+    const fieldErrors = {
+        username: '',
+        email: '',
+        newPassword: '',
+        confirmPassword: ''
+    };
+
+    const hasUsernameChanged = values.username !== profileSettingsState.initial.username;
+    const hasEmailChanged = values.email !== profileSettingsState.initial.email;
+    const hasPasswordChangeIntent = values.newPassword.length > 0 || values.confirmPassword.length > 0;
+
+    if (!values.username) {
+        fieldErrors.username = 'A felhasznalonev kotelezo.';
+    } else if (values.username.length < 3 || values.username.length > 50) {
+        fieldErrors.username = 'A felhasznalonevnek 3 es 50 karakter kozott kell lennie.';
+    } else if (!USERNAME_REGEX.test(values.username)) {
+        fieldErrors.username = 'A felhasznalonev formatuma ervenytelen.';
+    }
+
+    if (!values.email) {
+        fieldErrors.email = 'Az email cim kotelezo.';
+    } else if (!EMAIL_REGEX.test(values.email)) {
+        fieldErrors.email = 'Ervenytelen email formatum.';
+    }
+
+    if (values.confirmPassword && !values.newPassword) {
+        fieldErrors.newPassword = 'Adj meg uj jelszot is.';
+    }
+
+    if (values.newPassword) {
+        if (values.newPassword.includes('\\')) {
+            fieldErrors.newPassword = 'A jelszo nem megengedett karaktert tartalmaz.';
+        } else if (values.newPassword.length < 8) {
+            fieldErrors.newPassword = 'A jelszonak legalabb 8 karakter hosszu kell legyen.';
+        } else if (!PASSWORD_REGEX.test(values.newPassword)) {
+            fieldErrors.newPassword = 'A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.';
+        }
+    }
+
+    if (values.newPassword || values.confirmPassword) {
+        if (!values.confirmPassword) {
+            fieldErrors.confirmPassword = 'Erositsd meg az uj jelszot.';
+        } else if (values.newPassword !== values.confirmPassword) {
+            fieldErrors.confirmPassword = 'A ket jelszo nem egyezik.';
+        }
+    }
+
+    const hasFieldError = Object.values(fieldErrors).some(Boolean);
+    const hasAnyChange = hasUsernameChanged || hasEmailChanged || values.newPassword.length > 0;
+    const isValid = !hasFieldError && hasAnyChange;
+
+    applyInputFeedback(
+        elements.usernameInput,
+        elements.usernameFeedback,
+        fieldErrors.username ? 'error' : (hasUsernameChanged ? 'success' : 'neutral'),
+        fieldErrors.username || (hasUsernameChanged ? 'Felhasznalonev modositasra kerul.' : 'Nincs valtozas.')
+    );
+
+    applyInputFeedback(
+        elements.emailInput,
+        elements.emailFeedback,
+        fieldErrors.email ? 'error' : (hasEmailChanged ? 'success' : 'neutral'),
+        fieldErrors.email || (hasEmailChanged ? 'Email modositasra kerul.' : 'Nincs valtozas.')
+    );
+
+    applyInputFeedback(
+        elements.newPasswordInput,
+        elements.newPasswordFeedback,
+        fieldErrors.newPassword ? 'error' : (values.newPassword ? 'success' : 'neutral'),
+        fieldErrors.newPassword || (values.newPassword ? 'Uj jelszo elfogadva.' : 'Jelszo nem valtozik.')
+    );
+
+    applyInputFeedback(
+        elements.confirmPasswordInput,
+        elements.confirmPasswordFeedback,
+        fieldErrors.confirmPassword ? 'error' : (values.confirmPassword ? 'success' : 'neutral'),
+        fieldErrors.confirmPassword || (values.confirmPassword ? 'Jelszo megerosites rendben.' : 'Megerosites nem szukseges.')
+    );
+
+    if (elements.saveButton) {
+        elements.saveButton.disabled = !isValid;
+    }
+
+    if (hasFieldError) {
+        const firstError = Object.values(fieldErrors).find(Boolean);
+        setProfileSettingsMessage('danger', firstError || 'Ellenorizd a mezoket.');
+    } else if (!hasAnyChange) {
+        setProfileSettingsMessage('warning', 'Nincs valtozas. Modosits legalabb egy mezot a menteshez.');
+    } else {
+        setProfileSettingsMessage('success', 'Minden rendben, mentesre kesz.');
+    }
+
+    const changedFieldLabels = [];
+    if (hasUsernameChanged) {
+        changedFieldLabels.push(`Felhasznalonev: ${profileSettingsState.initial.username} -> ${values.username}`);
+    }
+    if (hasEmailChanged) {
+        changedFieldLabels.push(`Email: ${profileSettingsState.initial.email} -> ${values.email}`);
+    }
+    if (values.newPassword) {
+        changedFieldLabels.push('Jelszo frissitesre kerul.');
+    }
+
+    const payload = isValid ? {
+        username: values.username,
+        email: values.email,
+        newPassword: values.newPassword
+    } : null;
+
+    return { isValid, payload, changedFieldLabels, hasPasswordChangeIntent };
+}
+
+function resetProfileSettingsConfirmState() {
+    const elements = getProfileSettingsElements();
+    if (profileSettingsState.countdownTimer) {
+        clearInterval(profileSettingsState.countdownTimer);
+        profileSettingsState.countdownTimer = null;
+    }
+
+    profileSettingsState.countdownLeft = PROFILE_SETTINGS_CONFIRM_SECONDS;
+
+    if (elements.confirmSaveButton) {
+        elements.confirmSaveButton.disabled = true;
+        elements.confirmSaveButton.textContent = `Mentes (${PROFILE_SETTINGS_CONFIRM_SECONDS}s)`;
+    }
+
+    if (elements.confirmHint) {
+        elements.confirmHint.textContent = `A mentes gomb ${PROFILE_SETTINGS_CONFIRM_SECONDS} masodperc mulva lesz aktiv.`;
+    }
+}
+
+function openProfileSettingsConfirmModal(changedFieldLabels) {
+    const elements = getProfileSettingsElements();
+    if (!elements.confirmModal || !elements.changesList) {
+        return;
+    }
+
+    elements.changesList.innerHTML = changedFieldLabels
+        .map((label) => `<li class="text-light mb-1">${label}</li>`)
+        .join('');
+
+    resetProfileSettingsConfirmState();
+
+    const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
+    modal.show();
+
+    profileSettingsState.countdownTimer = setInterval(() => {
+        profileSettingsState.countdownLeft -= 1;
+
+        if (elements.confirmSaveButton) {
+            if (profileSettingsState.countdownLeft > 0) {
+                elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
+            } else {
+                elements.confirmSaveButton.disabled = false;
+                elements.confirmSaveButton.textContent = 'Mentes';
+            }
+        }
+
+        if (elements.confirmHint) {
+            elements.confirmHint.textContent = profileSettingsState.countdownLeft > 0
+                ? `A mentes gomb ${profileSettingsState.countdownLeft} masodperc mulva lesz aktiv.`
+                : 'A mentes gomb most mar aktiv.';
+        }
+
+        if (profileSettingsState.countdownLeft <= 0) {
+            clearInterval(profileSettingsState.countdownTimer);
+            profileSettingsState.countdownTimer = null;
+        }
+    }, 1000);
+}
+
+async function submitProfileSettingsChanges() {
+    const elements = getProfileSettingsElements();
+    if (!profileSettingsState.pendingPayload || !elements.confirmSaveButton) {
+        return;
+    }
+
+    elements.confirmSaveButton.disabled = true;
+    elements.confirmSaveButton.textContent = 'Mentés folyamatban...';
+
+    try {
+        const response = await fetch('/api/profile/settings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(profileSettingsState.pendingPayload)
+        });
+
+        const result = await parseJson(response);
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || 'Nem sikerult menteni a profil beallitasokat.');
+        }
+
+        setProfileSettingsMessage('success', result.message || 'A profil beallitasok sikeresen frissultek.');
+        profileSettingsState.pendingPayload = null;
+
+        if (elements.newPasswordInput) {
+            elements.newPasswordInput.value = '';
+        }
+        if (elements.confirmPasswordInput) {
+            elements.confirmPasswordInput.value = '';
+        }
+
+        if (elements.confirmModal) {
+            const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
+            modal.hide();
+        }
+
+        await refreshAuthUi();
+    } catch (error) {
+        setProfileSettingsMessage('danger', error.message || 'Hiba tortent a mentes soran.');
+        elements.confirmSaveButton.disabled = false;
+        elements.confirmSaveButton.textContent = 'Mentes';
     }
 }
 // Mobile Sidebar Toggle
