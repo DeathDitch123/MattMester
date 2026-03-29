@@ -7,7 +7,7 @@
             connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
             script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
             style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
-            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Profil</title>
 
@@ -506,6 +506,9 @@
                                                     data-bs-toggle="modal"
                                                     data-bs-target="#removeAvatarModal">Remove</button>
                                             </div>
+                                            <small id="profileImagePendingStatus" class="d-none text-warning mt-2 d-inline-block">
+                                                A profilkép függő státuszban van, elbírálásra vár.
+                                            </small>
                                         </div>
                                     </div>
 
@@ -663,6 +666,49 @@
                     <button type="button" class="btn btn-danger" id="confirmDeleteProfileBtn" disabled>
                         Törlés (<span id="deleteTimer">5</span>s)
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="profileImageEditorModal" tabindex="-1" aria-labelledby="profileImageEditorModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="profileImageEditorModalLabel">
+                        <i data-lucide="image-up" style="width: 18px; height: 18px;"></i>
+                        Profilkép kivágása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary mb-3">A képet húzással mozgathatod, zoomolhatod és forgathatod.</p>
+                    <div class="profile-image-editor-grid">
+                        <div class="profile-image-editor-main">
+                            <canvas id="profileImageEditorCanvas" class="profile-image-editor-canvas" width="640" height="360"></canvas>
+                        </div>
+                        <div class="profile-image-editor-side">
+                            <div>
+                                <label for="profileImageZoom" class="form-label mb-1">Nagyítás</label>
+                                <input id="profileImageZoom" type="range" class="form-range" min="0.6" max="3" step="0.05" value="1">
+                            </div>
+                            <div>
+                                <label for="profileImageRotate" class="form-label mb-1">Forgatás</label>
+                                <input id="profileImageRotate" type="range" class="form-range" min="-180" max="180" step="1" value="0">
+                            </div>
+                            <div>
+                                <label class="form-label mb-2">Előnézet</label>
+                                <canvas id="profileImageEditorPreview" class="profile-image-editor-preview" width="160" height="160"></canvas>
+                            </div>
+                            <button id="resetProfileImageEditor" type="button" class="btn btn-outline-gold btn-sm">Visszaállítás</button>
+                        </div>
+                    </div>
+                    <div id="profileImageEditorMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="saveProfileImageButton">Mentés</button>
                 </div>
             </div>
         </div>

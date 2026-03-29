@@ -14,16 +14,35 @@ const { stat } = require('fs');
 const { isAdmin } = require('./funtions.js');
 const { profile } = require('console');
 
+const PROFILE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+const ALLOWED_PROFILE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
         callback(null, path.join(__dirname, '../profile_pictures'));
     },
     filename: (request, file, callback) => {
-        callback(null, Date.now() + '-' + file.originalname); //?egyedi név: dátum - file eredeti neve
+        const sanitizedName = String(file.originalname || 'profile-image')
+            .replace(/[^a-zA-Z0-9._-]/g, '_')
+            .toLowerCase();
+        callback(null, Date.now() + '-' + sanitizedName); //?egyedi név: dátum - file eredeti neve
     }
 });
 
-const upload = multer({ storage });
+const profileImageUpload = multer({
+    storage,
+    limits: {
+        fileSize: PROFILE_IMAGE_MAX_BYTES
+    },
+    fileFilter: (request, file, callback) => {
+        if (!ALLOWED_PROFILE_IMAGE_MIME_TYPES.has(file.mimetype)) {
+            callback(new Error('Nem támogatott képformátum. Csak JPG, PNG és WEBP engedélyezett.'));
+            return;
+        }
+
+        callback(null, true);
+    }
+});
 
 router.get('/test', isAdmin, (request, response) => {
     response.status(200).json({
@@ -284,6 +303,7 @@ router.get('/sessionInfo', async (request, response) => {
                     username: dbUser.username,
                     email: dbUser.email,
                     profile_image: dbUser.profile_image,
+                    profile_image_status: dbUser.profile_image_status,
                     role: dbUser.role,
                     elo: dbUser.elo,
                     elo_MM: dbUser.elo_MM,
@@ -607,6 +627,62 @@ router.post('/profile/delete', async (request, response) => {
             message: responseMessage
         });
     }
+});
+
+router.post('/profile/upload-image', (request, response) => {
+    profileImageUpload.single('image')(request, response, async (uploadError) => {
+        let statusCode = 200;
+        let uploadedPath = null;
+        try {
+            if (!request.session?.userId) {
+                statusCode = 401;
+                throw new Error('Bejelentkezés szükséges.');
+            }
+
+            if (uploadError) {
+                if (uploadError.code === 'LIMIT_FILE_SIZE') {
+                    statusCode = 400;
+                    throw new Error('A kép mérete legfeljebb 3 MB lehet.');
+                }
+
+                statusCode = 400;
+                throw new Error(uploadError.message || 'A képfeltöltés sikertelen.');
+            }
+
+            if (!request.file) {
+                statusCode = 400;
+                throw new Error('A kép kiválasztása kötelező.');
+            }
+
+            uploadedPath = `/profile_pictures/${request.file.filename}`;
+            const uploadResult = await sql.uploadProfileImage(request.session.userId, uploadedPath);
+
+            return response.status(200).json({
+                success: true,
+                message: 'A profilkép sikeresen feltöltve, elbírálásra vár.',
+                profile_image: uploadResult.profileImage,
+                profile_image_status: uploadResult.status
+            });
+        } catch (error) {
+            if (uploadedPath) {
+                try {
+                    const relativeUploadedPath = uploadedPath.replace(/^\//, '');
+                    await fs.unlink(path.join(__dirname, '..', relativeUploadedPath));
+                } catch (deleteError) {
+                    console.warn('Feltöltött kép törlése nem sikerült:', deleteError.message);
+                }
+            }
+
+            if (statusCode === 200) {
+                statusCode = 500;
+            }
+
+            return response.status(statusCode).json({
+                success: false,
+                message: error.message || 'Szerverhiba a képfeltöltés közben.'
+            });
+        }
+    });
 });
 
 router.get('/leaderboard', async (request, response) => {

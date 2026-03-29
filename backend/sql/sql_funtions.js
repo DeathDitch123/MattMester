@@ -1,5 +1,48 @@
 const { getPool } = require('./database.js');
 
+const DEFAULT_PROFILE_IMAGE_PATH = '/profile_pictures/default.png';
+const ALLOWED_PROFILE_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+
+function isAllowedProfileImagePath(value) {
+    if (typeof value !== 'string') {
+        return false;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (!normalized.startsWith('/profile_pictures/')) {
+        return false;
+    }
+    if (normalized.includes('..')) {
+        return false;
+    }
+
+    const extensionIndex = normalized.lastIndexOf('.');
+    if (extensionIndex === -1) {
+        return false;
+    }
+
+    const extension = normalized.slice(extensionIndex);
+    return ALLOWED_PROFILE_IMAGE_EXTENSIONS.has(extension);
+}
+
+async function normalizeUserProfileImage(pool, userId, currentProfileImage, latestUploadStatus) {
+    let normalizedProfileImage = currentProfileImage;
+
+    if (!isAllowedProfileImagePath(normalizedProfileImage)) {
+        normalizedProfileImage = DEFAULT_PROFILE_IMAGE_PATH;
+    }
+
+    if (latestUploadStatus === 'rejected') {
+        normalizedProfileImage = DEFAULT_PROFILE_IMAGE_PATH;
+    }
+
+    if (normalizedProfileImage !== currentProfileImage) {
+        await pool.execute('UPDATE users SET profile_image = ? WHERE id = ?', [normalizedProfileImage, userId]);
+    }
+
+    return normalizedProfileImage;
+}
+
 async function insertUser(username, passwordHash, email) {
     const pool = getPool();
     const connection = await pool.getConnection();
@@ -151,6 +194,13 @@ async function getSessionUserById(userId) {
             u.email,
             u.role,
             u.profile_image,
+            (
+                SELECT piu.status
+                FROM profile_image_uploads piu
+                WHERE piu.user_id = u.id
+                ORDER BY piu.upload_time DESC, piu.id DESC
+                LIMIT 1
+            ) AS profile_image_status,
             u.elo,
             u.elo_MM,
             u.elo_bullet,
@@ -177,6 +227,7 @@ async function getSessionUserById(userId) {
             u.email,
             u.role,
             u.profile_image,
+            NULL AS profile_image_status,
             u.elo,
             NULL AS elo_MM,
             NULL AS elo_bullet,
@@ -198,11 +249,39 @@ async function getSessionUserById(userId) {
 
     try {
         const [rows] = await pool.execute(query, [userId]);
-        return rows[0];
+        if (!rows.length) {
+            return null;
+        }
+
+        const dbUser = rows[0];
+        const normalizedProfileImage = await normalizeUserProfileImage(
+            pool,
+            userId,
+            dbUser.profile_image,
+            dbUser.profile_image_status || null
+        );
+
+        dbUser.profile_image = normalizedProfileImage;
+        dbUser.profile_image_status = dbUser.profile_image_status || 'approved';
+        return dbUser;
     } catch (error) {
         if (error.code === 'ER_BAD_FIELD_ERROR') {
             const [rows] = await pool.execute(fallbackQuery, [userId]);
-            return rows[0];
+            if (!rows.length) {
+                return null;
+            }
+
+            const dbUser = rows[0];
+            const normalizedProfileImage = await normalizeUserProfileImage(
+                pool,
+                userId,
+                dbUser.profile_image,
+                null
+            );
+
+            dbUser.profile_image = normalizedProfileImage;
+            dbUser.profile_image_status = 'approved';
+            return dbUser;
         }
         throw new Error('Hiba a session felhasznalo lekerdezese soran.');
     }
@@ -490,12 +569,40 @@ async function ipCollisions(){
 
 async function uploadProfileImage(userId, filename) {
     const pool = getPool();
-    const query = 'INSERT INTO profile_image_uploads (user_id, filename, status) VALUES (?, ?, "pending")';
+    const connection = await pool.getConnection();
     try {
-        const [result] = await pool.execute(query, [userId, filename]);
-        return result.insertId;
+        await connection.beginTransaction();
+
+        const [userRows] = await connection.execute('SELECT id FROM users WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+        if (!userRows.length) {
+            throw new Error('A felhasználó nem található.');
+        }
+
+        if (!isAllowedProfileImagePath(filename)) {
+            throw new Error('Érvénytelen profilkép útvonal.');
+        }
+
+        const [insertResult] = await connection.execute(
+            'INSERT INTO profile_image_uploads (user_id, filename, status) VALUES (?, ?, "pending")',
+            [userId, filename]
+        );
+
+        await connection.execute('UPDATE users SET profile_image = ? WHERE id = ?', [filename, userId]);
+
+        await connection.commit();
+        return {
+            uploadId: insertResult.insertId,
+            status: 'pending',
+            profileImage: filename
+        };
     } catch (error) {
-        throw new Error('Hiba a profil kep feltoltese soran.');
+        await connection.rollback();
+        if (error.message === 'A felhasználó nem található.' || error.message === 'Érvénytelen profilkép útvonal.') {
+            throw error;
+        }
+        throw new Error('Hiba a profil kép feltöltése során.');
+    } finally {
+        connection.release();
     }
 }
 
@@ -560,19 +667,44 @@ async function approveProfileImage(uploadId, adminUserId) {
 
 async function rejectProfileImage(uploadId, adminUserId, reviewNote = null) {
     const pool = getPool();
+    const connection = await pool.getConnection();
     try {
-        const [result] = await pool.execute(
-            'UPDATE profile_image_uploads SET status = "rejected", reviewed_by = ?, review_time = NOW(), review_note = ? WHERE id = ? AND status = "pending"',
+        await connection.beginTransaction();
+
+        const [rows] = await connection.execute(
+            'SELECT user_id, filename, status FROM profile_image_uploads WHERE id = ? FOR UPDATE',
+            [uploadId]
+        );
+
+        if (!rows.length) {
+            throw new Error('A kép nem található vagy már nem függő állapotú.');
+        }
+
+        const upload = rows[0];
+        if (upload.status !== 'pending') {
+            throw new Error('A kép nem található vagy már nem függő állapotú.');
+        }
+
+        await connection.execute(
+            'UPDATE profile_image_uploads SET status = "rejected", reviewed_by = ?, review_time = NOW(), review_note = ? WHERE id = ?',
             [adminUserId, reviewNote, uploadId]
         );
 
-        if (result.affectedRows === 0) {
-            throw new Error('A kep nem talalhato vagy mar nem fuggo allapotu.');
-        }
+        await connection.execute(
+            'UPDATE users SET profile_image = ? WHERE id = ? AND profile_image = ?',
+            [DEFAULT_PROFILE_IMAGE_PATH, upload.user_id, upload.filename]
+        );
 
+        await connection.commit();
         return true;
     } catch (error) {
-        throw new Error('Hiba a kep elutasitasa soran.');
+        await connection.rollback();
+        if (error.message === 'A kép nem található vagy már nem függő állapotú.') {
+            throw error;
+        }
+        throw new Error('Hiba a kép elutasítása során.');
+    } finally {
+        connection.release();
     }
 }
 
@@ -582,8 +714,8 @@ async function getUserProfileImage(userId) {
     try {
         const [rows] = await pool.execute(query, [userId]);
         const profileImage = rows[0]?.profile_image;
-        if (!profileImage || String(profileImage).trim() === '') {
-            return '/profile_pictures/default.png';
+        if (!isAllowedProfileImagePath(profileImage)) {
+            return DEFAULT_PROFILE_IMAGE_PATH;
         }
         return profileImage;
     } catch (error) {
