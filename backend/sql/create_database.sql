@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS user_logs (
 
 
 /* test felhasználók */
-INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, created_at) VALUES
+INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, created_at) VALUES
 ('SakkKirály', '$2b$10$7R.x/8z9z...', 'kiraly@example.com', 2150, 2100, 2200, '2023-01-15 10:00:00'),
 ('GyalogGalopp', '$2b$10$7R.x/8z9z...', 'galopp@example.com', 1450, 1400, 1380, '2023-02-20 11:30:00'),
 ('VezérVágta', '$2b$10$7R.x/8z9z...', 'vezerv@example.com', 1890, 1920, 1850, '2023-03-05 09:15:00'),
@@ -197,3 +197,299 @@ INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, crea
 ('RapidRóbert', '$2b$10$7R.x/8z9z...', 'rapid@example.com', 1690, 1720, 1650, '2023-06-20 12:45:00'),
 ('BulletBéla', '$2b$10$7R.x/8z9z...', 'bulletb@example.com', 1320, 1280, 1550, '2023-07-15 21:00:00'),
 ('ProfiPistike', '$2b$10$7R.x/8z9z...', 'pistike@example.com', 1150, 1100, 1180, '2023-08-30 16:15:00');
+
+-- 11. Statisztikák feltöltése minden felhasználóra
+INSERT IGNORE INTO statistics (user_id)
+SELECT id FROM users;
+
+-- 12. Képességek seed
+INSERT IGNORE INTO abilities (name, description, cooldown_turns) VALUES
+('Double Move', 'A jatekos ugyanabban a korben ket lepest tehet.', 3),
+('Shield Pawn', 'Egy kijelolt gyalog egy korig vedett.', 2),
+('Vision', 'Felfedi az ellenfel kovetkezo lepeseit.', 4),
+('Undo Move', 'Visszavonja a jatekos elozo lepest.', 5);
+
+-- 13. Teszt jatekok
+INSERT INTO games (white_player_id, black_player_id, winner_id, time_control, initial_fen, current_fen, pgn, start_time, end_time, status)
+SELECT
+    w.id,
+    b.id,
+    win.id,
+    '10+0',
+    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 2 3',
+    '1. e4 e5 2. Nf3 Nc6 3. Bc4',
+    '2024-01-03 18:00:00',
+    '2024-01-03 18:22:00',
+    'finished'
+FROM users w
+JOIN users b ON b.username = 'SakkKirály'
+JOIN users win ON win.username = 'admin'
+WHERE w.username = 'admin'
+AND NOT EXISTS (
+    SELECT 1 FROM games g WHERE g.start_time = '2024-01-03 18:00:00' AND g.white_player_id = w.id AND g.black_player_id = b.id
+);
+
+INSERT INTO games (white_player_id, black_player_id, winner_id, time_control, initial_fen, current_fen, pgn, start_time, end_time, status)
+SELECT
+    w.id,
+    b.id,
+    NULL,
+    '5+3',
+    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    'rnbqk1nr/pppp1ppp/4p3/8/2B5/8/PPPPPPPP/RNBQK1NR b KQkq - 2 2',
+    '1. e4 e6 2. Bc4',
+    '2024-01-05 20:10:00',
+    '2024-01-05 20:27:00',
+    'draw'
+FROM users w
+JOIN users b ON b.username = 'VezérVágta'
+WHERE w.username = 'GyalogGalopp'
+AND NOT EXISTS (
+    SELECT 1 FROM games g WHERE g.start_time = '2024-01-05 20:10:00' AND g.white_player_id = w.id AND g.black_player_id = b.id
+);
+
+INSERT INTO games (white_player_id, black_player_id, winner_id, time_control, initial_fen, current_fen, pgn, start_time, end_time, status)
+SELECT
+    w.id,
+    b.id,
+    NULL,
+    '3+0',
+    'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    'rnbqkb1r/pppp1ppp/5n2/4p3/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 2 3',
+    NULL,
+    '2024-01-10 21:40:00',
+    NULL,
+    'ongoing'
+FROM users w
+JOIN users b ON b.username = 'RapidRóbert'
+WHERE w.username = 'BulletBéla'
+AND NOT EXISTS (
+    SELECT 1 FROM games g WHERE g.start_time = '2024-01-10 21:40:00' AND g.white_player_id = w.id AND g.black_player_id = b.id
+);
+
+-- 14. Lépések seed
+INSERT INTO moves (game_id, player_id, ply_number, san, piece, from_pos, to_pos, fen_after, is_capture, is_check, is_checkmate, promotion_piece, timestamp)
+SELECT
+    g.id,
+    p.id,
+    1,
+    'e4',
+    'pawn',
+    'e2',
+    'e4',
+    'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+    FALSE,
+    FALSE,
+    FALSE,
+    NULL,
+    '2024-01-03 18:01:00'
+FROM games g
+JOIN users p ON p.username = 'admin'
+WHERE g.start_time = '2024-01-03 18:00:00'
+AND NOT EXISTS (SELECT 1 FROM moves m WHERE m.game_id = g.id AND m.ply_number = 1);
+
+INSERT INTO moves (game_id, player_id, ply_number, san, piece, from_pos, to_pos, fen_after, is_capture, is_check, is_checkmate, promotion_piece, timestamp)
+SELECT
+    g.id,
+    p.id,
+    2,
+    'e5',
+    'pawn',
+    'e7',
+    'e5',
+    'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+    FALSE,
+    FALSE,
+    FALSE,
+    NULL,
+    '2024-01-03 18:02:00'
+FROM games g
+JOIN users p ON p.username = 'SakkKirály'
+WHERE g.start_time = '2024-01-03 18:00:00'
+AND NOT EXISTS (SELECT 1 FROM moves m WHERE m.game_id = g.id AND m.ply_number = 2);
+
+INSERT INTO moves (game_id, player_id, ply_number, san, piece, from_pos, to_pos, fen_after, is_capture, is_check, is_checkmate, promotion_piece, timestamp)
+SELECT
+    g.id,
+    p.id,
+    3,
+    'Nf3',
+    'knight',
+    'g1',
+    'f3',
+    'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2',
+    FALSE,
+    FALSE,
+    FALSE,
+    NULL,
+    '2024-01-03 18:04:00'
+FROM games g
+JOIN users p ON p.username = 'admin'
+WHERE g.start_time = '2024-01-03 18:00:00'
+AND NOT EXISTS (SELECT 1 FROM moves m WHERE m.game_id = g.id AND m.ply_number = 3);
+
+-- 15. Képességhasználat seed
+INSERT INTO ability_log (game_id, move_id, player_id, ability_id, used_at)
+SELECT
+    g.id,
+    m.id,
+    p.id,
+    a.id,
+    '2024-01-03 18:05:00'
+FROM games g
+JOIN moves m ON m.game_id = g.id AND m.ply_number = 3
+JOIN users p ON p.username = 'admin'
+JOIN abilities a ON a.name = 'Vision'
+WHERE g.start_time = '2024-01-03 18:00:00'
+AND NOT EXISTS (
+    SELECT 1 FROM ability_log al WHERE al.game_id = g.id AND al.move_id = m.id AND al.player_id = p.id AND al.ability_id = a.id
+);
+
+-- 16. Baráti kapcsolatok seed
+INSERT IGNORE INTO friends (user1_id, user2_id, action_user_id, status, invite_time)
+SELECT
+    LEAST(u1.id, u2.id),
+    GREATEST(u1.id, u2.id),
+    u1.id,
+    'accepted',
+    '2024-01-06 10:00:00'
+FROM users u1
+JOIN users u2 ON u2.username = 'SakkKirály'
+WHERE u1.username = 'admin';
+
+INSERT IGNORE INTO friends (user1_id, user2_id, action_user_id, status, invite_time)
+SELECT
+    LEAST(u1.id, u2.id),
+    GREATEST(u1.id, u2.id),
+    u1.id,
+    'pending',
+    '2024-01-07 11:30:00'
+FROM users u1
+JOIN users u2 ON u2.username = 'RapidRóbert'
+WHERE u1.username = 'BulletBéla';
+
+-- 17. Profilkep feltoltesek seed
+INSERT INTO profile_image_uploads (user_id, filename, upload_time, status, review_note, reviewed_by, review_time)
+SELECT
+    u.id,
+    'admin_avatar_v2.png',
+    '2024-01-08 09:10:00',
+    'approved',
+    'Jovahagyva teszt seed soran.',
+    r.id,
+    '2024-01-08 09:40:00'
+FROM users u
+JOIN users r ON r.username = 'admin'
+WHERE u.username = 'admin'
+AND NOT EXISTS (
+    SELECT 1 FROM profile_image_uploads piu WHERE piu.user_id = u.id AND piu.filename = 'admin_avatar_v2.png'
+);
+
+INSERT INTO profile_image_uploads (user_id, filename, upload_time, status, review_note, reviewed_by, review_time)
+SELECT
+    u.id,
+    'rapid_profile_candidate.jpg',
+    '2024-01-08 10:05:00',
+    'pending',
+    NULL,
+    NULL,
+    NULL
+FROM users u
+WHERE u.username = 'RapidRóbert'
+AND NOT EXISTS (
+    SELECT 1 FROM profile_image_uploads piu WHERE piu.user_id = u.id AND piu.filename = 'rapid_profile_candidate.jpg'
+);
+
+-- 18. Jatek chat seed
+INSERT INTO game_chats (game_id, sender_id, message, sent_at)
+SELECT
+    g.id,
+    u.id,
+    'Sok sikert, jo meccset!',
+    '2024-01-10 21:41:00'
+FROM games g
+JOIN users u ON u.username = 'BulletBéla'
+WHERE g.start_time = '2024-01-10 21:40:00'
+AND NOT EXISTS (
+    SELECT 1 FROM game_chats gc WHERE gc.game_id = g.id AND gc.sender_id = u.id AND gc.message = 'Sok sikert, jo meccset!'
+);
+
+INSERT INTO game_chats (game_id, sender_id, message, sent_at)
+SELECT
+    g.id,
+    u.id,
+    'Koszi, legyen izgalmas!',
+    '2024-01-10 21:41:20'
+FROM games g
+JOIN users u ON u.username = 'RapidRóbert'
+WHERE g.start_time = '2024-01-10 21:40:00'
+AND NOT EXISTS (
+    SELECT 1 FROM game_chats gc WHERE gc.game_id = g.id AND gc.sender_id = u.id AND gc.message = 'Koszi, legyen izgalmas!'
+);
+
+-- 19. Login history seed
+INSERT INTO login_history (user_id, ip_address, user_agent, login_time)
+SELECT
+    u.id,
+    '127.0.0.1',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0',
+    '2024-01-02 08:00:00'
+FROM users u
+WHERE u.username = 'admin'
+AND NOT EXISTS (
+    SELECT 1 FROM login_history lh WHERE lh.user_id = u.id AND lh.ip_address = '127.0.0.1' AND lh.login_time = '2024-01-02 08:00:00'
+);
+
+INSERT INTO login_history (user_id, ip_address, user_agent, login_time)
+SELECT
+    u.id,
+    '192.168.1.55',
+    'Mozilla/5.0 (X11; Linux x86_64) Firefox/126.0',
+    '2024-01-02 09:15:00'
+FROM users u
+WHERE u.username = 'SakkKirály'
+AND NOT EXISTS (
+    SELECT 1 FROM login_history lh WHERE lh.user_id = u.id AND lh.ip_address = '192.168.1.55' AND lh.login_time = '2024-01-02 09:15:00'
+);
+
+-- 20. Altalanos user log seed (statisztikai mutatokhoz)
+INSERT INTO user_logs (user_id, event_type, event_category, severity, source, success, metric_key, metric_value, metric_delta, message, metadata, occurred_at)
+SELECT
+    u.id,
+    'elo_update',
+    'game',
+    'info',
+    'backend',
+    TRUE,
+    'elo_mm',
+    1515.0000,
+    15.0000,
+    'Meccs utani ELO valtozas',
+    JSON_OBJECT('reason', 'game_finished', 'before', 1500, 'after', 1515),
+    '2024-01-03 18:23:00'
+FROM users u
+WHERE u.username = 'admin'
+AND NOT EXISTS (
+    SELECT 1 FROM user_logs ul WHERE ul.user_id = u.id AND ul.event_type = 'elo_update' AND ul.occurred_at = '2024-01-03 18:23:00'
+);
+
+INSERT INTO user_logs (user_id, event_type, event_category, severity, source, success, metric_key, metric_value, metric_delta, message, metadata, occurred_at)
+SELECT
+    u.id,
+    'friend_request_sent',
+    'social',
+    'info',
+    'backend',
+    TRUE,
+    'friends_pending',
+    1.0000,
+    1.0000,
+    'Barat felkeres elkuldve',
+    JSON_OBJECT('target_username', 'RapidRóbert'),
+    '2024-01-07 11:30:05'
+FROM users u
+WHERE u.username = 'BulletBéla'
+AND NOT EXISTS (
+    SELECT 1 FROM user_logs ul WHERE ul.user_id = u.id AND ul.event_type = 'friend_request_sent' AND ul.occurred_at = '2024-01-07 11:30:05'
+);
