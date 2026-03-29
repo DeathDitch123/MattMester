@@ -538,6 +538,29 @@ function idoPollingLeall() {
     }
 }
 
+/**
+ * Rövid intervallumon poll-ozza az állapotot amíg a bot gondolkodik.
+ * Amint botGondolkodik === false, frissíti a táblát a bot lépésével.
+ */
+function botValaszPoll() {
+    const timer = setInterval(async () => {
+        if (!gameId) { clearInterval(timer); return; }
+        try {
+            const allapot = await apiAllapot();
+            if (!allapot.botGondolkodik) {
+                clearInterval(timer);
+                allapotFrissit(allapot);
+                if (allapot.vege && allapot.uzenet) {
+                    jatekVegeUI(allapot.uzenet);
+                    idoPollingLeall();
+                }
+            }
+        } catch (e) {
+            clearInterval(timer);
+        }
+    }, 300);
+}
+
 // ────────────────────────────────────────────
 // INICIALIZÁLÁS
 // ────────────────────────────────────────────
@@ -736,6 +759,8 @@ async function babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek
         if (eredmeny.uzenet) {
             jatekVegeUI(eredmeny.uzenet);
             idoPollingLeall();
+        } else if (eredmeny.allapot.botGondolkodik) {
+            botValaszPoll();
         }
     } catch (e) {
         console.error('Lépés hiba:', e);
