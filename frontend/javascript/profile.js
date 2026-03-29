@@ -56,9 +56,131 @@ async function logSessionAndSocketInfo() {
 }
 
 async function refreshAuthUi() {
-    const sessionInfo = await fetchSessionInfo();
-    logSessionAndSocketInfo();
-    
+    try {
+        const sessionInfo = await fetchSessionInfo();
+        showStats(sessionInfo);
+        logSessionAndSocketInfo();
+    } catch (error) {
+        throw new Error(`refreshAuthUi hiba: ${error.message}`);
+    }
+}
+
+function showStats(sessionInfo) {
+    try {
+        if (!sessionInfo?.loggedIn || !sessionInfo?.user) {
+            throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
+        }
+
+        const user = sessionInfo.user;
+        const stats = user.stats || {};
+        const username = user.username || 'Ismeretlen jatekos';
+        const email = user.email || '';
+        const role = user.role || 'player';
+        const roleText = role.charAt(0).toUpperCase() + role.slice(1);
+
+        const toNumber = (value) => {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : 0;
+        };
+
+        const wins = toNumber(stats.wins);
+        const losses = toNumber(stats.losses);
+        const draws = toNumber(stats.draws);
+        const gamesPlayed = wins + losses + draws;
+        const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
+
+        const formatNumber = (value) => toNumber(value).toLocaleString('hu-HU');
+        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=d4af37&color=000&size=128`;
+        const rankClasses = ['rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster'];
+        const getRankForElo = (eloValue) => {
+            const elo = toNumber(eloValue);
+            let rank = { label: 'Grandmaster', className: 'rank-grandmaster' };
+
+            if (elo < 1000) {
+                rank = { label: 'Beginner', className: 'rank-beginner' };
+            } else if (elo < 1200) {
+                rank = { label: 'Intermediate', className: 'rank-intermediate' };
+            } else if (elo < 1500) {
+                rank = { label: 'Advanced', className: 'rank-advanced' };
+            } else if (elo < 1800) {
+                rank = { label: 'Expert', className: 'rank-expert' };
+            } else if (elo < 2100) {
+                rank = { label: 'Master', className: 'rank-master' };
+            }
+
+            return rank;
+        };
+
+        document.querySelectorAll('.top-bar-user-name').forEach((element) => {
+            element.textContent = username;
+        });
+
+        document.querySelectorAll('.top-bar-user-role').forEach((element) => {
+            element.textContent = roleText;
+        });
+
+        const profileName = document.querySelector('.profile-header h1.h3');
+        if (profileName) {
+            profileName.textContent = username;
+        }
+
+        const profileEmail = document.querySelector('.profile-header p.text-secondary');
+        if (profileEmail) {
+            profileEmail.textContent = email;
+        }
+
+        const roleBadge = document.querySelector('.profile-header .role-badge');
+        if (roleBadge) {
+            roleBadge.textContent = roleText;
+        }
+
+        const profileAvatar = document.querySelector('.profile-avatar');
+        if (profileAvatar) {
+            const avatarSrc = user.profile_image || fallbackAvatar;
+            profileAvatar.src = avatarSrc;
+            profileAvatar.alt = username;
+        }
+
+        const eloNumbers = document.querySelectorAll('.elo-display .elo-number');
+        const eloRanks = document.querySelectorAll('.elo-display .elo-rank');
+        const eloValues = [user.elo, user.elo_MM, user.elo_bullet];
+
+        if (eloNumbers[0]) {
+            eloNumbers[0].textContent = formatNumber(user.elo);
+        }
+        if (eloNumbers[1]) {
+            eloNumbers[1].textContent = formatNumber(user.elo_MM);
+        }
+        if (eloNumbers[2]) {
+            eloNumbers[2].textContent = formatNumber(user.elo_bullet);
+        }
+
+        eloValues.forEach((eloValue, index) => {
+            const rankElement = eloRanks[index];
+            if (rankElement) {
+                const rank = getRankForElo(eloValue);
+                rankElement.classList.remove(...rankClasses);
+                rankElement.classList.add(rank.className);
+                rankElement.textContent = rank.label;
+            }
+        });
+
+        const statValues = document.querySelectorAll('.stat-card .stat-value');
+        if (statValues[0]) {
+            statValues[0].textContent = formatNumber(wins);
+        }
+        if (statValues[1]) {
+            statValues[1].textContent = formatNumber(losses);
+        }
+        if (statValues[2]) {
+            statValues[2].textContent = formatNumber(draws);
+        }
+        if (statValues[3]) {
+            statValues[3].textContent = `${winRate}%`;
+        }
+    } catch (error) {
+        throw new Error(`showStats hiba: ${error.message}`);
+    }
 }
 
 // Mobile Sidebar Toggle
