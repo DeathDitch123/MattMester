@@ -614,6 +614,8 @@ function esemenyekUjraKot() {
                     if (eredmeny.uzenet) {
                         jatekVegeUI(eredmeny.uzenet);
                         idoPollingLeall();
+                    } else if (eredmeny.allapot.botGondolkodik) {
+                        botValaszPoll();
                     }
                 } catch (e) {
                     console.error('Átváltozás lépés hiba:', e);
