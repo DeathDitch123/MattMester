@@ -390,6 +390,11 @@ router.post('/profile/settings', async (request, response) => {
             throw new Error('Ervenytelen email formatum.');
         }
 
+        if (!currentPassword) {
+            statusCode = 400;
+            throw new Error('A profil modositasahoz add meg a jelenlegi jelszavad.');
+        }
+
         if (newPassword) {
             if (!currentPassword) {
                 statusCode = 400;
@@ -422,12 +427,10 @@ router.post('/profile/settings', async (request, response) => {
         const hasEmailChanged = email !== currentAuthUser.email;
         const hasPasswordChanged = newPassword.length > 0;
 
-        if (hasPasswordChanged) {
-            const isCurrentPasswordValid = await bcrypt.compare(currentPassword, currentAuthUser.password_hash);
-            if (!isCurrentPasswordValid) {
-                statusCode = 401;
-                throw new Error('A jelenlegi jelszo hibas.');
-            }
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, currentAuthUser.password_hash);
+        if (!isCurrentPasswordValid) {
+            statusCode = 401;
+            throw new Error('A jelenlegi jelszo hibas.');
         }
 
         if (!hasUsernameChanged && !hasEmailChanged && !hasPasswordChanged) {
@@ -505,6 +508,93 @@ router.post('/profile/settings', async (request, response) => {
         return response.status(statusCode).json({
             success: false,
             message: error.message || 'Szerverhiba a profil beallitasok mentese kozben.'
+        });
+    }
+});
+
+router.post('/profile/delete', async (request, response) => {
+    let statusCode = 200;
+    try {
+        if (!request.session?.userId) {
+            statusCode = 401;
+            throw new Error('Bejelentkezes szukseges.');
+        }
+
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+        const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
+
+        if (!currentPassword) {
+            statusCode = 400;
+            throw new Error('A jelenlegi jelszo kotelezo.');
+        }
+
+        if (currentPassword.includes('\\')) {
+            statusCode = 400;
+            throw new Error('A jelszo nem megengedett karaktert tartalmaz.');
+        }
+
+        if (currentPassword.length < 8) {
+            statusCode = 400;
+            throw new Error('A jelszonak legalabb 8 karakter hosszu kell legyen.');
+        }
+
+        if (!passwordRegex.test(currentPassword)) {
+            statusCode = 400;
+            throw new Error('A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.');
+        }
+
+        const authUser = await sql.getUserAuthById(request.session.userId);
+        if (!authUser) {
+            statusCode = 404;
+            throw new Error('A felhasznalo nem talalhato.');
+        }
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, authUser.password_hash);
+        if (!isCurrentPasswordValid) {
+            statusCode = 401;
+            throw new Error('A jelenlegi jelszo hibas.');
+        }
+
+        const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
+
+        await new Promise((resolve) => {
+            request.session.destroy((error) => {
+                if (error) {
+                    console.warn('Session torlesi hiba profil torles utan:', error);
+                }
+                response.clearCookie('connect.sid');
+                resolve();
+            });
+        });
+
+        return response.status(200).json({
+            success: true,
+            message: 'A profil sikeresen torolve lett.',
+            userId: deleteResult.userId,
+            username: deleteResult.username
+        });
+    } catch (error) {
+        console.error('Profile delete hiba:', error);
+
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        if (error.message === 'Admin profil nem torolheto.') {
+            statusCode = 403;
+        }
+
+        if (error.message === 'A felhasznalo nem talalhato.') {
+            statusCode = 404;
+        }
+
+        if (error.message === 'A jelenlegi jelszo hibas.') {
+            statusCode = 401;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a profil torlese kozben.'
         });
     }
 });

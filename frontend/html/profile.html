@@ -647,6 +647,7 @@
                     <label for="deleteProfileConfirmInput" class="mb-2">A megerősítéshez add meg a jelszavad:</label>
                     <input type="password" class="form-control mb-3" id="deleteProfileConfirmInput"
                         placeholder="Jelszó megadása">
+                    <div id="deleteProfileConfirmFeedback" class="form-text text-secondary mt-1 mb-3"></div>
 
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="deleteProfileAcknowledge">
@@ -654,6 +655,8 @@
                             Megértettem, hogy ez a folyamat nem vonható vissza.
                         </label>
                     </div>
+
+                    <div id="deleteProfileMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>

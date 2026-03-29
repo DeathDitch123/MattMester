@@ -587,6 +587,62 @@ async function getUserProfileImage(userId) {
     }
 }
 
+async function deleteUserProfileWithTransaction(userId) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        const [userRows] = await connection.execute(
+            'SELECT id, username, role FROM users WHERE id = ? LIMIT 1 FOR UPDATE',
+            [userId]
+        );
+
+        if (!userRows.length) {
+            throw new Error('A felhasznalo nem talalhato.');
+        }
+
+        const user = userRows[0];
+        if (user.role === 'admin') {
+            throw new Error('Admin profil nem torolheto.');
+        }
+
+        // A kapcsolt adatok explicit torlese nem bukik el akkor sem, ha 0 talalat van.
+        // Ez akkor is ved, ha egy regi adatbazisban hianyosak az FK-k.
+        await connection.execute('DELETE FROM user_logs WHERE user_id = ?', [userId]);
+        await connection.execute('DELETE FROM login_history WHERE user_id = ?', [userId]);
+        await connection.execute('DELETE FROM profile_image_uploads WHERE user_id = ?', [userId]);
+        await connection.execute(
+            'DELETE FROM friends WHERE user1_id = ? OR user2_id = ? OR action_user_id = ?',
+            [userId, userId, userId]
+        );
+
+        await connection.execute('UPDATE games SET winner_id = NULL WHERE winner_id = ?', [userId]);
+        await connection.execute('DELETE FROM moves WHERE player_id = ?', [userId]);
+        await connection.execute('DELETE FROM ability_log WHERE player_id = ?', [userId]);
+        await connection.execute('DELETE FROM games WHERE white_player_id = ? OR black_player_id = ?', [userId, userId]);
+        await connection.execute('DELETE FROM statistics WHERE user_id = ?', [userId]);
+
+        const [deleteResult] = await connection.execute('DELETE FROM users WHERE id = ?', [userId]);
+        if (!deleteResult.affectedRows) {
+            throw new Error('A profil torlese nem sikerult.');
+        }
+
+        await connection.commit();
+        return {
+            deleted: true,
+            userId,
+            username: user.username
+        };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
@@ -611,5 +667,6 @@ module.exports = {
     getPendingProfileImages,
     approveProfileImage,
     rejectProfileImage,
-    getUserProfileImage
+    getUserProfileImage,
+    deleteUserProfileWithTransaction
 };

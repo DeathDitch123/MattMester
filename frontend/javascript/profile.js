@@ -6,6 +6,7 @@ const socket = io();
 lucide.createIcons();
 
 const PROFILE_SETTINGS_CONFIRM_SECONDS = 10;
+const PROFILE_DELETE_CONFIRM_SECONDS = 5;
 const profileSettingsState = {
     bound: false,
     initial: null,
@@ -18,9 +19,17 @@ const profileSettingsState = {
     verifyTimer: null,
     verifyRequestId: 0
 };
+const profileDeleteState = {
+    bound: false,
+    countdownTimer: null,
+    countdownLeft: PROFILE_DELETE_CONFIRM_SECONDS,
+    countdownFinished: false,
+    submitting: false
+};
 
 document.addEventListener('DOMContentLoaded', () => {
     bindLogoutButton();
+    bindProfileDeleteModalEvents();
     refreshAuthUi().catch((error) => {
         console.error('Hiba az auth UI frissitesekor:', error);
     });
@@ -331,7 +340,7 @@ function bindProfileSettingsEvents() {
         }
 
         profileSettingsState.pendingPayload = validation.payload;
-        openProfileSettingsConfirmModal(validation.changedFieldLabels, validation.hasPasswordChangeIntent);
+        openProfileSettingsConfirmModal(validation.changedFieldLabels);
     });
 
     if (elements.confirmSaveButton) {
@@ -451,7 +460,6 @@ function validateProfileSettingsForm() {
 
     const hasUsernameChanged = values.username !== profileSettingsState.initial.username;
     const hasEmailChanged = values.email !== profileSettingsState.initial.email;
-    const hasPasswordChangeIntent = values.newPassword.length > 0 || values.confirmPassword.length > 0;
     if (!values.username) {
         fieldErrors.username = 'A felhasznalonev kotelezo.';
     } else if (values.username.length < 3 || values.username.length > 50) {
@@ -550,7 +558,7 @@ function validateProfileSettingsForm() {
         newPassword: values.newPassword
     } : null;
 
-    return { isValid, payload, changedFieldLabels, hasPasswordChangeIntent };
+    return { isValid, payload, changedFieldLabels };
 }
 
 function resetProfileSettingsConfirmState() {
@@ -580,13 +588,13 @@ function resetProfileSettingsConfirmState() {
 
 }
 
-function openProfileSettingsConfirmModal(changedFieldLabels, requiresPasswordCheck) {
+function openProfileSettingsConfirmModal(changedFieldLabels) {
     const elements = getProfileSettingsElements();
     if (!elements.confirmModal || !elements.changesList) {
         return;
     }
 
-    profileSettingsState.requiresPasswordCheck = Boolean(requiresPasswordCheck);
+    profileSettingsState.requiresPasswordCheck = true;
     profileSettingsState.passwordVerified = !profileSettingsState.requiresPasswordCheck;
 
     elements.changesList.innerHTML = '';
@@ -600,7 +608,7 @@ function openProfileSettingsConfirmModal(changedFieldLabels, requiresPasswordChe
     resetProfileSettingsConfirmState();
 
     if (elements.modalPasswordBlock) {
-        elements.modalPasswordBlock.classList.toggle('d-none', !profileSettingsState.requiresPasswordCheck);
+        elements.modalPasswordBlock.classList.remove('d-none');
     }
 
     if (profileSettingsState.requiresPasswordCheck) {
@@ -739,9 +747,7 @@ async function submitProfileSettingsChanges() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 ...profileSettingsState.pendingPayload,
-                currentPassword: profileSettingsState.requiresPasswordCheck
-                    ? (elements.modalCurrentPasswordInput?.value || '')
-                    : ''
+                currentPassword: elements.modalCurrentPasswordInput?.value || ''
             })
         });
 
@@ -771,6 +777,253 @@ async function submitProfileSettingsChanges() {
         elements.confirmSaveButton.textContent = 'Mentes';
     }
 }
+
+function getProfileDeleteElements() {
+    return {
+        modal: document.getElementById('deleteProfileModal'),
+        passwordInput: document.getElementById('deleteProfileConfirmInput'),
+        passwordFeedback: document.getElementById('deleteProfileConfirmFeedback'),
+        acknowledgeCheckbox: document.getElementById('deleteProfileAcknowledge'),
+        confirmButton: document.getElementById('confirmDeleteProfileBtn'),
+        timer: document.getElementById('deleteTimer'),
+        message: document.getElementById('deleteProfileMessage')
+    };
+}
+
+function setDeleteProfileMessage(type, message) {
+    const { message: messageElement } = getProfileDeleteElements();
+    if (!messageElement) {
+        return;
+    }
+
+    if (!message) {
+        messageElement.className = 'alert d-none mt-3 mb-0';
+        messageElement.textContent = '';
+        return;
+    }
+
+    messageElement.className = `alert alert-${type} mt-3 mb-0`;
+    messageElement.textContent = message;
+}
+
+function setDeleteProfilePasswordFeedback(state, message) {
+    const { passwordInput, passwordFeedback } = getProfileDeleteElements();
+    if (!passwordInput || !passwordFeedback) {
+        return;
+    }
+
+    passwordInput.classList.remove('is-valid', 'is-invalid');
+    passwordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
+    passwordFeedback.textContent = message;
+
+    if (state === 'error') {
+        passwordInput.classList.add('is-invalid');
+        passwordFeedback.classList.add('text-danger');
+    } else if (state === 'success') {
+        passwordInput.classList.add('is-valid');
+        passwordFeedback.classList.add('text-success');
+    } else {
+        passwordFeedback.classList.add('text-secondary');
+    }
+}
+
+function validateDeleteProfilePassword(password) {
+    if (!password) {
+        return 'A jelenlegi jelszo kotelezo.';
+    }
+    if (password.includes('\\')) {
+        return 'A jelszo nem megengedett karaktert tartalmaz.';
+    }
+    if (password.length < 8) {
+        return 'A jelszonak legalabb 8 karakter hosszu kell legyen.';
+    }
+    if (!PASSWORD_REGEX.test(password)) {
+        return 'A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.';
+    }
+    return '';
+}
+
+function updateDeleteProfileConfirmButtonState() {
+    const elements = getProfileDeleteElements();
+    if (!elements.confirmButton || !elements.passwordInput || !elements.acknowledgeCheckbox) {
+        return;
+    }
+
+    const password = elements.passwordInput.value || '';
+    const passwordError = validateDeleteProfilePassword(password);
+    const acknowledged = elements.acknowledgeCheckbox.checked;
+
+    if (!password) {
+        setDeleteProfilePasswordFeedback('neutral', 'A torleshez add meg a jelenlegi jelszavad.');
+    } else if (passwordError) {
+        setDeleteProfilePasswordFeedback('error', passwordError);
+    } else {
+        setDeleteProfilePasswordFeedback('success', 'A jelszo formatuma megfelelo.');
+    }
+
+    const canSubmit = profileDeleteState.countdownFinished
+        && !profileDeleteState.submitting
+        && acknowledged
+        && password.length > 0
+        && !passwordError;
+
+    elements.confirmButton.disabled = !canSubmit;
+}
+
+function resetDeleteProfileModalState() {
+    const elements = getProfileDeleteElements();
+
+    if (profileDeleteState.countdownTimer) {
+        clearInterval(profileDeleteState.countdownTimer);
+        profileDeleteState.countdownTimer = null;
+    }
+
+    profileDeleteState.countdownLeft = PROFILE_DELETE_CONFIRM_SECONDS;
+    profileDeleteState.countdownFinished = false;
+    profileDeleteState.submitting = false;
+
+    if (elements.passwordInput) {
+        elements.passwordInput.value = '';
+    }
+
+    if (elements.acknowledgeCheckbox) {
+        elements.acknowledgeCheckbox.checked = false;
+    }
+
+    if (elements.confirmButton) {
+        elements.confirmButton.innerHTML = `Törlés (<span id="deleteTimer">${PROFILE_DELETE_CONFIRM_SECONDS}</span>s)`;
+        elements.confirmButton.disabled = true;
+    }
+
+    setDeleteProfileMessage('danger', '');
+    setDeleteProfilePasswordFeedback('neutral', 'A torleshez add meg a jelenlegi jelszavad.');
+}
+
+function startDeleteProfileCountdown() {
+    const elements = getProfileDeleteElements();
+    if (!elements.confirmButton) {
+        return;
+    }
+
+    if (profileDeleteState.countdownTimer) {
+        clearInterval(profileDeleteState.countdownTimer);
+    }
+
+    profileDeleteState.countdownTimer = setInterval(() => {
+        profileDeleteState.countdownLeft -= 1;
+
+        const { timer } = getProfileDeleteElements();
+        if (timer) {
+            timer.textContent = String(Math.max(profileDeleteState.countdownLeft, 0));
+        }
+
+        if (profileDeleteState.countdownLeft <= 0) {
+            profileDeleteState.countdownFinished = true;
+            clearInterval(profileDeleteState.countdownTimer);
+            profileDeleteState.countdownTimer = null;
+            elements.confirmButton.textContent = 'Törlés';
+        }
+
+        updateDeleteProfileConfirmButtonState();
+    }, 1000);
+}
+
+async function submitDeleteProfile() {
+    const elements = getProfileDeleteElements();
+    if (!elements.passwordInput || !elements.acknowledgeCheckbox || !elements.confirmButton) {
+        return;
+    }
+
+    const currentPassword = elements.passwordInput.value || '';
+    const passwordError = validateDeleteProfilePassword(currentPassword);
+    if (passwordError) {
+        setDeleteProfilePasswordFeedback('error', passwordError);
+        updateDeleteProfileConfirmButtonState();
+        return;
+    }
+
+    if (!elements.acknowledgeCheckbox.checked) {
+        setDeleteProfileMessage('danger', 'Fogadd el, hogy a torles nem visszavonhato.');
+        updateDeleteProfileConfirmButtonState();
+        return;
+    }
+
+    profileDeleteState.submitting = true;
+    elements.confirmButton.disabled = true;
+    elements.confirmButton.textContent = 'Törlés folyamatban...';
+    setDeleteProfileMessage('danger', '');
+
+    try {
+        const response = await fetch('/api/profile/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ currentPassword })
+        });
+
+        const result = await parseJson(response);
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || 'A profil torlese nem sikerult.');
+        }
+
+        if (elements.modal) {
+            const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
+            modal.hide();
+        }
+
+        if (typeof socket !== 'undefined') {
+            socket.disconnect();
+        }
+
+        window.location.href = '/';
+    } catch (error) {
+        profileDeleteState.submitting = false;
+        setDeleteProfileMessage('danger', error.message || 'Hiba tortent a profil torlese kozben.');
+        updateDeleteProfileConfirmButtonState();
+    }
+}
+
+function bindProfileDeleteModalEvents() {
+    const elements = getProfileDeleteElements();
+    if (!elements.modal || profileDeleteState.bound) {
+        return;
+    }
+
+    profileDeleteState.bound = true;
+
+    if (elements.passwordInput) {
+        elements.passwordInput.addEventListener('input', () => {
+            setDeleteProfileMessage('danger', '');
+            updateDeleteProfileConfirmButtonState();
+        });
+
+        elements.passwordInput.addEventListener('blur', () => {
+            updateDeleteProfileConfirmButtonState();
+        });
+    }
+
+    if (elements.acknowledgeCheckbox) {
+        elements.acknowledgeCheckbox.addEventListener('change', () => {
+            setDeleteProfileMessage('danger', '');
+            updateDeleteProfileConfirmButtonState();
+        });
+    }
+
+    if (elements.confirmButton) {
+        elements.confirmButton.addEventListener('click', async () => {
+            await submitDeleteProfile();
+        });
+    }
+
+    elements.modal.addEventListener('show.bs.modal', () => {
+        resetDeleteProfileModalState();
+        startDeleteProfileCountdown();
+    });
+
+    elements.modal.addEventListener('hidden.bs.modal', () => {
+        resetDeleteProfileModalState();
+    });
+}
+
 // Mobile Sidebar Toggle
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
