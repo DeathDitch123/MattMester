@@ -223,8 +223,9 @@ router.post('/:id/move', async (req, res) => {
             await eloFrissitJatekVegen(jatek, eredmeny.uzenet);
         }
 
-        // Bot aszinkron lépés (1 mp késleltetés, majd gondolkodik)
+        // Bot aszinkron lépés (szintspecifikus késleltetés, majd gondolkodik)
         if (botKell) {
+            const botConfig = nehezsegiSzintInfo(jatek.nehezseg);
             setTimeout(async () => {
                 try {
                     const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
@@ -244,7 +245,7 @@ router.post('/:id/move', async (req, res) => {
                 } finally {
                     jatek.botGondolkodik = false;
                 }
-            }, 1000);
+            }, botConfig.varakozasMs);
         }
     } catch (err) {
         console.error('Chess move hiba:', err);
