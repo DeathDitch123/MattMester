@@ -16,7 +16,7 @@ const { profile } = require('console');
 
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
-        callback(null, path.join(__dirname, '../uploads'));
+        callback(null, path.join(__dirname, '../profile_pictures'));
     },
     filename: (request, file, callback) => {
         callback(null, Date.now() + '-' + file.originalname); //?egyedi név: dátum - file eredeti neve
@@ -76,26 +76,28 @@ router.post('/login', async (request, response) => {
 
                     await sql.logLoginAttempt(user.id, ipAdress, userAgent);
 
-                    return request.session.save((err) => {
-                        if (err) {
-                            console.error('Session mentési hiba:', err);
-                            return response.status(500).json({ success: false, message: 'Hiba a munkamenet mentésekor.' });
-                        }
-
-                        // Csak a sikeres mentés után küldjük el a JSON választ
-                        return response.status(statusCode).json({
-                            success: true,
-                            message: 'Sikeres bejelentkezés.',
-                            user: {
-                                id: currentUser.id,
-                                username: currentUser.username,
-                                email: currentUser.email,
-                                role: currentUser.role,
-                                elo: currentUser.elo,
-                                elo_MM: currentUser.elo_MM,
-                                elo_bullet: currentUser.elo_bullet
-                            },
+                    await new Promise((resolve, reject) => {
+                        request.session.save((err) => {
+                            if (err) {
+                                console.error('Session mentési hiba:', err);
+                                return reject(new Error('Hiba a munkamenet mentésekor.'));
+                            }
+                            resolve();
                         });
+                    });
+
+                    return response.status(statusCode).json({
+                        success: true,
+                        message: 'Sikeres bejelentkezés.',
+                        user: {
+                            id: currentUser.id,
+                            username: currentUser.username,
+                            email: currentUser.email,
+                            role: currentUser.role,
+                            elo: currentUser.elo,
+                            elo_MM: currentUser.elo_MM,
+                            elo_bullet: currentUser.elo_bullet
+                        },
                     });
                 }
             }
@@ -213,28 +215,30 @@ router.post('/register', async (request, response) => {
 
                                             statusCode = 201;
 
-                                            request.session.save(async (err) => {
-                                                if (err) {
-                                                    console.error('Session mentési hiba:', err);
-                                                    return response.status(500).json({ success: false, message: 'Sikertelen regisztráció.' });
-                                                }
-                                                else {
-                                                    console.log('Session sikeresen mentése a regisztráció után.');
-                                                    await sql.logLoginAttempt(result.insertId, ipAdress, userAgent);
-                                                    return response.status(statusCode).json({
-                                                        success: true,
-                                                        message: 'Sikeres regisztráció',
-                                                        user: {
-                                                            id: result.insertId,
-                                                            username,
-                                                            email,
-                                                            role: 'player',
-                                                            elo: 1200,
-                                                            elo_MM: 1200,
-                                                            elo_bullet: 1200
-                                                        },
-                                                    });
-                                                }
+                                            await new Promise((resolve, reject) => {
+                                                request.session.save((err) => {
+                                                    if (err) {
+                                                        console.error('Session mentési hiba:', err);
+                                                        return reject(new Error('Sikertelen regisztráció.'));
+                                                    }
+                                                    resolve();
+                                                });
+                                            });
+
+                                            console.log('Session sikeresen mentése a regisztráció után.');
+                                            await sql.logLoginAttempt(result.insertId, ipAdress, userAgent);
+                                            return response.status(statusCode).json({
+                                                success: true,
+                                                message: 'Sikeres regisztráció',
+                                                user: {
+                                                    id: result.insertId,
+                                                    username,
+                                                    email,
+                                                    role: 'player',
+                                                    elo: 1200,
+                                                    elo_MM: 1200,
+                                                    elo_bullet: 1200
+                                                },
                                             });
 
                                         }
@@ -260,55 +264,52 @@ router.get('/sessionInfo', async (request, response) => {
     let statusCode = 200;
     let result = { success: true, loggedIn: false, user: null };
     try {
-        if (!request.session?.userId) {
-            return response.status(statusCode).json(result);
-        }
+        if (request.session?.userId) {
+            const dbUser = await sql.getSessionUserById(request.session.userId);
 
-        const dbUser = await sql.getSessionUserById(request.session.userId);
+            if (!dbUser) {
+                request.session.destroy(() => {
+                    console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
+                });
+            } else {
+                // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
+                request.session.userId = dbUser.id;
+                request.session.username = dbUser.username;
+                request.session.role = dbUser.role;
+                request.session.elo = dbUser.elo;
 
-        if (!dbUser) {
-            request.session.destroy(() => {
-                console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
-            });
-            return response.status(statusCode).json(result);
-        }
-
-        // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
-        request.session.userId = dbUser.id;
-        request.session.username = dbUser.username;
-        request.session.role = dbUser.role;
-        request.session.elo = dbUser.elo;
-
-        result.loggedIn = true;
-        result.user = {
-            id: dbUser.id,
-            username: dbUser.username,
-            email: dbUser.email,
-            profile_image: dbUser.profile_image,
-            role: dbUser.role,
-            elo: dbUser.elo,
-            elo_MM: dbUser.elo_MM,
-            elo_bullet: dbUser.elo_bullet,
-            is_banned: dbUser.is_banned,
-            ban_reason: dbUser.ban_reason,
-            banned_until: dbUser.banned_until,
-            last_active: dbUser.last_active,
-            is_email_verified: dbUser.is_email_verified,
-            created_at: dbUser.created_at,
-            stats: {
-                wins: dbUser.wins,
-                losses: dbUser.losses,
-                draws: dbUser.draws,
-                abilities_used: dbUser.abilities_used
-            },
-            session: {
-                maxAge: request.session.cookie.maxAge,
-                expires: request.session.cookie.expires,
-                secure: request.session.cookie.secure,
-                httpOnly: request.session.cookie.httpOnly,
-                sameSite: request.session.cookie.sameSite
+                result.loggedIn = true;
+                result.user = {
+                    id: dbUser.id,
+                    username: dbUser.username,
+                    email: dbUser.email,
+                    profile_image: dbUser.profile_image,
+                    role: dbUser.role,
+                    elo: dbUser.elo,
+                    elo_MM: dbUser.elo_MM,
+                    elo_bullet: dbUser.elo_bullet,
+                    is_banned: dbUser.is_banned,
+                    ban_reason: dbUser.ban_reason,
+                    banned_until: dbUser.banned_until,
+                    last_active: dbUser.last_active,
+                    is_email_verified: dbUser.is_email_verified,
+                    created_at: dbUser.created_at,
+                    stats: {
+                        wins: dbUser.wins,
+                        losses: dbUser.losses,
+                        draws: dbUser.draws,
+                        abilities_used: dbUser.abilities_used
+                    },
+                    session: {
+                        maxAge: request.session.cookie.maxAge,
+                        expires: request.session.cookie.expires,
+                        secure: request.session.cookie.secure,
+                        httpOnly: request.session.cookie.httpOnly,
+                        sameSite: request.session.cookie.sameSite
+                    }
+                };
             }
-        };
+        }
 
         return response.status(statusCode).json(result);
     } catch (error) {
@@ -325,27 +326,32 @@ router.get('/sessionInfo', async (request, response) => {
 });
 
 router.post('/profile/verify-current-password', async (request, response) => {
+    let statusCode = 200;
+    let result = { success: true, valid: false, message: 'A jelenlegi jelszo hibas.' };
     try {
         if (!request.session?.userId) {
-            return response.status(401).json({ success: false, valid: false, message: 'Bejelentkezes szukseges.' });
+            statusCode = 401;
+            result = { success: false, valid: false, message: 'Bejelentkezes szukseges.' };
+        } else {
+            const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
+            if (!currentPassword) {
+                statusCode = 400;
+                result = { success: false, valid: false, message: 'A jelenlegi jelszo kotelezo.' };
+            } else {
+                const user = await sql.getUserAuthById(request.session.userId);
+                if (!user) {
+                    statusCode = 404;
+                    result = { success: false, valid: false, message: 'A felhasznalo nem talalhato.' };
+                } else {
+                    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+                    if (isMatch) {
+                        result = { success: true, valid: true, message: 'A jelenlegi jelszo helyes.' };
+                    }
+                }
+            }
         }
 
-        const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
-        if (!currentPassword) {
-            return response.status(400).json({ success: false, valid: false, message: 'A jelenlegi jelszo kotelezo.' });
-        }
-
-        const user = await sql.getUserAuthById(request.session.userId);
-        if (!user) {
-            return response.status(404).json({ success: false, valid: false, message: 'A felhasznalo nem talalhato.' });
-        }
-
-        const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
-        if (!isMatch) {
-            return response.status(200).json({ success: true, valid: false, message: 'A jelenlegi jelszo hibas.' });
-        }
-
-        return response.status(200).json({ success: true, valid: true, message: 'A jelenlegi jelszo helyes.' });
+        return response.status(statusCode).json(result);
     } catch (error) {
         console.error('Current password verify hiba:', error);
         return response.status(500).json({ success: false, valid: false, message: 'Szerverhiba az ellenorzes soran.' });

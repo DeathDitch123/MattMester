@@ -59,6 +59,7 @@ app.get('/html/adminPanel.html', requireAdmin, (req, res) => {
 
 //!Szerver futtatása
 app.use(express.static(path.join(__dirname, '../frontend'))); //?frontend mappa tartalmának betöltése az oldal működéséhez
+app.use('/profile_pictures', express.static(path.join(__dirname, 'profile_pictures')));
 
 //!Routing
 //?Főoldal:

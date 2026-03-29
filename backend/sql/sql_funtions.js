@@ -581,7 +581,11 @@ async function getUserProfileImage(userId) {
     const query = `SELECT profile_image FROM users WHERE id = ?`;
     try {
         const [rows] = await pool.execute(query, [userId]);
-        return rows[0]?.profile_image || null;
+        const profileImage = rows[0]?.profile_image;
+        if (!profileImage || String(profileImage).trim() === '') {
+            return '/profile_pictures/default.png';
+        }
+        return profileImage;
     } catch (error) {
         throw new Error('Hiba a profil kep lekerdezese soran.');
     }

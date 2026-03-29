@@ -27,13 +27,15 @@ router.get('/difficulties', (req, res) => {
 // (FONTOS: a /:id route-ok ELŐTT kell legyen!)
 // ────────────────────────────────────────────
 router.get('/user-elo', async (req, res) => {
+    let statusCode = 200;
+    let responseBody = { elo: KEZDO_ELO, bejelentkezve: false };
     try {
         const userId = req.session?.userId || null;
-        if (!userId) {
-            return res.status(200).json({ elo: KEZDO_ELO, bejelentkezve: false });
+        if (userId) {
+            const elo = await chessSql.eloLekerdezDb(userId);
+            responseBody = { elo: elo || KEZDO_ELO, bejelentkezve: true };
         }
-        const elo = await chessSql.eloLekerdezDb(userId);
-        return res.status(200).json({ elo: elo || KEZDO_ELO, bejelentkezve: true });
+        return res.status(statusCode).json(responseBody);
     } catch (err) {
         console.error('ELO lekérdezés hiba:', err);
         return res.status(500).json({ error: 'Hiba az ELO lekérdezésekor.' });
@@ -81,48 +83,53 @@ router.post('/new', async (req, res) => {
 // POST /api/chess/new-bot — Új játék robot ellen
 // ────────────────────────────────────────────
 router.post('/new-bot', async (req, res) => {
+    let statusCode = 200;
+    let responseBody = null;
     try {
         const { difficulty } = req.body;
         const nehezseg = parseInt(difficulty, 10);
 
         if (!nehezseg || nehezseg < 1 || nehezseg > 8) {
-            return res.status(400).json({ error: 'Érvénytelen nehézségi szint (1-8).' });
+            statusCode = 400;
+            responseBody = { error: 'Érvénytelen nehézségi szint (1-8).' };
+        } else {
+            const { gameId, jatek } = jatekLetrehoz();
+            const userId = req.session?.userId || null;
+            const botInfo = nehezsegiSzintInfo(nehezseg);
+
+            // Bot beállítás: user = fehér, bot = fekete
+            jatek.botAktiv = true;
+            jatek.botSzin = "black";
+            jatek.nehezseg = nehezseg;
+
+            jatek.jatekosok.white.userId = userId;
+            jatek.jatekosok.black.userId = null; // bot
+
+            // Tábla inicializálás
+            const allapot = jatekUjraIndit(jatek);
+
+            // DB mentés
+            if (userId) {
+                try {
+                    const dbGameId = await chessSql.jatekMentDb(userId, userId); // bot-nak nincs userId
+                    jatek.dbGameId = dbGameId;
+                } catch (dbErr) {
+                    console.error('Chess DB bot játék mentési hiba:', dbErr);
+                }
+            }
+
+            responseBody = {
+                gameId,
+                allapot,
+                botInfo: {
+                    nev: botInfo.nev,
+                    elo: botInfo.elo,
+                    szint: nehezseg
+                }
+            };
         }
 
-        const { gameId, jatek } = jatekLetrehoz();
-        const userId = req.session?.userId || null;
-        const botInfo = nehezsegiSzintInfo(nehezseg);
-
-        // Bot beállítás: user = fehér, bot = fekete
-        jatek.botAktiv = true;
-        jatek.botSzin = "black";
-        jatek.nehezseg = nehezseg;
-
-        jatek.jatekosok.white.userId = userId;
-        jatek.jatekosok.black.userId = null; // bot
-
-        // Tábla inicializálás
-        const allapot = jatekUjraIndit(jatek);
-
-        // DB mentés
-        if (userId) {
-            try {
-                const dbGameId = await chessSql.jatekMentDb(userId, userId); // bot-nak nincs userId
-                jatek.dbGameId = dbGameId;
-            } catch (dbErr) {
-                console.error('Chess DB bot játék mentési hiba:', dbErr);
-            }
-        }
-
-        return res.status(200).json({
-            gameId,
-            allapot,
-            botInfo: {
-                nev: botInfo.nev,
-                elo: botInfo.elo,
-                szint: nehezseg
-            }
-        });
+        return res.status(statusCode).json(responseBody);
     } catch (err) {
         console.error('Chess new bot game hiba:', err);
         return res.status(500).json({ error: 'Nem sikerült bot játékot indítani.' });
@@ -176,70 +183,79 @@ router.get('/:id/moves/:x/:y', (req, res) => {
 // POST /api/chess/:id/move — Lépés végrehajtás
 // ────────────────────────────────────────────
 router.post('/:id/move', async (req, res) => {
+    let statusCode = 200;
+    let responseBody = null;
     try {
         const gameId = parseInt(req.params.id, 10);
         const jatek = jatekKeres(gameId);
-        if (!jatek) return res.status(404).json({ error: 'Játék nem található.' });
 
-        // Bot játékban: nem lehet a bot helyett lépni
-        if (jatek.botAktiv && jatek.koronLevo === jatek.botSzin) {
-            return res.status(400).json({ error: 'Nem a te köröd.' });
-        }
+        if (!jatek) {
+            statusCode = 404;
+            responseBody = { error: 'Játék nem található.' };
+        } else if (jatek.botAktiv && jatek.koronLevo === jatek.botSzin) {
+            // Bot játékban: nem lehet a bot helyett lépni
+            statusCode = 400;
+            responseBody = { error: 'Nem a te köröd.' };
+        } else {
+            const { fromX, fromY, toX, toY, promotion } = req.body;
 
-        const { fromX, fromY, toX, toY, promotion } = req.body;
-
-        if ([fromX, fromY, toX, toY].some(v => v === undefined || v === null || isNaN(v))) {
-            return res.status(400).json({ error: 'Hiányzó vagy érvénytelen koordináták.' });
-        }
-
-        const eredmeny = await lepesKoordinataval(
-            jatek,
-            parseInt(fromX, 10),
-            parseInt(fromY, 10),
-            parseInt(toX, 10),
-            parseInt(toY, 10),
-            promotion || "queen"
-        );
-
-        if (!eredmeny.success) {
-            return res.status(400).json({ error: eredmeny.error });
-        }
-
-        // ── BOT VÁLASZLÉPÉS ──
-        let botLepes = null;
-        if (jatek.botAktiv && !jatek.vege && jatek.koronLevo === jatek.botSzin) {
-            await new Promise(r => setTimeout(r, 1000)); // 1 mp várakozás → bot órája tikkel
-            const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
-            if (botValasz) {
-                const botEredmeny = await lepesKoordinataval(
+            if ([fromX, fromY, toX, toY].some(v => v === undefined || v === null || isNaN(v))) {
+                statusCode = 400;
+                responseBody = { error: 'Hiányzó vagy érvénytelen koordináták.' };
+            } else {
+                const eredmeny = await lepesKoordinataval(
                     jatek,
-                    botValasz.fromX, botValasz.fromY,
-                    botValasz.toX, botValasz.toY,
-                    botValasz.promotion || "queen"
+                    parseInt(fromX, 10),
+                    parseInt(fromY, 10),
+                    parseInt(toX, 10),
+                    parseInt(toY, 10),
+                    promotion || "queen"
                 );
-                if (botEredmeny.success) {
-                    botLepes = {
-                        from: { x: botValasz.fromX, y: botValasz.fromY },
-                        to: { x: botValasz.toX, y: botValasz.toY }
-                    };
-                    // Ha a bot lépése véget ér a játék
-                    if (botEredmeny.uzenet) {
-                        eredmeny.uzenet = botEredmeny.uzenet;
+
+                if (!eredmeny.success) {
+                    statusCode = 400;
+                    responseBody = { error: eredmeny.error };
+                } else {
+                    // ── BOT VÁLASZLÉPÉS ──
+                    let botLepes = null;
+                    if (jatek.botAktiv && !jatek.vege && jatek.koronLevo === jatek.botSzin) {
+                        await new Promise(r => setTimeout(r, 1000)); // 1 mp várakozás → bot órája tikkel
+                        const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
+                        if (botValasz) {
+                            const botEredmeny = await lepesKoordinataval(
+                                jatek,
+                                botValasz.fromX, botValasz.fromY,
+                                botValasz.toX, botValasz.toY,
+                                botValasz.promotion || "queen"
+                            );
+                            if (botEredmeny.success) {
+                                botLepes = {
+                                    from: { x: botValasz.fromX, y: botValasz.fromY },
+                                    to: { x: botValasz.toX, y: botValasz.toY }
+                                };
+                                // Ha a bot lépése véget ér a játék
+                                if (botEredmeny.uzenet) {
+                                    eredmeny.uzenet = botEredmeny.uzenet;
+                                }
+                            }
+                        }
                     }
+
+                    // ── ELO FRISSÍTÉS JÁTÉK VÉGÉN ──
+                    if (jatek.vege && jatek.botAktiv) {
+                        await eloFrissitJatekVegen(jatek, eredmeny.uzenet);
+                    }
+
+                    responseBody = {
+                        allapot: jatekAllapotKliens(jatek),
+                        uzenet: eredmeny.uzenet,
+                        botLepes
+                    };
                 }
             }
         }
 
-        // ── ELO FRISSÍTÉS JÁTÉK VÉGÉN ──
-        if (jatek.vege && jatek.botAktiv) {
-            await eloFrissitJatekVegen(jatek, eredmeny.uzenet);
-        }
-
-        return res.status(200).json({
-            allapot: jatekAllapotKliens(jatek),
-            uzenet: eredmeny.uzenet,
-            botLepes
-        });
+        return res.status(statusCode).json(responseBody);
     } catch (err) {
         console.error('Chess move hiba:', err);
         return res.status(500).json({ error: 'Szerverhiba lépés közben.' });
@@ -314,48 +330,56 @@ router.post('/:id/reset', (req, res) => {
 // POST /api/chess/:id/surrender — Feladás ELO-változással
 // ────────────────────────────────────────────
 router.post('/:id/surrender', async (req, res) => {
+    let statusCode = 200;
+    let responseBody = null;
     try {
         const gameId = parseInt(req.params.id, 10);
         const jatek = jatekKeres(gameId);
-        if (!jatek) return res.status(404).json({ error: 'Játék nem található.' });
-        if (jatek.vege) return res.status(200).json({ message: 'Játék már véget ért.', uzenet: 'Feladtad a játékot.' });
+        if (!jatek) {
+            statusCode = 404;
+            responseBody = { error: 'Játék nem található.' };
+        } else if (jatek.vege) {
+            responseBody = { message: 'Játék már véget ért.', uzenet: 'Feladtad a játékot.' };
+        } else {
+            jatek.vege = true; // timer leáll a következő tikknél
 
-        jatek.vege = true; // timer leáll a következő tikknél
+            let uzenet = 'Feladtad a játékot.';
 
-        let uzenet = 'Feladtad a játékot.';
+            if (jatek.botAktiv) {
+                const jatekosSzin = jatek.botSzin === 'white' ? 'black' : 'white';
+                uzenet = `Feladás — ${jatek.botSzin} nyert`;
 
-        if (jatek.botAktiv) {
-            const jatekosSzin = jatek.botSzin === 'white' ? 'black' : 'white';
-            uzenet = `Feladás — ${jatek.botSzin} nyert`;
-
-            const jatekosId = jatek.jatekosok[jatekosSzin].userId;
-            if (jatekosId) {
-                try {
-                    const botInfo = nehezsegiSzintInfo(jatek.nehezseg);
-                    const jatekosElo = await chessSql.eloLekerdezDb(jatekosId);
-                    if (jatekosElo !== null) {
-                        const meccsek = await chessSql.meccsekSzamDb(jatekosId);
-                        const { ujElo, valtozas } = eloSzamit(jatekosElo, botInfo.elo, 0, meccsek);
-                        await chessSql.eloFrissitDb(jatekosId, ujElo);
-                        await chessSql.veresegMentDb(jatekosId);
-                        console.log(`[ELO] Feladás — User #${jatekosId}: ${jatekosElo} → ${ujElo} (${valtozas >= 0 ? '+' : ''}${valtozas})`);
+                const jatekosId = jatek.jatekosok[jatekosSzin].userId;
+                if (jatekosId) {
+                    try {
+                        const botInfo = nehezsegiSzintInfo(jatek.nehezseg);
+                        const jatekosElo = await chessSql.eloLekerdezDb(jatekosId);
+                        if (jatekosElo !== null) {
+                            const meccsek = await chessSql.meccsekSzamDb(jatekosId);
+                            const { ujElo, valtozas } = eloSzamit(jatekosElo, botInfo.elo, 0, meccsek);
+                            await chessSql.eloFrissitDb(jatekosId, ujElo);
+                            await chessSql.veresegMentDb(jatekosId);
+                            console.log(`[ELO] Feladás — User #${jatekosId}: ${jatekosElo} → ${ujElo} (${valtozas >= 0 ? '+' : ''}${valtozas})`);
+                        }
+                    } catch (err) {
+                        console.error('ELO frissítés hiba feladásnál:', err);
                     }
-                } catch (err) {
-                    console.error('ELO frissítés hiba feladásnál:', err);
                 }
             }
-        }
 
-        if (jatek.dbGameId) {
-            try {
-                await chessSql.jatekVegeMentDb(jatek.dbGameId, null, 'abandoned');
-            } catch (dbErr) {
-                console.error('Chess DB surrender mentési hiba:', dbErr);
+            if (jatek.dbGameId) {
+                try {
+                    await chessSql.jatekVegeMentDb(jatek.dbGameId, null, 'abandoned');
+                } catch (dbErr) {
+                    console.error('Chess DB surrender mentési hiba:', dbErr);
+                }
             }
+
+            jatekTorol(gameId);
+            responseBody = { message: 'Játék feladva.', uzenet };
         }
 
-        jatekTorol(gameId);
-        return res.status(200).json({ message: 'Játék feladva.', uzenet });
+        return res.status(statusCode).json(responseBody);
     } catch (err) {
         console.error('Surrender hiba:', err);
         return res.status(500).json({ error: 'Szerverhiba feladásnál.' });

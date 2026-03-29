@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS users (
     username VARCHAR(50) BINARY UNIQUE NOT NULL, 
     password_hash VARCHAR(255) NOT NULL,
     email VARCHAR(100) UNIQUE,
-    profile_image VARCHAR(255) DEFAULT NULL,
+    profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
     elo INT DEFAULT 1200,
     elo_MM INT DEFAULT 1200,
     elo_bullet INT DEFAULT 1200,
@@ -23,6 +23,10 @@ CREATE TABLE IF NOT EXISTS users (
 INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
 VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin')
 ON DUPLICATE KEY UPDATE id = id;
+
+UPDATE users
+SET profile_image = '/profile_pictures/default.png'
+WHERE profile_image IS NULL OR TRIM(profile_image) = '';
 
 CREATE TABLE IF NOT EXISTS profile_image_uploads (
     id INT AUTO_INCREMENT PRIMARY KEY,
