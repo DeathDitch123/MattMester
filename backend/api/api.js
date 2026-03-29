@@ -327,25 +327,25 @@ router.get('/sessionInfo', async (request, response) => {
 
 router.post('/profile/verify-current-password', async (request, response) => {
     let statusCode = 200;
-    let result = { success: true, valid: false, message: 'A jelenlegi jelszo hibas.' };
+    let result = { success: true, valid: false, message: 'A jelenlegi jelszó hibás.' };
     try {
         if (!request.session?.userId) {
             statusCode = 401;
-            result = { success: false, valid: false, message: 'Bejelentkezes szukseges.' };
+            result = { success: false, valid: false, message: 'Bejelentkezés szükséges.' };
         } else {
             const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
             if (!currentPassword) {
                 statusCode = 400;
-                result = { success: false, valid: false, message: 'A jelenlegi jelszo kotelezo.' };
+                result = { success: false, valid: false, message: 'A jelenlegi jelszó kötelező.' };
             } else {
                 const user = await sql.getUserAuthById(request.session.userId);
                 if (!user) {
                     statusCode = 404;
-                    result = { success: false, valid: false, message: 'A felhasznalo nem talalhato.' };
+                    result = { success: false, valid: false, message: 'A felhasználó nem található.' };
                 } else {
                     const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
                     if (isMatch) {
-                        result = { success: true, valid: true, message: 'A jelenlegi jelszo helyes.' };
+                        result = { success: true, valid: true, message: 'A jelenlegi jelszó helyes.' };
                     }
                 }
             }
@@ -354,7 +354,7 @@ router.post('/profile/verify-current-password', async (request, response) => {
         return response.status(statusCode).json(result);
     } catch (error) {
         console.error('Current password verify hiba:', error);
-        return response.status(500).json({ success: false, valid: false, message: 'Szerverhiba az ellenorzes soran.' });
+        return response.status(500).json({ success: false, valid: false, message: 'Szerverhiba az ellenőrzés során.' });
     }
 });
 
@@ -363,7 +363,7 @@ router.post('/profile/settings', async (request, response) => {
     try {
         if (!request.session?.userId) {
             statusCode = 401;
-            throw new Error('A profil modositasahoz be kell jelentkezni.');
+            throw new Error('A profil módosításhoz be kell jelentkezni.');
         }
 
         const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
@@ -378,55 +378,55 @@ router.post('/profile/settings', async (request, response) => {
 
         if (!username || !email) {
             statusCode = 400;
-            throw new Error('A felhasznalonev es az email cim kotelezo.');
+            throw new Error('A felhasználónév és az e-mail cím kötelező.');
         }
 
         if (username.length < 3 || username.length > 50) {
             statusCode = 400;
-            throw new Error('A felhasznalonevnek 3 es 50 karakter kozott kell lennie.');
+            throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie.');
         }
 
         if (!usernameRegex.test(username)) {
             statusCode = 400;
-            throw new Error('A felhasznalonev formatuma ervenytelen.');
+            throw new Error('A felhasználónév formátuma érvénytelen.');
         }
 
         if (!emailRegex.test(email)) {
             statusCode = 400;
-            throw new Error('Ervenytelen email formatum.');
+            throw new Error('Érvénytelen e-mail formátum.');
         }
 
         if (!currentPassword) {
             statusCode = 400;
-            throw new Error('A profil modositasahoz add meg a jelenlegi jelszavad.');
+            throw new Error('A profil módosításához add meg a jelenlegi jelszavad.');
         }
 
         if (newPassword) {
             if (!currentPassword) {
                 statusCode = 400;
-                throw new Error('Jelszo modositasahoz add meg a jelenlegi jelszavad.');
+                throw new Error('Jelszó módosításához add meg a jelenlegi jelszavad.');
             }
 
             if (newPassword.includes('\\')) {
                 statusCode = 400;
-                throw new Error('A jelszo nem megengedett karaktert tartalmaz.');
+                throw new Error('A jelszó nem megengedett karaktert tartalmaz.');
             }
 
             if (newPassword.length < 8) {
                 statusCode = 400;
-                throw new Error('A jelszonak legalabb 8 karakter hosszu kell legyen.');
+                throw new Error('A jelszónak legalább 8 karakter hosszú kell legyen.');
             }
 
             if (!passwordRegex.test(newPassword)) {
                 statusCode = 400;
-                throw new Error('A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.');
+                throw new Error('A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
             }
         }
 
         const currentAuthUser = await sql.getUserAuthById(request.session.userId);
         if (!currentAuthUser) {
             statusCode = 404;
-            throw new Error('A felhasznalo nem talalhato.');
+            throw new Error('A felhasználó nem található.');
         }
 
         const hasUsernameChanged = username !== currentAuthUser.username;
@@ -436,12 +436,12 @@ router.post('/profile/settings', async (request, response) => {
         const isCurrentPasswordValid = await bcrypt.compare(currentPassword, currentAuthUser.password_hash);
         if (!isCurrentPasswordValid) {
             statusCode = 401;
-            throw new Error('A jelenlegi jelszo hibas.');
+            throw new Error('A jelenlegi jelszó hibás.');
         }
 
         if (!hasUsernameChanged && !hasEmailChanged && !hasPasswordChanged) {
             statusCode = 400;
-            throw new Error('Nincs valtozas, nincs mit menteni.');
+            throw new Error('Nincs változás, nincs mit menteni.');
         }
 
         let passwordHash = null;
@@ -486,7 +486,7 @@ router.post('/profile/settings', async (request, response) => {
                 severity: 'info',
                 source: 'backend',
                 success: true,
-                message: 'Profil beallitasok frissitve.',
+                message: 'Profil beállítások frissítve.',
                 metadata: {
                     changedFields
                 }
@@ -497,7 +497,7 @@ router.post('/profile/settings', async (request, response) => {
 
         return response.status(statusCode).json({
             success: true,
-            message: 'A profil beallitasok sikeresen frissultek.',
+            message: 'A profil beállítások sikeresen frissültek.',
             changedFields
         });
     } catch (error) {
@@ -513,7 +513,7 @@ router.post('/profile/settings', async (request, response) => {
 
         return response.status(statusCode).json({
             success: false,
-            message: error.message || 'Szerverhiba a profil beallitasok mentese kozben.'
+            message: error.message || 'Szerverhiba a profil beállítások mentése közben.'
         });
     }
 });
@@ -523,7 +523,7 @@ router.post('/profile/delete', async (request, response) => {
     try {
         if (!request.session?.userId) {
             statusCode = 401;
-            throw new Error('Bejelentkezes szukseges.');
+            throw new Error('Bejelentkezés szükséges.');
         }
 
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
@@ -531,34 +531,34 @@ router.post('/profile/delete', async (request, response) => {
 
         if (!currentPassword) {
             statusCode = 400;
-            throw new Error('A jelenlegi jelszo kotelezo.');
+            throw new Error('A jelenlegi jelszó kötelező.');
         }
 
         if (currentPassword.includes('\\')) {
             statusCode = 400;
-            throw new Error('A jelszo nem megengedett karaktert tartalmaz.');
+            throw new Error('A jelszó nem megengedett karaktert tartalmaz.');
         }
 
         if (currentPassword.length < 8) {
             statusCode = 400;
-            throw new Error('A jelszonak legalabb 8 karakter hosszu kell legyen.');
+            throw new Error('A jelszónak legalább 8 karakter hosszú kell legyen.');
         }
 
         if (!passwordRegex.test(currentPassword)) {
             statusCode = 400;
-            throw new Error('A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.');
+            throw new Error('A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
         }
 
         const authUser = await sql.getUserAuthById(request.session.userId);
         if (!authUser) {
             statusCode = 404;
-            throw new Error('A felhasznalo nem talalhato.');
+            throw new Error('A felhasználó nem található.');
         }
 
         const isCurrentPasswordValid = await bcrypt.compare(currentPassword, authUser.password_hash);
         if (!isCurrentPasswordValid) {
             statusCode = 401;
-            throw new Error('A jelenlegi jelszo hibas.');
+            throw new Error('A jelenlegi jelszó hibás.');
         }
 
         const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
@@ -566,7 +566,7 @@ router.post('/profile/delete', async (request, response) => {
         await new Promise((resolve) => {
             request.session.destroy((error) => {
                 if (error) {
-                    console.warn('Session torlesi hiba profil torles utan:', error);
+                    console.warn('Session törlési hiba profil törlés után:', error);
                 }
                 response.clearCookie('connect.sid');
                 resolve();
@@ -575,32 +575,36 @@ router.post('/profile/delete', async (request, response) => {
 
         return response.status(200).json({
             success: true,
-            message: 'A profil sikeresen torolve lett.',
+            message: 'A profil sikeresen törölve lett.',
             userId: deleteResult.userId,
             username: deleteResult.username
         });
     } catch (error) {
         console.error('Profile delete hiba:', error);
+        let responseMessage = error?.message || 'Szerverhiba a profil törlése közben.';
 
         if (statusCode === 200) {
             statusCode = 500;
         }
 
-        if (error.message === 'Admin profil nem torolheto.') {
+        if (error.message === 'Admin profil nem törölhető.' || error.message === 'Admin profil nem torolheto.') {
             statusCode = 403;
+            responseMessage = 'Admin profil nem törölhető.';
         }
 
-        if (error.message === 'A felhasznalo nem talalhato.') {
+        if (error.message === 'A felhasználó nem található.' || error.message === 'A felhasznalo nem talalhato.') {
             statusCode = 404;
+            responseMessage = 'A felhasználó nem található.';
         }
 
-        if (error.message === 'A jelenlegi jelszo hibas.') {
+        if (error.message === 'A jelenlegi jelszó hibás.' || error.message === 'A jelenlegi jelszo hibas.') {
             statusCode = 401;
+            responseMessage = 'A jelenlegi jelszó hibás.';
         }
 
         return response.status(statusCode).json({
             success: false,
-            message: error.message || 'Szerverhiba a profil torlese kozben.'
+            message: responseMessage
         });
     }
 });

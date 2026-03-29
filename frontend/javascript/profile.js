@@ -15,9 +15,7 @@ const profileSettingsState = {
     countdownLeft: PROFILE_SETTINGS_CONFIRM_SECONDS,
     countdownFinished: false,
     requiresPasswordCheck: false,
-    passwordVerified: false,
-    verifyTimer: null,
-    verifyRequestId: 0
+    passwordVerified: false
 };
 const profileDeleteState = {
     bound: false,
@@ -154,7 +152,6 @@ function showStats(sessionInfo) {
         const winRate = gamesPlayed > 0 ? Math.round((wins / gamesPlayed) * 100) : 0;
 
         const formatNumber = (value) => toNumber(value).toLocaleString('hu-HU');
-        const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=d4af37&color=000&size=128`;
         const rankClasses = ['rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster'];
         const roleBadgeClasses = ['admin', 'badge-custom', 'badge-admin', 'badge-player'];
         const statBadgeClasses = ['badge-custom', 'badge-win', 'badge-loss', 'badge-draw', 'badge-ongoing'];
@@ -210,7 +207,7 @@ function showStats(sessionInfo) {
 
         const profileAvatar = document.querySelector('.profile-avatar');
         if (profileAvatar) {
-            const avatarSrc = user.profile_image || fallbackAvatar;
+            const avatarSrc = user.profile_image;
             profileAvatar.src = avatarSrc;
             profileAvatar.alt = username;
         }
@@ -359,12 +356,7 @@ function bindProfileSettingsEvents() {
 
     if (elements.modalCurrentPasswordInput) {
         elements.modalCurrentPasswordInput.addEventListener('input', () => {
-            if (profileSettingsState.verifyTimer) {
-                clearTimeout(profileSettingsState.verifyTimer);
-            }
-            profileSettingsState.verifyTimer = setTimeout(() => {
-                verifyModalCurrentPassword();
-            }, 250);
+            verifyModalCurrentPassword();
         });
 
         elements.modalCurrentPasswordInput.addEventListener('blur', () => {
@@ -377,11 +369,6 @@ function bindProfileSettingsEvents() {
             profileSettingsState.pendingPayload = null;
             profileSettingsState.passwordVerified = false;
             profileSettingsState.requiresPasswordCheck = false;
-            if (profileSettingsState.verifyTimer) {
-                clearTimeout(profileSettingsState.verifyTimer);
-                profileSettingsState.verifyTimer = null;
-            }
-            profileSettingsState.verifyRequestId += 1;
             resetProfileSettingsConfirmState();
         });
     }
@@ -404,6 +391,7 @@ function getProfileSettingsElements() {
         confirmSaveButton: document.getElementById('profileSettingsConfirmSaveButton'),
         confirmHint: document.getElementById('profileSettingsConfirmHint'),
         changesList: document.getElementById('profileSettingsChangesList'),
+        modalMessage: document.getElementById('profileSettingsModalMessage'),
         modalPasswordBlock: document.getElementById('profileSettingsModalPasswordBlock'),
         modalCurrentPasswordInput: document.getElementById('modalCurrentPassword'),
         modalCurrentPasswordFeedback: document.getElementById('modalCurrentPasswordFeedback')
@@ -431,19 +419,24 @@ function applyInputFeedback(inputElement, feedbackElement, state, message) {
 }
 
 function setProfileSettingsMessage(type, message) {
-    const { formMessage } = getProfileSettingsElements();
-    if (!formMessage) {
+    const { formMessage, modalMessage } = getProfileSettingsElements();
+    const messageTargets = [formMessage, modalMessage].filter(Boolean);
+    if (!messageTargets.length) {
         return;
     }
 
     if (!message) {
-        formMessage.className = 'alert d-none mb-0';
-        formMessage.textContent = '';
+        messageTargets.forEach((target) => {
+            target.className = 'alert d-none mb-0';
+            target.textContent = '';
+        });
         return;
     }
 
-    formMessage.className = `alert alert-${type} mb-0`;
-    formMessage.textContent = message;
+    messageTargets.forEach((target) => {
+        target.className = `alert alert-${type} mb-0`;
+        target.textContent = message;
+    });
 }
 
 function validateProfileSettingsForm() {
@@ -469,38 +462,38 @@ function validateProfileSettingsForm() {
     const hasUsernameChanged = values.username !== profileSettingsState.initial.username;
     const hasEmailChanged = values.email !== profileSettingsState.initial.email;
     if (!values.username) {
-        fieldErrors.username = 'A felhasznalonev kotelezo.';
+        fieldErrors.username = 'A felhasználónév kötelező.';
     } else if (values.username.length < 3 || values.username.length > 50) {
-        fieldErrors.username = 'A felhasznalonevnek 3 es 50 karakter kozott kell lennie.';
+        fieldErrors.username = 'A felhasználónévnek 3 és 50 karakter között kell lennie.';
     } else if (!USERNAME_REGEX.test(values.username)) {
-        fieldErrors.username = 'A felhasznalonev formatuma ervenytelen.';
+        fieldErrors.username = 'A felhasználónév formátuma érvénytelen.';
     }
 
     if (!values.email) {
-        fieldErrors.email = 'Az email cim kotelezo.';
+        fieldErrors.email = 'Az e-mail cím kötelező.';
     } else if (!EMAIL_REGEX.test(values.email)) {
-        fieldErrors.email = 'Ervenytelen email formatum.';
+        fieldErrors.email = 'Érvénytelen e-mail formátum.';
     }
 
     if (values.confirmPassword && !values.newPassword) {
-        fieldErrors.newPassword = 'Adj meg uj jelszot is.';
+        fieldErrors.newPassword = 'Adj meg új jelszót is.';
     }
 
     if (values.newPassword) {
         if (values.newPassword.includes('\\')) {
-            fieldErrors.newPassword = 'A jelszo nem megengedett karaktert tartalmaz.';
+            fieldErrors.newPassword = 'A jelszó nem megengedett karaktert tartalmaz.';
         } else if (values.newPassword.length < 8) {
-            fieldErrors.newPassword = 'A jelszonak legalabb 8 karakter hosszu kell legyen.';
+            fieldErrors.newPassword = 'A jelszónak legalább 8 karakter hosszú kell legyen.';
         } else if (!PASSWORD_REGEX.test(values.newPassword)) {
-            fieldErrors.newPassword = 'A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.';
+            fieldErrors.newPassword = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
         }
     }
 
     if (values.newPassword || values.confirmPassword) {
         if (!values.confirmPassword) {
-            fieldErrors.confirmPassword = 'Erositsd meg az uj jelszot.';
+            fieldErrors.confirmPassword = 'Erősítsd meg az új jelszót.';
         } else if (values.newPassword !== values.confirmPassword) {
-            fieldErrors.confirmPassword = 'A ket jelszo nem egyezik.';
+            fieldErrors.confirmPassword = 'A két jelszó nem egyezik.';
         }
     }
 
@@ -512,28 +505,28 @@ function validateProfileSettingsForm() {
         elements.usernameInput,
         elements.usernameFeedback,
         fieldErrors.username ? 'error' : (hasUsernameChanged ? 'success' : 'neutral'),
-        fieldErrors.username || (hasUsernameChanged ? 'Felhasznalonev modositasra kerul.' : 'Nincs valtozas.')
+        fieldErrors.username || (hasUsernameChanged ? 'A felhasználónév módosításra kerül.' : 'Nincs változás.')
     );
 
     applyInputFeedback(
         elements.emailInput,
         elements.emailFeedback,
         fieldErrors.email ? 'error' : (hasEmailChanged ? 'success' : 'neutral'),
-        fieldErrors.email || (hasEmailChanged ? 'Email modositasra kerul.' : 'Nincs valtozas.')
+        fieldErrors.email || (hasEmailChanged ? 'Az e-mail cím módosításra kerül.' : 'Nincs változás.')
     );
 
     applyInputFeedback(
         elements.newPasswordInput,
         elements.newPasswordFeedback,
         fieldErrors.newPassword ? 'error' : (values.newPassword ? 'success' : 'neutral'),
-        fieldErrors.newPassword || (values.newPassword ? 'Uj jelszo elfogadva.' : 'Jelszo nem valtozik.')
+        fieldErrors.newPassword || (values.newPassword ? 'Az új jelszó formátuma megfelelő.' : 'A jelszó nem változik.')
     );
 
     applyInputFeedback(
         elements.confirmPasswordInput,
         elements.confirmPasswordFeedback,
         fieldErrors.confirmPassword ? 'error' : (values.confirmPassword ? 'success' : 'neutral'),
-        fieldErrors.confirmPassword || (values.confirmPassword ? 'Jelszo megerosites rendben.' : 'Megerosites nem szukseges.')
+        fieldErrors.confirmPassword || (values.confirmPassword ? 'A jelszó megerősítése rendben.' : 'Megerősítés nem szükséges.')
     );
 
     if (elements.saveButton) {
@@ -542,22 +535,22 @@ function validateProfileSettingsForm() {
 
     if (hasFieldError) {
         const firstError = Object.values(fieldErrors).find(Boolean);
-        setProfileSettingsMessage('danger', firstError || 'Ellenorizd a mezoket.');
+        setProfileSettingsMessage('danger', firstError || 'Ellenőrizd a mezőket.');
     } else if (!hasAnyChange) {
-        setProfileSettingsMessage('warning', 'Nincs valtozas. Modosits legalabb egy mezot a menteshez.');
+        setProfileSettingsMessage('warning', 'Nincs változás. Módosíts legalább egy mezőt a mentéshez.');
     } else {
-        setProfileSettingsMessage('success', 'Minden rendben, mentesre kesz.');
+        setProfileSettingsMessage('success', 'Minden rendben, mentésre kész.');
     }
 
     const changedFieldLabels = [];
     if (hasUsernameChanged) {
-        changedFieldLabels.push(`Felhasznalonev: ${profileSettingsState.initial.username} -> ${values.username}`);
+        changedFieldLabels.push(`Felhasználónév: ${profileSettingsState.initial.username} -> ${values.username}`);
     }
     if (hasEmailChanged) {
         changedFieldLabels.push(`Email: ${profileSettingsState.initial.email} -> ${values.email}`);
     }
     if (values.newPassword) {
-        changedFieldLabels.push('Jelszo frissitesre kerul.');
+        changedFieldLabels.push('Jelszó frissítésre kerül.');
     }
 
     const payload = isValid ? {
@@ -585,7 +578,7 @@ function resetProfileSettingsConfirmState() {
     }
 
     if (elements.confirmHint) {
-        elements.confirmHint.textContent = `A mentes gomb ${PROFILE_SETTINGS_CONFIRM_SECONDS} masodperc mulva lesz aktiv.`;
+        elements.confirmHint.textContent = `A mentés gomb ${PROFILE_SETTINGS_CONFIRM_SECONDS} másodperc múlva lesz aktív.`;
     }
 
     if (elements.modalCurrentPasswordInput) {
@@ -620,7 +613,7 @@ function openProfileSettingsConfirmModal(changedFieldLabels) {
     }
 
     if (profileSettingsState.requiresPasswordCheck) {
-        setModalCurrentPasswordFeedback('neutral', 'A menteshez add meg a jelenlegi jelszavad.');
+        setModalCurrentPasswordFeedback('neutral', 'A mentéshez add meg a jelenlegi jelszavad.');
     }
 
     const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
@@ -641,8 +634,8 @@ function openProfileSettingsConfirmModal(changedFieldLabels) {
 
         if (elements.confirmHint) {
             elements.confirmHint.textContent = profileSettingsState.countdownLeft > 0
-                ? `A mentes gomb ${profileSettingsState.countdownLeft} masodperc mulva lesz aktiv.`
-                : 'A mentes gomb most mar aktiv.';
+                ? `A mentés gomb ${profileSettingsState.countdownLeft} másodperc múlva lesz aktív.`
+                : 'A mentés gomb most már aktív.';
         }
 
         if (profileSettingsState.countdownLeft <= 0) {
@@ -683,7 +676,7 @@ function updateModalSaveButtonState() {
     confirmSaveButton.disabled = !(profileSettingsState.countdownFinished && readyByPassword);
 }
 
-async function verifyModalCurrentPassword() {
+function verifyModalCurrentPassword() {
     const elements = getProfileSettingsElements();
     if (!profileSettingsState.requiresPasswordCheck || !elements.modalCurrentPasswordInput) {
         return;
@@ -692,52 +685,35 @@ async function verifyModalCurrentPassword() {
     const currentPassword = elements.modalCurrentPasswordInput.value;
     if (!currentPassword) {
         profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelenlegi jelszo kotelezo.');
+        setModalCurrentPasswordFeedback('error', 'A jelenlegi jelszó kötelező.');
+        updateModalSaveButtonState();
+        return;
+    }
+
+    if (currentPassword.includes('\\')) {
+        profileSettingsState.passwordVerified = false;
+        setModalCurrentPasswordFeedback('error', 'A jelszó nem megengedett karaktert tartalmaz.');
         updateModalSaveButtonState();
         return;
     }
 
     if (currentPassword.length < 8) {
         profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelszo formatuma ervenytelen.');
+        setModalCurrentPasswordFeedback('error', 'A jelszónak legalább 8 karakter hosszú kell legyen.');
         updateModalSaveButtonState();
         return;
     }
 
-    const requestId = ++profileSettingsState.verifyRequestId;
-    setModalCurrentPasswordFeedback('neutral', 'Jelszo ellenorzese...');
-
-    try {
-        const response = await fetch('/api/profile/verify-current-password', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ currentPassword })
-        });
-        const result = await parseJson(response);
-
-        if (requestId !== profileSettingsState.verifyRequestId) {
-            return;
-        }
-
-        if (!response.ok || !result.success || result.valid !== true) {
-            profileSettingsState.passwordVerified = false;
-            setModalCurrentPasswordFeedback('error', result.message || 'A jelenlegi jelszo hibas.');
-            updateModalSaveButtonState();
-            return;
-        }
-
-        profileSettingsState.passwordVerified = true;
-        setModalCurrentPasswordFeedback('success', 'A jelenlegi jelszo helyes.');
-        updateModalSaveButtonState();
-    } catch (error) {
-        if (requestId !== profileSettingsState.verifyRequestId) {
-            return;
-        }
-
+    if (!PASSWORD_REGEX.test(currentPassword)) {
         profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'Nem sikerult ellenorizni a jelszot.');
+        setModalCurrentPasswordFeedback('error', 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
         updateModalSaveButtonState();
+        return;
     }
+
+    profileSettingsState.passwordVerified = true;
+    setModalCurrentPasswordFeedback('success', 'A jelszó formátuma megfelelő.');
+    updateModalSaveButtonState();
 }
 
 async function submitProfileSettingsChanges() {
@@ -761,10 +737,10 @@ async function submitProfileSettingsChanges() {
 
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Nem sikerult menteni a profil beallitasokat.');
+            throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
         }
 
-        setProfileSettingsMessage('success', result.message || 'A profil beallitasok sikeresen frissultek.');
+        setProfileSettingsMessage('success', result.message || 'A profil beállítások sikeresen frissültek.');
         profileSettingsState.pendingPayload = null;
 
         if (elements.newPasswordInput) {
@@ -780,9 +756,9 @@ async function submitProfileSettingsChanges() {
 
         await refreshAuthUi();
     } catch (error) {
-        setProfileSettingsMessage('danger', error.message || 'Hiba tortent a mentes soran.');
-        elements.confirmSaveButton.disabled = false;
+        setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
         elements.confirmSaveButton.textContent = 'Mentes';
+        updateModalSaveButtonState();
     }
 }
 
@@ -837,16 +813,16 @@ function setDeleteProfilePasswordFeedback(state, message) {
 
 function validateDeleteProfilePassword(password) {
     if (!password) {
-        return 'A jelenlegi jelszo kotelezo.';
+        return 'A jelenlegi jelszó kötelező.';
     }
     if (password.includes('\\')) {
-        return 'A jelszo nem megengedett karaktert tartalmaz.';
+        return 'A jelszó nem megengedett karaktert tartalmaz.';
     }
     if (password.length < 8) {
-        return 'A jelszonak legalabb 8 karakter hosszu kell legyen.';
+        return 'A jelszónak legalább 8 karakter hosszú kell legyen.';
     }
     if (!PASSWORD_REGEX.test(password)) {
-        return 'A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.';
+        return 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
     }
     return '';
 }
@@ -862,11 +838,11 @@ function updateDeleteProfileConfirmButtonState() {
     const acknowledged = elements.acknowledgeCheckbox.checked;
 
     if (!password) {
-        setDeleteProfilePasswordFeedback('neutral', 'A torleshez add meg a jelenlegi jelszavad.');
+        setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
     } else if (passwordError) {
         setDeleteProfilePasswordFeedback('error', passwordError);
     } else {
-        setDeleteProfilePasswordFeedback('success', 'A jelszo formatuma megfelelo.');
+        setDeleteProfilePasswordFeedback('success', 'A jelszó formátuma megfelelő.');
     }
 
     const canSubmit = profileDeleteState.countdownFinished
@@ -904,7 +880,7 @@ function resetDeleteProfileModalState() {
     }
 
     setDeleteProfileMessage('danger', '');
-    setDeleteProfilePasswordFeedback('neutral', 'A torleshez add meg a jelenlegi jelszavad.');
+    setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
 }
 
 function startDeleteProfileCountdown() {
@@ -951,7 +927,7 @@ async function submitDeleteProfile() {
     }
 
     if (!elements.acknowledgeCheckbox.checked) {
-        setDeleteProfileMessage('danger', 'Fogadd el, hogy a torles nem visszavonhato.');
+        setDeleteProfileMessage('danger', 'Fogadd el, hogy a törlés nem visszavonható.');
         updateDeleteProfileConfirmButtonState();
         return;
     }
@@ -970,7 +946,7 @@ async function submitDeleteProfile() {
 
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
-            throw new Error(result.message || 'A profil torlese nem sikerult.');
+            throw new Error(result.message || 'A profil törlése nem sikerült.');
         }
 
         if (elements.modal) {
@@ -985,7 +961,7 @@ async function submitDeleteProfile() {
         window.location.href = '/';
     } catch (error) {
         profileDeleteState.submitting = false;
-        setDeleteProfileMessage('danger', error.message || 'Hiba tortent a profil torlese kozben.');
+        setDeleteProfileMessage('danger', error.message || 'Hiba történt a profil törlése közben.');
         updateDeleteProfileConfirmButtonState();
     }
 }
