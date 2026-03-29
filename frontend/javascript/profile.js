@@ -60,9 +60,10 @@ async function refreshAuthUi() {
     try {
         const sessionInfo = await fetchSessionInfo();
         showStats(sessionInfo);
+        handleProfileSettings(sessionInfo);
         logSessionAndSocketInfo();
     } catch (error) {
-        throw new Error(`refreshAuthUi hiba: ${error.message}`);
+        console.error('refreshAuthUi hiba:', error);
     }
 }
 
@@ -101,12 +102,16 @@ function bindLogoutButton() {
 
 function showStats(sessionInfo) {
     try {
-        if (!sessionInfo?.loggedIn || !sessionInfo?.user) {
+        const user = sessionInfo?.user || sessionInfo?.data?.user || null;
+        if (!user) {
             throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
         }
 
-        const user = sessionInfo.user;
-        const stats = user.stats || {};
+        const stats = user.stats || sessionInfo?.stats || {
+            wins: user.wins,
+            losses: user.losses,
+            draws: user.draws
+        };
         const username = user.username || 'Ismeretlen jatekos';
         const email = user.email || '';
         const role = user.role || 'player';
@@ -245,6 +250,32 @@ function showStats(sessionInfo) {
     }
 }
 
+function handleProfileSettings(sessionInfo) {
+    try {
+        const user = sessionInfo?.user || sessionInfo?.data?.user || null;
+        if (!user) {
+            throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
+        }
+        let settingsUsername = document.getElementById('settingsUsername');
+        let settingsEmail = document.getElementById('settingsEmail');
+        let settingsNewPassword = document.getElementById('settingsNewPassword');
+        let settingsConfirmPassword = document.getElementById('settingsConfirmPassword');
+        if (settingsUsername) {
+            settingsUsername.value = user.username;
+        }
+        if (settingsEmail) {
+            settingsEmail.value = user.email;
+        }
+        if (settingsNewPassword) {
+            settingsNewPassword.value = '';
+        }
+        if (settingsConfirmPassword) {
+            settingsConfirmPassword.value = '';
+        }
+    } catch (error) {
+        console.error('Hiba a profil beállítások kezelésekor:', error);
+    }
+}
 // Mobile Sidebar Toggle
 function toggleSidebar() {
     const sidebar = document.getElementById('sidebar');
