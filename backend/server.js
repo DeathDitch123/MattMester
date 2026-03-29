@@ -3,9 +3,11 @@ const express = require('express'); //?npm install express
 const session = require('express-session'); //?npm install express-session
 const path = require('path');
 const http = require('http');
+const fs = require('fs');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
 const { services, leaderboardService } = require('./services.js');
+const sql = require('./sql/sql_funtions');
 
 //!Beállítások
 const app = express();
@@ -82,11 +84,49 @@ io.on('connection', (socket) => {
     });
 });
 
+//!Cleanup service: Discarded profilképek törlése periodikusan
+async function cleanupDiscardedProfileImages() {
+    try {
+        const discardedRecords = await sql.getAndDeleteDiscardedProfileImages();
+        
+        if (discardedRecords && discardedRecords.length > 0) {
+            for (const record of discardedRecords) {
+                const filePath = path.join(__dirname, 'profile_pictures', record.filename);
+                try {
+                    // Fájl törlése a disk-ről
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        console.log(`✓ Discarded profilkép törölve: ${record.filename}`);
+                    }
+                } catch (fileErr) {
+                    console.error(`✗ Fájl törlési hiba: ${record.filename}`, fileErr.message);
+                }
+                
+                // Adatbázis rekord törlése
+                try {
+                    await sql.deleteDiscardedProfileImageRecord(record.id);
+                    console.log(`✓ DB rekord törölve: ${record.id}`);
+                } catch (dbErr) {
+                    console.error(`✗ DB törlési hiba: ${record.id}`, dbErr.message);
+                }
+            }
+            console.log(`Cleanup service: ${discardedRecords.length} discarded kép feldolgozva`);
+        }
+    } catch (err) {
+        console.error('Cleanup service hiba:', err.message);
+    }
+}
+
 // Adatbázis inicializálása, majd szerver indítása
 initDatabase()
     .then(() => {
         services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
         leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
+        
+        // Cleanup service: discarded profilképek törlése minden percben
+        setInterval(cleanupDiscardedProfileImages, 60000); // 60 másodpercenként futtatás
+        console.log('Cleanup service elindítva (percenkénti futás)');
+        
         server.listen(port, ip, () => {
             console.log(`Szerver és Socket elérhetősége: http://${ip}:${port}`);
         });
