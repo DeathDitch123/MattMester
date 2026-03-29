@@ -84,6 +84,20 @@ io.on('connection', (socket) => {
     });
 });
 
+function resolveProfileImageFilePath(storedFilename) {
+    const normalized = String(storedFilename || '').replace(/\\/g, '/').trim();
+    if (!normalized) {
+        return null;
+    }
+
+    if (normalized.startsWith('/profile_pictures/')) {
+        const relativePath = normalized.replace(/^\//, '');
+        return path.join(__dirname, relativePath);
+    }
+
+    return path.join(__dirname, 'profile_pictures', normalized);
+}
+
 //!Cleanup service: Discarded és elutasított profilképek törlése periodikusan
 async function cleanupDiscardedProfileImages() {
     try {
@@ -91,23 +105,42 @@ async function cleanupDiscardedProfileImages() {
         
         if (discardedRecords && discardedRecords.length > 0) {
             for (const record of discardedRecords) {
-                const filePath = path.join(__dirname, 'profile_pictures', record.filename);
+                const filePath = resolveProfileImageFilePath(record.filename);
+                let shouldDeleteDbRecord = false;
+
+                if (!filePath) {
+                    console.warn(`[Cleanup] Fájlnév hiányzik, DB rekord megtartva: id=${record.id}`);
+                    continue;
+                }
+
                 try {
-                    // Fájl törlése a disk-ről
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                        console.log(`✓ Profilkép törölve (discarded/rejected): ${record.filename}`);
-                    }
+                    await fs.promises.unlink(filePath);
+                    shouldDeleteDbRecord = true;
+                    console.log(`[Cleanup] Fájl törölve: ${record.filename}`);
                 } catch (fileErr) {
-                    console.error(`✗ Fájl törlési hiba: ${record.filename}`, fileErr.message);
+                    if (fileErr && fileErr.code === 'ENOENT') {
+                        shouldDeleteDbRecord = true;
+                        console.log(`[Cleanup] Fájl nem létezik (ENOENT): ${record.filename}`);
+                    } else {
+                        shouldDeleteDbRecord = false;
+                        console.error(`[Cleanup] Fájltörlés hiba (újrapróbálható): ${record.filename}`, fileErr.message);
+                    }
                 }
                 
-                // Adatbázis rekord törlése
+                if (!shouldDeleteDbRecord) {
+                    console.log(`[Cleanup] DB rekord megtartva: ${record.id}`);
+                    continue;
+                }
+
                 try {
-                    await sql.deleteDiscardedProfileImageRecord(record.id);
-                    console.log(`✓ DB rekord törölve: ${record.id}`);
+                    const deleted = await sql.deleteDiscardedProfileImageRecord(record.id);
+                    if (deleted) {
+                        console.log(`[Cleanup] DB rekord törölve: ${record.id}`);
+                    } else {
+                        console.log(`[Cleanup] DB rekord megtartva (nem törölhető állapot): ${record.id}`);
+                    }
                 } catch (dbErr) {
-                    console.error(`✗ DB törlési hiba: ${record.id}`, dbErr.message);
+                    console.error(`[Cleanup] DB törlési hiba: ${record.id}`, dbErr.message);
                 }
             }
             console.log(`Cleanup service: ${discardedRecords.length} kép feldolgozva (discarded + rejected)`);
