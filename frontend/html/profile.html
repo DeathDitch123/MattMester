@@ -129,7 +129,7 @@
                     <div class="col-12 col-md-7">
                         <div class="d-flex flex-column flex-md-row align-items-center gap-4">
                             <div class="position-relative">
-                                <img class="profile-avatar"
+                                <img id="profileAvatarDashboard" class="profile-avatar"
                                     src="https://ui-avatars.com/api/?name=Grand+Master&background=d4af37&color=000&size=128"
                                     alt="GrandMaster_99">
                                 <span class="position-absolute bottom-0 end-0 p-1">
@@ -149,6 +149,7 @@
                                     <span class="status-dot"></span>
                                     <span class="text-uppercase small fw-bold tracking-wider">Online</span>
                                 </div>
+                                <small id="profileImageHeaderStatus" class="text-secondary mt-2 d-inline-block">Profilkép státusz: Jóváhagyott</small>
                             </div>
                         </div>
                     </div>
@@ -506,8 +507,8 @@
                                                     data-bs-toggle="modal"
                                                     data-bs-target="#removeAvatarModal">Remove</button>
                                             </div>
-                                            <small id="profileImagePendingStatus" class="d-none text-warning mt-2 d-inline-block">
-                                                A profilkép függő státuszban van, elbírálásra vár.
+                                            <small id="profileImageSettingsStatus" class="text-secondary mt-2 d-inline-block">
+                                                Profilkép státusz: Jóváhagyott
                                             </small>
                                         </div>
                                     </div>

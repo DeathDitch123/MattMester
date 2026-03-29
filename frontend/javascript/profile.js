@@ -141,6 +141,61 @@ function bindLogoutButton() {
     });
 }
 
+function getProfileImageStatusMeta(statusInput) {
+    const normalizedStatus = String(statusInput || '').trim().toLowerCase() || 'approved';
+
+    if (normalizedStatus === 'pending') {
+        return {
+            normalizedStatus,
+            textClass: 'text-warning',
+            label: 'Függő (elbírálásra vár)'
+        };
+    }
+
+    if (normalizedStatus === 'rejected') {
+        return {
+            normalizedStatus,
+            textClass: 'text-danger',
+            label: 'Elutasított'
+        };
+    }
+
+    return {
+        normalizedStatus: 'approved',
+        textClass: 'text-success',
+        label: 'Jóváhagyott'
+    };
+}
+
+function applyProfileImagePresentation(user) {
+    const profileImagePath = (user?.profile_image || '').trim() || '/profile_pictures/default.png';
+    const username = user?.username || 'Felhasznalo';
+    const statusMeta = getProfileImageStatusMeta(user?.profile_image_status);
+    const isPending = statusMeta.normalizedStatus === 'pending';
+
+    const avatars = [
+        document.getElementById('profileAvatarDashboard'),
+        document.getElementById('profileAvatarSettings')
+    ].filter(Boolean);
+
+    avatars.forEach((avatarElement) => {
+        avatarElement.src = profileImagePath;
+        avatarElement.alt = `${username} profilkepe`;
+        avatarElement.classList.toggle('profile-image-pending', isPending);
+    });
+
+    const statusElements = [
+        document.getElementById('profileImageHeaderStatus'),
+        document.getElementById('profileImageSettingsStatus')
+    ].filter(Boolean);
+
+    statusElements.forEach((statusElement) => {
+        statusElement.classList.remove('text-secondary', 'text-success', 'text-warning', 'text-danger');
+        statusElement.classList.add(statusMeta.textClass);
+        statusElement.textContent = `Profilkép státusz: ${statusMeta.label}`;
+    });
+}
+
 function showStats(sessionInfo) {
     try {
         const user = sessionInfo?.user || sessionInfo?.data?.user || null;
@@ -223,12 +278,7 @@ function showStats(sessionInfo) {
             }
         }
 
-        const profileAvatar = document.querySelector('.profile-avatar');
-        if (profileAvatar) {
-            const avatarSrc = user.profile_image;
-            profileAvatar.src = avatarSrc;
-            profileAvatar.alt = username;
-        }
+        applyProfileImagePresentation(user);
 
         const eloNumbers = document.querySelectorAll('.elo-display .elo-number');
         const eloRanks = document.querySelectorAll('.elo-display .elo-rank');
@@ -300,20 +350,7 @@ function handleProfileSettings(sessionInfo) {
         const settingsEmail = document.getElementById('settingsEmail');
         const settingsNewPassword = document.getElementById('settingsNewPassword');
         const settingsConfirmPassword = document.getElementById('settingsConfirmPassword');
-        const settingsUserProfilePic = document.getElementById('profileAvatarSettings');
-        const profileImagePendingStatus = document.getElementById('profileImagePendingStatus');
-
-        if (settingsUserProfilePic) {
-            const settingsUserProfilePicSrc = (user.profile_image || '').trim() || '/profile_pictures/default.png';
-            settingsUserProfilePic.src = settingsUserProfilePicSrc;
-            settingsUserProfilePic.alt = `${user.username || 'Felhasznalo'} profilkepe`;
-            const isPendingImage = user.profile_image_status === 'pending';
-            settingsUserProfilePic.classList.toggle('profile-image-pending', isPendingImage);
-        }
-
-        if (profileImagePendingStatus) {
-            profileImagePendingStatus.classList.toggle('d-none', user.profile_image_status !== 'pending');
-        }
+        applyProfileImagePresentation(user);
 
         if (settingsUsername) {
             settingsUsername.value = user.username;
