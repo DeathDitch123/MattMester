@@ -6,6 +6,7 @@ const socket = io();
 lucide.createIcons();
 
 document.addEventListener('DOMContentLoaded', () => {
+    bindLogoutButton();
     refreshAuthUi();
 });
 // Ez parsol
@@ -63,6 +64,39 @@ async function refreshAuthUi() {
     } catch (error) {
         throw new Error(`refreshAuthUi hiba: ${error.message}`);
     }
+}
+
+async function handleLogout() {
+    try {
+        const response = await fetch('/api/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await parseJson(response);
+
+        if (!response.ok) {
+            throw new Error(result.message || 'Sikertelen kijelentkezes.');
+        }
+
+        if (typeof socket !== 'undefined') {
+            socket.disconnect();
+            socket.connect();
+        }
+
+        window.location.reload();
+    } catch (error) {
+        console.error('Hiba a kijelentkezes soran:', error);
+    }
+}
+
+function bindLogoutButton() {
+    const logoutButtons = document.querySelectorAll('[data-bs-target="#logoutModal"]');
+    logoutButtons.forEach((button) => {
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            handleLogout();
+        });
+    });
 }
 
 function showStats(sessionInfo) {
