@@ -285,6 +285,14 @@ function handleProfileSettings(sessionInfo) {
         const settingsEmail = document.getElementById('settingsEmail');
         const settingsNewPassword = document.getElementById('settingsNewPassword');
         const settingsConfirmPassword = document.getElementById('settingsConfirmPassword');
+        const settingsUserProfilePic = document.getElementById('profileAvatarSettings');
+
+        if (settingsUserProfilePic) {
+            const settingsUserProfilePicSrc = (user.profile_image || '').trim() || '/profile_pictures/default.png';
+            settingsUserProfilePic.src = settingsUserProfilePicSrc;
+            settingsUserProfilePic.alt = `${user.username || 'Felhasznalo'} profilkepe`;
+        }
+
         if (settingsUsername) {
             settingsUsername.value = user.username;
         }
