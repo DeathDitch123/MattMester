@@ -92,19 +92,21 @@ function showStats(sessionInfo) {
         const formatNumber = (value) => toNumber(value).toLocaleString('hu-HU');
         const fallbackAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=d4af37&color=000&size=128`;
         const rankClasses = ['rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster'];
+        const roleBadgeClasses = ['admin', 'badge-custom', 'badge-admin', 'badge-player'];
+        const statBadgeClasses = ['badge-custom', 'badge-win', 'badge-loss', 'badge-draw', 'badge-ongoing'];
         const getRankForElo = (eloValue) => {
             const elo = toNumber(eloValue);
             let rank = { label: 'Grandmaster', className: 'rank-grandmaster' };
 
-            if (elo < 1000) {
+            if (elo < 1100) {
                 rank = { label: 'Beginner', className: 'rank-beginner' };
-            } else if (elo < 1200) {
+            } else if (elo < 1400) {
                 rank = { label: 'Intermediate', className: 'rank-intermediate' };
-            } else if (elo < 1500) {
+            } else if (elo < 1700) {
                 rank = { label: 'Advanced', className: 'rank-advanced' };
-            } else if (elo < 1800) {
+            } else if (elo < 2000) {
                 rank = { label: 'Expert', className: 'rank-expert' };
-            } else if (elo < 2100) {
+            } else if (elo < 2300) {
                 rank = { label: 'Master', className: 'rank-master' };
             }
 
@@ -117,6 +119,8 @@ function showStats(sessionInfo) {
 
         document.querySelectorAll('.top-bar-user-role').forEach((element) => {
             element.textContent = roleText;
+            element.classList.remove(...roleBadgeClasses);
+            element.classList.add('badge-custom', role === 'admin' ? 'badge-admin' : 'badge-player');
         });
 
         const profileName = document.querySelector('.profile-header h1.h3');
@@ -132,6 +136,12 @@ function showStats(sessionInfo) {
         const roleBadge = document.querySelector('.profile-header .role-badge');
         if (roleBadge) {
             roleBadge.textContent = roleText;
+            roleBadge.classList.remove(...roleBadgeClasses);
+            if (role === 'admin') {
+                roleBadge.classList.add('admin', 'badge-custom', 'badge-admin');
+            } else {
+                roleBadge.classList.add('badge-custom', 'badge-player');
+            }
         }
 
         const profileAvatar = document.querySelector('.profile-avatar');
@@ -166,6 +176,7 @@ function showStats(sessionInfo) {
         });
 
         const statValues = document.querySelectorAll('.stat-card .stat-value');
+        const statLabels = document.querySelectorAll('.stat-card .stat-label');
         if (statValues[0]) {
             statValues[0].textContent = formatNumber(wins);
         }
@@ -177,6 +188,23 @@ function showStats(sessionInfo) {
         }
         if (statValues[3]) {
             statValues[3].textContent = `${winRate}%`;
+        }
+
+        if (statLabels[0]) {
+            statLabels[0].classList.remove(...statBadgeClasses);
+            statLabels[0].classList.add('badge-custom', 'badge-win');
+        }
+        if (statLabels[1]) {
+            statLabels[1].classList.remove(...statBadgeClasses);
+            statLabels[1].classList.add('badge-custom', 'badge-loss');
+        }
+        if (statLabels[2]) {
+            statLabels[2].classList.remove(...statBadgeClasses);
+            statLabels[2].classList.add('badge-custom', 'badge-draw');
+        }
+        if (statLabels[3]) {
+            statLabels[3].classList.remove(...statBadgeClasses);
+            statLabels[3].classList.add('badge-custom', 'badge-ongoing');
         }
     } catch (error) {
         throw new Error(`showStats hiba: ${error.message}`);
