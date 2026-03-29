@@ -127,7 +127,8 @@ function jatekAllapotKliens(jatek) {
         // ── BOT INFÓ A KLIENSNEK ──
         botAktiv: jatek.botAktiv,
         botSzin: jatek.botSzin,
-        nehezseg: jatek.nehezseg
+        nehezseg: jatek.nehezseg,
+        botGondolkodik: jatek.botGondolkodik || false
     };
 }
 
