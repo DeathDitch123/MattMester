@@ -357,7 +357,7 @@ function eloDisplayrefresh(user) {
             };
             for (const [key, value] of Object.entries(eloMap)) {
                 const element = document.querySelector(`[data-stat="${key}"]`);
-                if (element) element.textContent = value !== undefined ? value : '1200';
+                if (element) element.textContent = value !== undefined ? value : '800';
             }
             const stats = user.stats || {};
             const totalGames = (stats.wins || 0) + (stats.losses || 0) + (stats.draws || 0);
