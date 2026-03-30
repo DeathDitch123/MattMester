@@ -222,9 +222,9 @@ router.post('/register', async (request, response) => {
                                             request.session.userId = result.insertId;
                                             request.session.username = username;
                                             request.session.role = 'player';
-                                            request.session.elo = 1200;
-                                            request.session.elo_MM = 1200;
-                                            request.session.elo_bullet = 1200;
+                                            request.session.elo = 800;
+                                            request.session.elo_MM = 800;
+                                            request.session.elo_bullet = 800;
                                             request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
 
                                             const ipAdress = request.headers['x-forwarded-for'] || request.socket.remoteAddress;

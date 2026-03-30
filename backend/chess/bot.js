@@ -11,14 +11,14 @@ const { szabLepKeres, jatekAllapotEllenor } = require('./logika.js');
 // ────────────────────────────────────────────
 
 const NEHEZSEGEK = {
-    1: { nev: "Kezdő",       elo: 200,  melyseg: 1, randomPct: 40 },
-    2: { nev: "Újonc",       elo: 400,  melyseg: 1, randomPct: 25 },
-    3: { nev: "Amatőr",      elo: 600,  melyseg: 2, randomPct: 15 },
-    4: { nev: "Haladó",      elo: 800,  melyseg: 2, randomPct: 8  },
-    5: { nev: "Klubjátékos", elo: 1000, melyseg: 3, randomPct: 3  },
-    6: { nev: "Erős",        elo: 1200, melyseg: 3, randomPct: 0  },
-    7: { nev: "Mester",      elo: 1500, melyseg: 4, randomPct: 0  },
-    8: { nev: "Nagymester",  elo: 1800, melyseg: 5, randomPct: 0  },
+    1: { nev: "Kezdő",       elo: 800,  melyseg: 1, randomPct: 16, varakozasMs: 2600, checkBonus: 12,  backtrackPenalty: 90, randomDisableFromPly: 28 },
+    2: { nev: "Újonc",       elo: 1000, melyseg: 1, randomPct: 9,  varakozasMs: 2300, checkBonus: 18,  backtrackPenalty: 80, randomDisableFromPly: 24 },
+    3: { nev: "Amatőr",      elo: 1200, melyseg: 2, randomPct: 3,  varakozasMs: 2050, checkBonus: 28,  backtrackPenalty: 70, randomDisableFromPly: 22 },
+    4: { nev: "Haladó",      elo: 1400, melyseg: 2, randomPct: 0,  varakozasMs: 1850, checkBonus: 38,  backtrackPenalty: 60, randomDisableFromPly: 20 },
+    5: { nev: "Klubjátékos", elo: 1600, melyseg: 3, randomPct: 0,  varakozasMs: 1700, checkBonus: 50,  backtrackPenalty: 45, randomDisableFromPly: 18 },
+    6: { nev: "Erős",        elo: 1800, melyseg: 3, randomPct: 0,  varakozasMs: 1550, checkBonus: 54,  backtrackPenalty: 35, randomDisableFromPly: 26 },
+    7: { nev: "Mester",      elo: 2000, melyseg: 4, randomPct: 0,  varakozasMs: 1400, checkBonus: 68,  backtrackPenalty: 25, randomDisableFromPly: 22 },
+    8: { nev: "Nagymester",  elo: 2200, melyseg: 4, randomPct: 0,  varakozasMs: 1250, checkBonus: 82,  backtrackPenalty: 18, randomDisableFromPly: 18 },
 };
 
 function nehezsegiSzintInfo(szint) {
@@ -317,6 +317,48 @@ function lepesRendezErtek(lepes) {
     return ertek;
 }
 
+function aktualisRandomPct(jatek, config) {
+    if (jatek.lepesszam >= config.randomDisableFromPly) return 0;
+    return config.randomPct;
+}
+
+function azonnaliMattLepesKeres(jatek, lepesek) {
+    for (let i = 0; i < lepesek.length; i++) {
+        const lepes = lepesek[i];
+        const undo = botLepesCsinal(jatek, lepes);
+        const allapot = jatekAllapotEllenor(jatek, jatek.koronLevo);
+        botLepesVisszavon(jatek, lepes, undo);
+
+        if (allapot.vege && allapot.ok === "matt") {
+            return lepes;
+        }
+    }
+    return null;
+}
+
+function visszalepesBuntetes(jatek, lepes, config) {
+    const tort = jatek.lepesTortenet;
+    if (!tort || tort.length < 2) return 0;
+
+    const elozoBotLepes = tort[tort.length - 2];
+    if (!elozoBotLepes) return 0;
+
+    const visszalep =
+        elozoBotLepes.from.x === lepes.to.x &&
+        elozoBotLepes.from.y === lepes.to.y &&
+        elozoBotLepes.to.x === lepes.from.x &&
+        elozoBotLepes.to.y === lepes.from.y;
+
+    return visszalep ? config.backtrackPenalty : 0;
+}
+
+function tamadoBonusz(jatek, config) {
+    const allapot = jatekAllapotEllenor(jatek, jatek.koronLevo);
+    if (allapot.vege && allapot.ok === "matt") return 100000;
+    if (allapot.sakkban) return config.checkBonus;
+    return 0;
+}
+
 // ────────────────────────────────────────────
 // MINIMAX + ALFA-BÉTA
 // ────────────────────────────────────────────
@@ -420,8 +462,15 @@ function botLepesValaszt(jatek, nehezseg) {
 
     if (lepesek.length === 0) return null;
 
+    // Ha van azonnali matt, azt mindig válassza (minden szinten).
+    const mattLepes = azonnaliMattLepesKeres(jatek, lepesek);
+    if (mattLepes) {
+        return lepesFormaz(mattLepes, botSzin);
+    }
+
     // Random lépés esélye (gyengébb szintek hibáznak)
-    if (config.randomPct > 0 && Math.random() * 100 < config.randomPct) {
+    const randomPctAktualis = aktualisRandomPct(jatek, config);
+    if (randomPctAktualis > 0 && Math.random() * 100 < randomPctAktualis) {
         const randomLepes = lepesek[Math.floor(Math.random() * lepesek.length)];
         return lepesFormaz(randomLepes, botSzin);
     }
@@ -434,7 +483,9 @@ function botLepesValaszt(jatek, nehezseg) {
 
     for (let i = 0; i < lepesek.length; i++) {
         const undo = botLepesCsinal(jatek, lepesek[i]);
-        const ertek = minimax(jatek, config.melyseg - 1, -Infinity, Infinity, botSzin);
+        let ertek = minimax(jatek, config.melyseg - 1, -Infinity, Infinity, botSzin);
+        ertek += tamadoBonusz(jatek, config);
+        ertek -= visszalepesBuntetes(jatek, lepesek[i], config);
         botLepesVisszavon(jatek, lepesek[i], undo);
 
         if (ertek > legjobbErtek) {

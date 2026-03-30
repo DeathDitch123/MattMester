@@ -10,7 +10,8 @@
 // ============================================================
 
 import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt,
-         huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres } from './UI-megjelenites.js';
+         huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres,
+         lepesAnimacio } from './UI-megjelenites.js';
 
 // Az aktuális játék ID — a szerver adja
 let gameId = null;
@@ -24,6 +25,13 @@ let idoPollTimer = null;
 // Húzás folyamatban flag — ilyenkor NEM renderelünk újra
 let huzasFolyamatban = false;
 
+// Kliens már lerakta a bábút, de még vár a szerver válaszára
+let lepesKuldesFolyamatban = false;
+let lepesKuldesFailSafeTimer = null;
+
+// Click-to-move: kijelölt bábu adatai
+let kivalasztott = null; // { x, y, piece, lepesek }
+
 // MutationObserver — DOM manipuláció észlelése
 let appObserver = null;
 
@@ -35,6 +43,22 @@ let helyreallitasFut = false;
 
 // Bot játék infó
 let botInfo = null;
+let botPollTimer = null;
+let utolsoAnimaltLepesKulcs = null;
+let slidingFolyamatban = false;
+
+// Hang lejátszás deduplikálás + egyszeri AudioContext
+let utolsoHangLepesKulcs = null;
+let audioCtx = null;
+const HANG_FAJLOK = {
+    jatekosLep: '../sounds/Jatekos_lep.mp3',
+    ellenfelLep: '../sounds/Ellenfel_lep.mp3',
+    sakk: '../sounds/sakk.mp3',
+    matt: '../sounds/matt.mp3',
+    sanc: '../sounds/sanc.mp3'
+};
+const hangCache = {};
+const DRAG_START_THRESHOLD_PX = 6;
 
 // Hardcoded HTML template — a chess.html .app belseje, board tartalma nélkül
 const OLDAL_VAZ = `
@@ -65,6 +89,7 @@ const OLDAL_VAZ = `
                     Aktív: <strong id="turn-name">fehér</strong>
                 </div>
                 <div id="status" class="status">játékon</div>
+                <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
                 <div id="elo-change" class="elo-change hidden"></div>
                 <button id="feladBtn" class="felad-btn">Feladás</button>
                 <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
@@ -98,6 +123,18 @@ async function apiUjJatek() {
     return data.allapot;
 }
 
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 9000) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetch(url, { ...options, signal: controller.signal });
+        const data = await res.json();
+        return { res, data };
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
 async function apiUjBotJatek(difficulty) {
     const res = await fetch('/api/chess/new-bot', {
         method: 'POST',
@@ -126,15 +163,13 @@ async function apiUserElo() {
 }
 
 async function apiAllapot() {
-    const res = await fetch(`/api/chess/${gameId}/state`);
-    const data = await res.json();
+    const { res, data } = await fetchJsonWithTimeout(`/api/chess/${gameId}/state`, {}, 6000);
     if (!res.ok) throw new Error(data.error || 'Hiba');
     return data;
 }
 
 async function apiLepesek(x, y) {
-    const res = await fetch(`/api/chess/${gameId}/moves/${x}/${y}`);
-    const data = await res.json();
+    const { res, data } = await fetchJsonWithTimeout(`/api/chess/${gameId}/moves/${x}/${y}`, {}, 7000);
     if (!res.ok) throw new Error(data.error || 'Hiba');
     return data.lepesek;
 }
@@ -142,12 +177,11 @@ async function apiLepesek(x, y) {
 async function apiLepes(fromX, fromY, toX, toY, promotion) {
     const body = { fromX, fromY, toX, toY };
     if (promotion) body.promotion = promotion;
-    const res = await fetch(`/api/chess/${gameId}/move`, {
+    const { res, data } = await fetchJsonWithTimeout(`/api/chess/${gameId}/move`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body)
-    });
-    const data = await res.json();
+    }, 12000);
     if (!res.ok) throw new Error(data.error || 'Illegális lépés');
     return data;
 }
@@ -228,7 +262,6 @@ async function jatekIndit(nehezseg) {
 
         allapotFrissit(allapot);
         idoPollingIndit();
-        integritasEllenorzesIndit();
         console.log(`[INIT] Bot játék indítva — ${botInfo.nev} (ELO: ${botInfo.elo})`);
     } catch (e) {
         console.error('Bot játék indítási hiba:', e);
@@ -272,7 +305,7 @@ async function doFeladJatek() {
     if (!gameId) return;
     try {
         const data = await apiFeladMagat();
-        jatekVegeUI(data.uzenet || 'Feladtad a játékot.');
+        jatekVegeUI(data.uzenet || 'Feladtad a játékot.', data.eloValtozas ?? null);
         idoPollingLeall();
         integritasEllenorzesLeall();
         gameId = null;
@@ -305,26 +338,208 @@ function surrenderModalEsemenyekKot() {
     confirmBtn.addEventListener('touchend', stopHold);
 }
 
-function jatekVegeUI(uzenet) {
+function eloValtozasFrissit(eloValtozas) {
+    const eloElem = document.getElementById('elo-change');
+    if (!eloElem) return;
+
+    eloElem.classList.remove('positive', 'negative');
+
+    if (!eloValtozas) {
+        eloElem.textContent = '';
+        eloElem.classList.add('hidden');
+        return;
+    }
+
+    const diff = Number(eloValtozas.eloChange || 0);
+    const sign = diff >= 0 ? '+' : '';
+    eloElem.textContent = `ELO: ${eloValtozas.eloBefore} -> ${eloValtozas.eloAfter} (${sign}${diff})`;
+    eloElem.classList.add(diff >= 0 ? 'positive' : 'negative');
+    eloElem.classList.remove('hidden');
+}
+
+function jatekVegeUI(uzenet, eloValtozas) {
     uiJatekVegeMegjelenit(uzenet);
     integritasEllenorzesLeall();
+    botGondolkodasFrissit(false);
+    if (botPollTimer) {
+        clearInterval(botPollTimer);
+        botPollTimer = null;
+    }
+    lepesKuldesLezar();
+    if (eloValtozas !== undefined) {
+        eloValtozasFrissit(eloValtozas);
+    }
     const feladBtn = document.getElementById('feladBtn');
     const newGameBtn = document.getElementById('newGameBtn');
     if (feladBtn) feladBtn.classList.add('hidden');
     if (newGameBtn) newGameBtn.classList.remove('hidden');
 }
 
+function botGondolkodasFrissit(allapotVagyBool) {
+    const thinkingElem = document.getElementById('bot-thinking');
+    if (!thinkingElem) return;
+
+    const gondolkodik = typeof allapotVagyBool === 'boolean'
+        ? allapotVagyBool
+        : !!(allapotVagyBool && allapotVagyBool.botAktiv && allapotVagyBool.botGondolkodik && !allapotVagyBool.vege);
+
+    if (gondolkodik) thinkingElem.classList.remove('hidden');
+    else thinkingElem.classList.add('hidden');
+}
+
+function audioContextKeres() {
+    if (audioCtx) return audioCtx;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtx = new Ctx();
+    return audioCtx;
+}
+
+function hangObjektumKeres(hangKulcs) {
+    if (hangCache[hangKulcs]) return hangCache[hangKulcs];
+    const fajl = HANG_FAJLOK[hangKulcs];
+    if (!fajl) return null;
+    const audio = new Audio(fajl);
+    audio.preload = 'auto';
+    hangCache[hangKulcs] = audio;
+    return audio;
+}
+
+function hangLejatszas(hangKulcs, fallbackFreq = 620, fallbackMs = 90, fallbackGain = 0.03) {
+    const hang = hangObjektumKeres(hangKulcs);
+    if (!hang) {
+        pittyen(fallbackFreq, fallbackMs, fallbackGain);
+        return;
+    }
+
+    hang.currentTime = 0;
+    const playPromise = hang.play();
+    if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+            pittyen(fallbackFreq, fallbackMs, fallbackGain);
+        });
+    }
+}
+
+function pittyen(freq, durationMs, gain = 0.03) {
+    const ctx = audioContextKeres();
+    if (!ctx) return;
+
+    if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+    }
+
+    const osc = ctx.createOscillator();
+    const amp = ctx.createGain();
+    const start = ctx.currentTime;
+    const end = start + (durationMs / 1000);
+
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(freq, start);
+
+    amp.gain.setValueAtTime(0, start);
+    amp.gain.linearRampToValueAtTime(gain, start + 0.01);
+    amp.gain.exponentialRampToValueAtTime(0.0001, end);
+
+    osc.connect(amp);
+    amp.connect(ctx.destination);
+    osc.start(start);
+    osc.stop(end);
+}
+
+function lepesHangLejatszas(allapot) {
+    if (!allapot || !allapot.utolsoLepes) return;
+
+    const l = allapot.utolsoLepes;
+    const kulcs = `${allapot.lepesszam}:${l.from.x},${l.from.y}->${l.to.x},${l.to.y}`;
+    if (kulcs === utolsoHangLepesKulcs) return;
+    utolsoHangLepesKulcs = kulcs;
+
+    if (allapot.vege) {
+        hangLejatszas('matt', 350, 180, 0.04);
+        return;
+    }
+
+    if (allapot.sakkPoz) {
+        hangLejatszas('sakk', 900, 90, 0.035);
+        return;
+    }
+
+    if (l.special === 'castle-ks' || l.special === 'castle-qs') {
+        hangLejatszas('sanc', 560, 120, 0.03);
+        return;
+    }
+
+    const lepoSzin = allapot.koronLevo === 'white' ? 'black' : 'white';
+    const botLepett = !!(allapot.botAktiv && allapot.botSzin === lepoSzin);
+    hangLejatszas(botLepett ? 'ellenfelLep' : 'jatekosLep', 620, 90, 0.03);
+}
+
+function allapotLepesKulcs(allapot) {
+    if (!allapot || !allapot.utolsoLepes) return null;
+    const l = allapot.utolsoLepes;
+    return `${allapot.lepesszam}:${l.from.x},${l.from.y}->${l.to.x},${l.to.y}`;
+}
+
+function botLepesAnimacioKell(elozoAllapot, ujAllapot) {
+    if (!elozoAllapot || !ujAllapot) return false;
+    if (!ujAllapot.utolsoLepes) return false;
+    if (ujAllapot.lepesszam === elozoAllapot.lepesszam) return false;
+
+    // Az utolsó lépést az a szín tette meg, aki NEM körön lévő az új állapotban.
+    const lepoSzin = ujAllapot.koronLevo === 'white' ? 'black' : 'white';
+    return !!(ujAllapot.botAktiv && ujAllapot.botSzin === lepoSzin);
+}
+
+function lepesKuldesIndit() {
+    lepesKuldesFolyamatban = true;
+    if (lepesKuldesFailSafeTimer) clearTimeout(lepesKuldesFailSafeTimer);
+    lepesKuldesFailSafeTimer = setTimeout(async () => {
+        lepesKuldesFolyamatban = false;
+        try {
+            if (!gameId) return;
+            const allapot = await apiAllapot();
+            allapotFrissit(allapot);
+        } catch (_) {
+            // A normál poll tovább próbálkozik.
+        }
+    }, 10000);
+}
+
+function lepesKuldesLezar() {
+    lepesKuldesFolyamatban = false;
+    if (lepesKuldesFailSafeTimer) {
+        clearTimeout(lepesKuldesFailSafeTimer);
+        lepesKuldesFailSafeTimer = null;
+    }
+}
+
 // ────────────────────────────────────────────
 
-function allapotFrissit(allapot) {
+function allapotFrissit(allapot, animald = false) {
+    const elozoAllapot = utolsoAllapot;
     utolsoAllapot = allapot;
+    kivalasztott = null;
     try { if (appObserver) appObserver.disconnect(); } catch(e) {}
     oldalVazVisszaallit();
     tablaRajzol(allapot);
+    const automataAnimacio = botLepesAnimacioKell(elozoAllapot, allapot);
+    if ((animald || automataAnimacio) && allapot.utolsoLepes) {
+        const animKulcs = allapotLepesKulcs(allapot);
+        if (animKulcs && animKulcs !== utolsoAnimaltLepesKulcs) {
+            utolsoAnimaltLepesKulcs = animKulcs;
+            slidingFolyamatban = true;
+            Promise.resolve(lepesAnimacio(allapot.utolsoLepes)).finally(() => {
+                slidingFolyamatban = false;
+            });
+        }
+    }
+    lepesHangLejatszas(allapot);
     huzasHozzaadMinden(allapot);
     esemenyekUjraKot();
     nevekFrissit();
-    try { observerIndit(); } catch(e) { console.error("Observer indítás hiba:", e); }
+    eloValtozasFrissit(allapot.eloValtozas || null);
+    botGondolkodasFrissit(allapot);
 
     if (allapot.uzenet) {
         jatekVegeUI(allapot.uzenet);
@@ -355,6 +570,7 @@ function oldalSerult(allapot) {
         ".sidebar .status-row",
         "#turn-name",
         "#status",
+        "#bot-thinking",
         "#feladBtn",
         ".sidebar .legend",
         "footer.bottombar",
@@ -437,7 +653,7 @@ function observerIndit() {
     if (appObserver) appObserver.disconnect();
 
     appObserver = new MutationObserver(() => {
-        if (huzasFolyamatban || helyreallitasFut) return;
+        if (huzasFolyamatban || helyreallitasFut || lepesKuldesFolyamatban || slidingFolyamatban) return;
         if (!utolsoAllapot) return;
         try {
             if (oldalSerult(utolsoAllapot)) {
@@ -475,7 +691,7 @@ function integritasEllenorzesIndit() {
     integritasEllenorzesLeall();
     console.log("[INTEGRITÁS] Timer elindítva (500ms)");
     integritasTimer = setInterval(() => {
-        if (huzasFolyamatban || helyreallitasFut) return;
+        if (huzasFolyamatban || helyreallitasFut || lepesKuldesFolyamatban || slidingFolyamatban) return;
         if (!utolsoAllapot) return;
         try {
             if (oldalSerult(utolsoAllapot)) {
@@ -502,13 +718,22 @@ function idoPollingIndit() {
     idoPollingLeall();
     idoPollTimer = setInterval(async () => {
         if (!gameId) return;
-        if (huzasFolyamatban) return;
+        if (botPollTimer) return;
+        if (huzasFolyamatban || lepesKuldesFolyamatban || slidingFolyamatban) return;
         try {
+            const elozoAllapot = utolsoAllapot;
             const allapot = await apiAllapot();
             utolsoAllapot = allapot;
+            botGondolkodasFrissit(allapot);
 
-            if (oldalSerult(allapot)) {
-                allapotFrissit(allapot);
+            const allapotValtozott = !elozoAllapot
+                || allapot.lepesszam !== elozoAllapot.lepesszam
+                || allapot.koronLevo !== elozoAllapot.koronLevo
+                || !!allapot.vege !== !!elozoAllapot.vege;
+
+            const boardHianyzik = !document.getElementById("board");
+            if (boardHianyzik || allapotValtozott) {
+                allapotFrissit(allapot, botLepesAnimacioKell(elozoAllapot, allapot));
             } else {
                 const format = (mp) => {
                     const perc = Math.floor(mp / 60);
@@ -538,6 +763,50 @@ function idoPollingLeall() {
     }
 }
 
+/**
+ * Rövid intervallumon poll-ozza az állapotot amíg a bot gondolkodik.
+ * Amint botGondolkodik === false, frissíti a táblát a bot lépésével.
+ */
+function botValaszPoll() {
+    if (botPollTimer) {
+        clearInterval(botPollTimer);
+        botPollTimer = null;
+    }
+
+    let egymasUtanHibak = 0;
+    botPollTimer = setInterval(async () => {
+        if (!gameId) {
+            clearInterval(botPollTimer);
+            botPollTimer = null;
+            return;
+        }
+        if (slidingFolyamatban) return;
+        try {
+            const elozoAllapot = utolsoAllapot;
+            const allapot = await apiAllapot();
+            utolsoAllapot = allapot;
+            egymasUtanHibak = 0;
+            botGondolkodasFrissit(allapot);
+            if (!allapot.botGondolkodik) {
+                clearInterval(botPollTimer);
+                botPollTimer = null;
+                allapotFrissit(allapot, true);
+                if (allapot.vege && allapot.uzenet) {
+                    jatekVegeUI(allapot.uzenet);
+                    idoPollingLeall();
+                }
+            }
+        } catch (e) {
+            egymasUtanHibak++;
+            if (egymasUtanHibak >= 5) {
+                // Ne álljon meg teljesen: visszaesünk a normál pollra.
+                clearInterval(botPollTimer);
+                botPollTimer = null;
+            }
+        }
+    }, 300);
+}
+
 // ────────────────────────────────────────────
 // INICIALIZÁLÁS
 // ────────────────────────────────────────────
@@ -565,9 +834,15 @@ function esemenyekUjraKot() {
         ujBtn.addEventListener("click", () => {
             idoPollingLeall();
             integritasEllenorzesLeall();
+            if (botPollTimer) {
+                clearInterval(botPollTimer);
+                botPollTimer = null;
+            }
             gameId = null;
             botInfo = null;
             utolsoAllapot = null;
+            lepesKuldesLezar();
+            eloValtozasFrissit(null);
             modValasztoMegjelenit();
         });
     }
@@ -591,6 +866,8 @@ function esemenyekUjraKot() {
                     if (eredmeny.uzenet) {
                         jatekVegeUI(eredmeny.uzenet);
                         idoPollingLeall();
+                    } else if (eredmeny.allapot.botGondolkodik) {
+                        botValaszPoll();
                     }
                 } catch (e) {
                     console.error('Átváltozás lépés hiba:', e);
@@ -642,58 +919,120 @@ function huzasHozzaadMinden(allapot) {
 
         huzasHozzaad(babuElem, x, y, mezo.piece, allapot);
     }
+
+    // Click-to-move: mousedown üres/ellenfél mezőre → lépés a kijelölttel
+    const mezok = document.querySelectorAll(".square");
+    for (let i = 0; i < mezok.length; i++) {
+        mezok[i].addEventListener("mousedown", function (e) {
+            if (!kivalasztott || lepesKuldesFolyamatban) return;
+
+            // Drag folyamat közben ne kezeljünk click-to-move-ot.
+            if (huzasFolyamatban) return;
+
+            // Bal gomb legyen (touch esetén 0/undefined is jöhet).
+            if (typeof e.button === 'number' && e.button !== 0) return;
+
+            const toX = parseInt(this.dataset.x, 10);
+            const toY = parseInt(this.dataset.y, 10);
+            kattintasLep(toX, toY);
+        });
+    }
 }
 
 function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
+    let mozgott = false; // megkülönbözteti a kattintást a húzástól
+
     babuElem.addEventListener("mousedown", async function (e) {
-        if (allapot.vege) return;
+        if (allapot.vege || lepesKuldesFolyamatban) return;
 
         e.preventDefault();
         e.stopPropagation();
-        huzasFolyamatban = true;
 
-        // Legális lépések lekérdezése a SZERVERTŐL
-        let lepesek;
-        try {
-            lepesek = await apiLepesek(fromX, fromY);
-        } catch (err) {
-            huzasFolyamatban = false;
-            return;
-        }
-        if (!lepesek || lepesek.length === 0) {
-            huzasFolyamatban = false;
+        // Ha már van kijelölt és ERRE a mezőre kattintunk mint célmező (ütés)
+        if (kivalasztott && kivalasztott.piece.color !== piece.color) {
+            kattintasLep(fromX, fromY);
             return;
         }
 
-        const klon = babuElem.cloneNode(true);
-        klon.className = "piece dragging";
-        klon.style.position = "fixed";
-        klon.style.zIndex = 9999;
-        klon.style.pointerEvents = "none";
-        klon.style.width = babuElem.offsetWidth + "px";
-        klon.style.height = babuElem.offsetHeight + "px";
+        // Ha ugyanarra a bábura kattintunk: kijelölés törlése
+        if (kivalasztott && kivalasztott.x === fromX && kivalasztott.y === fromY) {
+            kivalasztasTorol();
+            return;
+        }
+
+        mozgott = false;
+
+        // Kijelölés beállítása (click-to-move)
+        kivalasztasTorol();
+        kivalasztott = { x: fromX, y: fromY, piece, lepesek: null };
+        const mezoElem = babuElem.parentElement;
+        mezoElem.classList.add("selected");
+
+        // A drag ne várjon szerverre: a lépéslistát aszinkron kérjük le a click-to-move bogyókhoz.
+        apiLepesek(fromX, fromY)
+            .then(lepesek => {
+                if (!kivalasztott) return;
+                if (kivalasztott.x !== fromX || kivalasztott.y !== fromY) return;
+                kivalasztott.lepesek = lepesek;
+                huzasKiemel(piece.type, piece.color, lepesek || []);
+            })
+            .catch(() => {
+                // Ilyenkor drag továbbra is működik, csak bogyók nem jönnek.
+            });
+
+        let klon = null;
+        let dragAktiv = false;
+        const startX = e.clientX;
+        const startY = e.clientY;
         const eltX = babuElem.offsetWidth / 2;
         const eltY = babuElem.offsetHeight / 2;
-        document.body.appendChild(klon);
 
-        // Eredeti bábu halvány
-        babuElem.style.opacity = "0.3";
+        function dragIndit(em) {
+            if (dragAktiv) return;
+            dragAktiv = true;
+            huzasFolyamatban = true;
 
-        // Kiemelés megjelenítés
-        huzasKiemel(piece.type, piece.color, lepesek);
+            klon = babuElem.cloneNode(true);
+            klon.className = "piece dragging";
+            klon.style.position = "fixed";
+            klon.style.zIndex = 9999;
+            klon.style.pointerEvents = "none";
+            klon.style.width = babuElem.offsetWidth + "px";
+            klon.style.height = babuElem.offsetHeight + "px";
+            document.body.appendChild(klon);
 
-        // Klón kezdő pozíció
-        babuKlonMozgat(e.clientX, e.clientY, klon, eltX, eltY);
+            babuElem.style.opacity = "0.3";
+            babuKlonMozgat(em.clientX, em.clientY, klon, eltX, eltY);
+        }
 
         function egerMozogKezelo(em) {
-            babuKlonMozgat(em.clientX, em.clientY, klon, eltX, eltY);
+            if (!dragAktiv) {
+                const dx = Math.abs(em.clientX - startX);
+                const dy = Math.abs(em.clientY - startY);
+                if (dx < DRAG_START_THRESHOLD_PX && dy < DRAG_START_THRESHOLD_PX) return;
+                dragIndit(em);
+            }
+            mozgott = true;
+            if (klon) babuKlonMozgat(em.clientX, em.clientY, klon, eltX, eltY);
         }
 
         function egerFelKezelo(ef) {
             document.removeEventListener("mousemove", egerMozogKezelo);
             document.removeEventListener("mouseup", egerFelKezelo);
-            huzasFolyamatban = false;
-            babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek);
+
+            if (dragAktiv) {
+                huzasFolyamatban = false;
+                if (klon) klon.remove();
+                babuElem.style.opacity = "";
+            }
+
+            if (mozgott) {
+                // Drag & drop: lépés a célmezőre
+                huzasKiemelTorol();
+                kivalasztasTorol();
+                babuHuzasEgerFel(ef, fromX, fromY, piece);
+            }
+            // Ha nem mozgott (kattintás): kijelölés marad, bogyók maradnak
         }
 
         document.addEventListener("mousemove", egerMozogKezelo);
@@ -701,25 +1040,122 @@ function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
     });
 }
 
+/**
+ * Kijelölés törlése (selected class + bogyók eltávolítása)
+ */
+function kivalasztasTorol() {
+    kivalasztott = null;
+    document.querySelectorAll(".square.selected").forEach(el => el.classList.remove("selected"));
+    huzasKiemelTorol();
+}
+
+function azonnaliDomLepes(fromX, fromY, toX, toY, piece, talaltLepes) {
+    const fromEl = mezoElemKeres(fromX, fromY);
+    const toEl = mezoElemKeres(toX, toY);
+    if (!fromEl || !toEl) return;
+
+    const mozgoBabu = fromEl.querySelector('.piece');
+    if (!mozgoBabu) return;
+
+    const celBabu = toEl.querySelector('.piece');
+    if (celBabu) celBabu.remove();
+
+    if (talaltLepes && talaltLepes.tipus === 'enpassant') {
+        const utottY = piece.color === 'white' ? toY + 1 : toY - 1;
+        const utottMezo = mezoElemKeres(toX, utottY);
+        const utottBabu = utottMezo ? utottMezo.querySelector('.piece') : null;
+        if (utottBabu) utottBabu.remove();
+    }
+
+    if (talaltLepes && talaltLepes.tipus === 'castle') {
+        const rovidSanc = toX > fromX;
+        const rookFromX = rovidSanc ? 7 : 0;
+        const rookToX = rovidSanc ? 5 : 3;
+        const rookFromEl = mezoElemKeres(rookFromX, fromY);
+        const rookToEl = mezoElemKeres(rookToX, fromY);
+        const rookBabu = rookFromEl ? rookFromEl.querySelector('.piece') : null;
+        if (rookBabu && rookToEl) rookToEl.appendChild(rookBabu);
+    }
+
+    toEl.appendChild(mozgoBabu);
+}
+
+async function legalisLepesKeres(fromX, fromY, toX, toY, cacheLepesek = null) {
+    let lepesek = Array.isArray(cacheLepesek) ? cacheLepesek : null;
+
+    if (!lepesek) {
+        try {
+            lepesek = await apiLepesek(fromX, fromY);
+        } catch (_) {
+            return { talaltLepes: null, lepesek: [] };
+        }
+    }
+
+    const talaltLepes = lepesek.find(l => l.toX === toX && l.toY === toY) || null;
+    return { talaltLepes, lepesek };
+}
+
+/**
+ * Click-to-move: lépés a kijelölt bábuval a célmezőre
+ */
+async function kattintasLep(toX, toY) {
+    if (!kivalasztott || lepesKuldesFolyamatban) return;
+    const { x: fromX, y: fromY, piece, lepesek } = kivalasztott;
+
+    const { talaltLepes } = await legalisLepesKeres(fromX, fromY, toX, toY, lepesek);
+    if (!talaltLepes) {
+        kivalasztasTorol();
+        return;
+    }
+
+    kivalasztasTorol();
+
+    // Gyalog átváltozás
+    const promotionGyanus = !!talaltLepes.promotion;
+    if (promotionGyanus) {
+        window._atvaltozasVarData = { fromX, fromY, toX, toY };
+        atvaltozasModal(piece.color);
+        return;
+    }
+
+    lepesKuldesIndit();
+    azonnaliDomLepes(fromX, fromY, toX, toY, piece, talaltLepes);
+
+    // Lépés küldése
+    try {
+        const eredmeny = await apiLepes(fromX, fromY, toX, toY);
+        allapotFrissit(eredmeny.allapot);
+        if (eredmeny.uzenet) {
+            jatekVegeUI(eredmeny.uzenet);
+            idoPollingLeall();
+        } else if (eredmeny.allapot.botGondolkodik) {
+            botValaszPoll();
+        }
+    } catch (e) {
+        console.error('Lépés hiba:', e);
+        if (utolsoAllapot) allapotFrissit(utolsoAllapot);
+    } finally {
+        lepesKuldesLezar();
+    }
+}
+
 function babuKlonMozgat(mx, my, klon, eltX, eltY) {
     klon.style.left = (mx - eltX) + "px";
     klon.style.top = (my - eltY) + "px";
 }
 
-async function babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek) {
+async function babuHuzasEgerFel(ef, fromX, fromY, piece) {
     const elemAlatt = document.elementFromPoint(ef.clientX, ef.clientY);
     const celMezoElem = elemAlatt ? elemAlatt.closest(".square") : null;
-    klon.remove();
-    babuElem.style.opacity = "";
-    huzasKiemelTorol();
 
     if (!celMezoElem) return;
 
     const toX = parseInt(celMezoElem.dataset.x, 10);
     const toY = parseInt(celMezoElem.dataset.y, 10);
 
-    // Megkeressük a szerver lépéslistájában
-    const talaltLepes = lepesek.find(l => l.toX === toX && l.toY === toY);
+    if (toX === fromX && toY === fromY) return;
+
+    const { talaltLepes } = await legalisLepesKeres(fromX, fromY, toX, toY, null);
     if (!talaltLepes) return;
 
     // Gyalog átváltozás
@@ -729,6 +1165,9 @@ async function babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek
         return;
     }
 
+    lepesKuldesIndit();
+    azonnaliDomLepes(fromX, fromY, toX, toY, piece, talaltLepes);
+
     // Lépés küldése
     try {
         const eredmeny = await apiLepes(fromX, fromY, toX, toY);
@@ -736,11 +1175,14 @@ async function babuHuzasEgerFel(ef, klon, babuElem, fromX, fromY, piece, lepesek
         if (eredmeny.uzenet) {
             jatekVegeUI(eredmeny.uzenet);
             idoPollingLeall();
+        } else if (eredmeny.allapot.botGondolkodik) {
+            botValaszPoll();
         }
     } catch (e) {
         console.error('Lépés hiba:', e);
-        // Visszarajzoljuk az aktuális állapotot
         if (utolsoAllapot) allapotFrissit(utolsoAllapot);
+    } finally {
+        lepesKuldesLezar();
     }
 }
 
