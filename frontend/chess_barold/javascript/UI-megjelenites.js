@@ -191,6 +191,7 @@ function mezoElemKeres(x, y) {
 let aktivLepesGhost = null;
 let aktivLepesCelPiece = null;
 const LEPES_ANIM_MS = 180;
+const LEPES_ANIM_FALLBACK_MS = 700;
 
 export function lepesAnimacio(utolsoLepes) {
     if (!utolsoLepes) return;
@@ -240,7 +241,10 @@ export function lepesAnimacio(utolsoLepes) {
     const dx = endLeft - startLeft;
     const dy = endTop - startTop;
 
+    let cleaned = false;
     const cleanup = () => {
+        if (cleaned) return;
+        cleaned = true;
         if (ghost.parentNode) ghost.remove();
         if (toPiece.isConnected) toPiece.style.visibility = "";
         if (aktivLepesGhost === ghost) aktivLepesGhost = null;
@@ -249,7 +253,8 @@ export function lepesAnimacio(utolsoLepes) {
 
     requestAnimationFrame(() => {
         ghost.style.transform = `translate(${dx}px, ${dy}px)`;
-        setTimeout(cleanup, LEPES_ANIM_MS + 20);
+        ghost.addEventListener("transitionend", cleanup, { once: true });
+        setTimeout(cleanup, LEPES_ANIM_FALLBACK_MS);
     });
 }
 

@@ -45,6 +45,7 @@ let helyreallitasFut = false;
 let botInfo = null;
 let botPollTimer = null;
 let utolsoAnimaltLepesKulcs = null;
+let slidingFolyamatban = false;
 
 // Hang lejátszás deduplikálás + egyszeri AudioContext
 let utolsoHangLepesKulcs = null;
@@ -527,7 +528,11 @@ function allapotFrissit(allapot, animald = false) {
         const animKulcs = allapotLepesKulcs(allapot);
         if (animKulcs && animKulcs !== utolsoAnimaltLepesKulcs) {
             utolsoAnimaltLepesKulcs = animKulcs;
+            slidingFolyamatban = true;
             lepesAnimacio(allapot.utolsoLepes);
+            setTimeout(() => {
+                slidingFolyamatban = false;
+            }, 260);
         }
     }
     lepesHangLejatszas(allapot);
@@ -649,7 +654,7 @@ function observerIndit() {
     if (appObserver) appObserver.disconnect();
 
     appObserver = new MutationObserver(() => {
-        if (huzasFolyamatban || helyreallitasFut || lepesKuldesFolyamatban) return;
+        if (huzasFolyamatban || helyreallitasFut || lepesKuldesFolyamatban || slidingFolyamatban) return;
         if (!utolsoAllapot) return;
         try {
             if (oldalSerult(utolsoAllapot)) {
@@ -687,7 +692,7 @@ function integritasEllenorzesIndit() {
     integritasEllenorzesLeall();
     console.log("[INTEGRITÁS] Timer elindítva (500ms)");
     integritasTimer = setInterval(() => {
-        if (huzasFolyamatban || helyreallitasFut || lepesKuldesFolyamatban) return;
+        if (huzasFolyamatban || helyreallitasFut || lepesKuldesFolyamatban || slidingFolyamatban) return;
         if (!utolsoAllapot) return;
         try {
             if (oldalSerult(utolsoAllapot)) {
@@ -714,17 +719,18 @@ function idoPollingIndit() {
     idoPollingLeall();
     idoPollTimer = setInterval(async () => {
         if (!gameId) return;
-        if (huzasFolyamatban || lepesKuldesFolyamatban) return;
+        if (botPollTimer) return;
+        if (huzasFolyamatban || lepesKuldesFolyamatban || slidingFolyamatban) return;
         try {
             const elozoAllapot = utolsoAllapot;
             const allapot = await apiAllapot();
             utolsoAllapot = allapot;
+            botGondolkodasFrissit(allapot);
 
             const allapotValtozott = !elozoAllapot
                 || allapot.lepesszam !== elozoAllapot.lepesszam
                 || allapot.koronLevo !== elozoAllapot.koronLevo
-                || !!allapot.vege !== !!elozoAllapot.vege
-                || !!allapot.botGondolkodik !== !!elozoAllapot.botGondolkodik;
+                || !!allapot.vege !== !!elozoAllapot.vege;
 
             const boardHianyzik = !document.getElementById("board");
             if (boardHianyzik || allapotValtozott) {
@@ -775,9 +781,11 @@ function botValaszPoll() {
             botPollTimer = null;
             return;
         }
+        if (slidingFolyamatban) return;
         try {
             const elozoAllapot = utolsoAllapot;
             const allapot = await apiAllapot();
+            utolsoAllapot = allapot;
             egymasUtanHibak = 0;
             botGondolkodasFrissit(allapot);
             if (!allapot.botGondolkodik) {
