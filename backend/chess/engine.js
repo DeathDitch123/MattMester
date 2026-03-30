@@ -29,6 +29,7 @@ function jatekUjraIndit(jatek) {
     jatek.lepesszam = 0;
     jatek.felLepes = 0;
     jatek.lepesTortenet = [];
+    jatek.eloValtozas = null;
     jatek.jatekosok.white.ido = 600;
     jatek.jatekosok.black.ido = 600;
 
@@ -156,43 +157,52 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         else if (allapot.ok === "50lepes") uzenet = "50 lépés szabály — Döntetlen.";
     }
 
-    // --- DB MENTÉS (aszinkron, nem blokkolja a választ hiba esetén) ---
-    try {
-        if (jatek.dbGameId) {
-            // Lépés mentése
-            await chessSql.lepesMentDb({
-                gameId: jatek.dbGameId,
-                playerId: jatek.jatekosok[lepettSzin].userId || null,
-                moveNumber: jatek.lepesszam,
-                piece: eredetiTipus,
-                fromPos: from.pos,
-                toPos: to.pos,
-                isCapture: voltUtes,
-                isCheck: !!(allapot.sakkban),
-                isCheckmate: allapot.ok === "matt",
-                promotionPiece: promotionPiece
-            });
+    // --- DB MENTÉS (nem blokkolja a kliensválaszt) ---
+    if (jatek.dbGameId) {
+        const dbGameId = jatek.dbGameId;
+        const playerId = jatek.jatekosok[lepettSzin].userId || null;
+        const moveNumber = jatek.lepesszam;
+        const fromPos = from.pos;
+        const toPos = to.pos;
+        const isCheck = !!(allapot.sakkban);
+        const isCheckmate = allapot.ok === "matt";
+        const vege = allapot.vege;
+        const allapotOk = allapot.ok;
+        const nyertesSzin = allapot.nyertes;
 
-            // Játékvége mentése
-            if (allapot.vege) {
-                let winnerId = null;
-                if (allapot.ok === "matt") {
-                    winnerId = jatek.jatekosok[allapot.nyertes].userId || null;
-                }
-                await chessSql.jatekVegeMentDb(jatek.dbGameId, winnerId, 'finished');
+        (async () => {
+            try {
+                await chessSql.lepesMentDb({
+                    gameId: dbGameId,
+                    playerId,
+                    moveNumber,
+                    piece: eredetiTipus,
+                    fromPos,
+                    toPos,
+                    isCapture: voltUtes,
+                    isCheck,
+                    isCheckmate,
+                    promotionPiece
+                });
 
-                // Statisztika frissítés
-                if (allapot.ok === "matt" && winnerId) {
-                    const vesztesSzin = (allapot.nyertes === "white") ? "black" : "white";
-                    const vesztesId = jatek.jatekosok[vesztesSzin].userId;
-                    await chessSql.gyozelemMentDb(winnerId);
-                    if (vesztesId) await chessSql.veresegMentDb(vesztesId);
+                if (vege) {
+                    let winnerId = null;
+                    if (allapotOk === "matt") {
+                        winnerId = jatek.jatekosok[nyertesSzin]?.userId || null;
+                    }
+                    await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished');
+
+                    if (allapotOk === "matt" && winnerId) {
+                        const vesztesSzin = (nyertesSzin === "white") ? "black" : "white";
+                        const vesztesId = jatek.jatekosok[vesztesSzin]?.userId;
+                        await chessSql.gyozelemMentDb(winnerId);
+                        if (vesztesId) await chessSql.veresegMentDb(vesztesId);
+                    }
                 }
+            } catch (dbErr) {
+                console.error('Chess DB mentési hiba:', dbErr);
             }
-        }
-    } catch (dbErr) {
-        console.error('Chess DB mentési hiba:', dbErr);
-        // A játék továbbmegy akkor is ha a DB hiba volt
+        })();
     }
 
     return {

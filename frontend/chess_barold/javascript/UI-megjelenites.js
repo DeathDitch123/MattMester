@@ -26,6 +26,20 @@ export function tablaRajzol(allapot) {
             mezoDiv.dataset.y = y;
             mezoDiv.dataset.pos = mezo.pos;
 
+            if (x === 0) {
+                const rank = document.createElement("span");
+                rank.className = "coord-rank";
+                rank.textContent = String(8 - y);
+                mezoDiv.appendChild(rank);
+            }
+
+            if (y === 7) {
+                const file = document.createElement("span");
+                file.className = "coord-file";
+                file.textContent = String.fromCharCode(97 + x);
+                mezoDiv.appendChild(file);
+            }
+
             if (mezo.piece) {
                 const pDiv = document.createElement("div");
                 pDiv.className = "piece";
@@ -174,33 +188,68 @@ function mezoElemKeres(x, y) {
  * Meghívás UTÁN kell hívni, hogy tablaRajzol() már lefutott (a bábu a célmezőn van).
  * @param {object} utolsoLepes - { from: {x,y}, to: {x,y} }
  */
+let aktivLepesGhost = null;
+let aktivLepesCelPiece = null;
+const LEPES_ANIM_MS = 180;
+
 export function lepesAnimacio(utolsoLepes) {
     if (!utolsoLepes) return;
-    const toEl = mezoElemKeres(utolsoLepes.to.x, utolsoLepes.to.y);
-    if (!toEl) return;
-    const pieceEl = toEl.querySelector(".piece");
-    if (!pieceEl) return;
-
     const fromEl = mezoElemKeres(utolsoLepes.from.x, utolsoLepes.from.y);
+    const toEl = mezoElemKeres(utolsoLepes.to.x, utolsoLepes.to.y);
     if (!fromEl) return;
+    if (!toEl) return;
 
-    // Pixel eltolás kiszámítása (célból visszafelé a kiindulásra)
+    const toPiece = toEl.querySelector(".piece");
+    if (!toPiece) return;
+
+    if (aktivLepesGhost) {
+        aktivLepesGhost.remove();
+        aktivLepesGhost = null;
+    }
+    if (aktivLepesCelPiece && aktivLepesCelPiece.isConnected) {
+        aktivLepesCelPiece.style.visibility = "";
+    }
+    aktivLepesCelPiece = null;
+
     const fromRect = fromEl.getBoundingClientRect();
     const toRect = toEl.getBoundingClientRect();
-    const dx = fromRect.left - toRect.left;
-    const dy = fromRect.top - toRect.top;
+    const pieceRect = toPiece.getBoundingClientRect();
 
-    // Bábu vizuálisan a régi pozícióra kerül
-    pieceEl.style.transform = `translate(${dx}px, ${dy}px)`;
+    const startLeft = fromRect.left + (fromRect.width - pieceRect.width) / 2;
+    const startTop = fromRect.top + (fromRect.height - pieceRect.height) / 2;
+    const endLeft = toRect.left + (toRect.width - pieceRect.width) / 2;
+    const endTop = toRect.top + (toRect.height - pieceRect.height) / 2;
 
-    // Következő frame-ben: transition + visszacsúsztatás a helyére
+    const ghost = toPiece.cloneNode(true);
+    ghost.style.position = "fixed";
+    ghost.style.left = `${startLeft}px`;
+    ghost.style.top = `${startTop}px`;
+    ghost.style.width = `${pieceRect.width}px`;
+    ghost.style.height = `${pieceRect.height}px`;
+    ghost.style.pointerEvents = "none";
+    ghost.style.zIndex = "9999";
+    ghost.style.transition = `transform ${LEPES_ANIM_MS}ms ease-out`;
+    ghost.style.willChange = "transform";
+
+    document.body.appendChild(ghost);
+    aktivLepesGhost = ghost;
+    aktivLepesCelPiece = toPiece;
+
+    toPiece.style.visibility = "hidden";
+
+    const dx = endLeft - startLeft;
+    const dy = endTop - startTop;
+
+    const cleanup = () => {
+        if (ghost.parentNode) ghost.remove();
+        if (toPiece.isConnected) toPiece.style.visibility = "";
+        if (aktivLepesGhost === ghost) aktivLepesGhost = null;
+        if (aktivLepesCelPiece === toPiece) aktivLepesCelPiece = null;
+    };
+
     requestAnimationFrame(() => {
-        pieceEl.classList.add("sliding");
-        pieceEl.style.transform = "translate(0, 0)";
-        pieceEl.addEventListener("transitionend", () => {
-            pieceEl.classList.remove("sliding");
-            pieceEl.style.transform = "";
-        }, { once: true });
+        ghost.style.transform = `translate(${dx}px, ${dy}px)`;
+        setTimeout(cleanup, LEPES_ANIM_MS + 20);
     });
 }
 

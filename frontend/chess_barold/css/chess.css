@@ -116,6 +116,36 @@ body
     position: relative;  /* Relatív pozíció (kiemelések elhelyezéséhez) */
 }
 
+.coord-file,
+.coord-rank {
+    position: absolute;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+    opacity: 0.9;
+}
+
+.coord-file {
+    right: 4px;
+    bottom: 3px;
+}
+
+.coord-rank {
+    left: 4px;
+    top: 3px;
+}
+
+.square[role="light"] .coord-file,
+.square[role="light"] .coord-rank {
+    color: rgba(60, 60, 60, 0.85);
+}
+
+.square[role="dark"] .coord-file,
+.square[role="dark"] .coord-rank {
+    color: rgba(245, 245, 245, 0.85);
+}
+
 /* Világos mező színe */
 .square[role="light"] /* Attribútum szelektor: csak azokra a .square elemekre vonatkozik, ahol role="light" */
 {
@@ -205,6 +235,26 @@ body
     background: #222;  /* Sötét háttér */
     padding: 8px;  /* Belső margó */
     border-radius: 6px;  /* Lekerekített sarkok */
+}
+
+.bot-thinking {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(255, 193, 7, 0.14);
+    border: 1px solid rgba(255, 193, 7, 0.35);
+    color: #ffd777;
+    font-size: 0.9rem;
+    animation: thinkingPulse 1.2s ease-in-out infinite;
+}
+
+.bot-thinking.hidden {
+    display: none;
+}
+
+@keyframes thinkingPulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
 }
 
 /* Új játék gomb */
@@ -339,6 +389,11 @@ body
     width:100%;  /* Teljes szélesség */
     max-width:560px;  /* Maximum sakktábla szélessége */
   }
+
+    .coord-file,
+    .coord-rank {
+        font-size: 0.66rem;
+    }
 }
 
 /* HÚZÁS KÖZBEN (dragging állapot) */

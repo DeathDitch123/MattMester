@@ -38,7 +38,8 @@ function jatekLetrehoz() {
         botSzin: null,          // 'white' | 'black' — melyik oldalon játszik a bot
         nehezseg: null,         // 1-8 nehézségi szint
         dbGameId: null,         // DB games.id
-        idoVegeUzenet: null     // időlejárat üzenet
+        idoVegeUzenet: null,    // időlejárat üzenet
+        eloValtozas: null       // játékvégi ELO összegzés a kliensnek
     };
     jatekok.set(gameId, jatek);
     return { gameId, jatek };
@@ -108,7 +109,9 @@ function jatekAllapotKliens(jatek) {
     if (jatek.utolsoLepes) {
         utolsoLepes = {
             from: { x: jatek.utolsoLepes.from.x, y: jatek.utolsoLepes.from.y },
-            to: { x: jatek.utolsoLepes.to.x, y: jatek.utolsoLepes.to.y }
+            to: { x: jatek.utolsoLepes.to.x, y: jatek.utolsoLepes.to.y },
+            capture: !!jatek.utolsoLepes.capture,
+            special: jatek.utolsoLepes.special || null
         };
     }
 
@@ -128,7 +131,8 @@ function jatekAllapotKliens(jatek) {
         botAktiv: jatek.botAktiv,
         botSzin: jatek.botSzin,
         nehezseg: jatek.nehezseg,
-        botGondolkodik: jatek.botGondolkodik || false
+        botGondolkodik: jatek.botGondolkodik || false,
+        eloValtozas: jatek.eloValtozas || null
     };
 }
 
