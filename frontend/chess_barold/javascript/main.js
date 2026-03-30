@@ -529,10 +529,9 @@ function allapotFrissit(allapot, animald = false) {
         if (animKulcs && animKulcs !== utolsoAnimaltLepesKulcs) {
             utolsoAnimaltLepesKulcs = animKulcs;
             slidingFolyamatban = true;
-            lepesAnimacio(allapot.utolsoLepes);
-            setTimeout(() => {
+            Promise.resolve(lepesAnimacio(allapot.utolsoLepes)).finally(() => {
                 slidingFolyamatban = false;
-            }, 260);
+            });
         }
     }
     lepesHangLejatszas(allapot);

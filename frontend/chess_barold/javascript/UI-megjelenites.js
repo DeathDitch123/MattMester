@@ -194,14 +194,14 @@ const LEPES_ANIM_MS = 180;
 const LEPES_ANIM_FALLBACK_MS = 700;
 
 export function lepesAnimacio(utolsoLepes) {
-    if (!utolsoLepes) return;
+    if (!utolsoLepes) return Promise.resolve(false);
     const fromEl = mezoElemKeres(utolsoLepes.from.x, utolsoLepes.from.y);
     const toEl = mezoElemKeres(utolsoLepes.to.x, utolsoLepes.to.y);
-    if (!fromEl) return;
-    if (!toEl) return;
+    if (!fromEl) return Promise.resolve(false);
+    if (!toEl) return Promise.resolve(false);
 
     const toPiece = toEl.querySelector(".piece");
-    if (!toPiece) return;
+    if (!toPiece) return Promise.resolve(false);
 
     if (aktivLepesGhost) {
         aktivLepesGhost.remove();
@@ -241,20 +241,23 @@ export function lepesAnimacio(utolsoLepes) {
     const dx = endLeft - startLeft;
     const dy = endTop - startTop;
 
-    let cleaned = false;
-    const cleanup = () => {
-        if (cleaned) return;
-        cleaned = true;
-        if (ghost.parentNode) ghost.remove();
-        if (toPiece.isConnected) toPiece.style.visibility = "";
-        if (aktivLepesGhost === ghost) aktivLepesGhost = null;
-        if (aktivLepesCelPiece === toPiece) aktivLepesCelPiece = null;
-    };
+    return new Promise((resolve) => {
+        let cleaned = false;
+        const cleanup = () => {
+            if (cleaned) return;
+            cleaned = true;
+            if (ghost.parentNode) ghost.remove();
+            if (toPiece.isConnected) toPiece.style.visibility = "";
+            if (aktivLepesGhost === ghost) aktivLepesGhost = null;
+            if (aktivLepesCelPiece === toPiece) aktivLepesCelPiece = null;
+            resolve(true);
+        };
 
-    requestAnimationFrame(() => {
-        ghost.style.transform = `translate(${dx}px, ${dy}px)`;
-        ghost.addEventListener("transitionend", cleanup, { once: true });
-        setTimeout(cleanup, LEPES_ANIM_FALLBACK_MS);
+        requestAnimationFrame(() => {
+            ghost.style.transform = `translate(${dx}px, ${dy}px)`;
+            ghost.addEventListener("transitionend", cleanup, { once: true });
+            setTimeout(cleanup, LEPES_ANIM_FALLBACK_MS);
+        });
     });
 }
 
