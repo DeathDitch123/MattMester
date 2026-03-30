@@ -187,99 +187,66 @@ router.get('/:id/moves/:x/:y', (req, res) => {
 // POST /api/chess/:id/move — Lépés végrehajtás
 // ────────────────────────────────────────────
 router.post('/:id/move', async (req, res) => {
-    let statusCode = 200;
-    let responseBody = null;
     try {
         const gameId = parseInt(req.params.id, 10);
         const jatek = jatekKeres(gameId);
 
         if (!jatek) {
-            statusCode = 404;
-            responseBody = { error: 'Játék nem található.' };
-        } else if (jatek.botAktiv && jatek.koronLevo === jatek.botSzin) {
+            return res.status(404).json({ error: 'Játék nem található.' });
+        }
+
+        if (jatek.botAktiv && jatek.koronLevo === jatek.botSzin) {
             // Bot játékban: nem lehet a bot helyett lépni
-            statusCode = 400;
-            responseBody = { error: 'Nem a te köröd.' };
-        } else {
-            const { fromX, fromY, toX, toY, promotion } = req.body;
+            return res.status(400).json({ error: 'Nem a te köröd.' });
+        }
 
-            if ([fromX, fromY, toX, toY].some(v => v === undefined || v === null || isNaN(v))) {
-                statusCode = 400;
-                responseBody = { error: 'Hiányzó vagy érvénytelen koordináták.' };
-            } else {
-                const eredmeny = await lepesKoordinataval(
-                    jatek,
-                    parseInt(fromX, 10),
-                    parseInt(fromY, 10),
-                    parseInt(toX, 10),
-                    parseInt(toY, 10),
-                    promotion || "queen"
-                );
+        const { fromX, fromY, toX, toY, promotion } = req.body;
+        if ([fromX, fromY, toX, toY].some(v => v === undefined || v === null || isNaN(v))) {
+            return res.status(400).json({ error: 'Hiányzó vagy érvénytelen koordináták.' });
+        }
 
-                if (!eredmeny.success) {
-                    statusCode = 400;
-                    responseBody = { error: eredmeny.error };
-                } else {
-                    // ── BOT VÁLASZLÉPÉS ──
-                    let botLepes = null;
-                    if (jatek.botAktiv && !jatek.vege && jatek.koronLevo === jatek.botSzin) {
-                        await new Promise(r => setTimeout(r, 1000)); // 1 mp várakozás → bot órája tikkel
-                        const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
-                        if (botValasz) {
-                            const botEredmeny = await lepesKoordinataval(
-                                jatek,
-                                botValasz.fromX, botValasz.fromY,
-                                botValasz.toX, botValasz.toY,
-                                botValasz.promotion || "queen"
-                            );
-                            if (botEredmeny.success) {
-                                botLepes = {
-                                    from: { x: botValasz.fromX, y: botValasz.fromY },
-                                    to: { x: botValasz.toX, y: botValasz.toY }
-                                };
-                                // Ha a bot lépése véget ér a játék
-                                if (botEredmeny.uzenet) {
-                                    eredmeny.uzenet = botEredmeny.uzenet;
-                                }
-                            }
-                        }
-                    }
+        const eredmeny = await lepesKoordinataval(
+            jatek,
+            parseInt(fromX, 10),
+            parseInt(fromY, 10),
+            parseInt(toX, 10),
+            parseInt(toY, 10),
+            promotion || "queen"
+        );
 
-                    // ── ELO FRISSÍTÉS JÁTÉK VÉGÉN ──
-                    if (jatek.vege && jatek.botAktiv) {
-                        await eloFrissitJatekVegen(jatek, eredmeny.uzenet);
-                    }
+        if (!eredmeny.success) {
+            return res.status(400).json({ error: eredmeny.error });
+        }
 
-        // ── BOT VÁLASZLÉPÉS ASZINKRON ──
         // A bot aszinkron lép a háttérben — a játékos azonnal látja a saját lépését.
         const botKell = jatek.botAktiv && !jatek.vege && jatek.koronLevo === jatek.botSzin;
         if (botKell) {
             jatek.botGondolkodik = true;
         }
 
-        // Azonnal válaszolunk a játékos lépésével
+        // Azonnali válasz a játékos lépésére
         res.status(200).json({
             allapot: jatekAllapotKliens(jatek),
             uzenet: eredmeny.uzenet
         });
 
-        // ELO frissítés ha a JÁTÉKOS lépése véget ért a játéknak (pl. matt)
+        // ELO frissítés, ha a játékos lépése véget ért a játéknak
         if (!botKell && jatek.vege && jatek.botAktiv) {
             const eloValtozas = await eloFrissitJatekVegen(jatek, eredmeny.uzenet);
-            if (eloValtozas) jatek.eloValtozas = eloValtozas;
+            if (eloValtozas) {
+                jatek.eloValtozas = eloValtozas;
+            }
         }
 
-        // Bot aszinkron lépés (szintspecifikus késleltetés, majd gondolkodik)
+        // Bot aszinkron válaszlépés
         if (botKell) {
             const botConfig = nehezsegiSzintInfo(jatek.nehezseg);
             (async () => {
                 try {
-                    // Előbb várunk, hogy a user lépés UI oldalon azonnal stabilan megjelenjen,
-                    // majd indul a nehéz bot számítás.
+                    // Késleltetés az UI stabil megjelenítéséhez, majd bot számítás.
                     await varakozas(botConfig.varakozasMs);
 
                     const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
-
                     if (botValasz && !jatek.vege) {
                         const botEredmeny = await lepesKoordinataval(
                             jatek,
@@ -287,9 +254,12 @@ router.post('/:id/move', async (req, res) => {
                             botValasz.toX, botValasz.toY,
                             botValasz.promotion || "queen"
                         );
+
                         if (botEredmeny.success && jatek.vege) {
                             const eloValtozas = await eloFrissitJatekVegen(jatek, botEredmeny.uzenet);
-                            if (eloValtozas) jatek.eloValtozas = eloValtozas;
+                            if (eloValtozas) {
+                                jatek.eloValtozas = eloValtozas;
+                            }
                         }
                     }
                 } catch (err) {
@@ -420,6 +390,8 @@ router.post('/:id/surrender', async (req, res) => {
                         };
                         console.log(`[ELO] Feladás — User #${jatekosId}: ${jatekosElo} → ${ujElo} (${valtozas >= 0 ? '+' : ''}${valtozas})`);
                     }
+                } catch (eloErr) {
+                    console.error('ELO feladás frissítés hiba:', eloErr);
                 }
             }
 
