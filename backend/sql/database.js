@@ -43,12 +43,13 @@ async function createTables() {
     const queries = [
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) NOT NULL UNIQUE,
+            username VARCHAR(50) BINARY UNIQUE NOT NULL, 
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
-            elo INT DEFAULT 800,
-            elo_MM INT DEFAULT 800,
-            elo_bullet INT DEFAULT 800,
+            profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
+            elo INT DEFAULT 1200,
+            elo_MM INT DEFAULT 1200,
+            elo_bullet INT DEFAULT 1200,
             role ENUM('player', 'admin') DEFAULT 'player',
             is_banned BOOLEAN DEFAULT FALSE,
             ban_reason VARCHAR(255),
@@ -63,6 +64,13 @@ async function createTables() {
         `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
             VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
         `,
+
+        `ALTER TABLE users
+            ALTER COLUMN profile_image SET DEFAULT '/profile_pictures/default.png'`,
+
+        `UPDATE users
+            SET profile_image = '/profile_pictures/default.png'
+            WHERE profile_image IS NULL OR TRIM(profile_image) = ''`,
 
         `CREATE TABLE IF NOT EXISTS login_history (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -89,8 +97,9 @@ async function createTables() {
 
         `CREATE TABLE IF NOT EXISTS abilities (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            name VARCHAR(100) NOT NULL,
-            description TEXT
+            name VARCHAR(100) NOT NULL UNIQUE,
+            description TEXT,
+            cooldown_turns INT DEFAULT 0
         )`,
 
         `CREATE TABLE IF NOT EXISTS games (
@@ -100,6 +109,8 @@ async function createTables() {
             winner_id INT,
             time_control VARCHAR(20) DEFAULT '10+0',
             initial_fen VARCHAR(100) DEFAULT 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+            current_fen VARCHAR(100),
+            pgn TEXT,
             start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             end_time TIMESTAMP NULL,
             status ENUM('ongoing', 'finished', 'abandoned', 'draw') DEFAULT 'ongoing',
@@ -122,10 +133,12 @@ async function createTables() {
             id INT AUTO_INCREMENT PRIMARY KEY,
             game_id INT NOT NULL,
             player_id INT NOT NULL,
-            move_number INT NOT NULL,
+            ply_number INT NOT NULL,
+            san VARCHAR(10) NOT NULL,
             piece VARCHAR(10),
             from_pos VARCHAR(5),
             to_pos VARCHAR(5),
+            fen_after VARCHAR(100) NOT NULL,
             is_capture BOOLEAN DEFAULT FALSE,
             is_check BOOLEAN DEFAULT FALSE,
             is_checkmate BOOLEAN DEFAULT FALSE,
@@ -137,21 +150,63 @@ async function createTables() {
 
         `CREATE TABLE IF NOT EXISTS ability_log (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            move_id INT NOT NULL,
+            game_id INT NOT NULL,
+            move_id INT,
+            player_id INT NOT NULL,
             ability_id INT NOT NULL,
+            used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
             FOREIGN KEY (move_id) REFERENCES moves(id) ON DELETE CASCADE,
+            FOREIGN KEY (player_id) REFERENCES users(id),
             FOREIGN KEY (ability_id) REFERENCES abilities(id)
         )`,
 
         `CREATE TABLE IF NOT EXISTS friends (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            user_init_id INT NOT NULL,
-            user_recv_id INT NOT NULL,
+            user1_id INT NOT NULL,
+            user2_id INT NOT NULL,
+            action_user_id INT NOT NULL,
             status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
             invite_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_friendship (user_init_id, user_recv_id),
-            FOREIGN KEY (user_init_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (user_recv_id) REFERENCES users(id) ON DELETE CASCADE
+            UNIQUE KEY unique_friendship (user1_id, user2_id),
+            CHECK (user1_id < user2_id),
+            FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (action_user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS profile_image_uploads (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            filename VARCHAR(255) NOT NULL,
+            upload_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            status ENUM('pending', 'approved', 'rejected', 'discarded', 'default') DEFAULT 'pending',
+            review_note TEXT,
+            reviewed_by INT,
+            review_time TIMESTAMP NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS user_logs (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            event_type VARCHAR(100) NOT NULL,
+            event_category ENUM('auth', 'game', 'social', 'profile', 'ability', 'security', 'system', 'admin') DEFAULT 'system',
+            severity ENUM('info', 'warning', 'error', 'critical') DEFAULT 'info',
+            source VARCHAR(50) DEFAULT 'backend',
+            success BOOLEAN NULL,
+            metric_key VARCHAR(100) NULL, 
+            metric_value DECIMAL(14, 4) NULL, 
+            metric_delta DECIMAL(14, 4) NULL, 
+            message VARCHAR(255) NULL,
+            metadata JSON NULL, 
+            occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_logs_user_time (user_id, occurred_at),
+            INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
+            INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
+            INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
         )`
     ];
 

@@ -12,17 +12,37 @@ const path = require('path');
 const { request } = require('http');
 const { stat } = require('fs');
 const { isAdmin } = require('./funtions.js');
+const { profile } = require('console');
+
+const PROFILE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+const ALLOWED_PROFILE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
-        callback(null, path.join(__dirname, '../uploads'));
+        callback(null, path.join(__dirname, '../profile_pictures'));
     },
     filename: (request, file, callback) => {
-        callback(null, Date.now() + '-' + file.originalname); //?egyedi név: dátum - file eredeti neve
+        const sanitizedName = String(file.originalname || 'profile-image')
+            .replace(/[^a-zA-Z0-9._-]/g, '_')
+            .toLowerCase();
+        callback(null, Date.now() + '-' + sanitizedName); //?egyedi név: dátum - file eredeti neve
     }
 });
 
-const upload = multer({ storage });
+const profileImageUpload = multer({
+    storage,
+    limits: {
+        fileSize: PROFILE_IMAGE_MAX_BYTES
+    },
+    fileFilter: (request, file, callback) => {
+        if (!ALLOWED_PROFILE_IMAGE_MIME_TYPES.has(file.mimetype)) {
+            callback(new Error('Nem támogatott képformátum. Csak JPG, PNG és WEBP engedélyezett.'));
+            return;
+        }
+
+        callback(null, true);
+    }
+});
 
 router.get('/test', isAdmin, (request, response) => {
     response.status(200).json({
@@ -75,26 +95,28 @@ router.post('/login', async (request, response) => {
 
                     await sql.logLoginAttempt(user.id, ipAdress, userAgent);
 
-                    return request.session.save((err) => {
-                        if (err) {
-                            console.error('Session mentési hiba:', err);
-                            return response.status(500).json({ success: false, message: 'Hiba a munkamenet mentésekor.' });
-                        }
-
-                        // Csak a sikeres mentés után küldjük el a JSON választ
-                        return response.status(statusCode).json({
-                            success: true,
-                            message: 'Sikeres bejelentkezés.',
-                            user: {
-                                id: currentUser.id,
-                                username: currentUser.username,
-                                email: currentUser.email,
-                                role: currentUser.role,
-                                elo: currentUser.elo,
-                                elo_MM: currentUser.elo_MM,
-                                elo_bullet: currentUser.elo_bullet
-                            },
+                    await new Promise((resolve, reject) => {
+                        request.session.save((err) => {
+                            if (err) {
+                                console.error('Session mentési hiba:', err);
+                                return reject(new Error('Hiba a munkamenet mentésekor.'));
+                            }
+                            resolve();
                         });
+                    });
+
+                    return response.status(statusCode).json({
+                        success: true,
+                        message: 'Sikeres bejelentkezés.',
+                        user: {
+                            id: currentUser.id,
+                            username: currentUser.username,
+                            email: currentUser.email,
+                            role: currentUser.role,
+                            elo: currentUser.elo,
+                            elo_MM: currentUser.elo_MM,
+                            elo_bullet: currentUser.elo_bullet
+                        },
                     });
                 }
             }
@@ -212,28 +234,30 @@ router.post('/register', async (request, response) => {
 
                                             statusCode = 201;
 
-                                            request.session.save(async (err) => {
-                                                if (err) {
-                                                    console.error('Session mentési hiba:', err);
-                                                    return response.status(500).json({ success: false, message: 'Sikertelen regisztráció.' });
-                                                }
-                                                else {
-                                                    console.log('Session sikeresen mentése a regisztráció után.');
-                                                    await sql.logLoginAttempt(result.insertId, ipAdress, userAgent);
-                                                    return response.status(statusCode).json({
-                                                        success: true,
-                                                        message: 'Sikeres regisztráció',
-                                                        user: {
-                                                            id: result.insertId,
-                                                            username,
-                                                            email,
-                                                            role: 'player',
-                                                            elo: 800,
-                                                            elo_MM: 800,
-                                                            elo_bullet: 800
-                                                        },
-                                                    });
-                                                }
+                                            await new Promise((resolve, reject) => {
+                                                request.session.save((err) => {
+                                                    if (err) {
+                                                        console.error('Session mentési hiba:', err);
+                                                        return reject(new Error('Sikertelen regisztráció.'));
+                                                    }
+                                                    resolve();
+                                                });
+                                            });
+
+                                            console.log('Session sikeresen mentése a regisztráció után.');
+                                            await sql.logLoginAttempt(result.insertId, ipAdress, userAgent);
+                                            return response.status(statusCode).json({
+                                                success: true,
+                                                message: 'Sikeres regisztráció',
+                                                user: {
+                                                    id: result.insertId,
+                                                    username,
+                                                    email,
+                                                    role: 'player',
+                                                    elo: 1200,
+                                                    elo_MM: 1200,
+                                                    elo_bullet: 1200
+                                                },
                                             });
 
                                         }
@@ -259,54 +283,53 @@ router.get('/sessionInfo', async (request, response) => {
     let statusCode = 200;
     let result = { success: true, loggedIn: false, user: null };
     try {
-        if (!request.session?.userId) {
-            return response.status(statusCode).json(result);
-        }
+        if (request.session?.userId) {
+            const dbUser = await sql.getSessionUserById(request.session.userId);
 
-        const dbUser = await sql.getSessionUserById(request.session.userId);
+            if (!dbUser) {
+                request.session.destroy(() => {
+                    console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
+                });
+            } else {
+                // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
+                request.session.userId = dbUser.id;
+                request.session.username = dbUser.username;
+                request.session.role = dbUser.role;
+                request.session.elo = dbUser.elo;
 
-        if (!dbUser) {
-            request.session.destroy(() => {
-                console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
-            });
-            return response.status(statusCode).json(result);
-        }
-
-        // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
-        request.session.userId = dbUser.id;
-        request.session.username = dbUser.username;
-        request.session.role = dbUser.role;
-        request.session.elo = dbUser.elo;
-
-        result.loggedIn = true;
-        result.user = {
-            id: dbUser.id,
-            username: dbUser.username,
-            email: dbUser.email,
-            role: dbUser.role,
-            elo: dbUser.elo,
-            elo_MM: dbUser.elo_MM,
-            elo_bullet: dbUser.elo_bullet,
-            is_banned: dbUser.is_banned,
-            ban_reason: dbUser.ban_reason,
-            banned_until: dbUser.banned_until,
-            last_active: dbUser.last_active,
-            is_email_verified: dbUser.is_email_verified,
-            created_at: dbUser.created_at,
-            stats: {
-                wins: dbUser.wins,
-                losses: dbUser.losses,
-                draws: dbUser.draws,
-                abilities_used: dbUser.abilities_used
-            },
-            session: {
-                maxAge: request.session.cookie.maxAge,
-                expires: request.session.cookie.expires,
-                secure: request.session.cookie.secure,
-                httpOnly: request.session.cookie.httpOnly,
-                sameSite: request.session.cookie.sameSite
+                result.loggedIn = true;
+                result.user = {
+                    id: dbUser.id,
+                    username: dbUser.username,
+                    email: dbUser.email,
+                    profile_image: dbUser.profile_image,
+                    profile_image_status: dbUser.profile_image_status,
+                    role: dbUser.role,
+                    elo: dbUser.elo,
+                    elo_MM: dbUser.elo_MM,
+                    elo_bullet: dbUser.elo_bullet,
+                    is_banned: dbUser.is_banned,
+                    ban_reason: dbUser.ban_reason,
+                    banned_until: dbUser.banned_until,
+                    last_active: dbUser.last_active,
+                    is_email_verified: dbUser.is_email_verified,
+                    created_at: dbUser.created_at,
+                    stats: {
+                        wins: dbUser.wins,
+                        losses: dbUser.losses,
+                        draws: dbUser.draws,
+                        abilities_used: dbUser.abilities_used
+                    },
+                    session: {
+                        maxAge: request.session.cookie.maxAge,
+                        expires: request.session.cookie.expires,
+                        secure: request.session.cookie.secure,
+                        httpOnly: request.session.cookie.httpOnly,
+                        sameSite: request.session.cookie.sameSite
+                    }
+                };
             }
-        };
+        }
 
         return response.status(statusCode).json(result);
     } catch (error) {
@@ -321,6 +344,379 @@ router.get('/sessionInfo', async (request, response) => {
         return response.status(statusCode).json(result);
     }
 });
+
+router.post('/profile/verify-current-password', async (request, response) => {
+    let statusCode = 200;
+    let result = { success: true, valid: false, message: 'A jelenlegi jelszó hibás.' };
+    try {
+        if (!request.session?.userId) {
+            statusCode = 401;
+            result = { success: false, valid: false, message: 'Bejelentkezés szükséges.' };
+        } else {
+            const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
+            if (!currentPassword) {
+                statusCode = 400;
+                result = { success: false, valid: false, message: 'A jelenlegi jelszó kötelező.' };
+            } else {
+                const user = await sql.getUserAuthById(request.session.userId);
+                if (!user) {
+                    statusCode = 404;
+                    result = { success: false, valid: false, message: 'A felhasználó nem található.' };
+                } else {
+                    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+                    if (isMatch) {
+                        result = { success: true, valid: true, message: 'A jelenlegi jelszó helyes.' };
+                    }
+                }
+            }
+        }
+
+        return response.status(statusCode).json(result);
+    } catch (error) {
+        console.error('Current password verify hiba:', error);
+        return response.status(500).json({ success: false, valid: false, message: 'Szerverhiba az ellenőrzés során.' });
+    }
+});
+
+router.post('/profile/settings', async (request, response) => {
+    let statusCode = 200;
+    try {
+        if (!request.session?.userId) {
+            statusCode = 401;
+            throw new Error('A profil módosításhoz be kell jelentkezni.');
+        }
+
+        const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
+        const body = request.body || {};
+        const username = typeof body.username === 'string' ? body.username.trim() : '';
+        const email = typeof body.email === 'string' ? body.email.trim() : '';
+        const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+        const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+
+        if (!username || !email) {
+            statusCode = 400;
+            throw new Error('A felhasználónév és az e-mail cím kötelező.');
+        }
+
+        if (username.length < 3 || username.length > 50) {
+            statusCode = 400;
+            throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie.');
+        }
+
+        if (!usernameRegex.test(username)) {
+            statusCode = 400;
+            throw new Error('A felhasználónév formátuma érvénytelen.');
+        }
+
+        if (!emailRegex.test(email)) {
+            statusCode = 400;
+            throw new Error('Érvénytelen e-mail formátum.');
+        }
+
+        if (!currentPassword) {
+            statusCode = 400;
+            throw new Error('A profil módosításához add meg a jelenlegi jelszavad.');
+        }
+
+        if (newPassword) {
+            if (!currentPassword) {
+                statusCode = 400;
+                throw new Error('Jelszó módosításához add meg a jelenlegi jelszavad.');
+            }
+
+            if (newPassword.includes('\\')) {
+                statusCode = 400;
+                throw new Error('A jelszó nem megengedett karaktert tartalmaz.');
+            }
+
+            if (newPassword.length < 8) {
+                statusCode = 400;
+                throw new Error('A jelszónak legalább 8 karakter hosszú kell legyen.');
+            }
+
+            if (!passwordRegex.test(newPassword)) {
+                statusCode = 400;
+                throw new Error('A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
+            }
+        }
+
+        const currentAuthUser = await sql.getUserAuthById(request.session.userId);
+        if (!currentAuthUser) {
+            statusCode = 404;
+            throw new Error('A felhasználó nem található.');
+        }
+
+        const hasUsernameChanged = username !== currentAuthUser.username;
+        const hasEmailChanged = email !== currentAuthUser.email;
+        const hasPasswordChanged = newPassword.length > 0;
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, currentAuthUser.password_hash);
+        if (!isCurrentPasswordValid) {
+            statusCode = 401;
+            throw new Error('A jelenlegi jelszó hibás.');
+        }
+
+        if (!hasUsernameChanged && !hasEmailChanged && !hasPasswordChanged) {
+            statusCode = 400;
+            throw new Error('Nincs változás, nincs mit menteni.');
+        }
+
+        let passwordHash = null;
+        if (hasPasswordChanged) {
+            passwordHash = await bcrypt.hash(newPassword, 10);
+        }
+
+        const updateResult = await sql.updateUserProfileSettings(request.session.userId, {
+            username,
+            email,
+            passwordHash
+        });
+
+        if (updateResult.usernameChanged) {
+            request.session.username = updateResult.username;
+        }
+
+        await new Promise((resolve, reject) => {
+            request.session.save((error) => {
+                if (error) {
+                    return reject(error);
+                }
+                resolve();
+            });
+        });
+
+        const changedFields = [];
+        if (updateResult.usernameChanged) {
+            changedFields.push('username');
+        }
+        if (updateResult.emailChanged) {
+            changedFields.push('email');
+        }
+        if (updateResult.passwordChanged) {
+            changedFields.push('password');
+        }
+
+        try {
+            await sql.insertUserLog(request.session.userId, {
+                eventType: 'profile_settings_update',
+                eventCategory: 'profile',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Profil beállítások frissítve.',
+                metadata: {
+                    changedFields
+                }
+            });
+        } catch (logError) {
+            console.warn('Profile settings log hiba:', logError.message);
+        }
+
+        return response.status(statusCode).json({
+            success: true,
+            message: 'A profil beállítások sikeresen frissültek.',
+            changedFields
+        });
+    } catch (error) {
+        console.error('Profile settings hiba:', error);
+
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        if (error?.code === 'ER_DUP_ENTRY' || error.message?.includes('foglalt')) {
+            statusCode = 409;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a profil beállítások mentése közben.'
+        });
+    }
+});
+
+router.post('/profile/delete', async (request, response) => {
+    let statusCode = 200;
+    try {
+        if (!request.session?.userId) {
+            statusCode = 401;
+            throw new Error('Bejelentkezés szükséges.');
+        }
+
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+        const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
+
+        if (!currentPassword) {
+            statusCode = 400;
+            throw new Error('A jelenlegi jelszó kötelező.');
+        }
+
+        if (currentPassword.includes('\\')) {
+            statusCode = 400;
+            throw new Error('A jelszó nem megengedett karaktert tartalmaz.');
+        }
+
+        if (currentPassword.length < 8) {
+            statusCode = 400;
+            throw new Error('A jelszónak legalább 8 karakter hosszú kell legyen.');
+        }
+
+        if (!passwordRegex.test(currentPassword)) {
+            statusCode = 400;
+            throw new Error('A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
+        }
+
+        const authUser = await sql.getUserAuthById(request.session.userId);
+        if (!authUser) {
+            statusCode = 404;
+            throw new Error('A felhasználó nem található.');
+        }
+
+        const isCurrentPasswordValid = await bcrypt.compare(currentPassword, authUser.password_hash);
+        if (!isCurrentPasswordValid) {
+            statusCode = 401;
+            throw new Error('A jelenlegi jelszó hibás.');
+        }
+
+        const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
+
+        await new Promise((resolve) => {
+            request.session.destroy((error) => {
+                if (error) {
+                    console.warn('Session törlési hiba profil törlés után:', error);
+                }
+                response.clearCookie('connect.sid');
+                resolve();
+            });
+        });
+
+        return response.status(200).json({
+            success: true,
+            message: 'A profil sikeresen törölve lett.',
+            userId: deleteResult.userId,
+            username: deleteResult.username
+        });
+    } catch (error) {
+        console.error('Profile delete hiba:', error);
+        let responseMessage = error?.message || 'Szerverhiba a profil törlése közben.';
+
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        if (error.message === 'Admin profil nem törölhető.' || error.message === 'Admin profil nem torolheto.') {
+            statusCode = 403;
+            responseMessage = 'Admin profil nem törölhető.';
+        }
+
+        if (error.message === 'A felhasználó nem található.' || error.message === 'A felhasznalo nem talalhato.') {
+            statusCode = 404;
+            responseMessage = 'A felhasználó nem található.';
+        }
+
+        if (error.message === 'A jelenlegi jelszó hibás.' || error.message === 'A jelenlegi jelszo hibas.') {
+            statusCode = 401;
+            responseMessage = 'A jelenlegi jelszó hibás.';
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: responseMessage
+        });
+    }
+});
+
+router.post('/profile/upload-image', (request, response) => {
+    profileImageUpload.single('image')(request, response, async (uploadError) => {
+        let statusCode = 200;
+        let uploadedPath = null;
+        try {
+            if (!request.session?.userId) {
+                statusCode = 401;
+                throw new Error('Bejelentkezés szükséges.');
+            }
+
+            if (uploadError) {
+                if (uploadError.code === 'LIMIT_FILE_SIZE') {
+                    statusCode = 400;
+                    throw new Error('A kép mérete legfeljebb 3 MB lehet.');
+                }
+
+                statusCode = 400;
+                throw new Error(uploadError.message || 'A képfeltöltés sikertelen.');
+            }
+
+            if (!request.file) {
+                statusCode = 400;
+                throw new Error('A kép kiválasztása kötelező.');
+            }
+
+            uploadedPath = `/profile_pictures/${request.file.filename}`;
+            const uploadResult = await sql.uploadProfileImage(request.session.userId, uploadedPath);
+
+            return response.status(200).json({
+                success: true,
+                message: 'A profilkép sikeresen feltöltve, elbírálásra vár.',
+                profile_image: uploadResult.profileImage,
+                profile_image_status: uploadResult.status
+            });
+        } catch (error) {
+            if (uploadedPath) {
+                try {
+                    const relativeUploadedPath = uploadedPath.replace(/^\//, '');
+                    await fs.unlink(path.join(__dirname, '..', relativeUploadedPath));
+                } catch (deleteError) {
+                    console.warn('Feltöltött kép törlése nem sikerült:', deleteError.message);
+                }
+            }
+
+            if (statusCode === 200) {
+                statusCode = 500;
+            }
+
+            return response.status(statusCode).json({
+                success: false,
+                message: error.message || 'Szerverhiba a képfeltöltés közben.'
+            });
+        }
+    });
+});
+
+router.post('/profile/remove-image', async (request, response) => {
+    let statusCode = 200;
+    try {
+        if (!request.session?.userId) {
+            statusCode = 401;
+            throw new Error('Bejelentkezés szükséges.');
+        }
+
+        const removeResult = await sql.resetUserProfileImageToDefault(request.session.userId);
+
+        return response.status(200).json({
+            success: true,
+            message: 'A profilkép visszaállítva az alapértelmezett képre.',
+            profile_image: removeResult.profileImage,
+            profile_image_status: removeResult.profileImageStatus
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        if (error.message === 'A felhasználó nem található.') {
+            statusCode = 404;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a profilkép eltávolítása közben.'
+        });
+    }
+});
+
 router.get('/leaderboard', async (request, response) => {
     try {
         const leaderboardData = leaderboardService.getLeaderBoard();

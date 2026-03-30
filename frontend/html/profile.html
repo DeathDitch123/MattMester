@@ -7,7 +7,7 @@
             connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
             script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
             style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
-            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Profil</title>
 
@@ -30,8 +30,10 @@
     <!-- Sidebar -->
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-            <i data-lucide="crown"></i>
-            <span>MattMester</span>
+            <a class="navbar-brand brand d-flex align-items-center gap-2" href="#">
+                <i class="bi bi-king-fill"></i>
+                <span>MATTMESTER</span>
+            </a>
         </div>
         <div class="nav flex-column">
             <a href="#dashboard" class="nav-link active">
@@ -79,30 +81,39 @@
     <main class="main-content">
         <!-- Top Bar -->
         <div class="top-bar">
-            <div class="d-flex align-items-center gap-3">
-                <button class="btn btn-outline-gold d-lg-none py-1 px-2" onclick="toggleSidebar()">
+            <div class="top-bar-left">
+                <button
+                    class="btn btn-outline-gold d-lg-none py-1 px-2 d-flex align-items-center justify-content-center"
+                    onclick="toggleSidebar()" style="height: 40px; width: 40px; border-radius: 12px;">
                     <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
                 </button>
-                <div class="top-bar-search d-none d-md-block">
-                    <i data-lucide="search"></i>
-                    <input type="text" placeholder="Search games, players...">
+                <div class="top-bar-search d-none d-lg-block">
+                    <input type="text" placeholder="Keresés játékosokra, meccsekre...">
                 </div>
             </div>
 
-            <div class="top-bar-actions">
-                <!-- talán fényes sötét mód?-->
-                <!-- <div class="theme-toggle" data-tooltip="Toggle Theme">
-                    <div class="theme-toggle-knob">
-                        <i data-lucide="moon" style="width: 12px; height: 12px; color: var(--bg-sidebar);"></i>
-                    </div>
-                </div> -->
-                <button class="top-bar-btn" type="button" data-tooltip="Notifications" data-bs-toggle="modal"
+            <div class="top-bar-center d-lg-none">
+                <i data-lucide="crown" style="color: var(--accent-gold); width: 22px; height: 22px;"></i>
+                <span
+                    style="font-family: 'Playfair Display', serif; font-weight: 700; color: var(--text-primary); font-size: 1.1rem; letter-spacing: 0.5px;">MattMester</span>
+            </div>
+
+            <div class="top-bar-right">
+                <div class="d-none d-md-flex align-items-center gap-2">
+                    <button class="top-bar-btn" id="openMessagesModal" type="button" data-tooltip="Üzenetek"
+                        data-bs-toggle="modal" data-bs-target="#messagesModal">
+                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                    </button>
+                </div>
+
+                <button class="top-bar-btn" type="button" data-tooltip="Értesítések" data-bs-toggle="modal"
                     data-bs-target="#notificationsModal">
                     <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
                     <span class="notification-dot"></span>
                 </button>
+
                 <div class="top-bar-user">
-                    <div class="top-bar-user-info">
+                    <div class="top-bar-user-info d-none d-sm-block">
                         <div class="top-bar-user-name">GrandMaster_99</div>
                         <div class="top-bar-user-role">Admin</div>
                     </div>
@@ -114,38 +125,43 @@
         <div class="main-content-inner" id="dashboard">
             <!-- Dashboard row 1 -->
             <div class="profile-header animate-in animate-in-1 section-block" id="profile">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <div class="d-flex flex-wrap align-items-center gap-4">
+                <div class="row align-items-center gy-4">
+                    <div class="col-12 col-md-7">
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-4">
                             <div class="position-relative">
-                                <img src="https://ui-avatars.com/api/?name=GrandMaster_99&background=1e293b&color=d4af37&size=240"
-                                    alt="Profile" class="profile-avatar" id="profileAvatarMain">
+                                <img id="profileAvatarDashboard" class="profile-avatar"
+                                    src="https://ui-avatars.com/api/?name=Grand+Master&background=d4af37&color=000&size=128"
+                                    alt="GrandMaster_99">
                                 <span class="position-absolute bottom-0 end-0 p-1">
-                                    <span class="status-dot"></span>
+                                    <span class="status-dot shadow-glow"></span>
                                 </span>
                             </div>
-                            <div>
-                                <div class="d-flex align-items-center gap-3 mb-2">
-                                    <h1 class="h3 mb-0 text-white">GrandMaster_99</h1>
+
+                            <div class="text-center text-md-start">
+                                <div
+                                    class="d-flex align-items-center justify-content-center justify-content-md-start gap-3 mb-2">
+                                    <h1 class="h3 mb-0 text-white fw-bold">GrandMaster_99</h1>
                                     <span class="role-badge admin">Admin</span>
                                 </div>
-                                <p class="text-secondary mb-2">admin@mattmester.com</p>
-                                <div class="profile-status">
+                                <p class="text-secondary mb-2 opacity-75">admin@mattmester.com</p>
+                                <div
+                                    class="profile-status d-flex align-items-center justify-content-center justify-content-md-start gap-2">
                                     <span class="status-dot"></span>
-                                    Online
+                                    <span class="text-uppercase small fw-bold tracking-wider">Online</span>
                                 </div>
+                                <small id="profileImageHeaderStatus" class="text-secondary mt-2 d-inline-block">Profilkép státusz: Jóváhagyott</small>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-md-5 mt-4 mt-md-0">
-                        <div class="d-flex justify-content-md-end flex-wrap gap-3">
+                    <div class="col-12 col-md-5">
+                        <div class="d-flex justify-content-center justify-content-md-end flex-wrap gap-3">
                             <div class="elo-display text-center">
                                 <div class="elo-number">1,500</div>
                                 <div class="elo-label">Klasszikus</div>
                                 <div class="elo-rank rank-master">Master</div>
                             </div>
-                            <div class="elo-display text-center">
+                            <div class="elo-display text-center highlighted">
                                 <div class="elo-number">1,650</div>
                                 <div class="elo-label">MattMester</div>
                                 <div class="elo-rank rank-master">Master</div>
@@ -487,34 +503,45 @@
                                                 <input type="file" class="d-none" id="avatarUpload">
                                                 <label for="avatarUpload" class="btn btn-gold btn-sm m-0">Upload
                                                     New</label>
-                                                <button type="button" class="btn btn-outline-danger btn-sm"
+                                                <button type="button" id="removeAvatarButton" class="btn btn-outline-danger btn-sm"
                                                     data-bs-toggle="modal"
                                                     data-bs-target="#removeAvatarModal">Remove</button>
                                             </div>
+                                            <small id="profileImageSettingsStatus" class="text-secondary mt-2 d-inline-block">
+                                                Profilkép státusz: Jóváhagyott
+                                            </small>
                                         </div>
                                     </div>
 
                                     <div class="col-md-6">
                                         <label class="form-label">Username</label>
-                                        <input type="text" class="form-control" value="GrandMaster_99">
+                                        <input id="settingsUsername" type="text" class="form-control" value="GrandMaster_99">
+                                        <div id="settingsUsernameFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">Email Address</label>
-                                        <input type="email" class="form-control" value="admin@mattmester.com">
+                                        <input id="settingsEmail" type="email" class="form-control" value="admin@mattmester.com">
+                                        <div id="settingsEmailFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
 
                                     <div class="col-md-6">
                                         <label class="form-label">New Password</label>
-                                        <input type="password" class="form-control"
+                                        <input id="settingsNewPassword" type="password" class="form-control"
                                             placeholder="Leave blank to keep current">
+                                        <div id="settingsNewPasswordFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">Confirm New Password</label>
-                                        <input type="password" class="form-control" placeholder="Confirm new password">
+                                        <input id="settingsConfirmPassword" type="password" class="form-control" placeholder="Confirm new password">
+                                        <div id="settingsConfirmPasswordFeedback" class="form-text text-secondary mt-1"></div>
+                                    </div>
+
+                                    <div class="col-12 mt-2">
+                                        <div id="profileSettingsMessage" class="alert d-none mb-0" role="alert"></div>
                                     </div>
 
                                     <div class="col-12 text-end mt-4">
-                                        <button type="submit" class="btn btn-gold px-5">Save Changes</button>
+                                        <button id="profileSettingsSaveButton" type="submit" class="btn btn-gold px-5" disabled>Save Changes</button>
                                     </div>
                                 </div>
                             </form>
@@ -548,9 +575,7 @@
             MattMester
         </div>
         <div class="footer-links">
-            <a href="#">Home</a>
-            <a href="#">Leaderboard</a>
-            <a href="#">Help Center</a>
+            <a href="/">Home</a>
         </div>
         <div class="footer-copy">&copy; 2026 MattMester</div>
     </footer>
@@ -564,6 +589,185 @@
         <span class="fab-tooltip">Quick Play</span>
         <i data-lucide="swords" style="width: 26px; height: 26px;"></i>
     </button>
+
+    <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="messagesModalLabel">Messenger</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">Ez egy egyszerű chat modal.</p>
+                    <p class="modal-note mb-3">Itt később jöhetnek az üzenetek és valós idejű chat funkciók.</p>
+                    <textarea class="form-control" rows="3" placeholder="Írj egy üzenetet..."></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-gold">Küldés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="addFriendModal" tabindex="-1" aria-labelledby="addFriendModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="addFriendModalLabel">
+                        <i data-lucide="user-plus" style="width: 18px; height: 18px;"></i>
+                        Add Friend
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="friendNameInput" class="form-label">Username</label>
+                    <input type="text" id="friendNameInput" class="form-control" placeholder="e.g. ChessWizard88">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-gold" id="sendFriendRequestBtn">Send Request</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="modal fade" id="deleteProfileModal" tabindex="-1" aria-labelledby="deleteProfileModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-delete">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="deleteProfileModalLabel">
+                        <i data-lucide="trash-2" style="width: 18px; height: 18px; color: var(--accent-red);"></i>
+                        Profil törlése
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3 text-secondary">Ez a művelet véglegesen eltávolítja a profiladataidat ebből a
+                        munkamenetből.</p>
+
+                    <label for="deleteProfileConfirmInput" class="mb-2">A megerősítéshez add meg a jelszavad:</label>
+                    <input type="password" class="form-control mb-3" id="deleteProfileConfirmInput"
+                        placeholder="Jelszó megadása">
+                    <div id="deleteProfileConfirmFeedback" class="form-text text-secondary mt-1 mb-3"></div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="deleteProfileAcknowledge">
+                        <label class="form-check-label text-secondary" for="deleteProfileAcknowledge">
+                            Megértettem, hogy ez a folyamat nem vonható vissza.
+                        </label>
+                    </div>
+
+                    <div id="deleteProfileMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteProfileBtn" disabled>
+                        Törlés (<span id="deleteTimer">5</span>s)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="removeAvatarModal" tabindex="-1" aria-labelledby="removeAvatarModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="removeAvatarModalLabel">
+                        <i data-lucide="image-minus" style="width: 18px; height: 18px;"></i>
+                        Profilkép eltávolítása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2 text-secondary">Biztosan visszaállítod a profilképet az alapértelmezett képre?</p>
+                    <div id="removeAvatarMessage" class="alert d-none mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmRemoveAvatarButton">Eltávolítás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="profileImageEditorModal" tabindex="-1" aria-labelledby="profileImageEditorModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="profileImageEditorModalLabel">
+                        <i data-lucide="image-up" style="width: 18px; height: 18px;"></i>
+                        Profilkép kivágása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary mb-3">A képet húzással mozgathatod, zoomolhatod és forgathatod.</p>
+                    <div class="profile-image-editor-grid">
+                        <div class="profile-image-editor-main">
+                            <canvas id="profileImageEditorCanvas" class="profile-image-editor-canvas" width="640" height="360"></canvas>
+                        </div>
+                        <div class="profile-image-editor-side">
+                            <div>
+                                <label for="profileImageZoom" class="form-label mb-1">Nagyítás</label>
+                                <input id="profileImageZoom" type="range" class="form-range" min="0.6" max="3" step="0.05" value="1">
+                            </div>
+                            <div>
+                                <label for="profileImageRotate" class="form-label mb-1">Forgatás</label>
+                                <input id="profileImageRotate" type="range" class="form-range" min="-180" max="180" step="1" value="0">
+                            </div>
+                            <div>
+                                <label class="form-label mb-2">Előnézet</label>
+                                <canvas id="profileImageEditorPreview" class="profile-image-editor-preview" width="160" height="160"></canvas>
+                            </div>
+                            <button id="resetProfileImageEditor" type="button" class="btn btn-outline-gold btn-sm">Visszaállítás</button>
+                        </div>
+                    </div>
+                    <div id="profileImageEditorMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="saveProfileImageButton">Mentés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="confirmProfileSettingsModal" tabindex="-1" aria-labelledby="confirmProfileSettingsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="confirmProfileSettingsModalLabel">
+                        <i data-lucide="circle-help" style="width: 18px; height: 18px;"></i>
+                        Módosítás megerősítése
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2 text-secondary">Biztosan menteni szeretnéd az alábbi változásokat?</p>
+                    <div id="profileSettingsModalMessage" class="alert d-none mb-3" role="alert"></div>
+                    <ul id="profileSettingsChangesList" class="mb-0 ps-3"></ul>
+                    <div id="profileSettingsModalPasswordBlock" class="mt-3 d-none">
+                        <label class="form-label">Jelenlegi jelszó</label>
+                        <input id="modalCurrentPassword" type="password" class="form-control" placeholder="A mentéshez add meg a jelenlegi jelszavad">
+                        <div id="modalCurrentPasswordFeedback" class="form-text text-secondary mt-1"></div>
+                    </div>
+                    <div class="mt-3">
+                        <small id="profileSettingsConfirmHint" class="text-secondary">A mentés gomb 10 másodperc múlva lesz aktív.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="profileSettingsConfirmSaveButton" disabled>Mentés (10s)</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>

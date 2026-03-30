@@ -4,24 +4,15 @@
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+        content="default-src 'self'; connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: https://ui-avatars.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Panel</title>
-    <!--!Bootstrap-->
-    <link rel="stylesheet" href="../bootstrap/css/bootstrap.min.css" />
-    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <!-- Google Fonts -->
     <link
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
         rel="stylesheet">
-    <!--?Popper: dropdowns, popovers, tooltips-->
-    <script src="../bootstrap/js/popper.min.js"></script>
-    <script src="../bootstrap/js/bootstrap.min.js"></script>
-    <!--!CSS-->
     <link rel="stylesheet" href="../css/adminPanel.css" />
-    <!--!JavaScript-->
-    <script src="../javascript/adminPanel.js"></script>
 </head>
 
 <body>
@@ -33,55 +24,54 @@
                 <span>MattAdmin</span>
             </a>
         </div>
-        <!-- Navigation Links -->
         <div class="sidebar-menu">
             <div class="menu-category">Overview</div>
-            <a href="#" class="nav-link active" onclick="showSection('dashboard')">
+            <a href="#" class="nav-link active" data-section="dashboard" onclick="showSection('dashboard', event)">
                 <i class="bi bi-grid-1x2-fill"></i>
                 <span>Dashboard</span>
             </a>
-            <a href="#" class="nav-link" onclick="showSection('analytics')">
+            <a href="#" class="nav-link" data-section="analytics" onclick="showSection('analytics', event)">
                 <i class="bi bi-graph-up-arrow"></i>
                 <span>Analytics</span>
             </a>
 
             <div class="menu-category">Management</div>
-            <a href="#" class="nav-link" onclick="showSection('users')">
+            <a href="#" class="nav-link" data-section="users" onclick="showSection('users', event)">
                 <i class="bi bi-people-fill"></i>
                 <span>Users</span>
                 <span class="badge bg-primary ms-auto">2.4k</span>
             </a>
-            <a href="#" class="nav-link" onclick="showSection('games')">
+            <a href="#" class="nav-link" data-section="games" onclick="showSection('games', event)">
                 <i class="bi bi-knight-fill"></i>
                 <span>Games</span>
             </a>
-            <a href="#" class="nav-link" onclick="showSection('chats')">
+            <a href="#" class="nav-link" data-section="chats" onclick="showSection('chats', event)">
                 <i class="bi bi-chat-dots-fill"></i>
                 <span>Chat Moderation</span>
                 <span class="badge bg-danger ms-auto">12</span>
             </a>
-            <a href="#" class="nav-link" onclick="showSection('abilities')">
+            <a href="#" class="nav-link" data-section="abilities" onclick="showSection('abilities', event)">
                 <i class="bi bi-magic"></i>
                 <span>Abilities</span>
             </a>
-            <a href="#" class="nav-link" onclick="showSection('friends')">
+            <a href="#" class="nav-link" data-section="friends" onclick="showSection('friends', event)">
                 <i class="bi bi-heart-fill"></i>
                 <span>Social Graph</span>
             </a>
 
             <div class="menu-category">Security</div>
-            <a href="#" class="nav-link" onclick="showSection('security')">
+            <a href="#" class="nav-link" data-section="security" onclick="showSection('security', event)">
                 <i class="bi bi-shield-check"></i>
                 <span>Login History</span>
             </a>
-            <a href="#" class="nav-link" onclick="showSection('bans')">
+            <a href="#" class="nav-link" data-section="bans" onclick="showSection('bans', event)">
                 <i class="bi bi-ban"></i>
                 <span>Banned Users</span>
                 <span class="badge bg-warning text-dark ms-auto">5</span>
             </a>
 
             <div class="menu-category">System</div>
-            <a href="#" class="nav-link" onclick="showSection('settings')">
+            <a href="#" class="nav-link" data-section="settings" onclick="showSection('settings', event)">
                 <i class="bi bi-gear-fill"></i>
                 <span>Settings</span>
             </a>
@@ -91,6 +81,7 @@
             </a>
         </div>
     </nav>
+
     <!-- Main Content -->
     <main class="main-content" id="mainContent">
         <!-- Top Navbar -->
@@ -104,13 +95,11 @@
                     <input type="text" placeholder="Search players, games...">
                 </div>
             </div>
-
             <div class="d-flex align-items-center gap-3">
                 <button class="btn btn-outline-gold position-relative">
                     <i class="bi bi-bell-fill"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">
-                        3
-                    </span>
+                    <span
+                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">3</span>
                 </button>
                 <div class="user-profile dropdown">
                     <div data-bs-toggle="dropdown">
@@ -136,64 +125,57 @@
                 </div>
             </div>
         </div>
-        <!-- Dashboard Sections -->
-        <!-- Each section is hidden by default and shown when the corresponding nav link is clicked -->
+
+        <!-- Dashboard Section -->
         <div class="section-content animate-slide-in" id="dashboard">
-
-            <!-- Dashboard Row -->
-
             <div class="row g-4 mb-4">
-                <!-- Dashboard Players-->
                 <div class="col-md-6 col-xl-3">
                     <div class="stat-card">
-                        <div class="stat-icon bg-primary-soft">
-                            <i class="bi bi-people-fill"></i>
-                        </div>
-                        <div class="stat-value">2,234</div>
+                        <div class="stat-icon bg-primary-soft"><i class="bi bi-people-fill"></i></div>
+                        <div class="stat-value">2,451</div>
                         <div class="stat-label">Active Players</div>
-                        <small class="text-success"><i class="bi bi-arrow-up"></i>+12% this week??</small>
+                        <small class="text-success"><i class="bi bi-arrow-up"></i> +12% this week</small>
                     </div>
                 </div>
-                <!-- Dashboard Games-->
                 <div class="col-md-6 col-xl-3">
                     <div class="stat-card">
-                        <div class="stat-icon bg-warning-soft">
-                            <i class="bi bi-trophy-fill"></i>
-                        </div>
-                        <div class="stat-value">1,567</div>
+                        <div class="stat-icon bg-success-soft"><i class="bi bi-king"></i></div>
+                        <div class="stat-value">842</div>
+                        <div class="stat-label">Active Games</div>
+                        <small class="text-success"><span class="live-indicator"><span class="live-dot"></span> Live
+                                now</span></small>
+                    </div>
+                </div>
+                <div class="col-md-6 col-xl-3">
+                    <div class="stat-card">
+                        <div class="stat-icon bg-warning-soft"><i class="bi bi-trophy-fill"></i></div>
+                        <div class="stat-value">15,234</div>
                         <div class="stat-label">Games Played</div>
-                        <small class="text-muted">total all time</small>
+                        <small class="text-muted">Total all time</small>
                     </div>
                 </div>
-                <!-- Dashboard Banned Users-->
                 <div class="col-md-6 col-xl-3">
                     <div class="stat-card">
-                        <div class="stat-icon bg-danger-soft">
-                            <i class="bi bi-ban"></i>
-                        </div>
-                        <div class="stat-value">42</div>
+                        <div class="stat-icon bg-danger-soft"><i class="bi bi-ban"></i></div>
+                        <div class="stat-value">5</div>
                         <div class="stat-label">Banned Users</div>
-                        <small class="text-danger"><i class="bi bi-exclamation-triangle"></i>Requires review</small>
+                        <small class="text-danger"><i class="bi bi-exclamation-triangle"></i> Requires review</small>
                     </div>
                 </div>
             </div>
 
-            <!-- Dashboard Row -->
-
             <div class="row g-4">
-                <!-- Dashboard Activity Chart -->
                 <div class="col-xl-8">
                     <div class="content-card">
                         <div class="card-header">
                             <h5 class="card-title"><i class="bi bi-activity me-2 text-gold"></i>Platform Activity</h5>
                             <button class="btn btn-sm btn-outline-gold">View Report</button>
                         </div>
-                        <div class="card-body">
-                            <canvas id="activityChart" height="150"></canvas>
+                        <div class="card-body p-0">
+                            <canvas id="activityChart" height="300"></canvas>
                         </div>
                     </div>
                 </div>
-                <!-- Dashboard Recent Activity -->
                 <div class="col-xl-4">
                     <div class="content-card h-100">
                         <div class="card-header">
@@ -201,10 +183,8 @@
                                 Activity</h5>
                         </div>
                         <div class="card-body">
-
                             <div class="activity-item">
-                                <div class="activity-icon bg-success text-white">
-                                    <i class="bi bi-person-plus-fill"></i>
+                                <div class="activity-icon bg-success text-white"><i class="bi bi-person-plus-fill"></i>
                                 </div>
                                 <div>
                                     <div class="fw-bold text-white">New User Registration</div>
@@ -212,50 +192,39 @@
                                     <div class="small text-muted">2 minutes ago</div>
                                 </div>
                             </div>
-
                             <div class="activity-item">
-                                <div class="activity-icon bg-primary text-white">
-                                    <i class="bi bi-knight-fill"></i>
-                                </div>
+                                <div class="activity-icon bg-primary text-white"><i class="bi bi-knight-fill"></i></div>
                                 <div>
                                     <div class="fw-bold text-white">Game Completed</div>
                                     <small class="text-secondary">Grandmaster vs. ProPlayer1</small>
                                     <div class="small text-muted">5 minutes ago</div>
                                 </div>
                             </div>
-
                             <div class="activity-item">
-                                <div class="activity-icon bg-danger text-white">
-                                    <i class="bi bi-exclamation-triangle-fill"></i>
-                                </div>
+                                <div class="activity-icon bg-danger text-white"><i
+                                        class="bi bi-exclamation-triangle-fill"></i></div>
                                 <div>
                                     <div class="fw-bold text-white">Report Submitted</div>
                                     <small class="text-secondary">Inappropriate chat behavior</small>
                                     <div class="small text-muted">12 minutes ago</div>
                                 </div>
                             </div>
-
                             <div class="activity-item">
-                                <div class="activity-icon bg-warning text-dark">
-                                    <i class="bi bi-magic"></i>
-                                </div>
+                                <div class="activity-icon bg-warning text-dark"><i class="bi bi-magic"></i></div>
                                 <div>
                                     <div class="fw-bold text-white">Ability Used</div>
                                     <small class="text-secondary">"Time Warp" in Game #4921</small>
                                     <div class="small text-muted">23 minutes ago</div>
                                 </div>
                             </div>
-
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
 
         <!-- Users Section -->
         <div id="users" class="section-content d-none">
-            <!-- Users Header -->
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2 class="mb-0"><i class="bi bi-people-fill me-2 text-gold"></i>User Management</h2>
                 <div class="d-flex gap-2">
@@ -267,8 +236,6 @@
                     </button>
                 </div>
             </div>
-
-            <!-- Users Filters-->
             <div class="content-card">
                 <div class="card-header">
                     <div class="d-flex gap-2 w-100">
@@ -294,7 +261,6 @@
                         </select>
                     </div>
                 </div>
-                <!-- Users Table -->
                 <div class="table-responsive">
                     <table class="table">
                         <thead>
@@ -304,11 +270,11 @@
                                 <th>Role</th>
                                 <th>Status</th>
                                 <th>Last Active</th>
+                                <th>Joined</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody id="usersTableBody">
-                            <!-- Users will be populated here dynamically but here's some examples -->
                             <tr>
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
@@ -388,7 +354,6 @@
                         </tbody>
                     </table>
                 </div>
-                <!-- Pagination just exaple not yet functional-->
                 <div
                     class="card-footer bg-transparent border-top border-secondary d-flex justify-content-between align-items-center">
                     <small class="text-secondary">Showing 1-3 of 2,451 users</small>
@@ -410,10 +375,433 @@
             </div>
         </div>
 
-        <!-- Games Section-->
+        <!-- Games Section -->
+        <div id="games" class="section-content d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0"><i class="bi bi-knight-fill me-2 text-gold"></i>Game Management</h2>
+                <button class="btn btn-gold"><i class="bi bi-plus-lg me-2"></i>Create Tournament</button>
+            </div>
+            <div class="row g-4 mb-4">
+                <div class="col-md-4">
+                    <div class="content-card p-3 text-center">
+                        <h3 class="text-success">842</h3>
+                        <p class="mb-0 text-secondary">Ongoing Games</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="content-card p-3 text-center">
+                        <h3 class="text-gold">14,392</h3>
+                        <p class="mb-0 text-secondary">Completed</p>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="content-card p-3 text-center">
+                        <h3 class="text-danger">156</h3>
+                        <p class="mb-0 text-secondary">Abandoned</p>
+                    </div>
+                </div>
+            </div>
+            <div class="content-card">
+                <div class="card-header">
+                    <h5 class="card-title">Recent Games</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-secondary active">All</button>
+                        <button class="btn btn-sm btn-outline-secondary">Live</button>
+                        <button class="btn btn-sm btn-outline-secondary">Finished</button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Game ID</th>
+                                <th>White Player</th>
+                                <th>Black Player</th>
+                                <th>Status</th>
+                                <th>Winner</th>
+                                <th>Moves</th>
+                                <th>Time Control</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="font-monospace text-gold">#4932</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2"><i
+                                            class="bi bi-circle text-light"></i><span>Carlsen (2847)</span></div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2"><i
+                                            class="bi bi-circle-fill text-dark border rounded-circle"></i><span>Nakamura
+                                            (2768)</span></div>
+                                </td>
+                                <td><span class="badge bg-success">Ongoing</span></td>
+                                <td>-</td>
+                                <td>24</td>
+                                <td>10+0</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-gold btn-icon"><i
+                                            class="bi bi-eye"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger btn-icon"><i
+                                            class="bi bi-stop-circle"></i></button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="font-monospace text-gold">#4931</td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2"><i
+                                            class="bi bi-circle text-light"></i><span>Firouzja (2785)</span></div>
+                                </td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2"><i
+                                            class="bi bi-circle-fill text-dark border rounded-circle"></i><span>Ding
+                                            (2812)</span></div>
+                                </td>
+                                <td><span class="badge bg-secondary">Finished</span></td>
+                                <td class="text-success">Ding Liren</td>
+                                <td>67</td>
+                                <td>3+2</td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-gold btn-icon"><i
+                                            class="bi bi-eye"></i></button>
+                                    <button class="btn btn-sm btn-outline-secondary btn-icon"><i
+                                            class="bi bi-download"></i></button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Moderation Section -->
+        <div id="chats" class="section-content d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0"><i class="bi bi-chat-dots-fill me-2 text-gold"></i>Chat Moderation</h2>
+                <button class="btn btn-outline-danger"><i class="bi bi-filter me-2"></i>Filter Reports</button>
+            </div>
+            <div class="content-card">
+                <div class="card-header bg-danger bg-opacity-10 border-danger">
+                    <h5 class="card-title text-danger mb-0"><i class="bi bi-exclamation-triangle-fill me-2"></i>Flagged
+                        Messages (12)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="list-group list-group-flush">
+                        <div class="list-group-item bg-dark border-secondary p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-danger">High Priority</span>
+                                    <small class="text-secondary">Game #4921</small>
+                                </div>
+                                <small class="text-muted">2 mins ago</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <img src="https://ui-avatars.com/api/?name=Player+One&background=random"
+                                    class="rounded-circle" width="24" height="24">
+                                <strong class="text-white">AggressivePlayer99</strong>
+                            </div>
+                            <div class="p-2 bg-dark rounded border border-secondary mb-2 font-monospace text-light">
+                                "You are such a noob, uninstall the game!!!"
+                            </div>
+                            <div class="d-flex justify-content-end gap-2">
+                                <button class="btn btn-sm btn-outline-success">Allow</button>
+                                <button class="btn btn-sm btn-outline-warning">Mute User</button>
+                                <button class="btn btn-sm btn-outline-danger">Ban User</button>
+                            </div>
+                        </div>
+                        <div class="list-group-item bg-dark border-secondary p-3">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="d-flex align-items-center gap-2">
+                                    <span class="badge bg-warning text-dark">Medium</span>
+                                    <small class="text-secondary">Game #4918</small>
+                                </div>
+                                <small class="text-muted">15 mins ago</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <img src="https://ui-avatars.com/api/?name=Player+Two&background=random"
+                                    class="rounded-circle" width="24" height="24">
+                                <strong class="text-white">ChatSpammer</strong>
+                            </div>
+                            <div class="p-2 bg-dark rounded border border-secondary mb-2 font-monospace text-light">
+                                [Repeated messages: "hurry up" x15]
+                            </div>
+                            <div class="d-flex justify-content-end gap-2">
+                                <button class="btn btn-sm btn-outline-success">Allow</button>
+                                <button class="btn btn-sm btn-outline-warning">Warn</button>
+                                <button class="btn btn-sm btn-outline-danger">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Abilities Section -->
+        <div id="abilities" class="section-content d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0"><i class="bi bi-magic me-2 text-gold"></i>Special Abilities</h2>
+                <button class="btn btn-gold"><i class="bi bi-plus-lg me-2"></i>Create Ability</button>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-6 col-lg-4">
+                    <div class="content-card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Time Warp</h5>
+                            <span class="badge bg-success">Active</span>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-secondary">Add 30 seconds to your clock once per game. Can be used
+                                strategically in time trouble.</p>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <small class="text-muted">Used 1,234 times</small>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-gold"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="content-card h-100">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">Pawn Promotion</h5>
+                            <span class="badge bg-success">Active</span>
+                        </div>
+                        <div class="card-body">
+                            <p class="text-secondary">Instantly promote a pawn to any piece (except king) once per game,
+                                regardless of position.</p>
+                            <div class="d-flex justify-content-between align-items-center mt-3">
+                                <small class="text-muted">Used 892 times</small>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-gold"><i class="bi bi-pencil"></i></button>
+                                    <button class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6 col-lg-4">
+                    <div class="content-card h-100">
+                        <div
+                            class="card-body d-flex flex-column align-items-center justify-content-center text-center p-5">
+                            <i class="bi bi-plus-circle display-4 text-gold mb-3"></i>
+                            <h5 class="text-white">Add New Ability</h5>
+                            <p class="text-secondary small">Create special powers for enhanced gameplay</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Security Section -->
+        <div id="security" class="section-content d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0"><i class="bi bi-shield-check me-2 text-gold"></i>Security & Login History</h2>
+                <button class="btn btn-outline-gold"><i class="bi bi-download me-2"></i>Export Logs</button>
+            </div>
+            <div class="content-card">
+                <div class="card-header">
+                    <h5 class="card-title">Recent Login Activity</h5>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="strictMode">
+                        <label class="form-check-label text-light" for="strictMode">Strict IP Check</label>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>IP Address</th>
+                                <th>Location</th>
+                                <th>Device/Browser</th>
+                                <th>Time</th>
+                                <th>Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="fw-bold text-white">Magnus Carlsen</td>
+                                <td class="font-monospace text-gold">192.168.1.1</td>
+                                <td><i class="bi bi-geo-alt me-1"></i>Oslo, Norway</td>
+                                <td><i class="bi bi-browser-chrome me-1"></i>Chrome / Windows</td>
+                                <td>Just now</td>
+                                <td><span class="badge bg-success">Low</span></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold text-white">Hikaru Nakamura</td>
+                                <td class="font-monospace text-gold">203.0.113.0</td>
+                                <td><i class="bi bi-geo-alt me-1"></i>St. Louis, USA</td>
+                                <td><i class="bi bi-phone me-1"></i>Safari / iOS</td>
+                                <td>5 mins ago</td>
+                                <td><span class="badge bg-success">Low</span></td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold text-white">Unknown</td>
+                                <td class="font-monospace text-danger">185.220.101.42</td>
+                                <td><i class="bi bi-geo-alt me-1"></i>Tor Network</td>
+                                <td><i class="bi bi-terminal me-1"></i>Termux / Android</td>
+                                <td>12 mins ago</td>
+                                <td><span class="badge bg-danger">High</span></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics placeholder -->
+        <div id="analytics" class="section-content d-none">
+            <div class="text-center py-5">
+                <i class="bi bi-bar-chart-line display-1 text-gold mb-3"></i>
+                <h2>Analytics Dashboard</h2>
+                <p class="text-secondary">Detailed statistics and charts would be displayed here.</p>
+            </div>
+        </div>
+
+        <!-- Friends placeholder -->
+        <div id="friends" class="section-content d-none">
+            <div class="text-center py-5">
+                <i class="bi bi-heart display-1 text-gold mb-3"></i>
+                <h2>Social Graph</h2>
+                <p class="text-secondary">Friend connections and social interactions management.</p>
+            </div>
+        </div>
+
+        <!-- Bans placeholder -->
+        <div id="bans" class="section-content d-none">
+            <div class="text-center py-5">
+                <i class="bi bi-ban display-1 text-danger mb-3"></i>
+                <h2>Banned Users</h2>
+                <p class="text-secondary">Manage temporary and permanent bans.</p>
+            </div>
+        </div>
+
+        <!-- Settings placeholder -->
+        <div id="settings" class="section-content d-none">
+            <div class="text-center py-5">
+                <i class="bi bi-gear display-1 text-gold mb-3"></i>
+                <h2>System Settings</h2>
+                <p class="text-secondary">Configure platform parameters and maintenance modes.</p>
+            </div>
+        </div>
+
+        <!-- Admin Footer -->
     </main>
+
+    <footer class="admin-footer">
+        <div class="admin-footer-brand"><i class="bi bi-king-fill me-1"></i> MattAdmin</div>
+        <div class="admin-footer-text">&copy; 2026 MattMester &middot; Admin Control Panel</div>
+    </footer>
+    <!-- User Details Modal -->
+    <div class="modal fade" id="userModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">User Details</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-4 text-center mb-3">
+                            <img src="https://ui-avatars.com/api/?name=Magnus+Carlsen&size=128&background=d4af37&color=000"
+                                class="rounded-circle mb-3 border border-3 border-gold">
+                            <h4 class="mb-1">Magnus Carlsen</h4>
+                            <span class="badge badge-role-admin">Administrator</span>
+                            <div class="mt-3">
+                                <div class="text-gold display-6 fw-bold">2847</div>
+                                <small class="text-secondary">ELO Rating</small>
+                            </div>
+                        </div>
+                        <div class="col-md-8">
+                            <div class="row g-3">
+                                <div class="col-6">
+                                    <label class="text-secondary small">Email</label>
+                                    <div class="text-white">magnus@chess.com</div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="text-secondary small">Joined</label>
+                                    <div class="text-white">Jan 15, 2023</div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="text-secondary small">Last Active</label>
+                                    <div class="text-white">2 minutes ago</div>
+                                </div>
+                                <div class="col-6">
+                                    <label class="text-secondary small">Status</label>
+                                    <div class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Active</div>
+                                </div>
+                            </div>
+                            <hr class="border-secondary my-4">
+                            <h6 class="text-gold mb-3">Statistics</h6>
+                            <div class="row text-center">
+                                <div class="col-4">
+                                    <div class="h4 text-success mb-0">1,234</div>
+                                    <small class="text-secondary">Wins</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="h4 text-danger mb-0">456</div>
+                                    <small class="text-secondary">Losses</small>
+                                </div>
+                                <div class="col-4">
+                                    <div class="h4 text-warning mb-0">89</div>
+                                    <small class="text-secondary">Draws</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-warning">Reset Password</button>
+                    <button type="button" class="btn btn-gold">Edit Profile</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div class="modal fade" id="addUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add New User</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control" placeholder="Enter username">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-control" placeholder="Enter email">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Role</label>
+                        <select class="form-select">
+                            <option value="player">Player</option>
+                            <option value="admin">Administrator</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Initial ELO</label>
+                        <input type="number" class="form-control" value="1200">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-gold">Create User</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="../javascript/adminPanel.js"></script>
 </body>
 
 </html>
