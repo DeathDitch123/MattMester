@@ -747,24 +747,19 @@ router.get('/searchPlayer', async (request, response) => {
             throw new Error('A felhasználónév formátuma érvénytelen.');
         }
 
-        const user = await sql.getUserByUsername(username);
-        if (!user || user.is_banned) {
-            statusCode = 404;
-            throw new Error('A keresett játékos nem található.');
-        }
+        const users = await sql.searchUsersByUsernamePrefix(username);
+        const data = (users || []).map((user) => ({
+            userId: user.id,
+            username: user.username,
+            profileImage: user.profile_image || '/profile_pictures/default.png'
+        }));
 
         return response.status(200).json({
             success: true,
-            data: {
-                userId: user.id,
-                username: user.username,
-                profileImage: user.profile_image || '/profile_pictures/default.png',
-                elo: user.elo,
-                eloMM: user.elo_MM,
-                eloBullet: user.elo_bullet,
-                role: user.role,
-                lastActive: user.last_active
-            }
+            data,
+            message: data.length
+                ? `${data.length} találat`
+                : 'Nincs találat a megadott előtagra.'
         });
     } catch (error) {
         if (statusCode === 200) {

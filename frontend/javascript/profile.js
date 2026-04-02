@@ -129,17 +129,17 @@ async function searchPlayer(){
         const response = await fetch(`/api/searchPlayer?username=${encodeURIComponent(username)}`);
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Nem sikerült keresni a játékost.');
+            throw new Error(result.message || 'Sikertelen keresés.');
         }
 
         feedback.classList.remove('text-secondary', 'text-danger');
         feedback.classList.add('text-success');
-        feedback.textContent = `Játékos megtalálva: ${result.data?.username || username}`;
+        feedback.textContent = `A keresés eredményes: ${result.data.length} találat.`;
 
-        if (result.data && result.data.userId) {
-            window.location.href = `/html/profile.html?userId=${encodeURIComponent(result.data.userId)}`;
+        if (result.data) {
+            //ide egy megjeleő modalt akarok ami kírja a talált usereket egy listában és rá lehet kattintani a profiljukra, de ez majd később
         } else {
-            window.location.href = `/html/profile.html?username=${encodeURIComponent(result.data?.username || username)}`;
+            //ide a modal azt fogja mutatni hogy nincs ilyen játékos, vagy ha van de nem sikerült lekérni az adatokat akkor egy általános hibaüzenetet
         }
     } catch (error) {
         const { feedback } = getTopBarPlayerSearchElements();
