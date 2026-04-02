@@ -1,4 +1,40 @@
 //MINDEN API AMI ITT MEG VAN HÍVVA ISADMIN() VALIDÁLÁSSAL KELL TÖRTÉNJEN A BACKENDEN, HOGY CSAK ADMINOK FÉRHESSENEK HOZZÁJUK
+const REQUEST_DEBOUNCE_MS = 300;
+const requestControlState = {
+    timers: {},
+    controllers: {}
+};
+
+function scheduleDebouncedAction(key, action, delayMs = REQUEST_DEBOUNCE_MS) {
+    if (requestControlState.timers[key]) {
+        clearTimeout(requestControlState.timers[key]);
+    }
+
+    requestControlState.timers[key] = setTimeout(async () => {
+        requestControlState.timers[key] = null;
+        try {
+            await action();
+        } catch (error) {
+            console.error('Debounced action hiba:', error);
+        }
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+function getAbortSignal(key) {
+    const previous = requestControlState.controllers[key];
+    if (previous) {
+        previous.abort();
+    }
+
+    const controller = new AbortController();
+    requestControlState.controllers[key] = controller;
+    return controller.signal;
+}
+
+function clearAbortController(key) {
+    requestControlState.controllers[key] = null;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     initChart();
     initRevealAnimations();
@@ -30,14 +66,17 @@ function toggleSidebar() {
 
 function exportUsers() {
     // MÉG FEJLESZTENI
-    fetch('/admin/export-users')
-        .then(response => {
+    scheduleDebouncedAction('exportUsers', async () => {
+        try {
+            const response = await fetch('/admin/export-users', {
+                signal: getAbortSignal('exportUsers')
+            });
+
             if (!response.ok) {
                 throw new Error('Hiba történt a felhasználók exportálása során.');
             }
-            return response.blob();
-        })
-        .then(blob => {
+
+            const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -46,11 +85,16 @@ function exportUsers() {
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
-        })
-        .catch(error => {
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                return;
+            }
             console.error('Hiba:', error);
             alert('Hiba történt a felhasználók exportálása során.');
-        });
+        } finally {
+            clearAbortController('exportUsers');
+        }
+    });
 }
 
 function viewUser(userId) {
@@ -61,9 +105,21 @@ function viewUser(userId) {
 
 function logout() {
     if (confirm('Are you sure you want to logout?')) {
-        fetch('/api/logout', { method: 'POST' })
-            .then(() => { window.location.href = '/'; })
-            .catch(() => { window.location.href = '/'; });
+        scheduleDebouncedAction('logout', async () => {
+            try {
+                await fetch('/api/logout', {
+                    method: 'POST',
+                    signal: getAbortSignal('logout')
+                });
+            } catch (error) {
+                if (error?.name !== 'AbortError') {
+                    console.error('Logout hiba:', error);
+                }
+            } finally {
+                clearAbortController('logout');
+                window.location.href = '/';
+            }
+        });
     }
 }
 

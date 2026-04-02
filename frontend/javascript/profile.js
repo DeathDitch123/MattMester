@@ -9,6 +9,7 @@ const PROFILE_SETTINGS_CONFIRM_SECONDS = 10;
 const PROFILE_DELETE_CONFIRM_SECONDS = 5;
 const PROFILE_IMAGE_MAX_SIZE_BYTES = 3 * 1024 * 1024;
 const PROFILE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const PLAYER_SEARCH_DEBOUNCE_MS = 300;
 
 const profileSettingsState = {
     bound: false,
@@ -40,6 +41,18 @@ const profileImageEditorState = {
     lastPointerY: 0,
     uploading: false,
     bufferCanvas: document.createElement('canvas')
+};
+const playerSearchState = {
+    topbar: {
+        debounceTimer: null,
+        abortController: null,
+        requestToken: 0
+    },
+    modal: {
+        debounceTimer: null,
+        abortController: null,
+        requestToken: 0
+    }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -111,7 +124,42 @@ async function refreshAuthUi() {
         console.error('refreshAuthUi hiba:', error);
     }
 }
+
+function getPlayerSearchRuntime(source = 'topbar') {
+    return source === 'modal' ? playerSearchState.modal : playerSearchState.topbar;
+}
+
+function cancelPlayerSearch(source = 'topbar', abortInFlight = true) {
+    const runtime = getPlayerSearchRuntime(source);
+    if (runtime.debounceTimer) {
+        clearTimeout(runtime.debounceTimer);
+        runtime.debounceTimer = null;
+    }
+
+    if (abortInFlight && runtime.abortController) {
+        runtime.abortController.abort();
+        runtime.abortController = null;
+    }
+}
+
+function schedulePlayerSearch(source = 'topbar', delayMs = PLAYER_SEARCH_DEBOUNCE_MS) {
+    const runtime = getPlayerSearchRuntime(source);
+    if (runtime.debounceTimer) {
+        clearTimeout(runtime.debounceTimer);
+        runtime.debounceTimer = null;
+    }
+
+    runtime.debounceTimer = setTimeout(() => {
+        runtime.debounceTimer = null;
+        searchPlayer(source);
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
 async function searchPlayer(source = 'topbar'){
+    const runtime = getPlayerSearchRuntime(source);
+    const requestToken = runtime.requestToken + 1;
+    runtime.requestToken = requestToken;
+
     try {
         const elements = source === 'modal'
             ? getModalPlayerSearchElements()
@@ -131,7 +179,19 @@ async function searchPlayer(source = 'topbar'){
         feedback.textContent = 'Keresés folyamatban...';
         button.disabled = true;
 
-        const response = await fetch(`/api/searchPlayer?username=${encodeURIComponent(username)}`);
+        if (runtime.abortController) {
+            runtime.abortController.abort();
+        }
+        runtime.abortController = new AbortController();
+
+        const response = await fetch(`/api/searchPlayer?username=${encodeURIComponent(username)}`, {
+            signal: runtime.abortController.signal
+        });
+
+        if (runtime.requestToken !== requestToken) {
+            return;
+        }
+
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
             throw new Error(result.message || 'Sikertelen keresés.');
@@ -143,6 +203,10 @@ async function searchPlayer(source = 'topbar'){
 
         openSearchResultsModal(Array.isArray(result.data) ? result.data : []);
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            return;
+        }
+
         const { feedback } = source === 'modal'
             ? getModalPlayerSearchElements()
             : getTopBarPlayerSearchElements();
@@ -153,6 +217,10 @@ async function searchPlayer(source = 'topbar'){
         }
         console.error('Hiba a jatekos kereses soran:', error);
     } finally {
+        if (runtime.requestToken === requestToken) {
+            runtime.abortController = null;
+        }
+
         if (source === 'modal') {
             validatePlayerSearchElements(getModalPlayerSearchElements());
         } else {
@@ -373,15 +441,22 @@ function bindTopBarPlayerSearchValidation() {
     }
 
     const validate = () => {
-        validatePlayerSearchElements(elements);
+        return validatePlayerSearchElements(elements);
     };
 
-    input.addEventListener('input', validate);
+    input.addEventListener('input', () => {
+        const isValid = validate();
+        if (isValid) {
+            schedulePlayerSearch('topbar');
+        } else {
+            cancelPlayerSearch('topbar');
+        }
+    });
     input.addEventListener('blur', validate);
 
     button.addEventListener('click', () => {
         if (!button.disabled) {
-            searchPlayer('topbar');
+            schedulePlayerSearch('topbar', 0);
         }
     });
 
@@ -389,7 +464,7 @@ function bindTopBarPlayerSearchValidation() {
         if (event.key === 'Enter') {
             event.preventDefault();
             if (!button.disabled) {
-                searchPlayer('topbar');
+                schedulePlayerSearch('topbar', 0);
             }
         }
     });
@@ -405,15 +480,22 @@ function bindModalPlayerSearchValidation() {
     }
 
     const validate = () => {
-        validatePlayerSearchElements(elements);
+        return validatePlayerSearchElements(elements);
     };
 
-    input.addEventListener('input', validate);
+    input.addEventListener('input', () => {
+        const isValid = validate();
+        if (isValid) {
+            schedulePlayerSearch('modal');
+        } else {
+            cancelPlayerSearch('modal');
+        }
+    });
     input.addEventListener('blur', validate);
 
     button.addEventListener('click', () => {
         if (!button.disabled) {
-            searchPlayer('modal');
+            schedulePlayerSearch('modal', 0);
         }
     });
 
@@ -421,7 +503,7 @@ function bindModalPlayerSearchValidation() {
         if (event.key === 'Enter') {
             event.preventDefault();
             if (!button.disabled) {
-                searchPlayer('modal');
+                schedulePlayerSearch('modal', 0);
             }
         }
     });
