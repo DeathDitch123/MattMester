@@ -17,6 +17,38 @@ const { profile } = require('console');
 const PROFILE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 const ALLOWED_PROFILE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
+function getRequestIpAddress(request) {
+    return request.headers['x-forwarded-for'] || request.socket.remoteAddress || 'ismeretlen';
+}
+
+function saveSessionAsync(request, errorMessage) {
+    return new Promise((resolve, reject) => {
+        request.session.save((err) => {
+            if (err) {
+                console.error('Session mentési hiba:', err);
+                reject(new Error(errorMessage));
+                return;
+            }
+
+            resolve();
+        });
+    });
+}
+
+function destroySessionAsync(request, errorMessage) {
+    return new Promise((resolve, reject) => {
+        request.session.destroy((err) => {
+            if (err) {
+                console.error('Session destroy hiba:', err);
+                reject(new Error(errorMessage));
+                return;
+            }
+
+            resolve();
+        });
+    });
+}
+
 const storage = multer.diskStorage({
     destination: (request, file, callback) => {
         callback(null, path.join(__dirname, '../profile_pictures'));
