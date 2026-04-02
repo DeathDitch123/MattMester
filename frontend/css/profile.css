@@ -301,15 +301,25 @@ h6 {
 }
 
 .top-bar-search {
-    position: relative;
     width: 280px;
+}
+
+.top-bar-search-field {
+    position: relative;
+}
+
+.top-bar-search-feedback {
+    margin-top: 6px;
+    min-height: 18px;
+    font-size: 0.75rem;
+    line-height: 1.2;
 }
 
 .top-bar-search input {
     background: rgba(2, 6, 23, 0.6);
     border: 1px solid var(--border-color);
     color: var(--text-primary);
-    padding: 8px 12px 8px 38px;
+    padding: 8px 44px 8px 12px;
     border-radius: 12px;
     width: 100%;
     font-size: 0.875rem;
@@ -327,7 +337,7 @@ h6 {
     color: var(--text-secondary);
 }
 
-.top-bar-search i {
+.top-bar-search > i {
     position: absolute;
     left: 12px;
     top: 50%;
@@ -335,6 +345,46 @@ h6 {
     color: var(--text-secondary);
     width: 16px;
     height: 16px;
+}
+
+.top-bar-search-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.top-bar-search-btn:hover {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.12);
+    border-color: rgba(212, 175, 55, 0.28);
+}
+
+.top-bar-search-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.top-bar-search-btn:disabled:hover {
+    color: var(--text-secondary);
+    background: transparent;
+    border-color: transparent;
+}
+
+.top-bar-search-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
 }
 
 .top-bar-btn {

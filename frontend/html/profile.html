@@ -88,7 +88,13 @@
                     <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
                 </button>
                 <div class="top-bar-search d-none d-lg-block">
-                    <input type="text" placeholder="Keresés játékosokra, meccsekre...">
+                    <div class="top-bar-search-field">
+                        <input id="playerSearchInput" type="text" placeholder="Keresés játékosokra...">
+                        <button id="playerSearchButton" type="button" class="top-bar-search-btn" aria-label="Keresés játékosokra">
+                            <i data-lucide="search" style="width: 16px; height: 16px;"></i>
+                        </button>
+                    </div>
+                    <div id="playerSearchFeedback" class="top-bar-search-feedback" aria-live="polite"></div>
                 </div>
             </div>
 
