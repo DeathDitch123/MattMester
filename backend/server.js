@@ -7,6 +7,7 @@ const fs = require('fs');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
 const { services, leaderboardService } = require('./services.js');
+const { createSocketHub } = require('./sockets.js');
 const sql = require('./sql/sql_funtions');
 
 //!Beállítások
@@ -34,6 +35,9 @@ app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware); //?Socket.io session kezelés
 app.use(express.json()); //?Middleware JSON
 app.set('trust proxy', 1); //?Middleware Proxy
+
+const socketHub = createSocketHub(io);
+app.locals.socketHub = socketHub;
 
 // Belepett felhasznalo ellenorzese vedett oldalakhoz
 function requireAuth(req, res, next) {
@@ -71,17 +75,6 @@ const chessEndpoints = require('./api/chess_api.js');
 app.use('/api/chess', chessEndpoints);
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/html/index.html'));
-});
-
-//Socket.io események
-io.on('connection', (socket) => {
-    services.handleConnection(socket, io);
-    socket.on('heartbeat', () => {
-        // services.refreshStats(io); //?Statisztikák frissítése minden kliensnek a heartbeat eseményre
-    });
-
-    socket.on('disconnect', () => {
-    });
 });
 
 function resolveProfileImageFilePath(storedFilename) {
@@ -152,7 +145,8 @@ async function cleanupDiscardedProfileImages() {
 
 // Adatbázis inicializálása, majd szerver indítása
 initDatabase()
-    .then(() => {
+    .then(async () => {
+        await services.refreshStats(io);
         services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
         leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
         

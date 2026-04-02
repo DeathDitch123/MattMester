@@ -2,7 +2,7 @@ const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
-const socket = io();
+const socket = window.MattMesterSocket?.socket || io();
 const requestController = window.createRequestController(300);
 
 function runSafely(label, handler) {
@@ -228,7 +228,7 @@ function bindLoginForm() {
                         hideModalById('loginModal');
                         showToast('Sikeres bejelentkezes.');
 
-                        if (typeof socket !== 'undefined') {
+                        if (socket) {
                             console.log('Login form successful, refreshing stats via socket...');
                             socket.disconnect();
                             socket.connect();
@@ -349,7 +349,7 @@ async function handleLogout() {
         }
 
         showToast(result.message || 'Sikeres kijelentkezés.');
-        if (typeof socket !== 'undefined') {
+        if (socket) {
             socket.disconnect();
             socket.connect();
         }
@@ -400,12 +400,11 @@ async function refreshAuthUi() {
         console.log('--- Auth Status Report ---');
         console.log('Session info:', data);
 
-        if (typeof socket !== 'undefined') {
-            console.log('SocketInfo:', {
+        if (socket) {
+            console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
                 socketId: socket.id,
                 connected: socket.connected,
-                // Itt láthatod, hogy a szerver felismerte-e a session-t a socketen keresztül
-                sessionBound: socket.connected ? "Active" : "Disconnected/Pending"
+                sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
             });
         }
         else {
@@ -463,9 +462,8 @@ function eloDisplayrefresh(user) {
     }
 }
 function socketHandler() {
-    if (typeof socket !== 'undefined') {
+    if (socket) {
         socket.on('stats:public', (stats) => {
-            // stats tartalma: { onlineUsers, totalUsers, totalGames, onlineGames }
             updateGlobalStats(stats);
         });
     }

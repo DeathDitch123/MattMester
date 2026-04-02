@@ -2,7 +2,7 @@ const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
-const socket = io();
+const socket = window.MattMesterSocket?.socket || io();
 lucide.createIcons();
 
 const PROFILE_SETTINGS_CONFIRM_SECONDS = 10;
@@ -74,13 +74,16 @@ async function runSafelyAsync(label, handler) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    runSafely('bindLogoutButton', () => bindLogoutButton());
-    runSafely('bindTopBarPlayerSearchValidation', () => bindTopBarPlayerSearchValidation());
-    runSafely('bindModalPlayerSearchValidation', () => bindModalPlayerSearchValidation());
-    runSafely('bindSearchResultsModalEvents', () => bindSearchResultsModalEvents());
-    runSafely('bindProfileDeleteModalEvents', () => bindProfileDeleteModalEvents());
-    runSafely('bindProfileImageUploadEvents', () => bindProfileImageUploadEvents());
-    runSafely('bindRemoveAvatarEvents', () => bindRemoveAvatarEvents());
+    runSafely('profileDOMContentLoaded', () => {
+        bindLogoutButton();
+        bindTopBarPlayerSearchValidation();
+        bindModalPlayerSearchValidation();
+        bindSearchResultsModalEvents();
+        bindProfileDeleteModalEvents();
+        bindProfileImageUploadEvents();
+        bindRemoveAvatarEvents();
+    });
+
     runSafelyAsync('refreshAuthUi', async () => refreshAuthUi());
 });
 // Ez parsol
@@ -114,8 +117,8 @@ async function logSessionAndSocketInfo(sessionInfoInput = null) {
         console.log('--- Auth Status Report ---');
         console.log('Session info:', sessionInfo);
 
-        if (typeof socket !== 'undefined') {
-            console.log('SocketInfo:', {
+        if (socket) {
+            console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
                 socketId: socket.id,
                 connected: socket.connected,
                 sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
@@ -437,7 +440,7 @@ async function handleLogout() {
             throw new Error(result.message || 'Sikertelen kijelentkezes.');
         }
 
-        if (typeof socket !== 'undefined') {
+        if (socket) {
             socket.disconnect();
             socket.connect();
         }
@@ -1472,7 +1475,7 @@ async function submitDeleteProfile() {
             modal.hide();
         }
 
-        if (typeof socket !== 'undefined') {
+        if (socket) {
             socket.disconnect();
         }
 
