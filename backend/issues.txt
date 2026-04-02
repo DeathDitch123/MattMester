@@ -151,11 +151,11 @@ blocked: Tiltva felirat vagy feloldás opció
 
 Keresés logika: 
 
-Pontosítsd a keresés típusát (prefix vs contains)
-Most a függvény neve prefixet ígér, de valójában contains keresést csinál (%text%). Ez félrevezető, és nagy user bázisnál lassabb is.
+Keresés típusa: contains
+A keresés tudatosan contains alapú (%text%), ezért a függvény- és API-nevek is ehhez vannak igazítva, hogy ne legyen félreértés.
 API hívás: api.js:750
 SQL: sql_funtions.js:813, sql_funtions.js:839
-Javaslat: vagy nevezd át contains-ra, vagy válts text% mintára.
+Javaslat lezárva: contains elnevezés + %text% minta marad.
 Legyen LIMIT + lapozás
 Jelenleg nincs limit, így üresen hagyott vagy gyakori találatnál túl sok rekord jöhet vissza.
 WHERE + ORDER rész: sql_funtions.js:834

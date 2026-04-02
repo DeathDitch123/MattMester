@@ -747,7 +747,8 @@ router.get('/searchPlayer', async (request, response) => {
             throw new Error('A felhasználónév formátuma érvénytelen.');
         }
 
-        const users = await sql.searchUsersByUsernamePrefix(username);
+        const currentUserId = Number(request.session?.userId) || 0;
+        const users = await sql.searchUsersByUsernameContains(username, currentUserId);
         const data = (users || []).map((user) => ({
             userId: user.id,
             username: user.username,
@@ -760,7 +761,7 @@ router.get('/searchPlayer', async (request, response) => {
             data,
             message: data.length
                 ? `${data.length} találat`
-                : 'Nincs találat a megadott előtagra.'
+                : 'Nincs találat a megadott keresésre.'
         });
     } catch (error) {
         if (statusCode === 200) {

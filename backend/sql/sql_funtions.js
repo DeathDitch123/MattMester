@@ -810,7 +810,7 @@ async function deleteDiscardedProfileImageRecord(uploadId) {
         return false;
     }
 }
-async function searchUsersByUsernamePrefix(prefix) {
+async function searchUsersByUsernameContains(searchText, currentUserId) {
     const pool = getPool();
     const query = `
         SELECT
@@ -832,11 +832,12 @@ async function searchUsersByUsernamePrefix(prefix) {
             END AS profile_image_status
                 FROM users u
         WHERE u.username LIKE ?
-          AND is_banned = FALSE
+          AND u.id <> ?
+          AND u.is_banned = FALSE
         ORDER BY u.username ASC
     `;
     try {
-        const [rows] = await pool.execute(query, [`%${prefix}%`]);
+        const [rows] = await pool.execute(query, [`%${searchText}%`, currentUserId]);
         return rows;
     } catch (error) {
         console.error('Hiba a felhasználó keresése során:', error);
@@ -929,6 +930,6 @@ module.exports = {
     resetUserProfileImageToDefault,
     getAndDeleteDiscardedProfileImages,
     deleteDiscardedProfileImageRecord,
-    searchUsersByUsernamePrefix,
+    searchUsersByUsernameContains,
     deleteUserProfileWithTransaction
 };
