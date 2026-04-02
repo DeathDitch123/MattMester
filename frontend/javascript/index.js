@@ -3,12 +3,7 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
 const socket = io();
-const REQUEST_DEBOUNCE_MS = 300;
-
-const requestControlState = {
-    timers: {},
-    controllers: {}
-};
+const requestController = window.createRequestController(300);
 
 let LeaderboardData = {
     elo: [],
@@ -17,36 +12,6 @@ let LeaderboardData = {
     winRate: [],
     lastUpdated: null
 };
-
-function scheduleDebouncedAction(key, action, delayMs = REQUEST_DEBOUNCE_MS) {
-    if (requestControlState.timers[key]) {
-        clearTimeout(requestControlState.timers[key]);
-    }
-
-    requestControlState.timers[key] = setTimeout(async () => {
-        requestControlState.timers[key] = null;
-        try {
-            await action();
-        } catch (error) {
-            console.error('Debounced action hiba:', error);
-        }
-    }, Math.max(0, Number(delayMs) || 0));
-}
-
-function getAbortSignal(key) {
-    const previous = requestControlState.controllers[key];
-    if (previous) {
-        previous.abort();
-    }
-
-    const controller = new AbortController();
-    requestControlState.controllers[key] = controller;
-    return controller.signal;
-}
-
-function clearAbortController(key) {
-    requestControlState.controllers[key] = null;
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     installModalFocusGuards();
@@ -73,7 +38,7 @@ async function fetchSessionInfo() {
     let result = { success: false, loggedIn: false };
     try {
         const response = await fetch('/api/sessionInfo', {
-            signal: getAbortSignal('sessionInfo')
+            signal: requestController.withAbortSignal('sessionInfo')
         });
         const data = await parseJson(response);
         if (response.ok) {
@@ -85,7 +50,7 @@ async function fetchSessionInfo() {
         }
         console.error('Hiba a session informacio lekerdezese soran:', error);
     } finally {
-        clearAbortController('sessionInfo');
+        requestController.clearSignal('sessionInfo');
     }
     return result;
 }
@@ -93,7 +58,7 @@ async function fetchSessionInfo() {
 async function loadLeaderBoard() {
     try {
         const response = await fetch('/api/leaderboard', {
-            signal: getAbortSignal('leaderboard')
+            signal: requestController.withAbortSignal('leaderboard')
         });
         const payload = await parseJson(response);
 
@@ -115,7 +80,7 @@ async function loadLeaderBoard() {
         }
         console.error('Hiba a ranglista lekérdezése során:', error);
     } finally {
-        clearAbortController('leaderboard');
+        requestController.clearSignal('leaderboard');
     }
 }
 
@@ -200,13 +165,13 @@ function bindLoginForm() {
             if (!usernameOrMail || !password) {
                 showFormMessage(messageElement, 'danger', 'Minden mező kitöltése kötelező.');
             } else {
-                scheduleDebouncedAction('loginSubmit', async () => {
+                requestController.schedule('loginSubmit', async () => {
                     try {
                         const response = await fetch('/api/login', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ usernameOrMail, password, remember }),
-                            signal: getAbortSignal('login')
+                            signal: requestController.withAbortSignal('login')
                         });
                         const result = await parseJson(response);
 
@@ -234,7 +199,7 @@ function bindLoginForm() {
                         showFormMessage(messageElement, 'danger', 'Nem sikerult csatlakozni a szerverhez.');
                         console.error('Hiba a bejelentkezes soran:', error);
                     } finally {
-                        clearAbortController('login');
+                        requestController.clearSignal('login');
                     }
                 });
             }
@@ -260,13 +225,13 @@ function bindRegisterForm() {
                 showFormMessage(messageElement, 'danger', validationMessage);
             }
             else {
-                scheduleDebouncedAction('registerSubmit', async () => {
+                requestController.schedule('registerSubmit', async () => {
                     try {
                         const response = await fetch('/api/register', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({ username, email, password }),
-                            signal: getAbortSignal('register')
+                            signal: requestController.withAbortSignal('register')
                         });
 
                         const result = await parseJson(response);
@@ -288,7 +253,7 @@ function bindRegisterForm() {
                         showFormMessage(messageElement, 'danger', 'Nem sikerult csatlakozni a szerverhez.');
                         console.error('Hiba a regisztráció soran:', error);
                     } finally {
-                        clearAbortController('register');
+                        requestController.clearSignal('register');
                     }
                 });
             }
@@ -325,7 +290,7 @@ async function handleLogout() {
         const response = await fetch('/api/logout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            signal: getAbortSignal('logout')
+            signal: requestController.withAbortSignal('logout')
         });
         const result = await parseJson(response);
 
@@ -345,7 +310,7 @@ async function handleLogout() {
         }
         console.error('Hiba a kijelentkezés során:', error);
     } finally {
-        clearAbortController('logout');
+        requestController.clearSignal('logout');
     }
 }
 

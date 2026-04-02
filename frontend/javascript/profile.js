@@ -173,6 +173,7 @@ async function searchPlayer(source = 'topbar'){
         if (!username || username.length < 3 || username.length > 50 || !USERNAME_REGEX.test(username)) {
             throw new Error('Érvénytelen felhasználónév a kereséshez.');
         }
+        const searchText = username;
 
         feedback.classList.remove('text-danger', 'text-success');
         feedback.classList.add('text-secondary');
@@ -201,7 +202,8 @@ async function searchPlayer(source = 'topbar'){
         feedback.classList.add('text-success');
         feedback.textContent = `A keresés eredményes: ${result.data.length} találat.`;
 
-        openSearchResultsModal(Array.isArray(result.data) ? result.data : []);
+        openSearchResultsModal(Array.isArray(result.data) ? result.data : [], searchText);
+        clearPlayerSearchInputs();
     } catch (error) {
         if (error?.name === 'AbortError') {
             return;
@@ -215,6 +217,7 @@ async function searchPlayer(source = 'topbar'){
             feedback.classList.add('text-danger');
             feedback.textContent = error.message || 'Hiba történt a játékos keresése során.';
         }
+        clearPlayerSearchInputs();
         console.error('Hiba a jatekos kereses soran:', error);
     } finally {
         if (runtime.requestToken === requestToken) {
@@ -232,10 +235,27 @@ async function searchPlayer(source = 'topbar'){
 function getSearchResultsModalElements() {
     return {
         modal: document.getElementById('searchResultsModal'),
+        titleText: document.getElementById('searchResultsModalTitleText'),
         list: document.getElementById('searchResultsList'),
         summary: document.getElementById('searchResultsSummary'),
         empty: document.getElementById('searchResultsEmpty')
     };
+}
+
+function clearPlayerSearchInputs() {
+    const { input: topInput } = getTopBarPlayerSearchElements();
+    const { input: modalInput } = getModalPlayerSearchElements();
+
+    if (topInput) {
+        topInput.value = '';
+    }
+
+    if (modalInput) {
+        modalInput.value = '';
+    }
+
+    validatePlayerSearchElements(getTopBarPlayerSearchElements());
+    validatePlayerSearchElements(getModalPlayerSearchElements());
 }
 
 function getModalPlayerSearchElements() {
@@ -300,16 +320,17 @@ function createSearchResultListItem(player) {
     return item;
 }
 
-function openSearchResultsModal(players) {
-    const { modal, list, summary, empty } = getSearchResultsModalElements();
-    const { input: modalInput } = getModalPlayerSearchElements();
-    const { input: topInput } = getTopBarPlayerSearchElements();
+function openSearchResultsModal(players, searchText = '') {
+    const { modal, titleText, list, summary, empty } = getSearchResultsModalElements();
     if (!modal || !list || !summary || !empty) {
         return;
     }
 
-    if (modalInput && topInput && topInput.value.trim()) {
-        modalInput.value = topInput.value.trim();
+    if (titleText) {
+        const normalizedSearchText = String(searchText || '').trim();
+        titleText.textContent = normalizedSearchText
+            ? `Keresési találatok: "${normalizedSearchText}"`
+            : 'Keresési találatok';
     }
 
     list.innerHTML = '';
@@ -433,8 +454,8 @@ function validatePlayerSearchElements(elements) {
     return isValid;
 }
 
-function bindTopBarPlayerSearchValidation() {
-    const elements = getTopBarPlayerSearchElements();
+function bindPlayerSearchValidation(source, getElements) {
+    const elements = getElements();
     const { input, button } = elements;
     if (!input || !button) {
         return;
@@ -445,70 +466,31 @@ function bindTopBarPlayerSearchValidation() {
     };
 
     input.addEventListener('input', () => {
-        const isValid = validate();
-        if (isValid) {
-            schedulePlayerSearch('topbar');
-        } else {
-            cancelPlayerSearch('topbar');
-        }
+        validate();
     });
     input.addEventListener('blur', validate);
 
     button.addEventListener('click', () => {
         if (!button.disabled) {
-            schedulePlayerSearch('topbar', 0);
+            schedulePlayerSearch(source, 0);
         }
     });
 
     input.addEventListener('keydown', (event) => {
         if (event.key === 'Enter') {
             event.preventDefault();
-            if (!button.disabled) {
-                schedulePlayerSearch('topbar', 0);
-            }
         }
     });
 
     validate();
 }
 
+function bindTopBarPlayerSearchValidation() {
+    bindPlayerSearchValidation('topbar', getTopBarPlayerSearchElements);
+}
+
 function bindModalPlayerSearchValidation() {
-    const elements = getModalPlayerSearchElements();
-    const { input, button } = elements;
-    if (!input || !button) {
-        return;
-    }
-
-    const validate = () => {
-        return validatePlayerSearchElements(elements);
-    };
-
-    input.addEventListener('input', () => {
-        const isValid = validate();
-        if (isValid) {
-            schedulePlayerSearch('modal');
-        } else {
-            cancelPlayerSearch('modal');
-        }
-    });
-    input.addEventListener('blur', validate);
-
-    button.addEventListener('click', () => {
-        if (!button.disabled) {
-            schedulePlayerSearch('modal', 0);
-        }
-    });
-
-    input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-            if (!button.disabled) {
-                schedulePlayerSearch('modal', 0);
-            }
-        }
-    });
-
-    validate();
+    bindPlayerSearchValidation('modal', getModalPlayerSearchElements);
 }
 
 function getProfileImageStatusMeta(statusInput) {

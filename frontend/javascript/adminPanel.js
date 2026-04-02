@@ -1,39 +1,5 @@
 //MINDEN API AMI ITT MEG VAN HÍVVA ISADMIN() VALIDÁLÁSSAL KELL TÖRTÉNJEN A BACKENDEN, HOGY CSAK ADMINOK FÉRHESSENEK HOZZÁJUK
-const REQUEST_DEBOUNCE_MS = 300;
-const requestControlState = {
-    timers: {},
-    controllers: {}
-};
-
-function scheduleDebouncedAction(key, action, delayMs = REQUEST_DEBOUNCE_MS) {
-    if (requestControlState.timers[key]) {
-        clearTimeout(requestControlState.timers[key]);
-    }
-
-    requestControlState.timers[key] = setTimeout(async () => {
-        requestControlState.timers[key] = null;
-        try {
-            await action();
-        } catch (error) {
-            console.error('Debounced action hiba:', error);
-        }
-    }, Math.max(0, Number(delayMs) || 0));
-}
-
-function getAbortSignal(key) {
-    const previous = requestControlState.controllers[key];
-    if (previous) {
-        previous.abort();
-    }
-
-    const controller = new AbortController();
-    requestControlState.controllers[key] = controller;
-    return controller.signal;
-}
-
-function clearAbortController(key) {
-    requestControlState.controllers[key] = null;
-}
+const requestController = window.createRequestController(300);
 
 document.addEventListener('DOMContentLoaded', function () {
     initChart();
@@ -66,10 +32,10 @@ function toggleSidebar() {
 
 function exportUsers() {
     // MÉG FEJLESZTENI
-    scheduleDebouncedAction('exportUsers', async () => {
+    requestController.schedule('exportUsers', async () => {
         try {
             const response = await fetch('/admin/export-users', {
-                signal: getAbortSignal('exportUsers')
+                signal: requestController.withAbortSignal('exportUsers')
             });
 
             if (!response.ok) {
@@ -92,7 +58,7 @@ function exportUsers() {
             console.error('Hiba:', error);
             alert('Hiba történt a felhasználók exportálása során.');
         } finally {
-            clearAbortController('exportUsers');
+            requestController.clearSignal('exportUsers');
         }
     });
 }
@@ -105,18 +71,18 @@ function viewUser(userId) {
 
 function logout() {
     if (confirm('Are you sure you want to logout?')) {
-        scheduleDebouncedAction('logout', async () => {
+        requestController.schedule('logout', async () => {
             try {
                 await fetch('/api/logout', {
                     method: 'POST',
-                    signal: getAbortSignal('logout')
+                    signal: requestController.withAbortSignal('logout')
                 });
             } catch (error) {
                 if (error?.name !== 'AbortError') {
                     console.error('Logout hiba:', error);
                 }
             } finally {
-                clearAbortController('logout');
+                requestController.clearSignal('logout');
                 window.location.href = '/';
             }
         });
