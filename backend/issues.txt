@@ -176,3 +176,10 @@ Egységes relation mező már a kereső válaszban
 Mivel úgyis jön a friend flow, érdemes már most relationStatus-t visszaadni, így a UI nem találgat.
 Válasz map: api.js:751
 Javaslat: relationStatus, canSendRequest, canAccept, friendshipId.
+
+Mit kell csinálnia egy jövőbeli új oldalnak:
+
+Betölti a közös socket klienst.
+Feliratkozik a subscribeSessionContextChanges API-ra.
+A callbackben meghívja a saját oldal refresh függvényét.
+Kész, ugyanúgy működik cross-tab frissítésre, mint most a profilon.

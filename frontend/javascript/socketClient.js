@@ -1,6 +1,7 @@
 (function attachMattMesterSocket(globalScope) {
     const SOCKET_SYNC_TIMEOUT_MS = 2500;
     const SOCKET_CONNECT_TIMEOUT_MS = 3000;
+    const SESSION_CONTEXT_REFRESH_DEFAULT_THROTTLE_MS = 1200;
 
     const DEFAULT_FEATURES = [
         {
@@ -159,6 +160,181 @@
         socket.emit('notification:subscribe');
     }
 
+    function dispatchSocketClientEvent(eventName, detail) {
+        try {
+            globalScope.dispatchEvent(new CustomEvent(eventName, {
+                detail: detail || null
+            }));
+        } catch (error) {
+            throw new Error(`Socket kliens esemény dispatch hiba (${eventName}): ${error.message}`);
+        }
+    }
+
+    function normalizeOwnContext(input = {}) {
+        try {
+            const userId = Number(input.userId || input.id) || null;
+            const username = typeof input.username === 'string' ? input.username.trim() : '';
+            const role = typeof input.role === 'string' ? input.role.trim() : '';
+            return {
+                userId,
+                username,
+                role
+            };
+        } catch (error) {
+            throw new Error(`Saját context normalizálási hiba: ${error.message}`);
+        }
+    }
+
+    function hasOwnContextChanged(previousContext = null, nextContext = null) {
+        try {
+            if (!previousContext && !nextContext) {
+                return false;
+            }
+
+            if (!previousContext || !nextContext) {
+                return true;
+            }
+
+            return previousContext.userId !== nextContext.userId
+                || previousContext.username !== nextContext.username
+                || previousContext.role !== nextContext.role;
+        } catch (error) {
+            throw new Error(`Context változás ellenőrzési hiba: ${error.message}`);
+        }
+    }
+
+    function extractOwnContextFromPresence(presencePayload, clientId) {
+        try {
+            const clients = Array.isArray(presencePayload?.clients) ? presencePayload.clients : [];
+            const ownClient = clients.find((client) => String(client?.clientId || '') === String(clientId || ''));
+            if (!ownClient) {
+                return null;
+            }
+
+            return normalizeOwnContext({
+                userId: ownClient.userId,
+                username: ownClient.username,
+                role: ownClient.role
+            });
+        } catch (error) {
+            throw new Error(`Presence alapú saját context kinyerési hiba: ${error.message}`);
+        }
+    }
+
+    function createSessionContextObserverStore() {
+        return {
+            nextId: 1,
+            handlers: new Map(),
+            lastOwnContext: null
+        };
+    }
+
+    async function runObserverHandler(entry, payload) {
+        try {
+            entry.inFlight = true;
+            entry.lastRunAt = Date.now();
+            await entry.handler(payload);
+        } catch (error) {
+            throw new Error(`Session context observer futási hiba: ${error.message}`);
+        } finally {
+            entry.inFlight = false;
+        }
+    }
+
+    function scheduleObserverExecution(entry, payload) {
+        try {
+            const now = Date.now();
+            const throttleMs = Math.max(0, Number(entry.throttleMs) || 0);
+            const elapsed = now - entry.lastRunAt;
+
+            if (entry.timer) {
+                clearTimeout(entry.timer);
+                entry.timer = null;
+            }
+
+            const execute = async () => {
+                try {
+                    if (entry.inFlight) {
+                        entry.timer = setTimeout(execute, throttleMs || 250);
+                        return;
+                    }
+
+                    await runObserverHandler(entry, payload);
+                } catch (error) {
+                    console.error('Session context observer végrehajtási hiba:', error);
+                }
+            };
+
+            if (elapsed >= throttleMs) {
+                void execute();
+                return;
+            }
+
+            entry.timer = setTimeout(() => {
+                entry.timer = null;
+                void execute();
+            }, Math.max(0, throttleMs - elapsed));
+        } catch (error) {
+            throw new Error(`Observer ütemezési hiba: ${error.message}`);
+        }
+    }
+
+    function notifySessionContextObservers(observerStore, trigger, payload) {
+        try {
+            const details = {
+                trigger,
+                payload,
+                emittedAt: new Date().toISOString()
+            };
+
+            dispatchSocketClientEvent('mattmester:session-context:changed', details);
+
+            observerStore.handlers.forEach((entry) => {
+                try {
+                    scheduleObserverExecution(entry, details);
+                } catch (error) {
+                    console.error('Session context observer értesítési hiba:', error);
+                }
+            });
+        } catch (error) {
+            throw new Error(`Session context observer értesítési hiba: ${error.message}`);
+        }
+    }
+
+    function subscribeSessionContextChanges(observerStore, handler, options = {}) {
+        try {
+            if (typeof handler !== 'function') {
+                throw new Error('A handler kötelező és függvény kell legyen.');
+            }
+
+            const id = observerStore.nextId;
+            observerStore.nextId += 1;
+
+            observerStore.handlers.set(id, {
+                id,
+                handler,
+                throttleMs: options.throttleMs ?? SESSION_CONTEXT_REFRESH_DEFAULT_THROTTLE_MS,
+                inFlight: false,
+                timer: null,
+                lastRunAt: 0
+            });
+
+            return () => {
+                try {
+                    const entry = observerStore.handlers.get(id);
+                    if (entry?.timer) {
+                        clearTimeout(entry.timer);
+                    }
+                    observerStore.handlers.delete(id);
+                } catch (error) {
+                    throw new Error(`Session context observer leiratkozási hiba: ${error.message}`);
+                }
+            };
+        } catch (error) {
+            throw new Error(`Session context observer feliratkozási hiba: ${error.message}`);
+        }
+    }
+
     async function ensureSocketConnected(socketInstance, timeoutMs = SOCKET_CONNECT_TIMEOUT_MS) {
         try {
             if (!socketInstance) {
@@ -276,6 +452,7 @@
     }
 
     const socketState = createSocketState();
+    const sessionContextObserverStore = createSessionContextObserverStore();
     const socket = typeof globalScope.io === 'function'
         ? globalScope.io({
             auth: {
@@ -318,22 +495,72 @@
         });
 
         socket.on('socket:state', (payload = {}) => {
-            socketState.socketId = payload.socketId || socketState.socketId;
-            socketState.clientId = payload.clientId || socketState.clientId;
-            socketState.tabId = payload.tabId || socketState.tabId;
-            socketState.page = payload.page || socketState.page;
-            socketState.sessionBound = Boolean(payload.sessionBound);
-            socketState.user = payload.user || null;
-            socketState.roomCount = payload.roomCount || 0;
-            socketState.rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
-            socketState.presence = payload.presence || socketState.presence;
-            socketState.roomState = Array.isArray(payload.roomState) ? payload.roomState : [];
-            updateSocketInfoPanel(socketState);
+            try {
+                const previousOwnContext = sessionContextObserverStore.lastOwnContext;
+                socketState.socketId = payload.socketId || socketState.socketId;
+                socketState.clientId = payload.clientId || socketState.clientId;
+                socketState.tabId = payload.tabId || socketState.tabId;
+                socketState.page = payload.page || socketState.page;
+                socketState.sessionBound = Boolean(payload.sessionBound);
+                socketState.user = payload.user || null;
+                socketState.roomCount = payload.roomCount || 0;
+                socketState.rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
+                socketState.presence = payload.presence || socketState.presence;
+                socketState.roomState = Array.isArray(payload.roomState) ? payload.roomState : [];
+                updateSocketInfoPanel(socketState);
+
+                dispatchSocketClientEvent('mattmester:socket:state', {
+                    ...payload,
+                    receivedAt: new Date().toISOString()
+                });
+
+                const nextOwnContext = normalizeOwnContext({
+                    userId: socketState.user?.id,
+                    username: socketState.user?.username,
+                    role: socketState.user?.role
+                });
+
+                if (hasOwnContextChanged(previousOwnContext, nextOwnContext)) {
+                    sessionContextObserverStore.lastOwnContext = nextOwnContext;
+                    notifySessionContextObservers(sessionContextObserverStore, 'socket:state', {
+                        previousOwnContext,
+                        nextOwnContext,
+                        socketState: {
+                            connected: socketState.connected,
+                            socketId: socketState.socketId,
+                            clientId: socketState.clientId,
+                            tabId: socketState.tabId
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('socket:state feldolgozási hiba:', error);
+            }
         });
 
         socket.on('presence:state', (payload = {}) => {
-            socketState.presence = payload;
-            updateSocketInfoPanel(socketState);
+            try {
+                const previousOwnContext = sessionContextObserverStore.lastOwnContext;
+                socketState.presence = payload;
+                updateSocketInfoPanel(socketState);
+
+                dispatchSocketClientEvent('mattmester:presence:state', {
+                    ...payload,
+                    receivedAt: new Date().toISOString()
+                });
+
+                const ownPresenceContext = extractOwnContextFromPresence(payload, socketState.clientId);
+                if (hasOwnContextChanged(previousOwnContext, ownPresenceContext)) {
+                    sessionContextObserverStore.lastOwnContext = ownPresenceContext;
+                    notifySessionContextObservers(sessionContextObserverStore, 'presence:state', {
+                        previousOwnContext,
+                        nextOwnContext: ownPresenceContext,
+                        clientId: socketState.clientId
+                    });
+                }
+            } catch (error) {
+                console.error('presence:state feldolgozási hiba:', error);
+            }
         });
 
         socket.on('notification:state', (payload = {}) => {
@@ -398,6 +625,13 @@
                 await syncSocketContextOrReconnect(socket, reason, options);
             } catch (error) {
                 throw new Error(error.message || 'Socket context szinkronizálási hiba.');
+            }
+        },
+        subscribeSessionContextChanges: (handler, options = {}) => {
+            try {
+                return subscribeSessionContextChanges(sessionContextObserverStore, handler, options);
+            } catch (error) {
+                throw new Error(error.message || 'Session context observer regisztrációs hiba.');
             }
         },
         getSnapshot: () => ({

@@ -10,6 +10,7 @@ const PROFILE_DELETE_CONFIRM_SECONDS = 5;
 const PROFILE_IMAGE_MAX_SIZE_BYTES = 3 * 1024 * 1024;
 const PROFILE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 const PLAYER_SEARCH_DEBOUNCE_MS = 300;
+const PROFILE_CROSS_TAB_REFRESH_THROTTLE_MS = 1200;
 
 const profileSettingsState = {
     bound: false,
@@ -54,6 +55,10 @@ const playerSearchState = {
         requestToken: 0
     }
 };
+const profileRealtimeSyncState = {
+    bound: false,
+    unsubscribe: null
+};
 
 function runSafely(label, handler) {
     try {
@@ -82,6 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
         bindProfileDeleteModalEvents();
         bindProfileImageUploadEvents();
         bindRemoveAvatarEvents();
+        bindCrossTabProfileRefreshEvents();
     });
 
     runSafelyAsync('refreshAuthUi', async () => refreshAuthUi());
@@ -154,6 +160,51 @@ async function syncSocketContextOrReconnect(reason = 'session-mutation') {
         throw new Error('A közös socket sync API nem érhető el.');
     } catch (error) {
         throw new Error(`Socket context szinkronizálási hiba: ${error.message}`);
+    }
+}
+
+function bindCrossTabProfileRefreshEvents() {
+    try {
+        if (profileRealtimeSyncState.bound) {
+            return;
+        }
+
+        if (!window.MattMesterSocket?.subscribeSessionContextChanges) {
+            throw new Error('A közös session context observer API nem érhető el.');
+        }
+
+        const unsubscribe = window.MattMesterSocket.subscribeSessionContextChanges(async (eventPayload = {}) => {
+            try {
+                await refreshAuthUi();
+            } catch (error) {
+                throw new Error(`Cross-tab profil frissítési hiba: ${error.message}`);
+            }
+        }, {
+            throttleMs: PROFILE_CROSS_TAB_REFRESH_THROTTLE_MS
+        });
+
+        if (typeof unsubscribe !== 'function') {
+            throw new Error('A session context observer leiratkozó függvény nem érkezett meg.');
+        }
+
+        profileRealtimeSyncState.unsubscribe = unsubscribe;
+        profileRealtimeSyncState.bound = true;
+
+        window.addEventListener('beforeunload', () => {
+            runSafely('profileRealtimeSyncUnsubscribe', () => {
+                try {
+                    if (typeof profileRealtimeSyncState.unsubscribe === 'function') {
+                        profileRealtimeSyncState.unsubscribe();
+                    }
+                    profileRealtimeSyncState.unsubscribe = null;
+                    profileRealtimeSyncState.bound = false;
+                } catch (error) {
+                    throw new Error(`Cross-tab observer leiratkozási hiba: ${error.message}`);
+                }
+            });
+        }, { once: true });
+    } catch (error) {
+        throw new Error(`Cross-tab profil refresh eseménykötési hiba: ${error.message}`);
     }
 }
 
