@@ -1351,7 +1351,8 @@ h6 {
     border: 1px solid rgba(51, 65, 85, 0.55);
     border-radius: 12px;
     overflow-y: auto;
-    height: 420px;
+    height: min(420px, calc(100vh - 320px));
+    min-height: 180px;
     background: rgba(2, 6, 23, 0.35);
 }
 
@@ -1365,6 +1366,28 @@ h6 {
 
 .search-results-header-search {
     width: 100%;
+}
+
+#searchResultsModal .modal-dialog {
+    max-width: min(900px, calc(100vw - 1.5rem));
+}
+
+#searchResultsModal .modal-content {
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+}
+
+#searchResultsModal .modal-header {
+    flex-shrink: 0;
+}
+
+#searchResultsModal .modal-body {
+    overflow-y: auto;
+}
+
+#searchResultsModal .modal-footer {
+    flex-shrink: 0;
 }
 
 .search-results-header-search .top-bar-search-feedback {
@@ -1406,7 +1429,7 @@ h6 {
     }
 
     .search-results-list {
-        height: 360px;
+        height: min(360px, calc(100vh - 320px));
     }
 
     .search-results-item {
@@ -1418,6 +1441,11 @@ h6 {
         width: 100%;
         margin-left: 0;
         justify-content: flex-end;
+    }
+
+    #searchResultsModal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
     }
 }
 
@@ -1527,6 +1555,11 @@ h6 {
         width: 180px;
     }
 
+    #searchResultsModal .search-results-header-search.top-bar-search {
+        width: 100%;
+        max-width: none;
+    }
+
     .fab-quick-play {
         bottom: 20px;
         right: 20px;
@@ -1547,6 +1580,28 @@ h6 {
 @media (max-width: 575.98px) {
     .top-bar-search {
         display: none;
+    }
+
+    .search-results-header-search {
+        display: block;
+        width: 100%;
+    }
+
+    .search-results-header-search .top-bar-search-field {
+        width: 100%;
+    }
+
+    .search-results-header-search input {
+        font-size: 0.95rem;
+        padding-right: 42px;
+    }
+
+    #searchResultsModal .modal-content {
+        max-height: calc(100vh - 1rem);
+    }
+
+    .search-results-list {
+        height: min(320px, calc(100vh - 300px));
     }
 
     .top-bar-user-info {
