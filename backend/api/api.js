@@ -726,4 +726,55 @@ router.get('/leaderboard', async (request, response) => {
         return response.status(500).json({ success: false, message: 'Szerverhiba a ranglista lekérdezése során.' });
     }
 });
+router.get('/searchPlayer', async (request, response) => {
+    let statusCode = 200;
+    try {
+        const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
+        const username = typeof request.query.username === 'string' ? request.query.username.trim() : '';
+
+        if (!username) {
+            statusCode = 400;
+            throw new Error('A felhasználónév kötelező.');
+        }
+
+        if (username.length < 3 || username.length > 50) {
+            statusCode = 400;
+            throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie.');
+        }
+
+        if (!usernameRegex.test(username)) {
+            statusCode = 400;
+            throw new Error('A felhasználónév formátuma érvénytelen.');
+        }
+
+        const user = await sql.getUserByUsername(username);
+        if (!user || user.is_banned) {
+            statusCode = 404;
+            throw new Error('A keresett játékos nem található.');
+        }
+
+        return response.status(200).json({
+            success: true,
+            data: {
+                userId: user.id,
+                username: user.username,
+                profileImage: user.profile_image || '/profile_pictures/default.png',
+                elo: user.elo,
+                eloMM: user.elo_MM,
+                eloBullet: user.elo_bullet,
+                role: user.role,
+                lastActive: user.last_active
+            }
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a játékos keresése során.'
+        });
+    }
+});
 module.exports = router;

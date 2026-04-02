@@ -111,23 +111,46 @@ async function refreshAuthUi() {
 }
 async function searchPlayer(){
     try {
-        const { input, feedback } = getTopBarPlayerSearchElements();
+        const { input, button, feedback } = getTopBarPlayerSearchElements();
+        if (!input || !button || !feedback) {
+            return;
+        }
+
         const username = (input.value || '').trim();
         if (!username || username.length < 3 || username.length > 50 || !USERNAME_REGEX.test(username)) {
             throw new Error('Érvénytelen felhasználónév a kereséshez.');
         }
+
+        feedback.classList.remove('text-danger', 'text-success');
+        feedback.classList.add('text-secondary');
+        feedback.textContent = 'Keresés folyamatban...';
+        button.disabled = true;
+
         const response = await fetch(`/api/searchPlayer?username=${encodeURIComponent(username)}`);
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
             throw new Error(result.message || 'Nem sikerült keresni a játékost.');
         }
+
+        feedback.classList.remove('text-secondary', 'text-danger');
+        feedback.classList.add('text-success');
+        feedback.textContent = `Játékos megtalálva: ${result.data?.username || username}`;
+
         if (result.data && result.data.userId) {
-            // Feltételezve, hogy a profil URL-je így néz ki: /profile/{userId}
+            window.location.href = `/html/profile.html?userId=${encodeURIComponent(result.data.userId)}`;
         } else {
-            // Ha nincs userId, de van username, akkor megpróbáljuk a username alapján
+            window.location.href = `/html/profile.html?username=${encodeURIComponent(result.data?.username || username)}`;
         }
     } catch (error) {
+        const { feedback } = getTopBarPlayerSearchElements();
+        if (feedback) {
+            feedback.classList.remove('text-secondary', 'text-success');
+            feedback.classList.add('text-danger');
+            feedback.textContent = error.message || 'Hiba történt a játékos keresése során.';
+        }
         console.error('Hiba a jatekos kereses soran:', error);
+    } finally {
+        validateTopBarPlayerSearch();
     }
 }
 
@@ -229,6 +252,22 @@ function bindTopBarPlayerSearchValidation() {
 
     input.addEventListener('input', validate);
     input.addEventListener('blur', validate);
+
+    button.addEventListener('click', () => {
+        if (!button.disabled) {
+            searchPlayer();
+        }
+    });
+
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (!button.disabled) {
+                searchPlayer();
+            }
+        }
+    });
+
     validate();
 }
 
