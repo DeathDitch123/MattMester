@@ -74,3 +74,105 @@ További elvárások, megvalósítandó feladatok:
 12. Dokumentáció: fejlesztői és felhasználói dokumentáció naprakészen tartása.
 
 Ezek a pontok biztosítják, hogy a projekt ne csak működjön, hanem hosszú távon is biztonságos, megbízható és fenntartható legyen.
+
+------
+
+BARÁT LOGIKA Kiinduló helyzet:
+
+A kereső végpont már létezik itt: api.js:729
+A keresési SQL már létezik itt: sql_funtions.js:813
+A barátság tábla jól van előkészítve normalizált párral és státusszal: create_database.sql:141
+A frontend találati listában a Barát hozzáadása gomb még nincs backendhez kötve: profile.js:213
+Javasolt barát hozzáadási logika:
+
+Keresésnél add vissza a kapcsolat állapotát is.
+A találati sorban a gomb viselkedjen állapot-alapon.
+A küldés, elfogadás, visszavonás, tiltás mind külön endpoint legyen.
+Minden művelet legyen idempotens, hogy dupla kattintásnál se legyen hiba.
+Az adatbázis tranzakcióval és sorzárral kezelje a versenyhelyzeteket.
+Konkrét API készlet:
+
+GET /api/friends/search?username=...
+POST /api/friends/request
+POST /api/friends/accept
+POST /api/friends/reject
+DELETE /api/friends/request/:friendshipId vagy DELETE /api/friends/:targetUserId
+POST /api/friends/block
+DELETE /api/friends/block/:targetUserId
+GET /api/friends/list
+GET /api/friends/requests/incoming
+GET /api/friends/requests/outgoing
+Kritikus üzleti szabályok:
+
+Saját magát ne lehessen jelölni.
+Csak bejelentkezett user küldhessen jelölést.
+Két user között csak egy rekord lehet, ezt már védi a unique kulcs.
+A rekord kulcsa mindig rendezett pár legyen:
+user1_id = min(senderId, targetId)
+user2_id = max(senderId, targetId)
+action_user_id = aki ténylegesen indította az akciót
+Ha már accepted, új kérés helyett térjen vissza existing állapottal.
+Ha pending:
+ha ugyanaz az action_user_id, akkor existing outgoing
+ha másik, akkor existing incoming (és UI-ban Elfogadás gomb)
+Ha blocked, alapból ne engedje újraküldeni, csak explicit unblock után.
+Minden változást naplózz a user_logs táblába social kategóriával.
+Ajánlott válaszforma a keresőhöz:
+
+userId
+username
+profileImage
+relationStatus: none | outgoing_pending | incoming_pending | friends | blocked_by_me | blocked_by_them
+friendshipId
+canSendRequest: boolean
+canAccept: boolean
+Miért jó ez:
+
+A frontend nem találgat, egyből tudja melyik gombot mutassa.
+Nem lesz duplikált friend rekord.
+Race condition esetén is konzisztens marad az állapot.
+Könnyű realtime-ra bővíteni később socket eventekkel.
+SQL oldali minimál javaslat még:
+
+Adj indexet státuszra és user párokra, gyorsabb listázásért:
+index user1_id, status
+index user2_id, status
+index action_user_id, status
+Ha szeretnéd, tegyél status_changed_at mezőt a friends táblába.
+Frontend gombállapot javaslat a találati sorban:
+
+none: plusz ikon, kattintásra POST request
+outgoing_pending: tiltott gomb, Felkérés elküldve
+incoming_pending: Elfogadás gomb
+friends: pipa, tiltott gomb
+blocked: Tiltva felirat vagy feloldás opció
+
+------
+
+Keresés logika: 
+
+Pontosítsd a keresés típusát (prefix vs contains)
+Most a függvény neve prefixet ígér, de valójában contains keresést csinál (%text%). Ez félrevezető, és nagy user bázisnál lassabb is.
+API hívás: api.js:750
+SQL: sql_funtions.js:813, sql_funtions.js:839
+Javaslat: vagy nevezd át contains-ra, vagy válts text% mintára.
+Legyen LIMIT + lapozás
+Jelenleg nincs limit, így üresen hagyott vagy gyakori találatnál túl sok rekord jöhet vissza.
+WHERE + ORDER rész: sql_funtions.js:834
+Javaslat: LIMIT 20 és opcionális offset/cursor.
+Zárd ki a saját usert a találatokból
+Most a kereső visszaadhatja a saját profilt is, ami barátlogikánál felesleges.
+Query helye: sql_funtions.js:813
+Javaslat: add át currentUserId-t és tedd be: AND u.id <> ?.
+Tedd auth-hoz kötötté a keresést
+A végpont jelenleg session check nélkül fut, így user-enumerációra használható.
+Végpont: api.js:729
+Javaslat: ha nincs bejelentkezés, 401.
+Frontenden debounce + kérés megszakítás
+Most minden Enter/kattintás külön kérés; gyors gépelésnél célszerű 250-300 ms debounce és AbortController.
+Fetch hívás: profile.js:134
+Input binding: profile.js:368, profile.js:400
+Egységes relation mező már a kereső válaszban
+Mivel úgyis jön a friend flow, érdemes már most relationStatus-t visszaadni, így a UI nem találgat.
+Válasz map: api.js:751
+Javaslat: relationStatus, canSendRequest, canAccept, friendshipId.
