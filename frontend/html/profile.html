@@ -7,7 +7,7 @@
             connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
             script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
             style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
-            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob: https://ui-avatars.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Profil</title>
 
@@ -211,7 +211,7 @@
                             <i data-lucide="minus-circle"></i>
                         </div>
                         <div class="stat-value" style="color: var(--accent-blue)">34</div>
-                        <div class="stat-label">Draws</div>
+                        <div class="stat-label" style="color: var(--accent-blue)">Draws</div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
@@ -220,7 +220,7 @@
                             <i data-lucide="percent"></i>
                         </div>
                         <div class="stat-value" style="color: var(--accent-gold)">68%</div>
-                        <div class="stat-label">Win Rate</div>
+                        <div class="stat-label" style="color: var(--accent-gold)">Win Rate</div>
                     </div>
                 </div>
             </div>
@@ -232,7 +232,9 @@
                     <div class="card mb-4 section-block">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <span><i data-lucide="activity" class="me-2"></i>Rating History</span>
-                            <select class="form-select form-select-sm w-auto bg-transparent border-secondary text-light"
+                            <label for="ratingHistorySelect" class="visually-hidden">Rating History típus</label>
+                            <select id="ratingHistorySelect" name="ratingHistorySelect"
+                                class="form-select form-select-sm w-auto bg-transparent border-secondary text-light"
                                 style="width: 120px !important;">
                                 <option>Klasszikus</option>
                                 <option>MattMester</option>
@@ -611,7 +613,9 @@
                 <div class="modal-body">
                     <p class="mb-2">Ez egy egyszerű chat modal.</p>
                     <p class="modal-note mb-3">Itt később jöhetnek az üzenetek és valós idejű chat funkciók.</p>
-                    <textarea class="form-control" rows="3" placeholder="Írj egy üzenetet..."></textarea>
+                    <label for="messageComposeInput" class="form-label visually-hidden">Üzenet</label>
+                    <textarea id="messageComposeInput" name="messageCompose" class="form-control" rows="3"
+                        placeholder="Írj egy üzenetet..."></textarea>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Mégse</button>
