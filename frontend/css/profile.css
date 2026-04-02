@@ -1287,6 +1287,62 @@ h6 {
     background-color: var(--accent-gold);
 }
 
+.search-results-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(51, 65, 85, 0.55);
+    border-radius: 12px;
+    overflow-y: auto;
+    max-height: 420px;
+    background: rgba(2, 6, 23, 0.35);
+}
+
+.search-results-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.search-results-item:last-child {
+    border-bottom: none;
+}
+
+.search-results-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+.search-results-empty {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    padding: 10px 12px;
+    border: 1px dashed rgba(51, 65, 85, 0.75);
+    border-radius: 10px;
+}
+
+@media (max-width: 767.98px) {
+    .search-results-list {
+        max-height: 360px;
+    }
+
+    .search-results-item {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .search-results-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-end;
+    }
+}
+
 .ability-card {
     background: linear-gradient(135deg, rgba(2, 6, 23, 0.6) 0%, rgba(2, 6, 23, 0.3) 100%);
     border: 1px solid var(--border-color);

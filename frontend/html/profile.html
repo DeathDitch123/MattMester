@@ -638,6 +638,32 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="searchResultsModal" tabindex="-1" aria-labelledby="searchResultsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="searchResultsModalLabel">
+                        <i data-lucide="search" style="width: 18px; height: 18px;"></i>
+                        Keresési találatok
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="searchResultsSummary" class="text-secondary mb-3">Találatok betöltése...</p>
+                    <div id="searchResultsList" class="search-results-list" role="list"></div>
+                    <div id="searchResultsEmpty" class="search-results-empty d-none">
+                        <i data-lucide="user-x" style="width: 18px; height: 18px;"></i>
+                        <span>Nincs találat a megadott keresésre.</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="deleteProfileModal" tabindex="-1" aria-labelledby="deleteProfileModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">

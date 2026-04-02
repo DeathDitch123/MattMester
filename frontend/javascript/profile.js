@@ -136,11 +136,7 @@ async function searchPlayer(){
         feedback.classList.add('text-success');
         feedback.textContent = `A keresés eredményes: ${result.data.length} találat.`;
 
-        if (result.data) {
-            //ide egy megjeleő modalt akarok ami kírja a talált usereket egy listában és rá lehet kattintani a profiljukra, de ez majd később
-        } else {
-            //ide a modal azt fogja mutatni hogy nincs ilyen játékos, vagy ha van de nem sikerült lekérni az adatokat akkor egy általános hibaüzenetet
-        }
+        openSearchResultsModal(Array.isArray(result.data) ? result.data : []);
     } catch (error) {
         const { feedback } = getTopBarPlayerSearchElements();
         if (feedback) {
@@ -152,6 +148,93 @@ async function searchPlayer(){
     } finally {
         validateTopBarPlayerSearch();
     }
+}
+
+function getSearchResultsModalElements() {
+    return {
+        modal: document.getElementById('searchResultsModal'),
+        list: document.getElementById('searchResultsList'),
+        summary: document.getElementById('searchResultsSummary'),
+        empty: document.getElementById('searchResultsEmpty')
+    };
+}
+
+function createSearchResultListItem(player) {
+    const item = document.createElement('div');
+    item.className = 'search-results-item';
+    item.setAttribute('role', 'listitem');
+
+    const avatarWrap = document.createElement('div');
+    avatarWrap.className = 'position-relative flex-shrink-0';
+
+    const avatar = document.createElement('img');
+    avatar.className = 'friend-avatar rounded-circle';
+    avatar.style.width = '40px';
+    avatar.style.height = '40px';
+    avatar.style.objectFit = 'cover';
+    avatar.alt = `${player.username || 'Jatekos'} profilkepe`;
+    avatar.src = player.profileImage || '/profile_pictures/default.png';
+    avatarWrap.appendChild(avatar);
+
+    const info = document.createElement('div');
+    info.className = 'flex-grow-1 min-width-0';
+
+    const name = document.createElement('h6');
+    name.className = 'mb-0 text-white text-truncate';
+    name.style.fontSize = '0.9rem';
+    name.textContent = player.username || 'Ismeretlen jatekos';
+    info.appendChild(name);
+
+    const actions = document.createElement('div');
+    actions.className = 'search-results-actions';
+
+    const addFriendButton = document.createElement('button');
+    addFriendButton.type = 'button';
+    addFriendButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
+    addFriendButton.title = 'Barát hozzáadása';
+    addFriendButton.innerHTML = '<i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>';
+
+    const viewButton = document.createElement('button');
+    viewButton.type = 'button';
+    viewButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
+    viewButton.title = 'Megtekintés';
+    viewButton.innerHTML = '<i data-lucide="eye" style="width: 16px; height: 16px;"></i>';
+
+    actions.appendChild(addFriendButton);
+    actions.appendChild(viewButton);
+
+    item.appendChild(avatarWrap);
+    item.appendChild(info);
+    item.appendChild(actions);
+
+    return item;
+}
+
+function openSearchResultsModal(players) {
+    const { modal, list, summary, empty } = getSearchResultsModalElements();
+    if (!modal || !list || !summary || !empty) {
+        return;
+    }
+
+    list.innerHTML = '';
+    const normalizedPlayers = Array.isArray(players) ? players : [];
+
+    if (!normalizedPlayers.length) {
+        summary.textContent = 'A keresés nem adott találatot.';
+        empty.classList.remove('d-none');
+        list.classList.add('d-none');
+    } else {
+        summary.textContent = `${normalizedPlayers.length} találat a keresésre.`;
+        empty.classList.add('d-none');
+        list.classList.remove('d-none');
+        normalizedPlayers.forEach((player) => {
+            list.appendChild(createSearchResultListItem(player));
+        });
+    }
+
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
+    modalInstance.show();
+    lucide.createIcons();
 }
 
 async function handleLogout() {
