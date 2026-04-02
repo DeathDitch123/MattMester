@@ -109,6 +109,27 @@ async function refreshAuthUi() {
         console.error('refreshAuthUi hiba:', error);
     }
 }
+async function searchPlayer(){
+    try {
+        const { input, feedback } = getTopBarPlayerSearchElements();
+        const username = (input.value || '').trim();
+        if (!username || username.length < 3 || username.length > 50 || !USERNAME_REGEX.test(username)) {
+            throw new Error('Érvénytelen felhasználónév a kereséshez.');
+        }
+        const response = await fetch(`/api/searchPlayer?username=${encodeURIComponent(username)}`);
+        const result = await parseJson(response);
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || 'Nem sikerült keresni a játékost.');
+        }
+        if (result.data && result.data.userId) {
+            // Feltételezve, hogy a profil URL-je így néz ki: /profile/{userId}
+        } else {
+            // Ha nincs userId, de van username, akkor megpróbáljuk a username alapján
+        }
+    } catch (error) {
+        console.error('Hiba a jatekos kereses soran:', error);
+    }
+}
 
 async function handleLogout() {
     try {
