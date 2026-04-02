@@ -144,6 +144,19 @@ async function refreshAuthUi() {
     }
 }
 
+async function syncSocketContextOrReconnect(reason = 'session-mutation') {
+    try {
+        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
+            return;
+        }
+
+        throw new Error('A közös socket sync API nem érhető el.');
+    } catch (error) {
+        throw new Error(`Socket context szinkronizálási hiba: ${error.message}`);
+    }
+}
+
 function getPlayerSearchRuntime(source = 'topbar') {
     return source === 'modal' ? playerSearchState.modal : playerSearchState.topbar;
 }
@@ -1275,11 +1288,13 @@ async function submitProfileSettingsChanges() {
             modal.hide();
         }
 
+        await syncSocketContextOrReconnect('profile-settings-save');
         await refreshAuthUi();
     } catch (error) {
         setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
         elements.confirmSaveButton.textContent = 'Mentes';
         updateModalSaveButtonState();
+        throw new Error(error.message || 'Profil beállítás mentési hiba.');
     }
 }
 
@@ -1484,6 +1499,7 @@ async function submitDeleteProfile() {
         profileDeleteState.submitting = false;
         setDeleteProfileMessage('danger', error.message || 'Hiba történt a profil törlése közben.');
         updateDeleteProfileConfirmButtonState();
+        throw new Error(error.message || 'Profil törlési hiba.');
     }
 }
 
@@ -1891,9 +1907,11 @@ async function submitProfileImageUpload() {
             elements.uploadInput.value = '';
         }
 
+        await syncSocketContextOrReconnect('profile-image-upload');
         await refreshAuthUi();
     } catch (error) {
         setProfileImageEditorMessage('danger', error.message || 'Hiba történt a képfeltöltés közben.');
+        throw new Error(error.message || 'Profilkép feltöltési hiba.');
     } finally {
         profileImageEditorState.uploading = false;
         if (elements.saveButton) {
@@ -2051,9 +2069,11 @@ async function submitRemoveAvatar() {
             modal.hide();
         }
 
+        await syncSocketContextOrReconnect('profile-image-remove');
         await refreshAuthUi();
     } catch (error) {
         setRemoveAvatarMessage('danger', error.message || 'Hiba történt a profilkép eltávolítása közben.');
+        throw new Error(error.message || 'Profilkép eltávolítási hiba.');
     } finally {
         elements.confirmButton.disabled = false;
         elements.confirmButton.textContent = 'Eltávolítás';

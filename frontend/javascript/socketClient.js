@@ -1,4 +1,7 @@
 (function attachMattMesterSocket(globalScope) {
+    const SOCKET_SYNC_TIMEOUT_MS = 2500;
+    const SOCKET_CONNECT_TIMEOUT_MS = 3000;
+
     const DEFAULT_FEATURES = [
         {
             key: 'presence',
@@ -156,6 +159,122 @@
         socket.emit('notification:subscribe');
     }
 
+    async function ensureSocketConnected(socketInstance, timeoutMs = SOCKET_CONNECT_TIMEOUT_MS) {
+        try {
+            if (!socketInstance) {
+                throw new Error('A socket objektum nem elérhető.');
+            }
+
+            if (socketInstance.connected) {
+                return;
+            }
+
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    cleanup();
+                    reject(new Error('Socket kapcsolódási timeout.'));
+                }, Math.max(500, Number(timeoutMs) || SOCKET_CONNECT_TIMEOUT_MS));
+
+                const onConnect = () => {
+                    cleanup();
+                    resolve();
+                };
+
+                const onConnectError = (error) => {
+                    cleanup();
+                    reject(new Error(error?.message || 'Socket connect_error.'));
+                };
+
+                const cleanup = () => {
+                    clearTimeout(timeout);
+                    socketInstance.off('connect', onConnect);
+                    socketInstance.off('connect_error', onConnectError);
+                };
+
+                socketInstance.on('connect', onConnect);
+                socketInstance.on('connect_error', onConnectError);
+
+                try {
+                    socketInstance.connect();
+                } catch (error) {
+                    cleanup();
+                    reject(new Error(error?.message || 'A socket.connect hívás sikertelen.'));
+                }
+            });
+        } catch (error) {
+            throw new Error(`Socket kapcsolódási hiba: ${error.message}`);
+        }
+    }
+
+    async function emitSocketSyncAndWait(socketInstance, reason = 'session-mutation', timeoutMs = SOCKET_SYNC_TIMEOUT_MS) {
+        try {
+            if (!socketInstance) {
+                throw new Error('A socket objektum nem elérhető.');
+            }
+
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    cleanup();
+                    reject(new Error('Socket context frissítési timeout.'));
+                }, Math.max(500, Number(timeoutMs) || SOCKET_SYNC_TIMEOUT_MS));
+
+                const onSyncDone = (payload = {}) => {
+                    cleanup();
+                    if (!payload.success) {
+                        reject(new Error(payload.message || 'A socket context frissítése sikertelen.'));
+                        return;
+                    }
+                    resolve(payload);
+                };
+
+                const cleanup = () => {
+                    clearTimeout(timeout);
+                    socketInstance.off('socket:sync:done', onSyncDone);
+                };
+
+                socketInstance.on('socket:sync:done', onSyncDone);
+
+                try {
+                    socketInstance.emit('socket:sync', {
+                        reason,
+                        emittedAt: new Date().toISOString()
+                    });
+                } catch (error) {
+                    cleanup();
+                    reject(new Error(error?.message || 'A socket:sync emit sikertelen.'));
+                }
+            });
+        } catch (error) {
+            throw new Error(`Socket context sync hiba: ${error.message}`);
+        }
+    }
+
+    async function syncSocketContextOrReconnect(socketInstance, reason = 'session-mutation', options = {}) {
+        try {
+            const connectTimeoutMs = options.connectTimeoutMs ?? SOCKET_CONNECT_TIMEOUT_MS;
+            const syncTimeoutMs = options.syncTimeoutMs ?? SOCKET_SYNC_TIMEOUT_MS;
+
+            await ensureSocketConnected(socketInstance, connectTimeoutMs);
+            await emitSocketSyncAndWait(socketInstance, reason, syncTimeoutMs);
+        } catch (initialError) {
+            try {
+                if (!socketInstance) {
+                    throw new Error('A socket objektum nem elérhető fallback reconnecthez.');
+                }
+
+                socketInstance.disconnect();
+                await ensureSocketConnected(socketInstance, options.connectTimeoutMs ?? SOCKET_CONNECT_TIMEOUT_MS);
+                await emitSocketSyncAndWait(
+                    socketInstance,
+                    `${reason}:fallback-reconnect`,
+                    options.syncTimeoutMs ?? SOCKET_SYNC_TIMEOUT_MS
+                );
+            } catch (fallbackError) {
+                throw new Error(`Socket context frissítés és fallback reconnect is sikertelen: ${fallbackError.message || initialError.message}`);
+            }
+        }
+    }
+
     const socketState = createSocketState();
     const socket = typeof globalScope.io === 'function'
         ? globalScope.io({
@@ -260,6 +379,27 @@
         socket,
         info: socketState,
         refresh: () => updateSocketInfoPanel(socketState),
+        ensureSocketConnected: async (timeoutMs = SOCKET_CONNECT_TIMEOUT_MS) => {
+            try {
+                await ensureSocketConnected(socket, timeoutMs);
+            } catch (error) {
+                throw new Error(error.message || 'Socket kapcsolat ellenőrzési hiba.');
+            }
+        },
+        emitSocketSyncAndWait: async (reason = 'session-mutation', timeoutMs = SOCKET_SYNC_TIMEOUT_MS) => {
+            try {
+                await emitSocketSyncAndWait(socket, reason, timeoutMs);
+            } catch (error) {
+                throw new Error(error.message || 'Socket sync esemény hiba.');
+            }
+        },
+        syncSocketContextOrReconnect: async (reason = 'session-mutation', options = {}) => {
+            try {
+                await syncSocketContextOrReconnect(socket, reason, options);
+            } catch (error) {
+                throw new Error(error.message || 'Socket context szinkronizálási hiba.');
+            }
+        },
         getSnapshot: () => ({
             ...socketState,
             features: [...socketState.features],

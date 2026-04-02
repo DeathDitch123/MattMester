@@ -176,6 +176,91 @@ function createSocketHub(io) {
         return payload;
     }
 
+    function getCurrentSocketContext(socket) {
+        try {
+            const context = socketsById.get(socket.id) || socket.data?.socketContext;
+            if (!context) {
+                throw new Error('A socket context nem található.');
+            }
+
+            return context;
+        } catch (error) {
+            throw new Error(`Socket context lekérdezési hiba: ${error.message}`);
+        }
+    }
+
+    function refreshSocketContextFromSession(socket) {
+        try {
+            const existingContext = getCurrentSocketContext(socket);
+            const refreshedContext = createContextFromSocket(socket);
+            const mergedContext = {
+                ...refreshedContext,
+                connectedAt: existingContext.connectedAt || refreshedContext.connectedAt,
+                lastSeenAt: new Date().toISOString()
+            };
+
+            if (existingContext.userId && existingContext.userId !== mergedContext.userId) {
+                socket.leave(`user-room:${existingContext.userId}`);
+                socket.leave(`${SOCKET_ROOMS.presence}:${existingContext.userId}`);
+            }
+
+            if (existingContext.role === 'admin' && mergedContext.role !== 'admin') {
+                socket.leave(SOCKET_ROOMS.admin);
+            }
+
+            if (mergedContext.userId) {
+                socket.join(`user-room:${mergedContext.userId}`);
+                socket.join(`${SOCKET_ROOMS.presence}:${mergedContext.userId}`);
+            }
+
+            if (mergedContext.role === 'admin') {
+                socket.join(SOCKET_ROOMS.admin);
+            }
+
+            if (existingContext.clientId !== mergedContext.clientId) {
+                const previousClientRecord = clientsById.get(existingContext.clientId);
+                if (previousClientRecord) {
+                    previousClientRecord.socketIds.delete(socket.id);
+                    previousClientRecord.tabs.delete(existingContext.tabId);
+                    previousClientRecord.lastSeenAt = mergedContext.lastSeenAt;
+
+                    if (previousClientRecord.socketIds.size === 0) {
+                        clientsById.delete(existingContext.clientId);
+                    }
+                }
+            }
+
+            if (!clientsById.has(mergedContext.clientId)) {
+                clientsById.set(mergedContext.clientId, createEmptyPresenceRecord(mergedContext));
+            }
+
+            const clientRecord = clientsById.get(mergedContext.clientId);
+            clientRecord.userId = mergedContext.userId;
+            clientRecord.username = mergedContext.username;
+            clientRecord.role = mergedContext.role;
+            clientRecord.lastSeenAt = mergedContext.lastSeenAt;
+            clientRecord.socketIds.add(socket.id);
+
+            if (existingContext.tabId !== mergedContext.tabId) {
+                clientRecord.tabs.delete(existingContext.tabId);
+            }
+
+            clientRecord.tabs.set(mergedContext.tabId, {
+                socketId: socket.id,
+                tabId: mergedContext.tabId,
+                page: mergedContext.page,
+                connectedAt: mergedContext.connectedAt,
+                lastSeenAt: mergedContext.lastSeenAt
+            });
+
+            socketsById.set(socket.id, mergedContext);
+            socket.data.socketContext = mergedContext;
+            return mergedContext;
+        } catch (error) {
+            throw new Error(`Socket context frissítési hiba: ${error.message}`);
+        }
+    }
+
     function registerSocket(socket) {
         const context = createContextFromSocket(socket);
         socketsById.set(socket.id, context);
@@ -224,7 +309,31 @@ function createSocketHub(io) {
         }
 
         socket.on('socket:sync', () => {
-            syncSocketState(socket);
+            try {
+                const refreshedContext = refreshSocketContextFromSession(socket);
+                const socketState = syncSocketState(socket);
+                const presenceState = syncPresence();
+
+                socket.emit('socket:sync:done', {
+                    success: true,
+                    message: 'A socket context frissítése sikeres.',
+                    context: {
+                        userId: refreshedContext.userId,
+                        username: refreshedContext.username,
+                        role: refreshedContext.role
+                    },
+                    socket: socketState,
+                    presence: presenceState,
+                    timestamp: new Date().toISOString()
+                });
+            } catch (error) {
+                console.error('socket:sync hiba:', error);
+                socket.emit('socket:sync:done', {
+                    success: false,
+                    message: error.message || 'A socket context frissítése sikertelen.',
+                    timestamp: new Date().toISOString()
+                });
+            }
         });
 
         socket.on('presence:subscribe', () => {
@@ -241,36 +350,45 @@ function createSocketHub(io) {
         });
 
         socket.on('chat:message', (payload = {}) => {
-            const roomId = safeString(payload.roomId, 'general-chat');
-            const message = safeString(payload.message, '');
+            try {
+                const currentContext = getCurrentSocketContext(socket);
+                const roomId = safeString(payload.roomId, 'general-chat');
+                const message = safeString(payload.message, '');
 
-            if (!message) {
-                socket.emit('chat:error', {
+                if (!message) {
+                    socket.emit('chat:error', {
+                        roomId,
+                        message: 'Az üzenet nem lehet üres.'
+                    });
+                    return;
+                }
+
+                const chatPayload = {
                     roomId,
-                    message: 'Az üzenet nem lehet üres.'
+                    message,
+                    author: currentContext.userId ? {
+                        id: currentContext.userId,
+                        username: currentContext.username,
+                        role: currentContext.role
+                    } : {
+                        id: null,
+                        username: 'Vendég',
+                        role: 'guest'
+                    },
+                    socketId: socket.id,
+                    clientId: currentContext.clientId,
+                    tabId: currentContext.tabId,
+                    sentAt: new Date().toISOString()
+                };
+
+                io.to(`chat-room:${roomId}`).emit('chat:message', chatPayload);
+            } catch (error) {
+                console.error('chat:message hiba:', error);
+                socket.emit('chat:error', {
+                    roomId: safeString(payload.roomId, 'general-chat'),
+                    message: error.message || 'Üzenetküldési hiba történt.'
                 });
-                return;
             }
-
-            const chatPayload = {
-                roomId,
-                message,
-                author: context.userId ? {
-                    id: context.userId,
-                    username: context.username,
-                    role: context.role
-                } : {
-                    id: null,
-                    username: 'Vendég',
-                    role: 'guest'
-                },
-                socketId: socket.id,
-                clientId: context.clientId,
-                tabId: context.tabId,
-                sentAt: new Date().toISOString()
-            };
-
-            io.to(`chat-room:${roomId}`).emit('chat:message', chatPayload);
         });
 
         socket.on('room:subscribe', (payload = {}) => {
@@ -285,32 +403,50 @@ function createSocketHub(io) {
         });
 
         socket.on('room:state:update', (payload = {}) => {
-            const roomId = safeString(payload.roomId, 'general-room');
-            const state = payload.state ?? null;
+            try {
+                const currentContext = getCurrentSocketContext(socket);
+                const roomId = safeString(payload.roomId, 'general-room');
+                const state = payload.state ?? null;
 
-            roomStateById.set(roomId, {
-                state,
-                updatedAt: new Date().toISOString(),
-                updatedBy: context.userId ? context.username : 'system'
-            });
+                roomStateById.set(roomId, {
+                    state,
+                    updatedAt: new Date().toISOString(),
+                    updatedBy: currentContext.userId ? currentContext.username : 'system'
+                });
 
-            io.to(`room-state:${roomId}`).emit('room:state', {
-                roomId,
-                state,
-                updatedAt: roomStateById.get(roomId).updatedAt,
-                updatedBy: roomStateById.get(roomId).updatedBy
-            });
+                io.to(`room-state:${roomId}`).emit('room:state', {
+                    roomId,
+                    state,
+                    updatedAt: roomStateById.get(roomId).updatedAt,
+                    updatedBy: roomStateById.get(roomId).updatedBy
+                });
+            } catch (error) {
+                console.error('room:state:update hiba:', error);
+                socket.emit('room:state:error', {
+                    roomId: safeString(payload.roomId, 'general-room'),
+                    message: error.message || 'Szobaállapot frissítési hiba történt.'
+                });
+            }
         });
 
         socket.on('notification:subscribe', () => {
-            if (context.userId) {
-                socket.join(`notification-user:${context.userId}`);
+            try {
+                const currentContext = getCurrentSocketContext(socket);
+                if (currentContext.userId) {
+                    socket.join(`notification-user:${currentContext.userId}`);
+                }
+                socket.emit('notification:state', {
+                    subscribed: true,
+                    userId: currentContext.userId,
+                    timestamp: new Date().toISOString()
+                });
+            } catch (error) {
+                console.error('notification:subscribe hiba:', error);
+                socket.emit('notification:error', {
+                    message: error.message || 'Értesítés feliratkozási hiba történt.',
+                    timestamp: new Date().toISOString()
+                });
             }
-            socket.emit('notification:state', {
-                subscribed: true,
-                userId: context.userId,
-                timestamp: new Date().toISOString()
-            });
         });
 
         socket.on('disconnect', (reason) => {

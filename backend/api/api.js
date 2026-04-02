@@ -568,10 +568,10 @@ router.post('/profile/delete', isAuthenticated, async (request, response) => {
 
         const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
 
-        await new Promise((resolve) => {
+        await new Promise((resolve, reject) => {
             request.session.destroy((error) => {
                 if (error) {
-                    console.warn('Session törlési hiba profil törlés után:', error);
+                    return reject(new Error(`Session törlési hiba profil törlés után: ${error.message}`));
                 }
                 response.clearCookie('connect.sid');
                 resolve();
