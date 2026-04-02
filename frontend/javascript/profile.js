@@ -113,7 +113,7 @@ async function searchPlayer(){
     try {
         const { input, button, feedback } = getTopBarPlayerSearchElements();
         if (!input || !button || !feedback) {
-            return;
+            throw new Error('A kereső elemek nem találhatók a DOM-ban.');
         }
 
         const username = (input.value || '').trim();
@@ -198,7 +198,7 @@ function getTopBarPlayerSearchElements() {
 function validateTopBarPlayerSearch() {
     const { input, button, feedback } = getTopBarPlayerSearchElements();
     if (!input || !button || !feedback) {
-        return false;
+        throw new Error('A kereső elemek nem találhatók a DOM-ban.');
     }
 
     const value = (input.value || '').trim();
@@ -243,7 +243,7 @@ function validateTopBarPlayerSearch() {
 function bindTopBarPlayerSearchValidation() {
     const { input, button } = getTopBarPlayerSearchElements();
     if (!input || !button) {
-        return;
+        throw new Error('A kereső elemek nem találhatók a DOM-ban.');
     }
 
     const validate = () => {
