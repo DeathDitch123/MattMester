@@ -55,17 +55,33 @@ const playerSearchState = {
     }
 };
 
+function runSafely(label, handler) {
+    try {
+        return handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
+async function runSafelyAsync(label, handler) {
+    try {
+        return await handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    bindLogoutButton();
-    bindTopBarPlayerSearchValidation();
-    bindModalPlayerSearchValidation();
-    bindSearchResultsModalEvents();
-    bindProfileDeleteModalEvents();
-    bindProfileImageUploadEvents();
-    bindRemoveAvatarEvents();
-    refreshAuthUi().catch((error) => {
-        console.error('Hiba az auth UI frissitesekor:', error);
-    });
+    runSafely('bindLogoutButton', () => bindLogoutButton());
+    runSafely('bindTopBarPlayerSearchValidation', () => bindTopBarPlayerSearchValidation());
+    runSafely('bindModalPlayerSearchValidation', () => bindModalPlayerSearchValidation());
+    runSafely('bindSearchResultsModalEvents', () => bindSearchResultsModalEvents());
+    runSafely('bindProfileDeleteModalEvents', () => bindProfileDeleteModalEvents());
+    runSafely('bindProfileImageUploadEvents', () => bindProfileImageUploadEvents());
+    runSafely('bindRemoveAvatarEvents', () => bindRemoveAvatarEvents());
+    runSafelyAsync('refreshAuthUi', async () => refreshAuthUi());
 });
 // Ez parsol
 async function parseJson(response) {
@@ -151,7 +167,13 @@ function schedulePlayerSearch(source = 'topbar', delayMs = PLAYER_SEARCH_DEBOUNC
 
     runtime.debounceTimer = setTimeout(() => {
         runtime.debounceTimer = null;
-        searchPlayer(source);
+        searchPlayer(source).catch((error) => {
+            if (error?.name === 'AbortError' || error?.name === 'SearchStaleError') {
+                console.debug('Keresés megszakítva vagy elavult:', error.message);
+            } else {
+                console.error('Keresés hiba:', error);
+            }
+        });
     }, Math.max(0, Number(delayMs) || 0));
 }
 
@@ -190,7 +212,9 @@ async function searchPlayer(source = 'topbar'){
         });
 
         if (runtime.requestToken !== requestToken) {
-            return;
+            const staleError = new Error('A keresés elavulttá vált.');
+            staleError.name = 'SearchStaleError';
+            throw staleError;
         }
 
         const result = await parseJson(response);
@@ -205,8 +229,8 @@ async function searchPlayer(source = 'topbar'){
         openSearchResultsModal(Array.isArray(result.data) ? result.data : [], searchText);
         clearPlayerSearchInputs();
     } catch (error) {
-        if (error?.name === 'AbortError') {
-            return;
+        if (error?.name === 'AbortError' || error?.name === 'SearchStaleError') {
+            throw error;
         }
 
         const { feedback } = source === 'modal'
@@ -270,6 +294,8 @@ function createSearchResultListItem(player) {
     const item = document.createElement('div');
     item.className = 'search-results-item';
     item.setAttribute('role', 'listitem');
+    item.dataset.userId = String(player.userId || player.id || '');
+    item.dataset.username = String(player.username || '');
 
     const avatarWrap = document.createElement('div');
     avatarWrap.className = 'position-relative flex-shrink-0';
@@ -302,12 +328,18 @@ function createSearchResultListItem(player) {
     addFriendButton.type = 'button';
     addFriendButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
     addFriendButton.title = 'Barát hozzáadása';
+    addFriendButton.dataset.action = 'add-friend';
+    addFriendButton.dataset.userId = String(player.userId || player.id || '');
+    addFriendButton.dataset.username = String(player.username || '');
     addFriendButton.innerHTML = '<i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>';
 
     const viewButton = document.createElement('button');
     viewButton.type = 'button';
     viewButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
     viewButton.title = 'Megtekintés';
+    viewButton.dataset.action = 'view-profile';
+    viewButton.dataset.userId = String(player.userId || player.id || '');
+    viewButton.dataset.username = String(player.username || '');
     viewButton.innerHTML = '<i data-lucide="eye" style="width: 16px; height: 16px;"></i>';
 
     actions.appendChild(addFriendButton);
@@ -323,7 +355,7 @@ function createSearchResultListItem(player) {
 function openSearchResultsModal(players, searchText = '') {
     const { modal, titleText, list, summary, empty } = getSearchResultsModalElements();
     if (!modal || !list || !summary || !empty) {
-        return;
+        throw new Error('A keresési találatok modal elemei nem találhatók a DOM-ban.');
     }
 
     if (titleText) {
@@ -359,12 +391,37 @@ function bindSearchResultsModalEvents() {
     const { modal, list } = getSearchResultsModalElements();
     const { input: modalInput } = getModalPlayerSearchElements();
     if (!modal || !modalInput || !list) {
-        return;
+        throw new Error('A keresési modal eseménykezelő elemei nem találhatók.');
     }
 
     modal.addEventListener('shown.bs.modal', () => {
         modalInput.focus();
         modalInput.select();
+    });
+
+    list.addEventListener('click', (event) => {
+        try {
+            const actionButton = event.target.closest('button[data-action]');
+            if (!actionButton) {
+                return;
+            }
+
+            const userId = Number(actionButton.dataset.userId);
+            const username = String(actionButton.dataset.username || '').trim();
+            const action = actionButton.dataset.action;
+
+            if (!userId) {
+                throw new Error('Hiányzó userId a keresési találat akciónál.');
+            }
+
+            if (action === 'add-friend') {
+                console.log('Friend request action payload:', { userId, username });
+            } else if (action === 'view-profile') {
+                console.log('View profile action payload:', { userId, username });
+            }
+        } catch (error) {
+            console.error('Keresési találat akció hiba:', error);
+        }
     });
 }
 
@@ -395,8 +452,10 @@ function bindLogoutButton() {
     const logoutButtons = document.querySelectorAll('[data-bs-target="#logoutModal"]');
     logoutButtons.forEach((button) => {
         button.addEventListener('click', (event) => {
-            event.preventDefault();
-            handleLogout();
+            runSafelyAsync('logoutButtonClick', async () => {
+                event.preventDefault();
+                await handleLogout();
+            });
         });
     });
 }
@@ -458,7 +517,7 @@ function bindPlayerSearchValidation(source, getElements) {
     const elements = getElements();
     const { input, button } = elements;
     if (!input || !button) {
-        return;
+        throw new Error(`Hianyzik a kereso input vagy gomb (${source}).`);
     }
 
     const validate = () => {
@@ -466,23 +525,35 @@ function bindPlayerSearchValidation(source, getElements) {
     };
 
     input.addEventListener('input', () => {
-        validate();
+        runSafely('playerSearchInput', () => {
+            validate();
+        });
     });
-    input.addEventListener('blur', validate);
+    input.addEventListener('blur', () => {
+        runSafely('playerSearchBlur', () => {
+            validate();
+        });
+    });
 
     button.addEventListener('click', () => {
-        if (!button.disabled) {
-            schedulePlayerSearch(source, 0);
-        }
+        runSafely('playerSearchClick', () => {
+            if (!button.disabled) {
+                schedulePlayerSearch(source, 0);
+            }
+        });
     });
 
     input.addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
-            event.preventDefault();
-        }
+        runSafely('playerSearchKeydown', () => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+            }
+        });
     });
 
-    validate();
+    runSafely('playerSearchInitialValidate', () => {
+        validate();
+    });
 }
 
 function bindTopBarPlayerSearchValidation() {
@@ -751,57 +822,73 @@ function handleProfileSettings(sessionInfo) {
 }
 
 function bindProfileSettingsEvents() {
-    const elements = getProfileSettingsElements();
-    if (!elements.form) {
-        return;
-    }
-
-    const onInputChange = () => {
-        validateProfileSettingsForm();
-    };
-
-    [elements.usernameInput, elements.emailInput, elements.newPasswordInput, elements.confirmPasswordInput]
-        .filter(Boolean)
-        .forEach((element) => {
-            element.addEventListener('input', onInputChange);
-            element.addEventListener('blur', onInputChange);
-        });
-
-    elements.form.addEventListener('submit', (event) => {
-        event.preventDefault();
-
-        const validation = validateProfileSettingsForm();
-        if (!validation.isValid) {
-            return;
+    try {
+        const elements = getProfileSettingsElements();
+        if (!elements.form) {
+            throw new Error('Hianyzik a profile settings form.');
         }
 
-        profileSettingsState.pendingPayload = validation.payload;
-        openProfileSettingsConfirmModal(validation.changedFieldLabels);
-    });
+        const onInputChange = () => {
+            runSafely('profileSettingsOnInputChange', () => {
+                validateProfileSettingsForm();
+            });
+        };
 
-    if (elements.confirmSaveButton) {
-        elements.confirmSaveButton.addEventListener('click', async () => {
-            await submitProfileSettingsChanges();
-        });
-    }
+        [elements.usernameInput, elements.emailInput, elements.newPasswordInput, elements.confirmPasswordInput]
+            .filter(Boolean)
+            .forEach((element) => {
+                element.addEventListener('input', onInputChange);
+                element.addEventListener('blur', onInputChange);
+            });
 
-    if (elements.modalCurrentPasswordInput) {
-        elements.modalCurrentPasswordInput.addEventListener('input', () => {
-            verifyModalCurrentPassword();
+        elements.form.addEventListener('submit', (event) => {
+            runSafely('profileSettingsSubmit', () => {
+                event.preventDefault();
+
+                const validation = validateProfileSettingsForm();
+                if (!validation.isValid) {
+                    throw new Error('Ervenytelen profile settings form.');
+                }
+
+                profileSettingsState.pendingPayload = validation.payload;
+                openProfileSettingsConfirmModal(validation.changedFieldLabels);
+            });
         });
 
-        elements.modalCurrentPasswordInput.addEventListener('blur', () => {
-            verifyModalCurrentPassword();
-        });
-    }
+        if (elements.confirmSaveButton) {
+            elements.confirmSaveButton.addEventListener('click', async () => {
+                await runSafelyAsync('profileSettingsConfirmSave', async () => {
+                    await submitProfileSettingsChanges();
+                });
+            });
+        }
 
-    if (elements.confirmModal) {
-        elements.confirmModal.addEventListener('hidden.bs.modal', () => {
-            profileSettingsState.pendingPayload = null;
-            profileSettingsState.passwordVerified = false;
-            profileSettingsState.requiresPasswordCheck = false;
-            resetProfileSettingsConfirmState();
-        });
+        if (elements.modalCurrentPasswordInput) {
+            elements.modalCurrentPasswordInput.addEventListener('input', () => {
+                runSafely('profileSettingsModalPasswordInput', () => {
+                    verifyModalCurrentPassword();
+                });
+            });
+
+            elements.modalCurrentPasswordInput.addEventListener('blur', () => {
+                runSafely('profileSettingsModalPasswordBlur', () => {
+                    verifyModalCurrentPassword();
+                });
+            });
+        }
+
+        if (elements.confirmModal) {
+            elements.confirmModal.addEventListener('hidden.bs.modal', () => {
+                runSafely('profileSettingsModalHidden', () => {
+                    profileSettingsState.pendingPayload = null;
+                    profileSettingsState.passwordVerified = false;
+                    profileSettingsState.requiresPasswordCheck = false;
+                    resetProfileSettingsConfirmState();
+                });
+            });
+        }
+    } catch (error) {
+        console.error('bindProfileSettingsEvents hiba:', error);
     }
 }
 
@@ -1398,45 +1485,65 @@ async function submitDeleteProfile() {
 }
 
 function bindProfileDeleteModalEvents() {
-    const elements = getProfileDeleteElements();
-    if (!elements.modal || profileDeleteState.bound) {
-        return;
-    }
+    try {
+        const elements = getProfileDeleteElements();
+        if (!elements.modal) {
+            throw new Error('Hianyzik a delete profile modal.');
+        }
 
-    profileDeleteState.bound = true;
+        if (profileDeleteState.bound) {
+            throw new Error('A delete profile esemenyek mar be vannak kotve.');
+        }
 
-    if (elements.passwordInput) {
-        elements.passwordInput.addEventListener('input', () => {
-            setDeleteProfileMessage('danger', '');
-            updateDeleteProfileConfirmButtonState();
+        profileDeleteState.bound = true;
+
+        if (elements.passwordInput) {
+            elements.passwordInput.addEventListener('input', () => {
+                runSafely('deleteProfilePasswordInput', () => {
+                    setDeleteProfileMessage('danger', '');
+                    updateDeleteProfileConfirmButtonState();
+                });
+            });
+
+            elements.passwordInput.addEventListener('blur', () => {
+                runSafely('deleteProfilePasswordBlur', () => {
+                    updateDeleteProfileConfirmButtonState();
+                });
+            });
+        }
+
+        if (elements.acknowledgeCheckbox) {
+            elements.acknowledgeCheckbox.addEventListener('change', () => {
+                runSafely('deleteProfileAcknowledgeChange', () => {
+                    setDeleteProfileMessage('danger', '');
+                    updateDeleteProfileConfirmButtonState();
+                });
+            });
+        }
+
+        if (elements.confirmButton) {
+            elements.confirmButton.addEventListener('click', async () => {
+                await runSafelyAsync('deleteProfileConfirmClick', async () => {
+                    await submitDeleteProfile();
+                });
+            });
+        }
+
+        elements.modal.addEventListener('show.bs.modal', () => {
+            runSafely('deleteProfileModalShow', () => {
+                resetDeleteProfileModalState();
+                startDeleteProfileCountdown();
+            });
         });
 
-        elements.passwordInput.addEventListener('blur', () => {
-            updateDeleteProfileConfirmButtonState();
+        elements.modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('deleteProfileModalHidden', () => {
+                resetDeleteProfileModalState();
+            });
         });
+    } catch (error) {
+        console.error('bindProfileDeleteModalEvents hiba:', error);
     }
-
-    if (elements.acknowledgeCheckbox) {
-        elements.acknowledgeCheckbox.addEventListener('change', () => {
-            setDeleteProfileMessage('danger', '');
-            updateDeleteProfileConfirmButtonState();
-        });
-    }
-
-    if (elements.confirmButton) {
-        elements.confirmButton.addEventListener('click', async () => {
-            await submitDeleteProfile();
-        });
-    }
-
-    elements.modal.addEventListener('show.bs.modal', () => {
-        resetDeleteProfileModalState();
-        startDeleteProfileCountdown();
-    });
-
-    elements.modal.addEventListener('hidden.bs.modal', () => {
-        resetDeleteProfileModalState();
-    });
 }
 
 function getProfileImageEditorElements() {
@@ -1794,77 +1901,99 @@ async function submitProfileImageUpload() {
 }
 
 function bindProfileImageUploadEvents() {
-    const elements = getProfileImageEditorElements();
-    if (!elements.uploadInput || !elements.modal || profileImageEditorState.bound) {
-        return;
-    }
-
-    profileImageEditorState.bound = true;
-
-    elements.uploadInput.addEventListener('change', async (event) => {
-        const file = event.target.files?.[0] || null;
-        const fileError = validateProfileImageFile(file);
-
-        if (fileError) {
-            setProfileSettingsMessage('danger', fileError);
-            elements.uploadInput.value = '';
-            return;
+    try {
+        const elements = getProfileImageEditorElements();
+        if (!elements.uploadInput || !elements.modal) {
+            throw new Error('Hianyzik a profile image upload input vagy modal.');
         }
 
-        try {
-            await openProfileImageEditorFromFile(file);
-        } catch (error) {
-            setProfileSettingsMessage('danger', error.message || 'A kiválasztott kép nem nyitható meg.');
-            elements.uploadInput.value = '';
+        if (profileImageEditorState.bound) {
+            throw new Error('A profile image upload esemenyek mar be vannak kotve.');
         }
-    });
 
-    if (elements.zoomInput) {
-        elements.zoomInput.addEventListener('input', () => {
-            profileImageEditorState.scale = Number(elements.zoomInput.value) || 1;
-            renderProfileImageEditor();
+        profileImageEditorState.bound = true;
+
+        elements.uploadInput.addEventListener('change', async (event) => {
+            await runSafelyAsync('profileImageUploadChange', async () => {
+                try {
+                    const file = event.target.files?.[0] || null;
+                    const fileError = validateProfileImageFile(file);
+
+                    if (fileError) {
+                        throw new Error(fileError);
+                    }
+
+                    await openProfileImageEditorFromFile(file);
+                } catch (error) {
+                    setProfileSettingsMessage('danger', error.message || 'A kiválasztott kép nem nyitható meg.');
+                    elements.uploadInput.value = '';
+                    throw error;
+                }
+            });
         });
-    }
 
-    if (elements.rotateInput) {
-        elements.rotateInput.addEventListener('input', () => {
-            profileImageEditorState.rotationDeg = Number(elements.rotateInput.value) || 0;
-            renderProfileImageEditor();
-        });
-    }
-
-    if (elements.resetButton) {
-        elements.resetButton.addEventListener('click', () => {
-            resetProfileImageEditorState();
-            renderProfileImageEditor();
-        });
-    }
-
-    if (elements.saveButton) {
-        elements.saveButton.addEventListener('click', async () => {
-            await submitProfileImageUpload();
-        });
-    }
-
-    bindProfileImageEditorCanvasEvents();
-
-    elements.modal.addEventListener('shown.bs.modal', () => {
-        renderProfileImageEditor();
-    });
-
-    elements.modal.addEventListener('hidden.bs.modal', () => {
-        clearProfileImageEditorImage();
-        if (elements.uploadInput) {
-            elements.uploadInput.value = '';
+        if (elements.zoomInput) {
+            elements.zoomInput.addEventListener('input', () => {
+                runSafely('profileImageZoomInput', () => {
+                    profileImageEditorState.scale = Number(elements.zoomInput.value) || 1;
+                    renderProfileImageEditor();
+                });
+            });
         }
-    });
 
-    window.addEventListener('resize', () => {
-        if (!profileImageEditorState.image) {
-            return;
+        if (elements.rotateInput) {
+            elements.rotateInput.addEventListener('input', () => {
+                runSafely('profileImageRotateInput', () => {
+                    profileImageEditorState.rotationDeg = Number(elements.rotateInput.value) || 0;
+                    renderProfileImageEditor();
+                });
+            });
         }
-        renderProfileImageEditor();
-    });
+
+        if (elements.resetButton) {
+            elements.resetButton.addEventListener('click', () => {
+                runSafely('profileImageResetClick', () => {
+                    resetProfileImageEditorState();
+                    renderProfileImageEditor();
+                });
+            });
+        }
+
+        if (elements.saveButton) {
+            elements.saveButton.addEventListener('click', async () => {
+                await runSafelyAsync('profileImageSaveClick', async () => {
+                    await submitProfileImageUpload();
+                });
+            });
+        }
+
+        bindProfileImageEditorCanvasEvents();
+
+        elements.modal.addEventListener('shown.bs.modal', () => {
+            runSafely('profileImageModalShown', () => {
+                renderProfileImageEditor();
+            });
+        });
+
+        elements.modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('profileImageModalHidden', () => {
+                clearProfileImageEditorImage();
+                if (elements.uploadInput) {
+                    elements.uploadInput.value = '';
+                }
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            runSafely('profileImageWindowResize', () => {
+                if (profileImageEditorState.image) {
+                    renderProfileImageEditor();
+                }
+            });
+        });
+    } catch (error) {
+        console.error('bindProfileImageUploadEvents hiba:', error);
+    }
 }
 
 function getRemoveAvatarElements() {
@@ -1929,22 +2058,32 @@ async function submitRemoveAvatar() {
 }
 
 function bindRemoveAvatarEvents() {
-    const elements = getRemoveAvatarElements();
-    if (!elements.modal || !elements.confirmButton) {
-        return;
+    try {
+        const elements = getRemoveAvatarElements();
+        if (!elements.modal || !elements.confirmButton) {
+            throw new Error('Hianyzik a remove avatar modal vagy confirm gomb.');
+        }
+
+        elements.confirmButton.addEventListener('click', async () => {
+            await runSafelyAsync('removeAvatarConfirmClick', async () => {
+                await submitRemoveAvatar();
+            });
+        });
+
+        elements.modal.addEventListener('show.bs.modal', () => {
+            runSafely('removeAvatarModalShow', () => {
+                setRemoveAvatarMessage('danger', '');
+            });
+        });
+
+        elements.modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('removeAvatarModalHidden', () => {
+                setRemoveAvatarMessage('danger', '');
+            });
+        });
+    } catch (error) {
+        console.error('bindRemoveAvatarEvents hiba:', error);
     }
-
-    elements.confirmButton.addEventListener('click', async () => {
-        await submitRemoveAvatar();
-    });
-
-    elements.modal.addEventListener('show.bs.modal', () => {
-        setRemoveAvatarMessage('danger', '');
-    });
-
-    elements.modal.addEventListener('hidden.bs.modal', () => {
-        setRemoveAvatarMessage('danger', '');
-    });
 }
 
 // Mobile Sidebar Toggle

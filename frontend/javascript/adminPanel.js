@@ -1,10 +1,30 @@
 //MINDEN API AMI ITT MEG VAN HÍVVA ISADMIN() VALIDÁLÁSSAL KELL TÖRTÉNJEN A BACKENDEN, HOGY CSAK ADMINOK FÉRHESSENEK HOZZÁJUK
 const requestController = window.createRequestController(300);
 
+function runSafely(label, handler) {
+    try {
+        return handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
+async function runSafelyAsync(label, handler) {
+    try {
+        return await handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
-    initChart();
-    initRevealAnimations();
-    initResponsiveSidebar();
+    runSafely('adminDOMContentLoaded', () => {
+        initChart();
+        initRevealAnimations();
+        initResponsiveSidebar();
+    });
 });
 
 function showSection(sectionId, event) {
@@ -32,34 +52,36 @@ function toggleSidebar() {
 
 function exportUsers() {
     // MÉG FEJLESZTENI
-    requestController.schedule('exportUsers', async () => {
-        try {
-            const response = await fetch('/admin/export-users', {
-                signal: requestController.withAbortSignal('exportUsers')
-            });
+    runSafelyAsync('exportUsers', async () => {
+        requestController.schedule('exportUsers', async () => {
+            try {
+                const response = await fetch('/admin/export-users', {
+                    signal: requestController.withAbortSignal('exportUsers')
+                });
 
-            if (!response.ok) {
-                throw new Error('Hiba történt a felhasználók exportálása során.');
-            }
+                if (!response.ok) {
+                    throw new Error('Hiba történt a felhasználók exportálása során.');
+                }
 
-            const blob = await response.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'users.csv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        } catch (error) {
-            if (error?.name === 'AbortError') {
-                return;
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'users.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                if (error?.name === 'AbortError') {
+                    throw error;
+                }
+                console.error('Hiba:', error);
+                alert(error.message || 'Hiba történt a felhasználók exportálása során.');
+            } finally {
+                requestController.clearSignal('exportUsers');
             }
-            console.error('Hiba:', error);
-            alert('Hiba történt a felhasználók exportálása során.');
-        } finally {
-            requestController.clearSignal('exportUsers');
-        }
+        });
     });
 }
 
@@ -71,27 +93,37 @@ function viewUser(userId) {
 
 function logout() {
     if (confirm('Are you sure you want to logout?')) {
-        requestController.schedule('logout', async () => {
-            try {
-                await fetch('/api/logout', {
-                    method: 'POST',
-                    signal: requestController.withAbortSignal('logout')
-                });
-            } catch (error) {
-                if (error?.name !== 'AbortError') {
+        runSafelyAsync('adminLogout', async () => {
+            requestController.schedule('logout', async () => {
+                try {
+                    const response = await fetch('/api/logout', {
+                        method: 'POST',
+                        signal: requestController.withAbortSignal('logout')
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Sikertelen kijelentkezes.');
+                    }
+                } catch (error) {
+                    if (error?.name === 'AbortError') {
+                        throw error;
+                    }
                     console.error('Logout hiba:', error);
+                    throw error;
+                } finally {
+                    requestController.clearSignal('logout');
+                    window.location.href = '/';
                 }
-            } finally {
-                requestController.clearSignal('logout');
-                window.location.href = '/';
-            }
+            });
         });
     }
 }
 
 function initChart() {
     const canvas = document.getElementById('activityChart');
-    if (!canvas) return;
+    if (!canvas) {
+        throw new Error('Az activityChart canvas nem található.');
+    }
 
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);
