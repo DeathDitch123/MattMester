@@ -691,8 +691,13 @@ h6 {
 }
 
 .elo-display {
+    --elo-accent: #fcd34d;
+    --elo-accent-strong: #d4af37;
+    --elo-accent-rgb: 252, 211, 77;
+    --elo-number-text: #1e293b;
     background: rgba(2, 6, 23, 0.5);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(var(--elo-accent-rgb), 0.24);
+    box-shadow: inset 0 0 0 1px rgba(var(--elo-accent-rgb), 0.06);
     padding: 15px;
     border-radius: 15px;
     min-width: 100px;
@@ -700,20 +705,31 @@ h6 {
 }
 
 .elo-display.highlighted {
-    border-color: var(--accent-gold);
-    background: linear-gradient(135deg, rgba(212, 175, 55, 0.1), transparent);
+    border-color: rgba(var(--elo-accent-rgb), 0.9);
+    background: linear-gradient(135deg, rgba(var(--elo-accent-rgb), 0.16), transparent);
+    box-shadow: 0 0 0 1px rgba(var(--elo-accent-rgb), 0.18), 0 0 20px rgba(var(--elo-accent-rgb), 0.2);
 }
 
 .elo-display:hover {
     transform: translateY(-5px);
-    border-color: var(--accent-gold);
+    border-color: rgba(var(--elo-accent-rgb), 0.9);
 }
 
 .elo-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 86px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(var(--elo-accent-rgb), 0.9);
+    background: linear-gradient(135deg, var(--elo-accent), var(--elo-accent-strong));
+    box-shadow: 0 4px 12px rgba(var(--elo-accent-rgb), 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.12);
     font-size: 1.25rem;
     font-weight: 800;
-    color: var(--accent-gold);
+    color: var(--elo-number-text);
     line-height: 1;
+    letter-spacing: -0.4px;
 }
 
 .elo-label {
@@ -729,6 +745,48 @@ h6 {
     padding: 2px 8px;
     border-radius: 4px;
     background: rgba(255, 255, 255, 0.05);
+}
+
+.elo-display:has(.rank-master) {
+    --elo-accent: #fcd34d;
+    --elo-accent-strong: #d4af37;
+    --elo-accent-rgb: 252, 211, 77;
+    --elo-number-text: #1e293b;
+}
+
+.elo-display:has(.rank-expert) {
+    --elo-accent: #a78bfa;
+    --elo-accent-strong: #6d28d9;
+    --elo-accent-rgb: 167, 139, 250;
+    --elo-number-text: #f8f7ff;
+}
+
+.elo-display:has(.rank-advanced) {
+    --elo-accent: #60a5fa;
+    --elo-accent-strong: #2563eb;
+    --elo-accent-rgb: 96, 165, 250;
+    --elo-number-text: #eff6ff;
+}
+
+.elo-display:has(.rank-intermediate) {
+    --elo-accent: #34d399;
+    --elo-accent-strong: #059669;
+    --elo-accent-rgb: 52, 211, 153;
+    --elo-number-text: #ecfdf5;
+}
+
+.elo-display:has(.rank-beginner) {
+    --elo-accent: #fb7185;
+    --elo-accent-strong: #be123c;
+    --elo-accent-rgb: 251, 113, 133;
+    --elo-number-text: #fff1f2;
+}
+
+.elo-display:has(.rank-grandmaster) {
+    --elo-accent: #c084fc;
+    --elo-accent-strong: #a16207;
+    --elo-accent-rgb: 192, 132, 252;
+    --elo-number-text: #111827;
 }
 
 .rank-master {
