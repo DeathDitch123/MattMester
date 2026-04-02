@@ -813,14 +813,30 @@ async function deleteDiscardedProfileImageRecord(uploadId) {
 async function searchUsersByUsernamePrefix(prefix) {
     const pool = getPool();
     const query = `
-        SELECT id, username, profile_image
-        FROM users
-        WHERE username LIKE ?
+        SELECT
+            u.id,
+            u.username,
+            u.profile_image,
+            CASE
+                WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                ELSE COALESCE(
+                    (
+                        SELECT piu.status
+                        FROM profile_image_uploads piu
+                        WHERE piu.user_id = u.id
+                        ORDER BY piu.upload_time DESC, piu.id DESC
+                        LIMIT 1
+                    ),
+                    'approved'
+                )
+            END AS profile_image_status
+                FROM users u
+        WHERE u.username LIKE ?
           AND is_banned = FALSE
-        ORDER BY username ASC
+        ORDER BY u.username ASC
     `;
     try {
-        const [rows] = await pool.execute(query, [`${prefix}%`]);
+        const [rows] = await pool.execute(query, [`%${prefix}%`]);
         return rows;
     } catch (error) {
         console.error('Hiba a felhasználó keresése során:', error);

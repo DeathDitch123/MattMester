@@ -1293,8 +1293,24 @@ h6 {
     border: 1px solid rgba(51, 65, 85, 0.55);
     border-radius: 12px;
     overflow-y: auto;
-    max-height: 420px;
+    height: 420px;
     background: rgba(2, 6, 23, 0.35);
+}
+
+.search-result-avatar-pending {
+    filter: blur(3px) saturate(0.85);
+}
+
+.search-results-header-content {
+    min-width: 0;
+}
+
+.search-results-header-search {
+    width: 100%;
+}
+
+.search-results-header-search .top-bar-search-feedback {
+    min-height: 16px;
 }
 
 .search-results-item {
@@ -1327,8 +1343,12 @@ h6 {
 }
 
 @media (max-width: 767.98px) {
+    .search-results-header-content .d-flex {
+        align-items: flex-start !important;
+    }
+
     .search-results-list {
-        max-height: 360px;
+        height: 360px;
     }
 
     .search-results-item {

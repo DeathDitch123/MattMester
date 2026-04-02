@@ -87,6 +87,10 @@
                     onclick="toggleSidebar()" style="height: 40px; width: 40px; border-radius: 12px;">
                     <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
                 </button>
+                <button class="top-bar-btn d-lg-none" type="button" data-tooltip="Keresés" data-bs-toggle="modal"
+                    data-bs-target="#searchResultsModal" aria-label="Keresés játékosokra">
+                    <i data-lucide="search" style="width: 18px; height: 18px;"></i>
+                </button>
                 <div class="top-bar-search d-none d-lg-block">
                     <div class="top-bar-search-field">
                         <input id="playerSearchInput" type="text" placeholder="Keresés játékosokra...">
@@ -643,11 +647,24 @@
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content modal-surface">
                 <div class="modal-header">
-                    <h5 class="modal-title d-flex align-items-center gap-2" id="searchResultsModalLabel">
-                        <i data-lucide="search" style="width: 18px; height: 18px;"></i>
-                        Keresési találatok
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <div class="search-results-header-content w-100">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                            <h5 class="modal-title d-flex align-items-center gap-2 mb-0" id="searchResultsModalLabel">
+                                <i data-lucide="search" style="width: 18px; height: 18px;"></i>
+                                Keresési találatok
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                        </div>
+                        <div class="top-bar-search search-results-header-search">
+                            <div class="top-bar-search-field">
+                                <input id="modalPlayerSearchInput" type="text" placeholder="Keresés játékosokra...">
+                                <button id="modalPlayerSearchButton" type="button" class="top-bar-search-btn" aria-label="Keresés a találatok között">
+                                    <i data-lucide="search" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                            <div id="modalPlayerSearchFeedback" class="top-bar-search-feedback" aria-live="polite"></div>
+                        </div>
+                    </div>
                 </div>
                 <div class="modal-body">
                     <p id="searchResultsSummary" class="text-secondary mb-3">Találatok betöltése...</p>

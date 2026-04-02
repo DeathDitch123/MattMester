@@ -45,6 +45,8 @@ const profileImageEditorState = {
 document.addEventListener('DOMContentLoaded', () => {
     bindLogoutButton();
     bindTopBarPlayerSearchValidation();
+    bindModalPlayerSearchValidation();
+    bindSearchResultsModalEvents();
     bindProfileDeleteModalEvents();
     bindProfileImageUploadEvents();
     bindRemoveAvatarEvents();
@@ -109,9 +111,12 @@ async function refreshAuthUi() {
         console.error('refreshAuthUi hiba:', error);
     }
 }
-async function searchPlayer(){
+async function searchPlayer(source = 'topbar'){
     try {
-        const { input, button, feedback } = getTopBarPlayerSearchElements();
+        const elements = source === 'modal'
+            ? getModalPlayerSearchElements()
+            : getTopBarPlayerSearchElements();
+        const { input, button, feedback } = elements;
         if (!input || !button || !feedback) {
             throw new Error('A kereső elemek nem találhatók a DOM-ban.');
         }
@@ -138,7 +143,9 @@ async function searchPlayer(){
 
         openSearchResultsModal(Array.isArray(result.data) ? result.data : []);
     } catch (error) {
-        const { feedback } = getTopBarPlayerSearchElements();
+        const { feedback } = source === 'modal'
+            ? getModalPlayerSearchElements()
+            : getTopBarPlayerSearchElements();
         if (feedback) {
             feedback.classList.remove('text-secondary', 'text-success');
             feedback.classList.add('text-danger');
@@ -146,7 +153,11 @@ async function searchPlayer(){
         }
         console.error('Hiba a jatekos kereses soran:', error);
     } finally {
-        validateTopBarPlayerSearch();
+        if (source === 'modal') {
+            validatePlayerSearchElements(getModalPlayerSearchElements());
+        } else {
+            validatePlayerSearchElements(getTopBarPlayerSearchElements());
+        }
     }
 }
 
@@ -156,6 +167,14 @@ function getSearchResultsModalElements() {
         list: document.getElementById('searchResultsList'),
         summary: document.getElementById('searchResultsSummary'),
         empty: document.getElementById('searchResultsEmpty')
+    };
+}
+
+function getModalPlayerSearchElements() {
+    return {
+        input: document.getElementById('modalPlayerSearchInput'),
+        button: document.getElementById('modalPlayerSearchButton'),
+        feedback: document.getElementById('modalPlayerSearchFeedback')
     };
 }
 
@@ -169,6 +188,9 @@ function createSearchResultListItem(player) {
 
     const avatar = document.createElement('img');
     avatar.className = 'friend-avatar rounded-circle';
+    if ((player.profileImageStatus || '').toLowerCase() === 'pending') {
+        avatar.classList.add('search-result-avatar-pending');
+    }
     avatar.style.width = '40px';
     avatar.style.height = '40px';
     avatar.style.objectFit = 'cover';
@@ -212,8 +234,14 @@ function createSearchResultListItem(player) {
 
 function openSearchResultsModal(players) {
     const { modal, list, summary, empty } = getSearchResultsModalElements();
+    const { input: modalInput } = getModalPlayerSearchElements();
+    const { input: topInput } = getTopBarPlayerSearchElements();
     if (!modal || !list || !summary || !empty) {
         return;
+    }
+
+    if (modalInput && topInput && topInput.value.trim()) {
+        modalInput.value = topInput.value.trim();
     }
 
     list.innerHTML = '';
@@ -234,7 +262,21 @@ function openSearchResultsModal(players) {
 
     const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
     modalInstance.show();
+    validatePlayerSearchElements(getModalPlayerSearchElements());
     lucide.createIcons();
+}
+
+function bindSearchResultsModalEvents() {
+    const { modal, list } = getSearchResultsModalElements();
+    const { input: modalInput } = getModalPlayerSearchElements();
+    if (!modal || !modalInput || !list) {
+        return;
+    }
+
+    modal.addEventListener('shown.bs.modal', () => {
+        modalInput.focus();
+        modalInput.select();
+    });
 }
 
 async function handleLogout() {
@@ -278,10 +320,10 @@ function getTopBarPlayerSearchElements() {
     };
 }
 
-function validateTopBarPlayerSearch() {
-    const { input, button, feedback } = getTopBarPlayerSearchElements();
+function validatePlayerSearchElements(elements) {
+    const { input, button, feedback } = elements || {};
     if (!input || !button || !feedback) {
-        throw new Error('A kereső elemek nem találhatók a DOM-ban.');
+        return false;
     }
 
     const value = (input.value || '').trim();
@@ -324,13 +366,14 @@ function validateTopBarPlayerSearch() {
 }
 
 function bindTopBarPlayerSearchValidation() {
-    const { input, button } = getTopBarPlayerSearchElements();
+    const elements = getTopBarPlayerSearchElements();
+    const { input, button } = elements;
     if (!input || !button) {
-        throw new Error('A kereső elemek nem találhatók a DOM-ban.');
+        return;
     }
 
     const validate = () => {
-        validateTopBarPlayerSearch();
+        validatePlayerSearchElements(elements);
     };
 
     input.addEventListener('input', validate);
@@ -338,7 +381,7 @@ function bindTopBarPlayerSearchValidation() {
 
     button.addEventListener('click', () => {
         if (!button.disabled) {
-            searchPlayer();
+            searchPlayer('topbar');
         }
     });
 
@@ -346,7 +389,39 @@ function bindTopBarPlayerSearchValidation() {
         if (event.key === 'Enter') {
             event.preventDefault();
             if (!button.disabled) {
-                searchPlayer();
+                searchPlayer('topbar');
+            }
+        }
+    });
+
+    validate();
+}
+
+function bindModalPlayerSearchValidation() {
+    const elements = getModalPlayerSearchElements();
+    const { input, button } = elements;
+    if (!input || !button) {
+        return;
+    }
+
+    const validate = () => {
+        validatePlayerSearchElements(elements);
+    };
+
+    input.addEventListener('input', validate);
+    input.addEventListener('blur', validate);
+
+    button.addEventListener('click', () => {
+        if (!button.disabled) {
+            searchPlayer('modal');
+        }
+    });
+
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            if (!button.disabled) {
+                searchPlayer('modal');
             }
         }
     });

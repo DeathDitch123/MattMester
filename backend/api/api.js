@@ -751,7 +751,8 @@ router.get('/searchPlayer', async (request, response) => {
         const data = (users || []).map((user) => ({
             userId: user.id,
             username: user.username,
-            profileImage: user.profile_image || '/profile_pictures/default.png'
+            profileImage: user.profile_image || '/profile_pictures/default.png',
+            profileImageStatus: user.profile_image_status || 'approved'
         }));
 
         return response.status(200).json({
