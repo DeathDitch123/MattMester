@@ -11,7 +11,7 @@ const multer = require('multer'); //?npm install multer
 const path = require('path');
 const { request } = require('http');
 const { stat } = require('fs');
-const { isAdmin } = require('./funtions.js');
+const { isAdmin, isAuthenticated } = require('./funtions.js');
 const { profile } = require('console');
 
 const PROFILE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
@@ -345,28 +345,23 @@ router.get('/sessionInfo', async (request, response) => {
     }
 });
 
-router.post('/profile/verify-current-password', async (request, response) => {
+router.post('/profile/verify-current-password', isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let result = { success: true, valid: false, message: 'A jelenlegi jelszó hibás.' };
     try {
-        if (!request.session?.userId) {
-            statusCode = 401;
-            result = { success: false, valid: false, message: 'Bejelentkezés szükséges.' };
+        const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
+        if (!currentPassword) {
+            statusCode = 400;
+            result = { success: false, valid: false, message: 'A jelenlegi jelszó kötelező.' };
         } else {
-            const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
-            if (!currentPassword) {
-                statusCode = 400;
-                result = { success: false, valid: false, message: 'A jelenlegi jelszó kötelező.' };
+            const user = await sql.getUserAuthById(request.session.userId);
+            if (!user) {
+                statusCode = 404;
+                result = { success: false, valid: false, message: 'A felhasználó nem található.' };
             } else {
-                const user = await sql.getUserAuthById(request.session.userId);
-                if (!user) {
-                    statusCode = 404;
-                    result = { success: false, valid: false, message: 'A felhasználó nem található.' };
-                } else {
-                    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
-                    if (isMatch) {
-                        result = { success: true, valid: true, message: 'A jelenlegi jelszó helyes.' };
-                    }
+                const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+                if (isMatch) {
+                    result = { success: true, valid: true, message: 'A jelenlegi jelszó helyes.' };
                 }
             }
         }
@@ -378,14 +373,9 @@ router.post('/profile/verify-current-password', async (request, response) => {
     }
 });
 
-router.post('/profile/settings', async (request, response) => {
+router.post('/profile/settings', isAuthenticated, async (request, response) => {
     let statusCode = 200;
     try {
-        if (!request.session?.userId) {
-            statusCode = 401;
-            throw new Error('A profil módosításhoz be kell jelentkezni.');
-        }
-
         const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
@@ -538,14 +528,9 @@ router.post('/profile/settings', async (request, response) => {
     }
 });
 
-router.post('/profile/delete', async (request, response) => {
+router.post('/profile/delete', isAuthenticated, async (request, response) => {
     let statusCode = 200;
     try {
-        if (!request.session?.userId) {
-            statusCode = 401;
-            throw new Error('Bejelentkezés szükséges.');
-        }
-
         const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
         const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
 
@@ -629,16 +614,11 @@ router.post('/profile/delete', async (request, response) => {
     }
 });
 
-router.post('/profile/upload-image', (request, response) => {
+router.post('/profile/upload-image', isAuthenticated, (request, response) => {
     profileImageUpload.single('image')(request, response, async (uploadError) => {
         let statusCode = 200;
         let uploadedPath = null;
         try {
-            if (!request.session?.userId) {
-                statusCode = 401;
-                throw new Error('Bejelentkezés szükséges.');
-            }
-
             if (uploadError) {
                 if (uploadError.code === 'LIMIT_FILE_SIZE') {
                     statusCode = 400;
@@ -685,14 +665,9 @@ router.post('/profile/upload-image', (request, response) => {
     });
 });
 
-router.post('/profile/remove-image', async (request, response) => {
+router.post('/profile/remove-image', isAuthenticated, async (request, response) => {
     let statusCode = 200;
     try {
-        if (!request.session?.userId) {
-            statusCode = 401;
-            throw new Error('Bejelentkezés szükséges.');
-        }
-
         const removeResult = await sql.resetUserProfileImageToDefault(request.session.userId);
 
         return response.status(200).json({
@@ -726,7 +701,7 @@ router.get('/leaderboard', async (request, response) => {
         return response.status(500).json({ success: false, message: 'Szerverhiba a ranglista lekérdezése során.' });
     }
 });
-router.get('/searchPlayer', async (request, response) => {
+router.get('/searchPlayer', isAuthenticated, async (request, response) => {
     let statusCode = 200;
     try {
         const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
