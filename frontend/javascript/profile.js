@@ -60,6 +60,16 @@ const profileRealtimeSyncState = {
     unsubscribe: null
 };
 
+async function syncSocketContextForStartup(reason = 'profile-startup') {
+    try {
+        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
+        }
+    } catch (error) {
+        console.warn('Profile startup socket context sync hiba:', error.message || error);
+    }
+}
+
 function runSafely(label, handler) {
     try {
         return handler();
@@ -79,7 +89,7 @@ async function runSafelyAsync(label, handler) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-    runSafely('profileDOMContentLoaded', () => {
+    runSafely('profileDOMContentLoadedBindings', () => {
         bindLogoutButton();
         bindTopBarPlayerSearchValidation();
         bindModalPlayerSearchValidation();
@@ -90,7 +100,10 @@ document.addEventListener('DOMContentLoaded', () => {
         bindCrossTabProfileRefreshEvents();
     });
 
-    runSafelyAsync('refreshAuthUi', async () => refreshAuthUi());
+    runSafelyAsync('profileInitialLoadSequence', async () => {
+        await syncSocketContextForStartup('profile-initial-load');
+        await refreshAuthUi();
+    });
 });
 // Ez parsol
 async function parseJson(response) {

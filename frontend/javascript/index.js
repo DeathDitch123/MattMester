@@ -31,8 +31,18 @@ let LeaderboardData = {
     lastUpdated: null
 };
 
+async function syncSocketContextForStartup(reason = 'index-startup') {
+    try {
+        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
+        }
+    } catch (error) {
+        console.warn('Startup socket context sync hiba:', error.message || error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    runSafely('indexDOMContentLoaded', () => {
+    runSafely('indexDOMContentLoadedBindings', () => {
         installModalFocusGuards();
         bindLoginForm();
         bindRegisterForm();
@@ -43,7 +53,8 @@ document.addEventListener('DOMContentLoaded', () => {
         socketHandler();
     });
 
-    runSafelyAsync('indexInitialAuthRefresh', async () => {
+    runSafelyAsync('indexInitialLoadSequence', async () => {
+        await syncSocketContextForStartup('index-initial-load');
         await loadLeaderBoard();
         await refreshAuthUi();
     });
