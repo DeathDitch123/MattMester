@@ -29,6 +29,7 @@ function jatekLetrehoz() {
         lepesszam: 0,       // teljes lépésszám
         felLepes: 0,        // 50 lépés szabályhoz
         lepesTortenet: [],   // visszajátszáshoz
+        pozicioTortenet: [], // háromszori ismétlés ellenőrzéshez (pozíció hash-ek)
         jatekosok: {
             white: { ido: 600, timer: null },
             black: { ido: 600, timer: null }
@@ -72,7 +73,7 @@ function jatekTorol(gameId) {
  */
 function mezoKeres(jatek, x, y) {
     if (x < 0 || x > 7 || y < 0 || y > 7) return null;
-    return jatek.tabla.find(m => m.x === x && m.y === y);
+    return jatek.tabla[y * 8 + x];
 }
 
 /**
