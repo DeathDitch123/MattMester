@@ -353,8 +353,6 @@ router.post('/:id/reset', (req, res) => {
 // POST /api/chess/:id/surrender — Feladás ELO-változással
 // ────────────────────────────────────────────
 router.post('/:id/surrender', async (req, res) => {
-    let statusCode = 200;
-    let responseBody = null;
     try {
         const gameId = parseInt(req.params.id, 10);
         const jatek = jatekKeres(gameId);
@@ -364,7 +362,6 @@ router.post('/:id/surrender', async (req, res) => {
         jatek.vege = true; // timer leáll a következő tikknél
 
         let uzenet = 'Feladtad a játékot.';
-
         let eloValtozas = null;
 
         if (jatek.botAktiv) {
@@ -402,9 +399,6 @@ router.post('/:id/surrender', async (req, res) => {
                     console.error('Chess DB surrender mentési hiba:', dbErr);
                 }
             }
-
-            jatekTorol(gameId);
-            responseBody = { message: 'Játék feladva.', uzenet };
         }
 
         jatekTorol(gameId);
