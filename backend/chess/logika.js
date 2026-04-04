@@ -11,6 +11,38 @@
 const { mezoKeres } = require('./state.js');
 
 // ============================================================
+// POZÍCIÓ HASH (háromszori ismétlés ellenőrzéshez)
+// ============================================================
+
+/**
+ * Egyedi string hash a tábla aktuális pozíciójáról.
+ * Tartalmazza: bábuk helyzete + körön lévő + en passant + sáncolási jogok.
+ */
+function pozicioHash(jatek) {
+    let hash = '';
+    for (let i = 0; i < 64; i++) {
+        const m = jatek.tabla[i];
+        if (m.piece) {
+            hash += m.piece.color[0] + m.piece.type[0] + i + ',';
+        }
+    }
+    hash += jatek.koronLevo[0];
+    if (jatek.enPassant) hash += 'e' + jatek.enPassant.x + jatek.enPassant.y;
+    // Sáncolási jogok
+    for (const szin of ['white', 'black']) {
+        const sor = szin === 'white' ? 7 : 0;
+        const king = jatek.tabla[sor * 8 + 4];
+        if (king.piece?.type === 'king' && !king.piece.hasMoved) {
+            const rookK = jatek.tabla[sor * 8 + 7];
+            if (rookK.piece?.type === 'rook' && !rookK.piece.hasMoved) hash += szin[0] + 'K';
+            const rookQ = jatek.tabla[sor * 8 + 0];
+            if (rookQ.piece?.type === 'rook' && !rookQ.piece.hasMoved) hash += szin[0] + 'Q';
+        }
+    }
+    return hash;
+}
+
+// ============================================================
 // SEGÉDFÜGGVÉNYEK
 // ============================================================
 
@@ -290,7 +322,46 @@ function nincsMozgas(jatek, szin) {
 }
 
 /**
- * Ellenőrzi a játék végét: matt, patt, 50 lépés szabály.
+ * Elégtelen anyag ellenőrzés — egyik fél sem tud mattot adni.
+ * Döntetlen esetek: K vs K, K+B vs K, K+N vs K, K+B vs K+B (azonos színű futók).
+ */
+function elegtelenAnyag(jatek) {
+    const feher = [];
+    const fekete = [];
+
+    for (let i = 0; i < jatek.tabla.length; i++) {
+        const b = jatek.tabla[i].piece;
+        if (!b) continue;
+        if (b.color === "white") feher.push(b);
+        else fekete.push(b);
+    }
+
+    // Király mindig van, szóval min 1-1
+    if (feher.length > 3 || fekete.length > 3) return false;
+
+    const nemKiraly = (lista) => lista.filter(b => b.type !== "king");
+    const fExtra = nemKiraly(feher);
+    const kExtra = nemKiraly(fekete);
+
+    // K vs K
+    if (fExtra.length === 0 && kExtra.length === 0) return true;
+
+    // K+B vs K vagy K+N vs K
+    if (fExtra.length === 0 && kExtra.length === 1 && (kExtra[0].type === "bishop" || kExtra[0].type === "knight")) return true;
+    if (kExtra.length === 0 && fExtra.length === 1 && (fExtra[0].type === "bishop" || fExtra[0].type === "knight")) return true;
+
+    // K+B vs K+B — azonos színű futók
+    if (fExtra.length === 1 && kExtra.length === 1 && fExtra[0].type === "bishop" && kExtra[0].type === "bishop") {
+        const fMezo = fExtra[0].square;
+        const kMezo = kExtra[0].square;
+        if ((fMezo.x + fMezo.y) % 2 === (kMezo.x + kMezo.y) % 2) return true;
+    }
+
+    return false;
+}
+
+/**
+ * Ellenőrzi a játék végét: matt, patt, 50 lépés szabály, elégtelen anyag, háromszori ismétlés.
  */
 function jatekAllapotEllenor(jatek, szin) {
     const ellenfel = (szin === "white") ? "black" : "white";
@@ -303,6 +374,17 @@ function jatekAllapotEllenor(jatek, szin) {
     }
 
     if (jatek.felLepes >= 100) return { vege: true, ok: "50lepes" };
+    if (elegtelenAnyag(jatek)) return { vege: true, ok: "anyaghiany" };
+
+    // Háromszori ismétlés
+    if (jatek.pozicioTortenet && jatek.pozicioTortenet.length > 0) {
+        const aktualisHash = pozicioHash(jatek);
+        let szamlalo = 0;
+        for (let i = 0; i < jatek.pozicioTortenet.length; i++) {
+            if (jatek.pozicioTortenet[i] === aktualisHash) szamlalo++;
+            if (szamlalo >= 3) return { vege: true, ok: "haromszor" };
+        }
+    }
 
     return { vege: false, sakkban };
 }
@@ -311,5 +393,6 @@ module.exports = {
     mezoTamadva,
     lehetsLepSzamit,
     szabLepKeres,
-    jatekAllapotEllenor
+    jatekAllapotEllenor,
+    pozicioHash
 };
