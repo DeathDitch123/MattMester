@@ -10,7 +10,7 @@
 // ============================================================
 
 const { mezoKeres, jatekAllapotKliens } = require('./state.js');
-const { jatekAllapotEllenor, szabLepKeres } = require('./logika.js');
+const { jatekAllapotEllenor, szabLepKeres, pozicioHash } = require('./logika.js');
 const { idoFut, idoLeall } = require('./timer.js');
 const chessSql = require('./chess_sql_functions.js');
 
@@ -29,6 +29,7 @@ function jatekUjraIndit(jatek) {
     jatek.lepesszam = 0;
     jatek.felLepes = 0;
     jatek.lepesTortenet = [];
+    jatek.pozicioTortenet = [];
     jatek.eloValtozas = null;
     jatek.jatekosok.white.ido = 600;
     jatek.jatekosok.black.ido = 600;
@@ -45,6 +46,7 @@ function jatekUjraIndit(jatek) {
     }
 
     alapfelallasHelyez(jatek);
+    jatek.pozicioTortenet.push(pozicioHash(jatek)); // kezdőállás hash
     idoFut(jatek, jatek.koronLevo);
 
     return jatekAllapotKliens(jatek);
@@ -145,6 +147,9 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
     jatek.koronLevo = (jatek.koronLevo === "white") ? "black" : "white";
     idoFut(jatek, jatek.koronLevo);
 
+    // --- Pozíció hash mentés (háromszori ismétlés) ---
+    jatek.pozicioTortenet.push(pozicioHash(jatek));
+
     // --- Játékállapot ellenőrzés ---
     const allapot = jatekAllapotEllenor(jatek, jatek.koronLevo);
     let uzenet = null;
@@ -152,9 +157,11 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
     if (allapot.vege) {
         jatek.vege = true;
         idoLeall(jatek);
-        if (allapot.ok === "matt")       uzenet = `${jatek.koronLevo} matt — ${allapot.nyertes} nyert`;
-        else if (allapot.ok === "patt")  uzenet = "Döntetlen (Stalemate)";
-        else if (allapot.ok === "50lepes") uzenet = "50 lépés szabály — Döntetlen.";
+        if (allapot.ok === "matt")           uzenet = `${jatek.koronLevo} matt — ${allapot.nyertes} nyert`;
+        else if (allapot.ok === "patt")      uzenet = "Döntetlen (Stalemate)";
+        else if (allapot.ok === "50lepes")   uzenet = "50 lépés szabály — Döntetlen.";
+        else if (allapot.ok === "anyaghiany") uzenet = "Döntetlen (elégtelen anyag).";
+        else if (allapot.ok === "haromszor")  uzenet = "Döntetlen (háromszori ismétlés).";
     }
 
     // --- DB MENTÉS (nem blokkolja a kliensválaszt) ---
@@ -186,17 +193,23 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
                 });
 
                 if (vege) {
-                    let winnerId = null;
                     if (allapotOk === "matt") {
-                        winnerId = jatek.jatekosok[nyertesSzin]?.userId || null;
-                    }
-                    await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished');
+                        const winnerId = jatek.jatekosok[nyertesSzin]?.userId || null;
+                        await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished');
 
-                    if (allapotOk === "matt" && winnerId) {
-                        const vesztesSzin = (nyertesSzin === "white") ? "black" : "white";
-                        const vesztesId = jatek.jatekosok[vesztesSzin]?.userId;
-                        await chessSql.gyozelemMentDb(winnerId);
-                        if (vesztesId) await chessSql.veresegMentDb(vesztesId);
+                        if (winnerId) {
+                            const vesztesSzin = (nyertesSzin === "white") ? "black" : "white";
+                            const vesztesId = jatek.jatekosok[vesztesSzin]?.userId;
+                            await chessSql.gyozelemMentDb(winnerId);
+                            if (vesztesId) await chessSql.veresegMentDb(vesztesId);
+                        }
+                    } else {
+                        // Döntetlen: patt, 50 lépés, elégtelen anyag, háromszori ismétlés
+                        await chessSql.jatekVegeMentDb(dbGameId, null, 'draw');
+                        const whiteId = jatek.jatekosok.white?.userId;
+                        const blackId = jatek.jatekosok.black?.userId;
+                        if (whiteId) await chessSql.dontetlenMentDb(whiteId);
+                        if (blackId) await chessSql.dontetlenMentDb(blackId);
                     }
                 }
             } catch (dbErr) {
