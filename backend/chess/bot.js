@@ -4,7 +4,7 @@
 
 
 const { mezoKeres } = require('./state.js');
-const { szabLepKeres, jatekAllapotEllenor } = require('./logika.js');
+const { szabLepKeres, jatekAllapotEllenor, pozicioHash } = require('./logika.js');
 
 // ────────────────────────────────────────────
 // NEHÉZSÉGI SZINTEK
@@ -237,6 +237,9 @@ function botLepesCsinal(jatek, lepes) {
     // Játékosváltás
     jatek.koronLevo = (jatek.koronLevo === "white") ? "black" : "white";
 
+    // Pozíció hash mentés (háromszori ismétlés keresésben)
+    if (jatek.pozicioTortenet) jatek.pozicioTortenet.push(pozicioHash(jatek));
+
     return undo;
 }
 
@@ -279,6 +282,7 @@ function botLepesVisszavon(jatek, lepes, undo) {
     jatek.enPassant = undo.enPassant;
     jatek.koronLevo = undo.koronLevo;
     jatek.felLepes = undo.felLepes;
+    if (jatek.pozicioTortenet) jatek.pozicioTortenet.pop();
 }
 
 // ────────────────────────────────────────────
