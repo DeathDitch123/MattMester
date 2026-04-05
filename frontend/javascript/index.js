@@ -32,19 +32,23 @@ async function parseJson(response) {
         return {};
     }
 }
+
+
 //sessionInfo
 async function fetchSessionInfo() {
-    let result = { success: false, loggedIn: false };
+    let data = { success: false, loggedIn: false };
+
     try {
         const response = await fetch('/api/sessionInfo');
-        const data = await parseJson(response);
+
         if (response.ok) {
-            result = data;
+            data = await parseJson(response);
         }
     } catch (error) {
         console.error('Hiba a session informacio lekerdezese soran:', error);
     }
-    return result;
+
+    return data;
 }
 
 async function loadLeaderBoard() {
