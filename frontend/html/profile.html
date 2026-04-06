@@ -337,39 +337,32 @@
 
                 <div class="col-lg-4">
                     <div class="card mb-4 section-block" id="friends">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span class="d-flex align-items-center"><i data-lucide="users"
-                                    class="me-2"></i>Barátok</span>
-                            <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
-                                data-bs-target="#searchResultsModal" aria-label="Játékos keresése és barát hozzáadása">
-                                <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
-                            </button>
+                        <div class="card-header friends-header">
+                            <div class="friends-header-main">
+                                <span class="d-flex align-items-center"><i data-lucide="users" class="me-2"></i>Barátok</span>
+                            </div>
+
+                            <div class="friends-header-controls" role="group" aria-label="Barátok lista szűrése">
+                                <button class="btn btn-sm btn-outline-gold is-active" type="button" data-friends-filter="all">Összes</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="pending">Függő</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="friend">Már barát</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="blocked">Blokkolt</button>
+                            </div>
+
+                            <div class="friends-header-actions">
+                                <button class="btn btn-sm btn-outline-gold" type="button" id="refreshFriendsButton" aria-label="Barát lista frissítése" title="Barát lista frissítése">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
+                                    data-bs-target="#searchResultsModal" aria-label="Játékos keresése és barát hozzáadása">
+                                    <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
                         </div>
+                        <div id="friendsFeedback" class="friends-feedback d-none" aria-live="polite"></div>
                         <div class="card-body p-0">
-                            <div class="friend-list">
-                                <div class="friend-item d-flex align-items-center gap-2 p-3">
-                                    <div class="position-relative flex-shrink-0">
-                                        <img src="https://ui-avatars.com/api/?name=ChessMaster_Pro&background=0f172a&color=d4af37&size=40"
-                                            alt="Friend" class="friend-avatar rounded-circle"
-                                            style="width: 40px; height: 40px; object-fit: cover;">
-                                        <span class="friend-status online"></span>
-                                    </div>
-
-                                    <div class="flex-grow-1 min-width-0">
-                                        <h6 class="mb-0 text-white text-truncate" style="font-size: 0.9rem;">
-                                            ChessMaster_Pro</h6>
-                                        <small class="text-success d-block text-truncate">In Game</small>
-                                    </div>
-
-                                    <div class="flex-shrink-0">
-                                        <button class="btn btn-sm btn-outline-gold py-1 px-2 open-message-modal"
-                                            type="button" data-friend="ChessMaster_Pro" data-bs-toggle="modal"
-                                            data-bs-target="#messagesModal">
-                                            <i data-lucide="message-square" style="width: 16px; height: 16px;"></i>
-                                        </button>
-                                    </div>
-                                </div>
-
+                            <div class="friend-list" id="friendsList" role="list" aria-live="polite">
+                                <div class="friend-list-empty">Barátok betöltése...</div>
                             </div>
                         </div>
                     </div>

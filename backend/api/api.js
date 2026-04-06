@@ -835,4 +835,227 @@ router.post('/friends/add', isAuthenticated, async (request, response) => {
     }
 });
 
+function parseTargetUserId(value) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+        return null;
+    }
+
+    return parsed;
+}
+
+router.get('/friends/list', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+
+    try {
+        const currentUserId = Number(request.session?.userId) || 0;
+        const requestedStatus = String(request.query?.status || 'friend').trim().toLowerCase();
+        const allowedStatuses = new Set(['all', 'pending', 'friend', 'blocked']);
+
+        if (!currentUserId) {
+            statusCode = 401;
+            throw new Error('Nincs bejelentkezett felhasználó.');
+        }
+
+        if (!allowedStatuses.has(requestedStatus)) {
+            statusCode = 400;
+            throw new Error('Érvénytelen státusz szűrő.');
+        }
+
+        const data = await sql.getFriendListForUser(currentUserId, requestedStatus);
+        return response.status(200).json({
+            success: true,
+            data,
+            filter: requestedStatus,
+            message: data.length
+                ? `${data.length} találat`
+                : 'Nincs megjeleníthető kapcsolat a kiválasztott szűrőre.'
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a barát lista lekérése során.'
+        });
+    }
+});
+
+router.post('/friends/accept', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+
+    try {
+        const currentUserId = Number(request.session?.userId) || 0;
+        const targetUserId = parseTargetUserId(request.body?.targetUserId);
+
+        if (!currentUserId) {
+            statusCode = 401;
+            throw new Error('Nincs bejelentkezett felhasználó.');
+        }
+
+        if (!targetUserId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen target user ID.');
+        }
+
+        const result = await sql.acceptFriendRequest(currentUserId, targetUserId);
+        return response.status(200).json({
+            success: true,
+            message: result.message
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a barát kérelem elfogadása során.'
+        });
+    }
+});
+
+router.post('/friends/reject', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+
+    try {
+        const currentUserId = Number(request.session?.userId) || 0;
+        const targetUserId = parseTargetUserId(request.body?.targetUserId);
+
+        if (!currentUserId) {
+            statusCode = 401;
+            throw new Error('Nincs bejelentkezett felhasználó.');
+        }
+
+        if (!targetUserId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen target user ID.');
+        }
+
+        const result = await sql.rejectFriendRequest(currentUserId, targetUserId);
+        return response.status(200).json({
+            success: true,
+            message: result.message
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a barát kérelem elutasítása során.'
+        });
+    }
+});
+
+router.post('/friends/block', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+
+    try {
+        const currentUserId = Number(request.session?.userId) || 0;
+        const targetUserId = parseTargetUserId(request.body?.targetUserId);
+
+        if (!currentUserId) {
+            statusCode = 401;
+            throw new Error('Nincs bejelentkezett felhasználó.');
+        }
+
+        if (!targetUserId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen target user ID.');
+        }
+
+        if (currentUserId === targetUserId) {
+            statusCode = 400;
+            throw new Error('Nem tilthatod le saját magadat.');
+        }
+
+        const result = await sql.blockUserDirectional(currentUserId, targetUserId);
+        return response.status(200).json({
+            success: true,
+            message: result.message
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a tiltás során.'
+        });
+    }
+});
+
+router.delete('/friends/unblock/:targetUserId', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+
+    try {
+        const currentUserId = Number(request.session?.userId) || 0;
+        const targetUserId = parseTargetUserId(request.params?.targetUserId);
+
+        if (!currentUserId) {
+            statusCode = 401;
+            throw new Error('Nincs bejelentkezett felhasználó.');
+        }
+
+        if (!targetUserId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen target user ID.');
+        }
+
+        const result = await sql.unblockUserDirectional(currentUserId, targetUserId);
+        return response.status(200).json({
+            success: true,
+            message: result.message
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a tiltás feloldása során.'
+        });
+    }
+});
+
+router.delete('/friends/:targetUserId', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+
+    try {
+        const currentUserId = Number(request.session?.userId) || 0;
+        const targetUserId = parseTargetUserId(request.params?.targetUserId);
+
+        if (!currentUserId) {
+            statusCode = 401;
+            throw new Error('Nincs bejelentkezett felhasználó.');
+        }
+
+        if (!targetUserId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen target user ID.');
+        }
+
+        const result = await sql.deleteFriendConnection(currentUserId, targetUserId);
+        return response.status(200).json({
+            success: true,
+            message: result.message
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a barát kapcsolat törlése során.'
+        });
+    }
+});
+
 module.exports = router;

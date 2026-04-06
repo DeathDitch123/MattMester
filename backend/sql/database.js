@@ -175,6 +175,19 @@ async function createTables() {
             FOREIGN KEY (action_user_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
 
+        `CREATE TABLE IF NOT EXISTS friend_blocks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            blocker_user_id INT NOT NULL,
+            blocked_user_id INT NOT NULL,
+            active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_friend_block (blocker_user_id, blocked_user_id),
+            CHECK (blocker_user_id <> blocked_user_id),
+            FOREIGN KEY (blocker_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`,
+
         `CREATE TABLE IF NOT EXISTS profile_image_uploads (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,

@@ -152,6 +152,20 @@ CREATE TABLE IF NOT EXISTS friends (
     FOREIGN KEY (action_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
+-- 9/b. Irányfüggő felhasználó blokkolások
+CREATE TABLE IF NOT EXISTS friend_blocks (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    blocker_user_id INT NOT NULL,
+    blocked_user_id INT NOT NULL,
+    active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY unique_friend_block (blocker_user_id, blocked_user_id),
+    CHECK (blocker_user_id <> blocked_user_id),
+    FOREIGN KEY (blocker_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
 -- 10. Altalanos felhasznaloi naplo (audit + activity)
 CREATE TABLE IF NOT EXISTS user_logs (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
