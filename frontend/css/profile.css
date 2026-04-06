@@ -1402,6 +1402,25 @@ h6 {
     font-size: 0.9rem;
 }
 
+.friend-actions {
+    margin-left: auto;
+}
+
+.friend-actions-menu {
+    min-width: 220px;
+    border: 1px solid rgba(51, 65, 85, 0.75);
+    background: rgba(2, 6, 23, 0.95);
+}
+
+.friend-actions-menu .dropdown-item {
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+.friend-actions-menu .dropdown-item:hover {
+    background-color: rgba(212, 175, 55, 0.1);
+}
+
 .friend-avatar {
     width: 40px;
     height: 40px;
@@ -1527,6 +1546,23 @@ h6 {
 
     .friends-header-actions {
         margin-left: 0;
+    }
+
+    .friend-item {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .friend-item .min-width-0 {
+        min-width: calc(100% - 56px);
+    }
+
+    .friend-actions {
+        width: 100%;
+        margin-left: 0;
+        display: flex;
+        justify-content: flex-end;
     }
 
     .search-results-header-content .d-flex {

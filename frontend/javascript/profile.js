@@ -534,6 +534,30 @@ function bindSearchResultsModalEvents() {
         modalInput.select();
     });
 
+    modal.addEventListener('hide.bs.modal', () => {
+        const activeElement = document.activeElement;
+        if (activeElement && modal.contains(activeElement) && typeof activeElement.blur === 'function') {
+            activeElement.blur();
+        }
+    });
+
+    modal.addEventListener('hidden.bs.modal', () => {
+        const { input: topInput, button: topButton } = getTopBarPlayerSearchElements();
+        if (topInput && !topInput.disabled) {
+            topInput.focus();
+            return;
+        }
+
+        if (topButton && !topButton.disabled) {
+            topButton.focus();
+            return;
+        }
+
+        if (document.body && typeof document.body.focus === 'function') {
+            document.body.focus();
+        }
+    });
+
     list.addEventListener('click', (event) => {
         try {
             const actionButton = event.target.closest('button[data-action]');
@@ -688,6 +712,49 @@ function createFriendActionButton(actionName, title, iconName, variantClass = 'b
     return button;
 }
 
+function createFriendDropdownAction(actionName, label, iconName, variantClass = '') {
+    const actionButton = document.createElement('button');
+    actionButton.type = 'button';
+    actionButton.className = `dropdown-item d-flex align-items-center gap-2 ${variantClass}`.trim();
+    actionButton.dataset.friendAction = actionName;
+    actionButton.innerHTML = `<i data-lucide="${iconName}" style="width: 16px; height: 16px;"></i><span>${label}</span>`;
+    return actionButton;
+}
+
+function getFriendActionConfigs(friend) {
+    const actions = [];
+
+    if (friend.canChat) {
+        actions.push({ action: 'chat', title: 'Üzenet küldése', label: 'Üzenet küldése', icon: 'message-square', buttonClass: 'btn-outline-gold' });
+    }
+
+    if (friend.canDeleteFriend) {
+        actions.push({ action: 'delete-friend', title: 'Barát törlése', label: 'Barát törlése', icon: 'user-x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+    }
+
+    if (friend.canAccept) {
+        actions.push({ action: 'accept', title: 'Barát kérelem elfogadása', label: 'Elfogadás', icon: 'check', buttonClass: 'btn-outline-success', dropdownClass: 'text-success' });
+    }
+
+    if (friend.canReject) {
+        actions.push({ action: 'reject', title: 'Barát kérelem elutasítása', label: 'Elutasítás', icon: 'x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+    }
+
+    if (friend.canBlock) {
+        actions.push({ action: 'block', title: 'Felhasználó tiltása', label: 'Tiltás', icon: 'ban', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+    }
+
+    if (friend.canUnblock) {
+        actions.push({ action: 'unblock', title: 'Tiltás visszavonása', label: 'Tiltás visszavonása', icon: 'shield-check', buttonClass: 'btn-outline-warning', dropdownClass: 'text-warning' });
+    }
+
+    if (friend.canView) {
+        actions.push({ action: 'view', title: 'Profil megtekintése', label: 'Profil megtekintése', icon: 'eye', buttonClass: 'btn-outline-gold' });
+    }
+
+    return actions;
+}
+
 function createFriendListItem(friend) {
     const relationMeta = getRelationMeta(friend.relationStatus);
     const item = document.createElement('div');
@@ -740,36 +807,51 @@ function createFriendListItem(friend) {
     info.appendChild(username);
     info.appendChild(relation);
 
+    const actionConfigs = getFriendActionConfigs(friend);
     const actions = document.createElement('div');
-    actions.className = 'search-results-actions flex-shrink-0';
+    actions.className = 'friend-actions d-flex align-items-center gap-2 flex-shrink-0';
 
-    if (friend.canChat) {
-        actions.appendChild(createFriendActionButton('chat', 'Üzenet küldése', 'message-square', 'btn-outline-gold'));
-    }
+    const inlineActions = document.createElement('div');
+    inlineActions.className = 'd-none d-md-flex flex-wrap justify-content-end gap-2';
+    actionConfigs.forEach((actionConfig) => {
+        inlineActions.appendChild(
+            createFriendActionButton(
+                actionConfig.action,
+                actionConfig.title,
+                actionConfig.icon,
+                actionConfig.buttonClass
+            )
+        );
+    });
 
-    if (friend.canDeleteFriend) {
-        actions.appendChild(createFriendActionButton('delete-friend', 'Barát törlése', 'user-x', 'btn-outline-danger'));
-    }
+    const dropdownWrapper = document.createElement('div');
+    dropdownWrapper.className = 'dropdown d-md-none';
 
-    if (friend.canAccept) {
-        actions.appendChild(createFriendActionButton('accept', 'Barát kérelem elfogadása', 'check', 'btn-outline-success'));
-    }
+    const dropdownToggle = document.createElement('button');
+    dropdownToggle.type = 'button';
+    dropdownToggle.className = 'btn btn-sm btn-outline-gold dropdown-toggle';
+    dropdownToggle.dataset.bsToggle = 'dropdown';
+    dropdownToggle.setAttribute('aria-expanded', 'false');
+    dropdownToggle.innerHTML = '<i data-lucide="ellipsis-vertical" style="width: 16px; height: 16px;"></i><span class="ms-1">Műveletek</span>';
 
-    if (friend.canReject) {
-        actions.appendChild(createFriendActionButton('reject', 'Barát kérelem elutasítása', 'x', 'btn-outline-danger'));
-    }
+    const dropdownMenu = document.createElement('div');
+    dropdownMenu.className = 'dropdown-menu dropdown-menu-end friend-actions-menu';
+    actionConfigs.forEach((actionConfig) => {
+        dropdownMenu.appendChild(
+            createFriendDropdownAction(
+                actionConfig.action,
+                actionConfig.label,
+                actionConfig.icon,
+                actionConfig.dropdownClass
+            )
+        );
+    });
 
-    if (friend.canBlock) {
-        actions.appendChild(createFriendActionButton('block', 'Felhasználó tiltása', 'ban', 'btn-outline-danger'));
-    }
+    dropdownWrapper.appendChild(dropdownToggle);
+    dropdownWrapper.appendChild(dropdownMenu);
 
-    if (friend.canUnblock) {
-        actions.appendChild(createFriendActionButton('unblock', 'Tiltás visszavonása', 'shield-check', 'btn-outline-warning'));
-    }
-
-    if (friend.canView) {
-        actions.appendChild(createFriendActionButton('view', 'Profil megtekintése', 'eye', 'btn-outline-gold'));
-    }
+    actions.appendChild(inlineActions);
+    actions.appendChild(dropdownWrapper);
 
     item.appendChild(avatarWrap);
     item.appendChild(info);
