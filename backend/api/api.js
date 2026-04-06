@@ -332,6 +332,8 @@ router.get('/sessionInfo', async (request, response) => {
                 request.session.username = dbUser.username;
                 request.session.role = dbUser.role;
                 request.session.elo = dbUser.elo;
+                request.session.profile_image = dbUser.profile_image || '/profile_pictures/default.png';
+                request.session.profile_image_status = dbUser.profile_image_status || 'default';
 
                 result.loggedIn = true;
                 result.user = {

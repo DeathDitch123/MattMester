@@ -387,11 +387,15 @@ function createSocketHub(io) {
                     author: currentContext.userId ? {
                         id: currentContext.userId,
                         username: currentContext.username,
-                        role: currentContext.role
+                        role: currentContext.role,
+                        profile_image: currentContext.profile_image || '/profile_pictures/default.png',
+                        profile_image_status: currentContext.profile_image_status || 'default'
                     } : {
                         id: null,
                         username: 'Vendég',
-                        role: 'guest'
+                        role: 'guest',
+                        profile_image: '/profile_pictures/default.png',
+                        profile_image_status: 'default'
                     },
                     socketId: socket.id,
                     clientId: currentContext.clientId,

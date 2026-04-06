@@ -195,10 +195,18 @@
             const userId = Number(input.userId || input.id) || null;
             const username = typeof input.username === 'string' ? input.username.trim() : '';
             const role = typeof input.role === 'string' ? input.role.trim() : '';
+            const profile_image = typeof input.profile_image === 'string' && input.profile_image.trim()
+                ? input.profile_image.trim()
+                : '/profile_pictures/default.png';
+            const profile_image_status = typeof input.profile_image_status === 'string' && input.profile_image_status.trim()
+                ? input.profile_image_status.trim()
+                : 'default';
             return {
                 userId,
                 username,
-                role
+                role,
+                profile_image,
+                profile_image_status
             };
         } catch (error) {
             throw new Error(`Saját context normalizálási hiba: ${error.message}`);
@@ -217,7 +225,9 @@
             } else {
                 hasChanged = previousContext.userId !== nextContext.userId
                     || previousContext.username !== nextContext.username
-                    || previousContext.role !== nextContext.role;
+                    || previousContext.role !== nextContext.role
+                    || previousContext.profile_image !== nextContext.profile_image
+                    || previousContext.profile_image_status !== nextContext.profile_image_status;
             }
 
             return hasChanged;
@@ -237,7 +247,9 @@
                 ownContext = normalizeOwnContext({
                     userId: ownClient.userId,
                     username: ownClient.username,
-                    role: ownClient.role
+                    role: ownClient.role,
+                    profile_image: ownClient.profile_image,
+                    profile_image_status: ownClient.profile_image_status
                 });
             }
 
@@ -556,7 +568,9 @@
                 const nextOwnContext = normalizeOwnContext({
                     userId: socketState.user?.id,
                     username: socketState.user?.username,
-                    role: socketState.user?.role
+                    role: socketState.user?.role,
+                    profile_image: socketState.user?.profile_image,
+                    profile_image_status: socketState.user?.profile_image_status
                 });
 
                 if (hasOwnContextChanged(previousOwnContext, nextOwnContext)) {
