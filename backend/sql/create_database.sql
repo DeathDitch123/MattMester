@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS friends (
     user1_id INT NOT NULL, -- user_init_id helyett. Ide MINDIG a kisebb ID kerül.
     user2_id INT NOT NULL, -- user_recv_id helyett. Ide MINDIG a nagyobb ID kerül.
     action_user_id INT NOT NULL, -- Ő az, aki valójában kezdeményezte a jelölést (hogy tudjuk, kinek kell elfogadnia).
-    status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
+    status ENUM('pending', 'accepted', 'rejected', 'blocked') DEFAULT 'pending',
     invite_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY unique_friendship (user1_id, user2_id),
     CHECK (user1_id < user2_id), -- Ez a zseniális trükk megakadályozza a (1, 2) és (2, 1) duplikációkat adatbázis szinten!
@@ -174,3 +174,26 @@ CREATE TABLE IF NOT EXISTS user_logs (
     INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
 );
 
+-- 20 teszt felhasznalo (jelszo: 123456Ab)
+INSERT IGNORE INTO users (username, password_hash, email, role)
+VALUES
+    ('testuser01', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser01@mattmester.local', 'player'),
+    ('testuser02', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser02@mattmester.local', 'player'),
+    ('testuser03', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser03@mattmester.local', 'player'),
+    ('testuser04', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser04@mattmester.local', 'player'),
+    ('testuser05', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser05@mattmester.local', 'player'),
+    ('testuser06', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser06@mattmester.local', 'player'),
+    ('testuser07', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser07@mattmester.local', 'player'),
+    ('testuser08', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser08@mattmester.local', 'player'),
+    ('testuser09', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser09@mattmester.local', 'player'),
+    ('testuser10', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser10@mattmester.local', 'player'),
+    ('testuser11', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser11@mattmester.local', 'player'),
+    ('testuser12', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser12@mattmester.local', 'player'),
+    ('testuser13', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser13@mattmester.local', 'player'),
+    ('testuser14', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser14@mattmester.local', 'player'),
+    ('testuser15', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser15@mattmester.local', 'player'),
+    ('testuser16', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser16@mattmester.local', 'player'),
+    ('testuser17', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser17@mattmester.local', 'player'),
+    ('testuser18', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser18@mattmester.local', 'player'),
+    ('testuser19', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser19@mattmester.local', 'player'),
+    ('testuser20', '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi', 'testuser20@mattmester.local', 'player');

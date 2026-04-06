@@ -166,7 +166,7 @@ async function createTables() {
             user1_id INT NOT NULL,
             user2_id INT NOT NULL,
             action_user_id INT NOT NULL,
-            status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
+            status ENUM('pending', 'accepted', 'rejected', 'blocked') DEFAULT 'pending',
             invite_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY unique_friendship (user1_id, user2_id),
             CHECK (user1_id < user2_id),

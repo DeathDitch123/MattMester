@@ -829,15 +829,23 @@ async function searchUsersByUsernameContains(searchText, currentUserId) {
                     ),
                     'approved'
                 )
-            END AS profile_image_status
-                FROM users u
+            END AS profile_image_status,
+            CASE
+                WHEN f.user1_id IS NOT NULL OR f.user2_id IS NOT NULL THEN f.status
+                ELSE 'none'
+            END AS friend_status
+        FROM users u
+        LEFT JOIN friends f ON (
+            (u.id = f.user1_id AND ? = f.user2_id) OR
+            (u.id = f.user2_id AND ? = f.user1_id)
+        )
         WHERE u.username LIKE ?
           AND u.id <> ?
           AND u.is_banned = FALSE
         ORDER BY u.username ASC
     `;
     try {
-        const [rows] = await pool.execute(query, [`%${searchText}%`, currentUserId]);
+        const [rows] = await pool.execute(query, [currentUserId, currentUserId, `%${searchText}%`, currentUserId]);
         return rows;
     } catch (error) {
         console.error('Hiba a felhasználó keresése során:', error);
@@ -902,6 +910,71 @@ async function deleteUserProfileWithTransaction(userId) {
     }
 }
 
+
+
+async function addFriendRequest(currentUserId, targetUserId) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        // user1_id és user2_id normalizálása: user1_id < user2_id
+        const [user1Id, user2Id] = [currentUserId, targetUserId].sort((a, b) => a - b);
+
+        // Ellenőrzés, van-e már barátkapcsolat
+        const [existingRows] = await connection.execute(
+            'SELECT status FROM friends WHERE user1_id = ? AND user2_id = ?',
+            [user1Id, user2Id]
+        );
+
+        if (existingRows.length > 0) {
+            const existingStatus = existingRows[0].status;
+            if (existingStatus === 'pending' || existingStatus === 'accepted') {
+                throw new Error('Már van függőben vagy fogadott barát kérelem.');
+            }
+            // Ha rejected vagy blocked, frissítjük pending-re
+            if (existingStatus === 'rejected' || existingStatus === 'blocked') {
+                await connection.execute(
+                    'UPDATE friends SET status = ?, action_user_id = ?, invite_time = NOW() WHERE user1_id = ? AND user2_id = ?',
+                    ['pending', currentUserId, user1Id, user2Id]
+                );
+            }
+        } else {
+            // Új barát kérelem
+            await connection.execute(
+                'INSERT INTO friends (user1_id, user2_id, action_user_id, status) VALUES (?, ?, ?, ?)',
+                [user1Id, user2Id, currentUserId, 'pending']
+            );
+        }
+
+        await connection.commit();
+        return { success: true, message: 'Barát kérelem elküldve.' };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+async function getFriendStatus(currentUserId, targetUserId) {
+    const pool = getPool();
+    try {
+        const [user1Id, user2Id] = [currentUserId, targetUserId].sort((a, b) => a - b);
+        
+        const query = `
+            SELECT status FROM friends 
+            WHERE user1_id = ? AND user2_id = ?
+        `;
+        
+        const [rows] = await pool.execute(query, [user1Id, user2Id]);
+        return rows.length > 0 ? rows[0].status : 'none';
+    } catch (error) {
+        console.error('Hiba a friend status lekérdezése során:', error);
+        return 'none';
+    }
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
@@ -931,5 +1004,7 @@ module.exports = {
     getAndDeleteDiscardedProfileImages,
     deleteDiscardedProfileImageRecord,
     searchUsersByUsernameContains,
-    deleteUserProfileWithTransaction
+    deleteUserProfileWithTransaction,
+    addFriendRequest,
+    getFriendStatus
 };

@@ -772,7 +772,8 @@ router.get('/searchPlayer', isAuthenticated, async (request, response) => {
             userId: user.id,
             username: user.username,
             profileImage: user.profile_image || '/profile_pictures/default.png',
-            profileImageStatus: user.profile_image_status || 'approved'
+            profileImageStatus: user.profile_image_status || 'approved',
+            friendStatus: user.friend_status || 'none'
         }));
 
         return response.status(200).json({
@@ -793,4 +794,45 @@ router.get('/searchPlayer', isAuthenticated, async (request, response) => {
         });
     }
 });
+
+// ?POST /api/friends/add - barát kérelem küldése
+router.post('/friends/add', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    try {
+        const currentUserId = Number(request.session?.userId) || 0;
+        const { targetUserId } = request.body;
+
+        if (!currentUserId) {
+            statusCode = 401;
+            throw new Error('Nincs bejelentkezett felhasználó.');
+        }
+
+        if (!targetUserId || typeof targetUserId !== 'number') {
+            statusCode = 400;
+            throw new Error('Érvénytelen target user ID.');
+        }
+
+        if (currentUserId === targetUserId) {
+            statusCode = 400;
+            throw new Error('Nem adhatsz hozzá magadat barátnak.');
+        }
+
+        const result = await sql.addFriendRequest(currentUserId, targetUserId);
+        
+        return response.status(200).json({
+            success: true,
+            message: result.message
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a barát kérelem küldése során.'
+        });
+    }
+});
+
 module.exports = router;

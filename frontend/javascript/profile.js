@@ -377,6 +377,7 @@ function createSearchResultListItem(player) {
     item.setAttribute('role', 'listitem');
     item.dataset.userId = String(player.userId || player.id || '');
     item.dataset.username = String(player.username || '');
+    item.dataset.friendStatus = String(player.friendStatus || 'none');
 
     const avatarWrap = document.createElement('div');
     avatarWrap.className = 'position-relative flex-shrink-0';
@@ -405,14 +406,59 @@ function createSearchResultListItem(player) {
     const actions = document.createElement('div');
     actions.className = 'search-results-actions';
 
-    const addFriendButton = document.createElement('button');
-    addFriendButton.type = 'button';
-    addFriendButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
-    addFriendButton.title = 'Barát hozzáadása';
-    addFriendButton.dataset.action = 'add-friend';
-    addFriendButton.dataset.userId = String(player.userId || player.id || '');
-    addFriendButton.dataset.username = String(player.username || '');
-    addFriendButton.innerHTML = '<i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>';
+    const friendStatus = String(player.friendStatus || 'none');
+    let actionButton, chatButton;
+
+    // Friend gomb az eredeti Friend Add helyett
+    if (friendStatus === 'none' || friendStatus === 'rejected') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
+        actionButton.title = 'Barát hozzáadása';
+        actionButton.dataset.action = 'add-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.dataset.username = String(player.username || '');
+        actionButton.innerHTML = '<i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+    } else if (friendStatus === 'pending') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-warning py-1 px-2';
+        actionButton.title = 'Barát kérelem: függőben';
+        actionButton.dataset.action = 'pending-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.innerHTML = '<i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+    } else if (friendStatus === 'accepted') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-success py-1 px-2';
+        actionButton.title = 'Barát: elfogadva';
+        actionButton.dataset.action = 'accepted-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.innerHTML = '<i data-lucide="check" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+
+        chatButton = document.createElement('button');
+        chatButton.type = 'button';
+        chatButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
+        chatButton.title = 'Üzenet küldése';
+        chatButton.dataset.action = 'chat';
+        chatButton.dataset.userId = String(player.userId || player.id || '');
+        chatButton.dataset.username = String(player.username || '');
+        chatButton.innerHTML = '<i data-lucide="message-circle" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(chatButton);
+    } else if (friendStatus === 'blocked') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-danger py-1 px-2';
+        actionButton.title = 'Felhasználó: letiltva';
+        actionButton.dataset.action = 'blocked-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.disabled = true;
+        actionButton.innerHTML = '<i data-lucide="slash-circle" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+    }
 
     const viewButton = document.createElement('button');
     viewButton.type = 'button';
@@ -422,8 +468,6 @@ function createSearchResultListItem(player) {
     viewButton.dataset.userId = String(player.userId || player.id || '');
     viewButton.dataset.username = String(player.username || '');
     viewButton.innerHTML = '<i data-lucide="eye" style="width: 16px; height: 16px;"></i>';
-
-    actions.appendChild(addFriendButton);
     actions.appendChild(viewButton);
 
     item.appendChild(avatarWrap);
@@ -491,14 +535,46 @@ function bindSearchResultsModalEvents() {
             const username = String(actionButton.dataset.username || '').trim();
             const action = actionButton.dataset.action;
 
-            if (!userId) {
-                throw new Error('Hiányzó userId a keresési találat akciónál.');
+            if (!userId && action !== 'pending-friend' && action !== 'accepted-friend' && action !== 'blocked-friend') {
+                if (action === 'add-friend' || action === 'view-profile' || action === 'chat') {
+                    throw new Error('Hiányzó userId a keresési találat akciónál.');
+                }
             }
 
             if (action === 'add-friend') {
-                console.log('Friend request action payload:', { userId, username });
+                runSafelyAsync('searchResultAddFriend', async () => {
+                    try {
+                        const response = await fetch('/api/friends/add', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ targetUserId: userId })
+                        });
+
+                        const result = await parseJson(response);
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || 'Nem sikerült a barát kérelem küldése.');
+                        }
+
+                        // Gomb frissítése pending státuszra
+                        actionButton.dataset.action = 'pending-friend';
+                        actionButton.className = 'btn btn-sm btn-outline-warning py-1 px-2';
+                        actionButton.title = 'Barát kérelem: elküldve';
+                        actionButton.innerHTML = '<i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>';
+                        lucide.createIcons();
+
+                        console.log('Barát kérelem elküldve:', { userId, username });
+                    } catch (error) {
+                        console.error('Barát kérelem hiba:', error);
+                        throw error;
+                    }
+                });
             } else if (action === 'view-profile') {
                 console.log('View profile action payload:', { userId, username });
+            } else if (action === 'chat') {
+                console.log('Chat action payload:', { userId, username });
+            } else if (action === 'pending-friend' || action === 'accepted-friend' || action === 'blocked-friend') {
+                // Ezek az akciók nem interaktívak, vagy később implementálandók
+                return;
             }
         } catch (error) {
             console.error('Keresési találat akció hiba:', error);
