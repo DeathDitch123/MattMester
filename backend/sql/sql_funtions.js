@@ -291,6 +291,53 @@ async function getSessionUserById(userId) {
     }
 }
 
+async function getPublicPlayerProfileById(targetUserId) {
+    const pool = getPool();
+    const query = `
+        SELECT
+            u.id,
+            u.username,
+            u.role,
+            u.profile_image,
+            (
+                SELECT piu.status
+                FROM profile_image_uploads piu
+                WHERE piu.user_id = u.id
+                ORDER BY piu.upload_time DESC, piu.id DESC
+                LIMIT 1
+            ) AS profile_image_status,
+            u.created_at,
+            u.last_active,
+            u.elo,
+            u.elo_MM,
+            u.elo_bullet,
+            COALESCE(s.wins, 0) AS wins,
+            COALESCE(s.losses, 0) AS losses,
+            COALESCE(s.draws, 0) AS draws,
+            ROUND(
+                IFNULL((COALESCE(s.wins, 0) / NULLIF(COALESCE(s.wins, 0) + COALESCE(s.losses, 0) + COALESCE(s.draws, 0), 0)) * 100, 0),
+                2
+            ) AS winrate_percent
+        FROM users u
+        LEFT JOIN statistics s ON s.user_id = u.id
+        WHERE u.id = ?
+          AND u.is_banned = FALSE
+        LIMIT 1
+    `;
+
+    try {
+        const [rows] = await pool.execute(query, [targetUserId]);
+        if (!rows.length) {
+            return null;
+        }
+
+        return rows[0];
+    } catch (error) {
+        console.error('Hiba a publikus játékos profil lekérdezése során:', error);
+        throw new Error('Nem sikerült a játékos profil lekérése.');
+    }
+}
+
 async function getUserAuthById(userId) {
     const pool = getPool();
     const query = 'SELECT id, username, email, password_hash FROM users WHERE id = ? LIMIT 1';
@@ -1484,6 +1531,7 @@ module.exports = {
     getLeaderBoardByBullet,
     getLeaderBoardByWinRate,
     getSessionUserById,
+    getPublicPlayerProfileById,
     getUserAuthById,
     updateUserProfileSettings,
     insertUserLog,

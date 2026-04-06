@@ -795,6 +795,53 @@ router.get('/searchPlayer', isAuthenticated, async (request, response) => {
     }
 });
 
+router.get('/players/:targetUserId/profile', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+
+    try {
+        const targetUserId = Number(request.params?.targetUserId) || 0;
+        if (!targetUserId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen játékos azonosító.');
+        }
+
+        const profile = await sql.getPublicPlayerProfileById(targetUserId);
+        if (!profile) {
+            statusCode = 404;
+            throw new Error('A játékos nem található.');
+        }
+
+        return response.status(200).json({
+            success: true,
+            data: {
+                userId: profile.id,
+                username: profile.username,
+                role: profile.role || 'player',
+                profileImage: profile.profile_image || '/profile_pictures/default.png',
+                profileImageStatus: profile.profile_image_status || 'approved',
+                joinedAt: profile.created_at,
+                lastActiveAt: profile.last_active,
+                elo: profile.elo,
+                eloMM: profile.elo_MM,
+                eloBullet: profile.elo_bullet,
+                wins: profile.wins,
+                losses: profile.losses,
+                draws: profile.draws,
+                winRate: profile.winrate_percent
+            }
+        });
+    } catch (error) {
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+
+        return response.status(statusCode).json({
+            success: false,
+            message: error.message || 'Szerverhiba a játékos profil lekérése során.'
+        });
+    }
+});
+
 // ?POST /api/friends/add - barát kérelem küldése
 router.post('/friends/add', isAuthenticated, async (request, response) => {
     let statusCode = 200;

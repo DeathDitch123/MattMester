@@ -629,6 +629,108 @@
         </div>
     </div>
 
+    <div class="modal fade" id="playerProfileModal" tabindex="-1" aria-labelledby="playerProfileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down">
+            <div class="modal-content modal-surface player-profile-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2 mb-0" id="playerProfileModalLabel">
+                        <i data-lucide="user-round" style="width: 18px; height: 18px;"></i>
+                        <span id="playerProfileModalTitleText">Játékos profil</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="playerProfileModalFeedback" class="friends-feedback d-none mb-3" aria-live="polite"></div>
+
+                    <section class="player-profile-section" data-section="identity">
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-3">
+                            <img id="playerProfileAvatar" class="profile-avatar player-profile-avatar" src="/profile_pictures/default.png" alt="Játékos profilkép">
+                            <div class="text-center text-md-start min-width-0">
+                                <h4 id="playerProfileUsername" class="mb-1 text-white text-truncate">-</h4>
+                                <span id="playerProfileRole" class="role-badge">Player</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="meta">
+                        <div class="row g-2">
+                            <div class="col-12 col-md-6">
+                                <div class="player-meta-box">
+                                    <small class="text-secondary d-block">Csatlakozott</small>
+                                    <strong id="playerProfileJoinedAt" class="text-white">-</strong>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <div class="player-meta-box">
+                                    <small class="text-secondary d-block">Utoljára aktív</small>
+                                    <strong id="playerProfileLastActiveAt" class="text-white">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="ratings">
+                        <div class="row g-3" id="playerProfileEloGrid">
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center player-profile-elo-card">
+                                    <div id="playerProfileEloClassic" class="elo-number">0</div>
+                                    <div class="elo-label">Klasszikus</div>
+                                    <div id="playerProfileEloClassicRank" class="elo-rank rank-beginner">Beginner</div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center highlighted player-profile-elo-card">
+                                    <div id="playerProfileEloMM" class="elo-number">0</div>
+                                    <div class="elo-label">MattMester</div>
+                                    <div id="playerProfileEloMMRank" class="elo-rank rank-beginner">Beginner</div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center player-profile-elo-card">
+                                    <div id="playerProfileEloBullet" class="elo-number">0</div>
+                                    <div class="elo-label">Bullet</div>
+                                    <div id="playerProfileEloBulletRank" class="elo-rank rank-beginner">Beginner</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="stats">
+                        <div class="row g-3" id="playerProfileStatsGrid">
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value text-success" id="playerProfileWins">0</div>
+                                    <div class="stat-label badge-custom badge-win">Wins</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value text-danger" id="playerProfileLosses">0</div>
+                                    <div class="stat-label badge-custom badge-loss">Losses</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value" style="color: var(--accent-blue)" id="playerProfileDraws">0</div>
+                                    <div class="stat-label badge-custom badge-draw">Draws</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value" style="color: var(--accent-gold)" id="playerProfileWinRate">0%</div>
+                                    <div class="stat-label badge-custom badge-ongoing">Win Rate</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="deleteProfileModal" tabindex="-1" aria-labelledby="deleteProfileModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">

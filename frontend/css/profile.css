@@ -1501,6 +1501,56 @@ h6 {
     flex-shrink: 0;
 }
 
+#playerProfileModal .modal-dialog {
+    max-width: min(1100px, calc(100vw - 1.5rem));
+}
+
+#playerProfileModal .modal-content {
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+}
+
+#playerProfileModal .modal-body {
+    overflow-y: auto;
+}
+
+.player-profile-modal .player-profile-section {
+    border: 1px solid rgba(51, 65, 85, 0.55);
+    border-radius: 12px;
+    padding: 14px;
+    background: rgba(2, 6, 23, 0.3);
+}
+
+.player-profile-modal .player-profile-section + .player-profile-section {
+    margin-top: 12px;
+}
+
+.player-profile-avatar {
+    width: 74px;
+    height: 74px;
+}
+
+.player-meta-box {
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid rgba(51, 65, 85, 0.55);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.player-profile-elo-card {
+    min-width: 0;
+}
+
+.player-profile-modal .modal-header,
+.player-profile-modal .modal-footer {
+    flex-shrink: 0;
+}
+
+.player-profile-modal .modal-footer {
+    justify-content: flex-end;
+}
+
 .search-results-header-search .top-bar-search-feedback {
     min-height: 16px;
 }
@@ -1587,6 +1637,46 @@ h6 {
     #searchResultsModal .modal-dialog {
         margin: 0.5rem;
         max-width: calc(100vw - 1rem);
+    }
+
+    #playerProfileModal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
+    }
+
+    .player-profile-avatar {
+        width: 64px;
+        height: 64px;
+    }
+
+    .player-profile-modal .modal-body {
+        padding: 0.85rem;
+    }
+
+    .player-profile-modal .player-profile-section {
+        padding: 12px;
+    }
+
+    .player-profile-modal .modal-footer {
+        padding: 0.75rem 0.85rem;
+    }
+
+    .player-profile-modal .modal-footer .btn {
+        width: 100%;
+    }
+
+    .player-profile-modal .elo-number {
+        min-width: 74px;
+        font-size: 1.08rem;
+        padding: 4px 10px;
+    }
+
+    .player-profile-modal .elo-label {
+        font-size: 0.66rem;
+    }
+
+    .player-profile-modal .elo-rank {
+        font-size: 0.7rem;
     }
 }
 
@@ -1760,6 +1850,56 @@ h6 {
     .profile-avatar {
         width: 80px;
         height: 80px;
+    }
+
+    .player-profile-modal .modal-header {
+        padding: 0.75rem 0.85rem;
+    }
+
+    .player-profile-modal .modal-title {
+        font-size: 1rem;
+    }
+
+    .player-profile-modal .player-profile-section {
+        border-radius: 10px;
+        padding: 10px;
+    }
+
+    .player-profile-modal .stat-card {
+        padding: 12px;
+    }
+
+    .player-profile-modal .stat-value {
+        font-size: 1.15rem;
+    }
+
+    .player-profile-avatar {
+        width: 58px;
+        height: 58px;
+    }
+
+    .player-meta-box {
+        padding: 9px 10px;
+    }
+}
+
+@media (max-width: 420px) {
+    .player-profile-modal .modal-title {
+        font-size: 0.95rem;
+    }
+
+    .player-profile-modal .elo-number {
+        min-width: 68px;
+        font-size: 1rem;
+    }
+
+    .player-profile-modal .elo-rank {
+        font-size: 0.66rem;
+        padding: 2px 6px;
+    }
+
+    .player-profile-modal .stat-value {
+        font-size: 1.05rem;
     }
 }
 
