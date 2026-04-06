@@ -130,6 +130,16 @@ Lepesek:
 - presence:state
   Online jelenlet snapshot.
 
+- profile_image és profile_image_status a socket state-ben
+  Ha a profilkép több helyen kell, akkor a publikus socket state-be érdemes felvenni:
+  - profile_image: a profilkép publikus elérési útja
+  - profile_image_status: megjelenítési státusz, például approved, pending, rejected, default
+
+  Fontos:
+  - ne a tényleges képfájlt küldd socketen,
+  - csak az URL-t vagy relatív útvonalat add át,
+  - a status csak UI logikához kell.
+
 - notification:state
   Notification feliratkozas allapota.
 
@@ -256,6 +266,21 @@ B) Presence es context model
 C) Statisztika kuldes
 - Hely: backend/services.js
 - Erintett resz: refreshStats (stats:public, stats:admin emit)
+
+D) Profilkép támogatás a socketben
+
+Ha a profilkép több helyen kell, például a top barban, chatben, presence listában vagy több oldalon, akkor a socket state-be érdemes felvenni egy publikus mezőt:
+- profile_image: a profilkép publikus elérési útja
+- profile_image_status: opcionális státusz, például approved, pending, rejected, default
+
+Fontos:
+- ne a tényleges képfájlt küldd socketen
+- csak az URL-t vagy relatív elérési utat add át
+- a státusz csak megjelenítési logikához kell
+
+Backend oldalon a socket context és a socket:state payload részeibe kell beemelni.
+Frontend oldalon a socketClient.js-ben ezt eltárolni kell a socketState-ben, és a UI komponensek felé továbbítani.
+Ha a profilkép csak egy oldalon kell, akkor maradhat külön session/profile lekérés.
 
 
 8) VALTOZTATASI SZABALYOK (NAGYON FONTOS)

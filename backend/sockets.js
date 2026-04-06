@@ -46,6 +46,8 @@ function safeString(value, fallback = '') {
 function createContextFromSocket(socket) {
     const session = socket.request?.session || {};
     const auth = socket.handshake?.auth || {};
+    const profileImage = safeString(session.profile_image, '/profile_pictures/default.png') || '/profile_pictures/default.png';
+    const profileImageStatus = safeString(session.profile_image_status, 'default') || 'default';
 
     return {
         socketId: socket.id,
@@ -56,6 +58,8 @@ function createContextFromSocket(socket) {
         userId: session.userId || null,
         username: session.username || 'Vendég',
         role: session.role || 'guest',
+        profile_image: profileImage,
+        profile_image_status: profileImageStatus,
         connectedAt: new Date().toISOString(),
         lastSeenAt: new Date().toISOString()
     };
@@ -67,6 +71,8 @@ function createEmptyPresenceRecord(context) {
         username: context.username,
         role: context.role,
         clientId: context.clientId,
+        profile_image: context.profile_image || '/profile_pictures/default.png',
+        profile_image_status: context.profile_image_status || 'default',
         tabs: new Map(),
         socketIds: new Set(),
         firstSeenAt: context.connectedAt,
@@ -80,6 +86,8 @@ function snapshotPresenceRecord(record) {
         username: record.username,
         role: record.role,
         clientId: record.clientId,
+        profile_image: record.profile_image || '/profile_pictures/default.png',
+        profile_image_status: record.profile_image_status || 'default',
         socketCount: record.socketIds.size,
         tabCount: record.tabs.size,
         firstSeenAt: record.firstSeenAt,
@@ -116,6 +124,8 @@ function createSocketHub(io) {
     function getSocketSnapshot(socket, context = null) {
         const currentContext = context || socketsById.get(socket.id) || createContextFromSocket(socket);
         const clientRecord = clientsById.get(currentContext.clientId);
+        const profileImage = currentContext.profile_image || '/profile_pictures/default.png';
+        const profileImageStatus = currentContext.profile_image_status || 'default';
 
         return {
             socketId: socket.id,
@@ -128,8 +138,12 @@ function createSocketHub(io) {
             user: currentContext.userId ? {
                 id: currentContext.userId,
                 username: currentContext.username,
-                role: currentContext.role
+                role: currentContext.role,
+                profile_image: profileImage,
+                profile_image_status: profileImageStatus
             } : null,
+            profile_image: profileImage,
+            profile_image_status: profileImageStatus,
             roomCount: socket.rooms.size,
             rooms: [...socket.rooms],
             clientSocketCount: clientRecord ? clientRecord.socketIds.size : 0,
@@ -238,6 +252,8 @@ function createSocketHub(io) {
             clientRecord.userId = mergedContext.userId;
             clientRecord.username = mergedContext.username;
             clientRecord.role = mergedContext.role;
+            clientRecord.profile_image = mergedContext.profile_image || '/profile_pictures/default.png';
+            clientRecord.profile_image_status = mergedContext.profile_image_status || 'default';
             clientRecord.lastSeenAt = mergedContext.lastSeenAt;
             clientRecord.socketIds.add(socket.id);
 
@@ -272,6 +288,8 @@ function createSocketHub(io) {
         const clientRecord = clientsById.get(context.clientId);
         clientRecord.username = context.username;
         clientRecord.role = context.role;
+        clientRecord.profile_image = context.profile_image || '/profile_pictures/default.png';
+        clientRecord.profile_image_status = context.profile_image_status || 'default';
         clientRecord.lastSeenAt = context.lastSeenAt;
         clientRecord.socketIds.add(socket.id);
         clientRecord.tabs.set(context.tabId, {

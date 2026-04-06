@@ -115,6 +115,8 @@ router.post('/login', async (request, response) => {
                     request.session.elo = user.elo;
                     request.session.elo_MM = user.elo_MM;
                     request.session.elo_bullet = user.elo_bullet;
+                    request.session.profile_image = user.profile_image || '/profile_pictures/default.png';
+                    request.session.profile_image_status = user.profile_image_status || 'default';
                     if (remember) {
                         request.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7; // 7 nap
                     } else {
@@ -257,6 +259,8 @@ router.post('/register', async (request, response) => {
                                             request.session.elo = 800;
                                             request.session.elo_MM = 800;
                                             request.session.elo_bullet = 800;
+                                            request.session.profile_image = '/profile_pictures/default.png';
+                                            request.session.profile_image_status = 'default';
                                             request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
 
                                             const ipAdress = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
@@ -668,6 +672,9 @@ router.post('/profile/upload-image', isAuthenticated, (request, response) => {
 
             uploadedPath = `/profile_pictures/${request.file.filename}`;
             const uploadResult = await sql.uploadProfileImage(request.session.userId, uploadedPath);
+            request.session.profile_image = uploadResult.profileImage;
+            request.session.profile_image_status = uploadResult.status;
+            await saveSessionAsync(request, 'Hiba a profilkép feltöltése utáni session mentésekor.');
 
             return response.status(200).json({
                 success: true,
@@ -701,6 +708,9 @@ router.post('/profile/remove-image', isAuthenticated, async (request, response) 
     let statusCode = 200;
     try {
         const removeResult = await sql.resetUserProfileImageToDefault(request.session.userId);
+        request.session.profile_image = removeResult.profileImage;
+        request.session.profile_image_status = removeResult.profileImageStatus;
+        await saveSessionAsync(request, 'Hiba a profilkép eltávolítása utáni session mentésekor.');
 
         return response.status(200).json({
             success: true,

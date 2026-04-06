@@ -78,6 +78,8 @@
             rooms: [],
             sessionBound: false,
             user: null,
+            profile_image: '/profile_pictures/default.png',
+            profile_image_status: 'default',
             features: [...DEFAULT_FEATURES],
             presence: {
                 onlineUsers: 0,
@@ -538,6 +540,8 @@
                 socketState.page = payload.page || socketState.page;
                 socketState.sessionBound = Boolean(payload.sessionBound);
                 socketState.user = payload.user || null;
+                socketState.profile_image = payload.profile_image || payload.user?.profile_image || socketState.profile_image || '/profile_pictures/default.png';
+                socketState.profile_image_status = payload.profile_image_status || payload.user?.profile_image_status || socketState.profile_image_status || 'default';
                 socketState.roomCount = payload.roomCount || 0;
                 socketState.rooms = Array.isArray(payload.rooms) ? payload.rooms : [];
                 socketState.presence = payload.presence || socketState.presence;
