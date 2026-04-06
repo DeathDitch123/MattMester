@@ -467,6 +467,9 @@ function fillPlayerProfileModal(player) {
         throw new Error('A játékos profil modal elemei nem találhatók a DOM-ban.');
     }
 
+    const profileImageStatus = String(player.profileImageStatus || '').trim().toLowerCase();
+    const isPendingProfileImage = profileImageStatus === 'pending';
+
     if (elements.titleText) {
         elements.titleText.textContent = `${player.username || 'Játékos'} profilja`;
     }
@@ -474,6 +477,7 @@ function fillPlayerProfileModal(player) {
     if (elements.avatar) {
         elements.avatar.src = player.profileImage || '/profile_pictures/default.png';
         elements.avatar.alt = `${player.username || 'Játékos'} profilképe`;
+        elements.avatar.classList.toggle('search-result-avatar-pending', isPendingProfileImage);
     }
 
     if (elements.username) {
