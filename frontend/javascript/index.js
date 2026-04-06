@@ -244,7 +244,7 @@ function bindLoginForm() {
                             socket.disconnect();
                             socket.connect();
                         }
-                        await refreshAuthUi();
+                        await refreshAuthUi('login-success');
                     } catch (error) {
                         if (error?.name === 'AbortError') {
                             throw error;
@@ -305,7 +305,7 @@ function bindRegisterForm() {
                         showFormMessage(messageElement, 'success', result.message || 'Sikeres regisztráció.');
                         registerForm.reset();
                         hideModalById('registerModal');
-                        await refreshAuthUi();
+                        await refreshAuthUi('register-success');
                         showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
                     } catch (error) {
                         if (error?.name === 'AbortError') {
@@ -364,7 +364,7 @@ async function handleLogout() {
             socket.disconnect();
             socket.connect();
         }
-        await refreshAuthUi();
+        await refreshAuthUi('logout-success');
     } catch (error) {
         if (error?.name === 'AbortError') {
             throw error;
@@ -386,7 +386,7 @@ function bindLogoutButtonAdmin() {
     if (btn) btn.addEventListener('click', handleLogout);
 }
 
-async function refreshAuthUi() {
+async function refreshAuthUi(contextLabel = 'auth-refresh') {
     const guestActions = document.getElementById('guestActions');
     const userActions = document.getElementById('userActions');
     const adminActions = document.getElementById('adminActions');
@@ -409,6 +409,7 @@ async function refreshAuthUi() {
 
         console.clear();
         console.log('--- Auth Status Report ---');
+        console.log('Context:', contextLabel);
         console.log('Session info:', data);
 
         if (socket) {

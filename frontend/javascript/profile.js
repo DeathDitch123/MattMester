@@ -102,7 +102,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     runSafelyAsync('profileInitialLoadSequence', async () => {
         await syncSocketContextForStartup('profile-initial-load');
-        await refreshAuthUi();
+        await refreshAuthUi('profile-initial-load');
     });
 });
 // Ez parsol
@@ -128,12 +128,13 @@ async function fetchSessionInfo() {
     return result;
 }
 
-async function logSessionAndSocketInfo(sessionInfoInput = null) {
+async function logSessionAndSocketInfo(sessionInfoInput = null, contextLabel = 'auth-refresh') {
     try {
         const sessionInfo = sessionInfoInput || await fetchSessionInfo();
 
         console.clear();
         console.log('--- Auth Status Report ---');
+        console.log('Context:', contextLabel);
         console.log('Session info:', sessionInfo);
 
         if (socket) {
@@ -152,12 +153,12 @@ async function logSessionAndSocketInfo(sessionInfoInput = null) {
     }
 }
 
-async function refreshAuthUi() {
+async function refreshAuthUi(contextLabel = 'auth-refresh') {
     try {
         const sessionInfo = await fetchSessionInfo();
         showStats(sessionInfo);
         handleProfileSettings(sessionInfo);
-        logSessionAndSocketInfo(sessionInfo);
+        logSessionAndSocketInfo(sessionInfo, contextLabel);
     } catch (error) {
         console.error('refreshAuthUi hiba:', error);
     }
@@ -1353,7 +1354,7 @@ async function submitProfileSettingsChanges() {
         }
 
         await syncSocketContextOrReconnect('profile-settings-save');
-        await refreshAuthUi();
+        await refreshAuthUi('profile-settings-save-success');
     } catch (error) {
         setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
         elements.confirmSaveButton.textContent = 'Mentes';
@@ -1558,6 +1559,7 @@ async function submitDeleteProfile() {
             socket.disconnect();
         }
 
+        await refreshAuthUi('profile-delete-success');
         window.location.href = '/';
     } catch (error) {
         profileDeleteState.submitting = false;
@@ -1972,7 +1974,7 @@ async function submitProfileImageUpload() {
         }
 
         await syncSocketContextOrReconnect('profile-image-upload');
-        await refreshAuthUi();
+        await refreshAuthUi('profile-image-upload-success');
     } catch (error) {
         setProfileImageEditorMessage('danger', error.message || 'Hiba történt a képfeltöltés közben.');
         throw new Error(error.message || 'Profilkép feltöltési hiba.');
@@ -2134,7 +2136,7 @@ async function submitRemoveAvatar() {
         }
 
         await syncSocketContextOrReconnect('profile-image-remove');
-        await refreshAuthUi();
+        await refreshAuthUi('profile-image-remove-success');
     } catch (error) {
         setRemoveAvatarMessage('danger', error.message || 'Hiba történt a profilkép eltávolítása közben.');
         throw new Error(error.message || 'Profilkép eltávolítási hiba.');

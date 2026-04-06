@@ -19,6 +19,32 @@ async function runSafelyAsync(label, handler) {
     }
 }
 
+async function logAuthStatusReport(contextLabel = 'admin-logout') {
+    try {
+        const response = await fetch('/api/sessionInfo');
+        const data = await response.json().catch(() => ({}));
+
+        console.clear();
+        console.log('--- Auth Status Report ---');
+        console.log('Context:', contextLabel);
+        console.log('Session info:', response.ok ? data : { success: false, loggedIn: false });
+
+        if (window.MattMesterSocket?.socket) {
+            console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
+                socketId: window.MattMesterSocket.socket.id,
+                connected: window.MattMesterSocket.socket.connected,
+                sessionBound: window.MattMesterSocket.socket.connected ? 'Active' : 'Disconnected/Pending'
+            });
+        } else {
+            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+        }
+
+        console.log('--------------------------');
+    } catch (error) {
+        console.error('Hiba az auth status report naplozasakor:', error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     runSafely('adminDOMContentLoaded', () => {
         initChart();
@@ -104,6 +130,8 @@ function logout() {
                     if (!response.ok) {
                         throw new Error('Sikertelen kijelentkezes.');
                     }
+
+                    await logAuthStatusReport('admin-logout-success');
                 } catch (error) {
                     if (error?.name === 'AbortError') {
                         throw error;
