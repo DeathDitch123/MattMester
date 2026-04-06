@@ -154,6 +154,17 @@ initDatabase()
         setInterval(cleanupDiscardedProfileImages, 60000); // 60 másodpercenként futtatás
         console.log('Cleanup service elindítva (percenkénti futás)');
         
+        server.on('error', (error) => {
+            if (error && error.code === 'EADDRINUSE') {
+                console.error(`A ${ip}:${port} port már használatban van. Zárd be a régi backend folyamatot, vagy használd az \"npm run dev\" scriptet, ami indulás előtt felszabadítja a portot.`);
+                process.exit(1);
+                return;
+            }
+
+            console.error('Szerver indítási hiba:', error);
+            process.exit(1);
+        });
+
         server.listen(port, ip, () => {
             console.log(`Szerver és Socket elérhetősége: http://${ip}:${port}`);
         });
