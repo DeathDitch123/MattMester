@@ -1,8 +1,12 @@
 (function attachMattMesterSocket(globalScope) {
+    // Socket műveletek timeoutjai: connect és context-sync műveletekhez.
     const SOCKET_SYNC_TIMEOUT_MS = 2500;
     const SOCKET_CONNECT_TIMEOUT_MS = 3000;
+    // Session context observer throttling alapérték (ms).
     const SESSION_CONTEXT_REFRESH_DEFAULT_THROTTLE_MS = 1200;
 
+    // UI fallback feature lista: akkor is van mit megjeleníteni, ha a szerver még
+    // nem küldött capabilities payloadot.
     const DEFAULT_FEATURES = [
         {
             key: 'presence',
@@ -32,26 +36,34 @@
     ];
 
     function ensureIdentifier(storage, key) {
+        // Stabil azonosító biztosítása adott storage-ban (local/session).
+        // Ha már létezik, visszaadjuk; ha nem, létrehozzuk és eltároljuk.
+        let identifier = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
         try {
             const existingValue = storage.getItem(key);
             if (existingValue) {
-                return existingValue;
+                identifier = existingValue;
+            } else {
+                identifier = (globalScope.crypto && typeof globalScope.crypto.randomUUID === 'function')
+                    ? globalScope.crypto.randomUUID()
+                    : identifier;
+                storage.setItem(key, identifier);
             }
-
-            const createdValue = (globalScope.crypto && typeof globalScope.crypto.randomUUID === 'function')
-                ? globalScope.crypto.randomUUID()
-                : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-            storage.setItem(key, createdValue);
-            return createdValue;
         } catch (error) {
-            return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            // Fallback az előre létrehozott időbélyeges azonosítóra.
         }
+
+        return identifier;
     }
 
     function createSocketState() {
+        // clientId: böngésző-szintű (localStorage), tabId: fül-szintű (sessionStorage).
+        // Ezzel a szerver külön tudja kezelni ugyanazon user több tabját.
         const clientId = ensureIdentifier(globalScope.localStorage, 'mattmester.clientId');
         const tabId = ensureIdentifier(globalScope.sessionStorage, 'mattmester.tabId');
 
+        // Kliens oldali egyetlen forrás-állapot minden sockethez kapcsolódó adatra.
         return {
             connected: false,
             socketId: null,
@@ -82,22 +94,22 @@
     }
 
     function getSocketStatusLabel(state) {
+        // Emberi olvasható státusz címke az info panelhez.
+        let statusLabel = 'Kapcsolódásra vár';
+
         if (state.connected) {
-            return state.sessionBound ? 'Kapcsolódva, sessionnel' : 'Kapcsolódva, vendégként';
+            statusLabel = state.sessionBound ? 'Kapcsolódva, sessionnel' : 'Kapcsolódva, vendégként';
+        } else if (state.lastDisconnectReason === 'io server disconnect') {
+            statusLabel = 'Szerver bontotta a kapcsolatot';
+        } else if (state.lastDisconnectReason === 'transport close') {
+            statusLabel = 'Szállítási kapcsolat megszakadt';
         }
 
-        if (state.lastDisconnectReason === 'io server disconnect') {
-            return 'Szerver bontotta a kapcsolatot';
-        }
-
-        if (state.lastDisconnectReason === 'transport close') {
-            return 'Szállítási kapcsolat megszakadt';
-        }
-
-        return 'Kapcsolódásra vár';
+        return statusLabel;
     }
 
     function updateText(selector, value) {
+        // Központi segédfüggvény: biztonságos textContent frissítés.
         const element = globalScope.document.querySelector(selector);
         if (element) {
             element.textContent = value;
@@ -105,6 +117,7 @@
     }
 
     function updateSocketInfoPanel(state) {
+        // A socket állapot vizuális leképezése data-socket-bind célpontokra.
         updateText('[data-socket-bind="status"]', getSocketStatusLabel(state));
         updateText('[data-socket-bind="socketId"]', state.socketId || '-');
         updateText('[data-socket-bind="clientId"]', state.clientId || '-');
@@ -115,6 +128,7 @@
 
         const featureList = globalScope.document.querySelector('[data-socket-bind="features"]');
         if (featureList) {
+            // Feature kártyák kirenderelése: online/offline állapot szerint eltérő class.
             featureList.innerHTML = state.features.map((feature) => {
                 const activeClass = state.connected ? 'socket-feature-card--active' : 'socket-feature-card--idle';
                 return `
@@ -131,6 +145,7 @@
 
         const roomStateList = globalScope.document.querySelector('[data-socket-bind="roomState"]');
         if (roomStateList) {
+            // Ha nincs roomState, adunk egy fallback sort a panelen.
             const roomStateItems = state.roomState.length > 0
                 ? state.roomState
                 : [{ roomId: 'general-room', state: 'Nincs aktív játékszoba állapot.' }];
@@ -150,6 +165,7 @@
     }
 
     function emitClientReady(socket, state) {
+        // Első connect után kliens-szinkron + feliratkozások elindítása.
         socket.emit('socket:sync', {
             clientId: state.clientId,
             tabId: state.tabId,
@@ -161,6 +177,7 @@
     }
 
     function dispatchSocketClientEvent(eventName, detail) {
+        // Egy helyen történjen a CustomEvent dispatch (egységes hibakezeléssel).
         try {
             globalScope.dispatchEvent(new CustomEvent(eventName, {
                 detail: detail || null
@@ -171,6 +188,7 @@
     }
 
     function normalizeOwnContext(input = {}) {
+        // Saját user context normalizálása összehasonlítható formára.
         try {
             const userId = Number(input.userId || input.id) || null;
             const username = typeof input.username === 'string' ? input.username.trim() : '';
@@ -186,42 +204,49 @@
     }
 
     function hasOwnContextChanged(previousContext = null, nextContext = null) {
+        // Csak valódi változásnál jelezzünk (id/username/role mezők alapján).
         try {
+            let hasChanged = false;
+
             if (!previousContext && !nextContext) {
-                return false;
+                hasChanged = false;
+            } else if (!previousContext || !nextContext) {
+                hasChanged = true;
+            } else {
+                hasChanged = previousContext.userId !== nextContext.userId
+                    || previousContext.username !== nextContext.username
+                    || previousContext.role !== nextContext.role;
             }
 
-            if (!previousContext || !nextContext) {
-                return true;
-            }
-
-            return previousContext.userId !== nextContext.userId
-                || previousContext.username !== nextContext.username
-                || previousContext.role !== nextContext.role;
+            return hasChanged;
         } catch (error) {
             throw new Error(`Context változás ellenőrzési hiba: ${error.message}`);
         }
     }
 
     function extractOwnContextFromPresence(presencePayload, clientId) {
+        // Presence payloadból a saját kliens sorának kinyerése clientId szerint.
         try {
             const clients = Array.isArray(presencePayload?.clients) ? presencePayload.clients : [];
             const ownClient = clients.find((client) => String(client?.clientId || '') === String(clientId || ''));
-            if (!ownClient) {
-                return null;
+            let ownContext = null;
+
+            if (ownClient) {
+                ownContext = normalizeOwnContext({
+                    userId: ownClient.userId,
+                    username: ownClient.username,
+                    role: ownClient.role
+                });
             }
 
-            return normalizeOwnContext({
-                userId: ownClient.userId,
-                username: ownClient.username,
-                role: ownClient.role
-            });
+            return ownContext;
         } catch (error) {
             throw new Error(`Presence alapú saját context kinyerési hiba: ${error.message}`);
         }
     }
 
     function createSessionContextObserverStore() {
+        // Egyszerű in-memory observer regiszter.
         return {
             nextId: 1,
             handlers: new Map(),
@@ -230,6 +255,7 @@
     }
 
     async function runObserverHandler(entry, payload) {
+        // Egy observer futtatása inFlight jelöléssel, hogy ne induljon párhuzamosan kétszer.
         try {
             entry.inFlight = true;
             entry.lastRunAt = Date.now();
@@ -242,6 +268,8 @@
     }
 
     function scheduleObserverExecution(entry, payload) {
+        // Observer futtatás throttlinggal és ütközésvédelemmel.
+        // Ha a handler már fut, későbbre ütemezzük.
         try {
             const now = Date.now();
             const throttleMs = Math.max(0, Number(entry.throttleMs) || 0);
@@ -256,10 +284,9 @@
                 try {
                     if (entry.inFlight) {
                         entry.timer = setTimeout(execute, throttleMs || 250);
-                        return;
+                    } else {
+                        await runObserverHandler(entry, payload);
                     }
-
-                    await runObserverHandler(entry, payload);
                 } catch (error) {
                     console.error('Session context observer végrehajtási hiba:', error);
                 }
@@ -267,19 +294,19 @@
 
             if (elapsed >= throttleMs) {
                 void execute();
-                return;
+            } else {
+                entry.timer = setTimeout(() => {
+                    entry.timer = null;
+                    void execute();
+                }, Math.max(0, throttleMs - elapsed));
             }
-
-            entry.timer = setTimeout(() => {
-                entry.timer = null;
-                void execute();
-            }, Math.max(0, throttleMs - elapsed));
         } catch (error) {
             throw new Error(`Observer ütemezési hiba: ${error.message}`);
         }
     }
 
     function notifySessionContextObservers(observerStore, trigger, payload) {
+        // 1) Globális esemény dispatch 2) Regisztrált handlerek értesítése.
         try {
             const details = {
                 trigger,
@@ -302,6 +329,7 @@
     }
 
     function subscribeSessionContextChanges(observerStore, handler, options = {}) {
+        // Feliratkozás session context változásra, visszatérési érték: unsubscribe függvény.
         try {
             if (typeof handler !== 'function') {
                 throw new Error('A handler kötelező és függvény kell legyen.');
@@ -336,53 +364,53 @@
     }
 
     async function ensureSocketConnected(socketInstance, timeoutMs = SOCKET_CONNECT_TIMEOUT_MS) {
+        // Garantálja, hogy van élő socket kapcsolat; timeout és connect_error kezelésével.
         try {
             if (!socketInstance) {
                 throw new Error('A socket objektum nem elérhető.');
             }
 
-            if (socketInstance.connected) {
-                return;
+            if (!socketInstance.connected) {
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        cleanup();
+                        reject(new Error('Socket kapcsolódási timeout.'));
+                    }, Math.max(500, Number(timeoutMs) || SOCKET_CONNECT_TIMEOUT_MS));
+
+                    const onConnect = () => {
+                        cleanup();
+                        resolve();
+                    };
+
+                    const onConnectError = (error) => {
+                        cleanup();
+                        reject(new Error(error?.message || 'Socket connect_error.'));
+                    };
+
+                    const cleanup = () => {
+                        clearTimeout(timeout);
+                        socketInstance.off('connect', onConnect);
+                        socketInstance.off('connect_error', onConnectError);
+                    };
+
+                    socketInstance.on('connect', onConnect);
+                    socketInstance.on('connect_error', onConnectError);
+
+                    try {
+                        socketInstance.connect();
+                    } catch (error) {
+                        cleanup();
+                        reject(new Error(error?.message || 'A socket.connect hívás sikertelen.'));
+                    }
+                });
             }
-
-            await new Promise((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    cleanup();
-                    reject(new Error('Socket kapcsolódási timeout.'));
-                }, Math.max(500, Number(timeoutMs) || SOCKET_CONNECT_TIMEOUT_MS));
-
-                const onConnect = () => {
-                    cleanup();
-                    resolve();
-                };
-
-                const onConnectError = (error) => {
-                    cleanup();
-                    reject(new Error(error?.message || 'Socket connect_error.'));
-                };
-
-                const cleanup = () => {
-                    clearTimeout(timeout);
-                    socketInstance.off('connect', onConnect);
-                    socketInstance.off('connect_error', onConnectError);
-                };
-
-                socketInstance.on('connect', onConnect);
-                socketInstance.on('connect_error', onConnectError);
-
-                try {
-                    socketInstance.connect();
-                } catch (error) {
-                    cleanup();
-                    reject(new Error(error?.message || 'A socket.connect hívás sikertelen.'));
-                }
-            });
         } catch (error) {
             throw new Error(`Socket kapcsolódási hiba: ${error.message}`);
         }
     }
 
     async function emitSocketSyncAndWait(socketInstance, reason = 'session-mutation', timeoutMs = SOCKET_SYNC_TIMEOUT_MS) {
+        // socket:sync emit + socket:sync:done válasz megvárása timeouttal.
         try {
             if (!socketInstance) {
                 throw new Error('A socket objektum nem elérhető.');
@@ -398,9 +426,9 @@
                     cleanup();
                     if (!payload.success) {
                         reject(new Error(payload.message || 'A socket context frissítése sikertelen.'));
-                        return;
+                    } else {
+                        resolve(payload);
                     }
-                    resolve(payload);
                 };
 
                 const cleanup = () => {
@@ -426,6 +454,7 @@
     }
 
     async function syncSocketContextOrReconnect(socketInstance, reason = 'session-mutation', options = {}) {
+        // Első körben normál sync; hiba esetén fallback: disconnect -> reconnect -> új sync.
         try {
             const connectTimeoutMs = options.connectTimeoutMs ?? SOCKET_CONNECT_TIMEOUT_MS;
             const syncTimeoutMs = options.syncTimeoutMs ?? SOCKET_SYNC_TIMEOUT_MS;
@@ -453,6 +482,7 @@
 
     const socketState = createSocketState();
     const sessionContextObserverStore = createSessionContextObserverStore();
+    // Socket.IO kliens inicializálása auth metadattal (client/tab/page).
     const socket = typeof globalScope.io === 'function'
         ? globalScope.io({
             auth: {
@@ -466,6 +496,7 @@
 
     if (socket) {
         socket.on('connect', () => {
+            // Sikeres kapcsolat: kliens állapot beállítás, ready emit, UI frissítés.
             socketState.connected = true;
             socketState.socketId = socket.id;
             socketState.lastConnectedAt = new Date().toISOString();
@@ -476,6 +507,7 @@
         });
 
         socket.on('disconnect', (reason) => {
+            // Kapcsolat bontva: ok mentése és panel frissítés.
             socketState.connected = false;
             socketState.lastDisconnectedAt = new Date().toISOString();
             socketState.lastDisconnectReason = reason || null;
@@ -483,11 +515,13 @@
         });
 
         socket.on('connect_error', (error) => {
+            // Csatlakozási hiba visszajelzése a state-ben és UI-n.
             socketState.lastDisconnectReason = error?.message || 'connect_error';
             updateSocketInfoPanel(socketState);
         });
 
         socket.on('socket:capabilities', (payload = {}) => {
+            // Szerver oldali képességlista frissíti a feature kártyákat.
             if (Array.isArray(payload.features) && payload.features.length > 0) {
                 socketState.features = payload.features;
             }
@@ -495,6 +529,7 @@
         });
 
         socket.on('socket:state', (payload = {}) => {
+            // Teljes socket/session állapotfrissítés a szervertől.
             try {
                 const previousOwnContext = sessionContextObserverStore.lastOwnContext;
                 socketState.socketId = payload.socketId || socketState.socketId;
@@ -521,6 +556,7 @@
                 });
 
                 if (hasOwnContextChanged(previousOwnContext, nextOwnContext)) {
+                    // Saját user context váltásról observer értesítés.
                     sessionContextObserverStore.lastOwnContext = nextOwnContext;
                     notifySessionContextObservers(sessionContextObserverStore, 'socket:state', {
                         previousOwnContext,
@@ -539,6 +575,7 @@
         });
 
         socket.on('presence:state', (payload = {}) => {
+            // Presence állapotfrissítés (online user/tab/socket adatok).
             try {
                 const previousOwnContext = sessionContextObserverStore.lastOwnContext;
                 socketState.presence = payload;
@@ -551,6 +588,7 @@
 
                 const ownPresenceContext = extractOwnContextFromPresence(payload, socketState.clientId);
                 if (hasOwnContextChanged(previousOwnContext, ownPresenceContext)) {
+                    // Presence-ből számolt saját context változásról observer értesítés.
                     sessionContextObserverStore.lastOwnContext = ownPresenceContext;
                     notifySessionContextObservers(sessionContextObserverStore, 'presence:state', {
                         previousOwnContext,
@@ -564,11 +602,13 @@
         });
 
         socket.on('notification:state', (payload = {}) => {
+            // Notification feliratkozottság állapotának frissítése.
             socketState.notificationSubscribed = Boolean(payload.subscribed);
             updateSocketInfoPanel(socketState);
         });
 
         socket.on('stats:public', (stats) => {
+            // Publikus statisztika mentése + custom event továbbítás.
             socketState.statsPublic = stats || null;
             globalScope.dispatchEvent(new CustomEvent('mattmester:stats:public', {
                 detail: stats || null
@@ -576,6 +616,7 @@
         });
 
         socket.on('stats:admin', (stats) => {
+            // Admin statisztika mentése + custom event továbbítás.
             socketState.statsAdmin = stats || null;
             globalScope.dispatchEvent(new CustomEvent('mattmester:stats:admin', {
                 detail: stats || null
@@ -583,11 +624,13 @@
         });
 
         socket.io.on('reconnect_attempt', (attemptNumber) => {
+            // Reconnect próbálkozások számlálása UI célra.
             socketState.reconnectAttempts = attemptNumber || 0;
             updateSocketInfoPanel(socketState);
         });
 
         socket.io.on('reconnect', (attemptNumber) => {
+            // Sikeres reconnect után számláló/státusz frissítése.
             socketState.reconnectAttempts = attemptNumber || socketState.reconnectAttempts;
             updateSocketInfoPanel(socketState);
         });
@@ -603,6 +646,7 @@
     }
 
     globalScope.MattMesterSocket = {
+        // Publikus API a többi frontend modul számára.
         socket,
         info: socketState,
         refresh: () => updateSocketInfoPanel(socketState),
@@ -635,6 +679,7 @@
             }
         },
         getSnapshot: () => ({
+            // Védett másolat: kívülről ne lehessen közvetlenül mutálni a belső state-et.
             ...socketState,
             features: [...socketState.features],
             rooms: [...socketState.rooms],
@@ -649,8 +694,10 @@
     };
 
     if (globalScope.document.readyState === 'loading') {
+        // DOM készenlét után inicial panel frissítés.
         globalScope.document.addEventListener('DOMContentLoaded', () => updateSocketInfoPanel(socketState), { once: true });
     } else {
+        // Ha a DOM már kész, azonnal frissítünk.
         updateSocketInfoPanel(socketState);
     }
 })(window);
