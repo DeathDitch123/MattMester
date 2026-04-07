@@ -857,6 +857,59 @@ async function deleteDiscardedProfileImageRecord(uploadId) {
         return false;
     }
 }
+
+async function deleteOrphanProfileImageUploadRecords() {
+    const pool = getPool();
+    try {
+        const [result] = await pool.execute(
+            `
+                DELETE piu
+                FROM profile_image_uploads piu
+                LEFT JOIN users u ON u.profile_image = piu.filename
+                WHERE (piu.filename IS NULL OR TRIM(piu.filename) = '')
+                   OR (
+                        piu.filename <> '/profile_pictures/default.png'
+                    AND u.id IS NULL
+                   )
+            `
+        );
+
+        return Number(result.affectedRows || 0);
+    } catch (error) {
+        console.error('Hiba az arvahagyott profile_image_uploads rekordok torlese soran:', error);
+        return 0;
+    }
+}
+
+async function getAllProfileImageReferences() {
+    const pool = getPool();
+    try {
+        const [userRows] = await pool.execute(
+            'SELECT profile_image AS filename FROM users WHERE profile_image IS NOT NULL AND TRIM(profile_image) <> ""'
+        );
+        const [uploadRows] = await pool.execute(
+            'SELECT filename FROM profile_image_uploads WHERE filename IS NOT NULL AND TRIM(filename) <> ""'
+        );
+
+        const seen = new Set();
+        const references = [];
+
+        [...userRows, ...uploadRows].forEach((row) => {
+            const filename = String(row.filename || '').trim();
+            if (!filename || seen.has(filename)) {
+                return;
+            }
+
+            seen.add(filename);
+            references.push(filename);
+        });
+
+        return references;
+    } catch (error) {
+        console.error('Hiba a profilkep referencia lista lekerdezese soran:', error);
+        return [];
+    }
+}
 async function searchUsersByUsernameContains(searchText, currentUserId) {
     const pool = getPool();
     const query = `
@@ -1551,6 +1604,8 @@ module.exports = {
     resetUserProfileImageToDefault,
     getAndDeleteDiscardedProfileImages,
     deleteDiscardedProfileImageRecord,
+    deleteOrphanProfileImageUploadRecords,
+    getAllProfileImageReferences,
     searchUsersByUsernameContains,
     deleteUserProfileWithTransaction,
     addFriendRequest,

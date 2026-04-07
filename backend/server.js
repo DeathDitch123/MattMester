@@ -91,6 +91,60 @@ function resolveProfileImageFilePath(storedFilename) {
     return path.join(__dirname, 'profile_pictures', normalized);
 }
 
+function normalizeProfileImageReference(storedFilename) {
+    const normalized = String(storedFilename || '').replace(/\\/g, '/').trim();
+    if (!normalized) {
+        return null;
+    }
+
+    if (normalized.startsWith('/profile_pictures/')) {
+        return normalized.toLowerCase();
+    }
+
+    return `/profile_pictures/${normalized.replace(/^\/+/, '')}`.toLowerCase();
+}
+
+async function cleanupOrphanProfileImageFiles() {
+    const profilePicturesDir = path.join(__dirname, 'profile_pictures');
+    const dbReferences = await sql.getAllProfileImageReferences();
+    const normalizedReferences = new Set(
+        (dbReferences || [])
+            .map((filename) => normalizeProfileImageReference(filename))
+            .filter(Boolean)
+    );
+
+    normalizedReferences.add('/profile_pictures/default.png');
+
+    let deletedCount = 0;
+    const entries = await fs.promises.readdir(profilePicturesDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+        if (!entry.isFile()) {
+            continue;
+        }
+
+        const normalizedEntryPath = normalizeProfileImageReference(`/profile_pictures/${entry.name}`);
+        if (!normalizedEntryPath || normalizedReferences.has(normalizedEntryPath)) {
+            continue;
+        }
+
+        try {
+            await fs.promises.unlink(path.join(profilePicturesDir, entry.name));
+            deletedCount += 1;
+            console.log(`[Cleanup] Árva fájl törölve: ${entry.name}`);
+        } catch (error) {
+            if (error && error.code === 'ENOENT') {
+                continue;
+            }
+            console.error(`[Cleanup] Árva fájl törlési hiba: ${entry.name}`, error.message);
+        }
+    }
+
+    if (deletedCount > 0) {
+        console.log(`[Cleanup] Árva profilkép fájlok törölve: ${deletedCount}`);
+    }
+}
+
 //!Cleanup service: Discarded és elutasított profilképek törlése periodikusan
 async function cleanupDiscardedProfileImages() {
     try {
@@ -138,6 +192,13 @@ async function cleanupDiscardedProfileImages() {
             }
             console.log(`Cleanup service: ${discardedRecords.length} kép feldolgozva (discarded + rejected)`);
         }
+
+        const deletedOrphanUploadRows = await sql.deleteOrphanProfileImageUploadRecords();
+        if (deletedOrphanUploadRows > 0) {
+            console.log(`[Cleanup] Árva profile_image_uploads rekordok törölve: ${deletedOrphanUploadRows}`);
+        }
+
+        await cleanupOrphanProfileImageFiles();
     } catch (err) {
         console.error('Cleanup service hiba:', err.message);
     }
