@@ -102,6 +102,7 @@ async function runSafelyAsync(label, handler) {
 
 document.addEventListener('DOMContentLoaded', () => {
     runSafely('profileDOMContentLoadedBindings', () => {
+        window.MattMesterChatModal?.init();
         bindLogoutButton();
         bindTopBarPlayerSearchValidation();
         bindModalPlayerSearchValidation();
@@ -818,7 +819,13 @@ function bindSearchResultsModalEvents() {
                     await openPlayerProfileModalByUserId(userId);
                 });
             } else if (action === 'chat') {
-                console.log('Chat action payload:', { userId, username });
+                runSafelyAsync('searchResultOpenDirectChat', async () => {
+                    if (!window.MattMesterChatModal?.openDirectByUserId) {
+                        throw new Error('A chat modal API nem érhető el.');
+                    }
+
+                    await window.MattMesterChatModal.openDirectByUserId(userId);
+                });
             } else if (action === 'pending-friend' || action === 'accepted-friend' || action === 'blocked-friend') {
                 // Ezek az akciók nem interaktívak, vagy később implementálandók
                 return;
@@ -1246,7 +1253,11 @@ function bindFriendsSectionEvents() {
             }
 
             if (actionName === 'chat') {
-                console.log('Chat action payload:', { targetUserId, username });
+                if (!window.MattMesterChatModal?.openDirectByUserId) {
+                    throw new Error('A chat modal API nem érhető el.');
+                }
+
+                await window.MattMesterChatModal.openDirectByUserId(targetUserId);
                 return;
             }
 

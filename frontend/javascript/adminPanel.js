@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', function () {
         initChart();
         initRevealAnimations();
         initResponsiveSidebar();
+        window.MattMesterChatModal?.init();
     });
 });
 
