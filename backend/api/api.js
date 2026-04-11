@@ -1267,6 +1267,7 @@ router.get('/chat/conversations/:conversationId/messages', isAuthenticated, asyn
         success: false,
         data: [],
         message: 'Szerverhiba a beszélgetés üzeneteinek lekérése során.',
+        beforeMessageId: null,
         cursor: null,
         hasMore: false
     };
@@ -1280,7 +1281,7 @@ router.get('/chat/conversations/:conversationId/messages', isAuthenticated, asyn
         }
 
         const limit = parseChatListLimit(request.query?.limit, 30, 1, 50);
-        const beforeMessageId = parsePositiveInteger(request.query?.before, null);
+        const beforeMessageId = parsePositiveInteger(request.query?.beforeMessageId ?? request.query?.before, null);
 
         await sql.assertConversationParticipant(currentUserId, conversationId);
         const result = await sql.getConversationMessages(currentUserId, conversationId, beforeMessageId, limit);
@@ -1291,6 +1292,7 @@ router.get('/chat/conversations/:conversationId/messages', isAuthenticated, asyn
             message: result.data.length
                 ? `${result.data.length} üzenet betöltve.`
                 : 'Nincs megjeleníthető üzenet.',
+            beforeMessageId: result.nextCursor,
             cursor: result.nextCursor,
             hasMore: Boolean(result.hasMore)
         };

@@ -2041,10 +2041,9 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
 
     const hasMore = rows.length > normalizedLimit;
     const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
-    const chronological = [...sliced].reverse();
 
     return {
-        data: chronological.map((row) => ({
+        data: sliced.map((row) => ({
             id: row.id,
             conversationId: row.conversation_id,
             senderId: row.sender_id,

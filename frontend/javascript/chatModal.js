@@ -6,7 +6,7 @@
         conversationMessagesEndpoint: (conversationId, beforeCursor, limit) => {
             const params = new URLSearchParams();
             if (beforeCursor) {
-                params.set('before', String(beforeCursor));
+                params.set('beforeMessageId', String(beforeCursor));
             }
             params.set('limit', String(limit || 30));
             return `/api/chat/conversations/${encodeURIComponent(conversationId)}/messages?${params.toString()}`;
@@ -453,9 +453,12 @@
         state.messagesByConversation.set(key, messages);
     }
 
-    function renderMessageList() {
+    function renderMessageList(options = {}) {
         const conversationId = Number(state.activeConversationId) || 0;
         const canRenderConversation = Boolean(conversationId && dom.messageList);
+        const preserveOffset = Boolean(options?.preserveOffset);
+        const previousScrollHeight = canRenderConversation ? Number(dom.messageList.scrollHeight || 0) : 0;
+        const previousScrollTop = canRenderConversation ? Number(dom.messageList.scrollTop || 0) : 0;
 
         if (canRenderConversation) {
             const messages = getMessagesForConversation(conversationId);
@@ -485,7 +488,13 @@
 
             const hasMessages = messages.length > 0;
             setMessageEmptyState(!hasMessages, hasMessages ? '' : 'Nincs megjelenitheto uzenet.');
-            dom.messageList.scrollTop = dom.messageList.scrollHeight;
+            if (preserveOffset) {
+                const nextScrollHeight = Number(dom.messageList.scrollHeight || 0);
+                const diff = Math.max(0, nextScrollHeight - previousScrollHeight);
+                dom.messageList.scrollTop = previousScrollTop + diff;
+            } else {
+                dom.messageList.scrollTop = dom.messageList.scrollHeight;
+            }
         } else {
             if (dom.messageList) {
                 dom.messageList.innerHTML = '';
@@ -540,7 +549,7 @@
             const endpoint = state.options.conversationMessagesEndpoint(normalizedId, cursor, state.options.pageLimit);
             const payload = await requestJson(endpoint);
 
-            const incoming = Array.isArray(payload.data) ? payload.data : [];
+            const incoming = Array.isArray(payload.data) ? [...payload.data].sort((left, right) => Number(left.id) - Number(right.id)) : [];
             const current = getMessagesForConversation(normalizedId);
 
             if (isLoadOlder) {
@@ -560,9 +569,9 @@
                 state.messagesByConversation.set(normalizedId, incoming);
             }
 
-            state.paginationCursorByConversation.set(normalizedId, payload.cursor || null);
+            state.paginationCursorByConversation.set(normalizedId, payload.beforeMessageId || payload.cursor || null);
             state.hasMoreByConversation.set(normalizedId, Boolean(payload.hasMore));
-            renderMessageList();
+            renderMessageList({ preserveOffset: isLoadOlder });
         } finally {
             state.isLoadingByConversation.set(normalizedId, false);
             setMessageLoading(false);
