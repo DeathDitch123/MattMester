@@ -188,6 +188,16 @@ CREATE TABLE IF NOT EXISTS user_logs (
     INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
 );
 
+CREATE TABLE IF NOT EXISTS chat_conversations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    type ENUM('private', 'group') NOT NULL,
+    name VARCHAR(255) NULL, -- Csak csoportos beszélgetésekhez, privát beszélgetéseknél NULL maradhat
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_message_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_message_preview TEXT NULL,
+    UNIQUE KEY unique_group_name (name) -- Csak csoportos beszélgetésekhez, privát beszélgetéseknél NULL maradhat
+);
+
 -- 20 teszt felhasznalo (jelszo: 123456Ab)
 INSERT IGNORE INTO users (username, password_hash, email, role)
 VALUES
