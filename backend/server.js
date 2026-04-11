@@ -33,6 +33,36 @@ const sessionMiddleware = session({
 //!Session beállítása:
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware); //?Socket.io session kezelés
+
+//?CORS beállítása production-hez
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+    .split(',')
+    .map(origin => origin.trim());
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
+            callback(null, true);
+        } else {
+            console.warn(`[CORS] Rejected origin: ${origin}`);
+            callback(new Error(`CORS policy: origin ${origin} not allowed`));
+        }
+    },
+    credentials: true,
+    optionsSuccessStatus: 200,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400 // 1 nap
+};
+
+try {
+    const cors = require('cors');
+    app.use(cors(corsOptions));
+    console.log('[Server] CORS middleware loaded');
+} catch (corsError) {
+    console.warn('[Server] CORS module not available, skipping CORS middleware');
+}
+
 app.use(express.json()); //?Middleware JSON
 app.set('trust proxy', 1); //?Middleware Proxy
 
@@ -70,6 +100,13 @@ app.use('/profile_pictures', express.static(path.join(__dirname, 'profile_pictur
 //!Routing
 //?Főoldal:
 const endpoints = require('./api/api.js');
+
+// ?Chat Rate Limiter cleanup inicializálása
+if (typeof endpoints.initChatRateLimiterCleanup === 'function') {
+    endpoints.initChatRateLimiterCleanup();
+    console.log('[Server] Chat Rate Limiter cleanup initialized');
+}
+
 app.use('/api', endpoints);
 const chessEndpoints = require('./api/chess_api.js');
 app.use('/api/chess', chessEndpoints);

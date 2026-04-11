@@ -271,13 +271,23 @@ function bindNotificationCenterEvents() {
                             }
                         }
 
-                        window.MattMesterSocket.handleNotificationClick(payload);
-                        notificationCenterState.unreadCount = Math.max(0, notificationCenterState.unreadCount - 1);
-                        setNotificationDotState();
+                        const triggerChatOpen = () => {
+                            window.MattMesterSocket.handleNotificationClick(payload);
+                            notificationCenterState.unreadCount = Math.max(0, notificationCenterState.unreadCount - 1);
+                            setNotificationDotState();
+                        };
 
                         if (modal) {
+                            modal.addEventListener('hidden.bs.modal', () => {
+                                runSafely('notificationModalHiddenChatOpen', () => {
+                                    triggerChatOpen();
+                                });
+                            }, { once: true });
+
                             const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
                             modalInstance.hide();
+                        } else {
+                            triggerChatOpen();
                         }
                     }
                 });
@@ -316,23 +326,27 @@ async function fetchSessionInfo() {
 
 async function logSessionAndSocketInfo(sessionInfoInput = null, contextLabel = 'auth-refresh') {
     try {
-        const sessionInfo = sessionInfoInput || await fetchSessionInfo();
+        const debugEnabled = String(window.localStorage?.getItem('mattmester.debugAuthLogs') || 'false').toLowerCase() === 'true';
+        
+        if (debugEnabled) {
+            const sessionInfo = sessionInfoInput || await fetchSessionInfo();
 
-        console.log('--- Auth Status Report ---');
-        console.log('Context:', contextLabel);
-        console.log('Session info:', sessionInfo);
+            console.log('--- Auth Status Report ---');
+            console.log('Context:', contextLabel);
+            console.log('Session info:', sessionInfo);
 
-        if (socket) {
-            console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
-                socketId: socket.id,
-                connected: socket.connected,
-                sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
-            });
-        } else {
-            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+            if (socket) {
+                console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
+                    socketId: socket.id,
+                    connected: socket.connected,
+                    sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
+                });
+            } else {
+                console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+            }
+
+            console.log('--------------------------');
         }
-
-        console.log('--------------------------');
     } catch (error) {
         console.error('Hiba a session/socket informacio naplozasakor:', error);
     }
@@ -351,12 +365,11 @@ async function refreshAuthUi(contextLabel = 'auth-refresh') {
 
 async function syncSocketContextOrReconnect(reason = 'session-mutation') {
     try {
-        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
-            await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
-            return;
+        if (!window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            throw new Error('A közös socket sync API nem érhető el.');
         }
 
-        throw new Error('A közös socket sync API nem érhető el.');
+        await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
     } catch (error) {
         throw new Error(`Socket context szinkronizálási hiba: ${error.message}`);
     }
@@ -364,44 +377,42 @@ async function syncSocketContextOrReconnect(reason = 'session-mutation') {
 
 function bindCrossTabProfileRefreshEvents() {
     try {
-        if (profileRealtimeSyncState.bound) {
-            return;
-        }
-
-        if (!window.MattMesterSocket?.subscribeSessionContextChanges) {
-            throw new Error('A közös session context observer API nem érhető el.');
-        }
-
-        const unsubscribe = window.MattMesterSocket.subscribeSessionContextChanges(async (eventPayload = {}) => {
-            try {
-                await refreshAuthUi();
-            } catch (error) {
-                throw new Error(`Cross-tab profil frissítési hiba: ${error.message}`);
+        if (!profileRealtimeSyncState.bound) {
+            if (!window.MattMesterSocket?.subscribeSessionContextChanges) {
+                throw new Error('A közös session context observer API nem érhető el.');
             }
-        }, {
-            throttleMs: PROFILE_CROSS_TAB_REFRESH_THROTTLE_MS
-        });
 
-        if (typeof unsubscribe !== 'function') {
-            throw new Error('A session context observer leiratkozó függvény nem érkezett meg.');
-        }
-
-        profileRealtimeSyncState.unsubscribe = unsubscribe;
-        profileRealtimeSyncState.bound = true;
-
-        window.addEventListener('beforeunload', () => {
-            runSafely('profileRealtimeSyncUnsubscribe', () => {
+            const unsubscribe = window.MattMesterSocket.subscribeSessionContextChanges(async (eventPayload = {}) => {
                 try {
-                    if (typeof profileRealtimeSyncState.unsubscribe === 'function') {
-                        profileRealtimeSyncState.unsubscribe();
-                    }
-                    profileRealtimeSyncState.unsubscribe = null;
-                    profileRealtimeSyncState.bound = false;
+                    await refreshAuthUi();
                 } catch (error) {
-                    throw new Error(`Cross-tab observer leiratkozási hiba: ${error.message}`);
+                    throw new Error(`Cross-tab profil frissítési hiba: ${error.message}`);
                 }
+            }, {
+                throttleMs: PROFILE_CROSS_TAB_REFRESH_THROTTLE_MS
             });
-        }, { once: true });
+
+            if (typeof unsubscribe !== 'function') {
+                throw new Error('A session context observer leiratkozó függvény nem érkezett meg.');
+            }
+
+            profileRealtimeSyncState.unsubscribe = unsubscribe;
+            profileRealtimeSyncState.bound = true;
+
+            window.addEventListener('beforeunload', () => {
+                runSafely('profileRealtimeSyncUnsubscribe', () => {
+                    try {
+                        if (typeof profileRealtimeSyncState.unsubscribe === 'function') {
+                            profileRealtimeSyncState.unsubscribe();
+                        }
+                        profileRealtimeSyncState.unsubscribe = null;
+                        profileRealtimeSyncState.bound = false;
+                    } catch (error) {
+                        throw new Error(`Cross-tab observer leiratkozási hiba: ${error.message}`);
+                    }
+                });
+            }, { once: true });
+        }
     } catch (error) {
         throw new Error(`Cross-tab profil refresh eseménykötési hiba: ${error.message}`);
     }

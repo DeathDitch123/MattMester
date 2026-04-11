@@ -1156,6 +1156,42 @@ function validateChatRateLimitOrThrow(userId) {
     chatRateLimitByUserId.set(normalizedUserId, freshTimestamps);
 }
 
+function initChatRateLimiterCleanup() {
+    const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 perc
+    const MAX_TIMESTAMPS_PER_USER = 100;
+
+    const cleanupInterval = setInterval(() => {
+        const now = Date.now();
+        let cleanedCount = 0;
+
+        for (const [userId, timestamps] of chatRateLimitByUserId.entries()) {
+            const freshTimestamps = timestamps.filter(
+                ts => now - ts < CHAT_RATE_LIMIT_WINDOW_MS
+            );
+
+            if (freshTimestamps.length === 0) {
+                chatRateLimitByUserId.delete(userId);
+                cleanedCount++;
+            } else if (freshTimestamps.length > MAX_TIMESTAMPS_PER_USER) {
+                const trimmed = freshTimestamps.slice(-MAX_TIMESTAMPS_PER_USER);
+                chatRateLimitByUserId.set(userId, trimmed);
+            } else {
+                chatRateLimitByUserId.set(userId, freshTimestamps);
+            }
+        }
+
+        if (cleanedCount > 0 || chatRateLimitByUserId.size > 0) {
+            console.log(
+                `[Chat Rate Limiter] Cleanup: ${cleanedCount} user(s) cleaned, ` +
+                `${chatRateLimitByUserId.size} active user(s) remaining`
+            );
+        }
+    }, CLEANUP_INTERVAL);
+
+    // Graceful shutdown: stop cleanup on process exit
+    process.on('exit', () => clearInterval(cleanupInterval));
+}
+
 function buildChatModerationPolicyResult(message) {
     const hasBlockedWord = sql.containsBlockedWord(message);
     const normalizedMessage = sql.normalizeTextForModeration(message);
@@ -1426,3 +1462,4 @@ router.post('/chat/conversations/direct', isAuthenticated, async (request, respo
 });
 
 module.exports = router;
+module.exports.initChatRateLimiterCleanup = initChatRateLimiterCleanup;

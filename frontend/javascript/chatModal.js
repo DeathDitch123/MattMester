@@ -56,24 +56,6 @@
             const style = globalScope.document.createElement('style');
             style.id = 'chatModalStyles';
             style.textContent = `
-            .chat-floating-button {
-                position: fixed;
-                right: 20px;
-                bottom: 20px;
-                width: 56px;
-                height: 56px;
-                border-radius: 999px;
-                border: none;
-                background: linear-gradient(135deg, #d4af37, #f4d67a);
-                color: #111827;
-                box-shadow: 0 10px 30px rgba(212, 175, 55, 0.35);
-                z-index: 1080;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                font-size: 20px;
-                font-weight: 700;
-            }
             .chat-modal-dialog {
                 max-width: 1100px;
             }
@@ -216,10 +198,6 @@
                     border-bottom: 1px solid #1e293b;
                     max-height: 36vh;
                 }
-                .chat-floating-button {
-                    right: 14px;
-                    bottom: 14px;
-                }
             }
             `;
 
@@ -228,14 +206,13 @@
     }
 
     function ensureMarkup() {
-        const hasMarkup = Boolean(globalScope.document.getElementById('chatFloatingButton'));
+        const hasMarkup = Boolean(globalScope.document.getElementById('chatModal'));
         if (hasMarkup) {
             cacheDomReferences();
         } else {
             const wrapper = globalScope.document.createElement('div');
             wrapper.id = 'chatModalRoot';
             wrapper.innerHTML = `
-            <button id="chatFloatingButton" class="chat-floating-button" type="button" aria-label="Chat" title="Chat">💬</button>
             <div class="modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down chat-modal-dialog">
                     <div class="modal-content chat-modal-content">
@@ -810,17 +787,19 @@
     }
 
     function bindEvents() {
-        if (!dom.floatingButton || !dom.modal) {
+        if (!dom.modal) {
             throw new Error('A chat modal DOM elemei nem talalhatok.');
         }
 
-        dom.floatingButton.addEventListener('click', async () => {
-            try {
-                await openInbox();
-            } catch (error) {
-                setFeedback(error.message || 'Nem sikerult megnyitni a chat modalt.', true);
-            }
-        });
+        if (dom.floatingButton) {
+            dom.floatingButton.addEventListener('click', async () => {
+                try {
+                    await openInbox();
+                } catch (error) {
+                    setFeedback(error.message || 'Nem sikerult megnyitni a chat modalt.', true);
+                }
+            });
+        }
 
         if (dom.searchInput) {
             dom.searchInput.addEventListener('input', () => {
@@ -869,9 +848,22 @@
                     setFeedback(error.message || 'Nem sikerult betolteni a beszelgeteseket.', true);
                 });
             }
+
+            dom.modal.setAttribute('aria-hidden', 'false');
             if (dom.messageInput) {
                 dom.messageInput.focus();
             }
+        });
+
+        dom.modal.addEventListener('hide.bs.modal', () => {
+            const activeElement = globalScope.document.activeElement;
+            if (activeElement && dom.modal.contains(activeElement) && typeof activeElement.blur === 'function') {
+                activeElement.blur();
+            }
+        });
+
+        dom.modal.addEventListener('hidden.bs.modal', () => {
+            dom.modal.setAttribute('aria-hidden', 'true');
         });
     }
 
