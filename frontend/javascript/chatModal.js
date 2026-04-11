@@ -796,20 +796,6 @@
                 });
             });
 
-            globalScope.addEventListener('mattmester:notification:push', (event) => {
-                const detail = event?.detail || {};
-                const conversationId = Number(detail.conversationId) || 0;
-                const fromUserId = Number(detail.fromUserId || detail.targetUserId || detail.senderUserId) || 0;
-
-                if (conversationId || fromUserId) {
-                    globalScope.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT_NAME, {
-                        detail: conversationId
-                            ? { conversationId }
-                            : { fromUserId }
-                    }));
-                }
-            });
-
             state.globalEventsBound = true;
         }
     }

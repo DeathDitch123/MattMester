@@ -4,6 +4,9 @@
     const SOCKET_CONNECT_TIMEOUT_MS = 3000;
     // Session context observer throttling alapérték (ms).
     const SESSION_CONTEXT_REFRESH_DEFAULT_THROTTLE_MS = 1200;
+    const CHAT_OPEN_EVENT_NAME = 'mattmester:chat:open-conversation';
+    const NOTIFICATION_PUSH_EVENT_NAME = 'mattmester:notification:push';
+    const NOTIFICATION_CLICK_EVENT_NAME = 'mattmester:notification:click';
 
     // UI fallback feature lista: akkor is van mit megjeleníteni, ha a szerver még
     // nem küldött capabilities payloadot.
@@ -187,6 +190,68 @@
         } catch (error) {
             throw new Error(`Socket kliens esemény dispatch hiba (${eventName}): ${error.message}`);
         }
+    }
+
+    function normalizeNotificationPayload(payloadInput = {}) {
+        const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
+        const type = String(payload.type || '').trim().toLowerCase();
+        const conversationId = Number(payload.conversationId) || 0;
+        const fromUserId = Number(payload.fromUserId || payload.targetUserId || payload.senderUserId || payload.userId) || 0;
+
+        return {
+            ...payload,
+            type,
+            conversationId,
+            fromUserId
+        };
+    }
+
+    function dispatchChatOpenFromNotification(payloadInput = {}, source = 'notification-click') {
+        const normalizedPayload = normalizeNotificationPayload(payloadInput);
+        const isChatMessage = normalizedPayload.type === 'chat_message';
+        const hasConversationTarget = normalizedPayload.conversationId > 0;
+        const hasUserTarget = normalizedPayload.fromUserId > 0;
+
+        if (isChatMessage && (hasConversationTarget || hasUserTarget)) {
+            const openDetail = hasConversationTarget
+                ? { conversationId: normalizedPayload.conversationId }
+                : { fromUserId: normalizedPayload.fromUserId };
+
+            dispatchSocketClientEvent(CHAT_OPEN_EVENT_NAME, {
+                ...openDetail,
+                source,
+                notificationType: normalizedPayload.type
+            });
+        }
+    }
+
+    function parseNotificationPayloadText(payloadText = '') {
+        const rawText = String(payloadText || '').trim();
+        let parsedPayload = {};
+
+        if (rawText) {
+            try {
+                parsedPayload = JSON.parse(rawText);
+            } catch (error) {
+                parsedPayload = {};
+            }
+        }
+
+        return parsedPayload;
+    }
+
+    function extractNotificationPayloadFromElement(element) {
+        const parsedPayload = parseNotificationPayloadText(element?.dataset?.notificationPayload || '');
+        const datasetPayload = {
+            type: element?.dataset?.notificationType || element?.dataset?.type,
+            conversationId: element?.dataset?.conversationId,
+            fromUserId: element?.dataset?.fromUserId || element?.dataset?.senderUserId || element?.dataset?.targetUserId || element?.dataset?.userId
+        };
+
+        return {
+            ...parsedPayload,
+            ...datasetPayload
+        };
     }
 
     function normalizeOwnContext(input = {}) {
@@ -627,10 +692,31 @@
 
         socket.on('notification:push', (payload = {}) => {
             // Notification payload továbbítása globális eseményként a közös moduloknak.
-            dispatchSocketClientEvent('mattmester:notification:push', {
-                ...payload,
+            const normalizedPayload = normalizeNotificationPayload(payload);
+            dispatchSocketClientEvent(NOTIFICATION_PUSH_EVENT_NAME, {
+                ...normalizedPayload,
                 receivedAt: new Date().toISOString()
             });
+        });
+
+        globalScope.addEventListener(NOTIFICATION_CLICK_EVENT_NAME, (event) => {
+            const detail = event?.detail || {};
+            dispatchChatOpenFromNotification(detail, 'notification-click-event');
+        });
+
+        globalScope.document.addEventListener('click', (event) => {
+            const isElementTarget = Boolean(globalScope.Element && event?.target instanceof globalScope.Element);
+            const clickableNotification = isElementTarget
+                ? event.target.closest('[data-notification-click]')
+                : null;
+
+            if (clickableNotification) {
+                const payload = extractNotificationPayloadFromElement(clickableNotification);
+                dispatchSocketClientEvent(NOTIFICATION_CLICK_EVENT_NAME, {
+                    ...payload,
+                    source: 'notification-dom-click'
+                });
+            }
         });
 
         socket.on('stats:public', (stats) => {
@@ -702,6 +788,16 @@
                 return subscribeSessionContextChanges(sessionContextObserverStore, handler, options);
             } catch (error) {
                 throw new Error(error.message || 'Session context observer regisztrációs hiba.');
+            }
+        },
+        handleNotificationClick: (payload = {}) => {
+            try {
+                dispatchSocketClientEvent(NOTIFICATION_CLICK_EVENT_NAME, {
+                    ...(payload || {}),
+                    source: 'notification-api'
+                });
+            } catch (error) {
+                throw new Error(error.message || 'Notification kattintas esemeny hiba.');
             }
         },
         getSnapshot: () => ({
