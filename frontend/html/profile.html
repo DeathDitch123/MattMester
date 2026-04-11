@@ -113,7 +113,7 @@
             <div class="top-bar-right">
                 <div class="d-none d-md-flex align-items-center gap-2">
                     <button class="top-bar-btn" id="openMessagesModal" type="button" data-tooltip="Üzenetek"
-                        data-bs-toggle="modal" data-bs-target="#messagesModal">
+                        data-open-chat="inbox" aria-label="Chat megnyitása">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                     </button>
                 </div>
@@ -537,10 +537,33 @@
         <div class="footer-copy">&copy; 2026 MattMester</div>
     </footer>
 
-    <button class="fab-chat" type="button" data-bs-toggle="modal" data-bs-target="#messagesModal">
+    <button class="fab-chat" id="fabOpenChatButton" type="button" data-open-chat="inbox" aria-label="Chat megnyitása">
         <span class="fab-tooltip">Messenger</span>
         <i data-lucide="message-circle" style="width: 26px; height: 26px;"></i>
     </button>
+
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content modal-surface notifications-modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="notificationsModalLabel">
+                        <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
+                        Értesítések
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="notificationsList" class="notifications-list" role="list"></div>
+                    <div id="notificationsEmpty" class="notifications-empty text-secondary d-none">
+                        Nincs új értesítés.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <button class="fab-quick-play" type="button" data-bs-toggle="modal" data-bs-target="#quickPlayModal">
         <span class="fab-tooltip">Quick Play</span>
@@ -568,28 +591,6 @@
         </div>
     </div>
 
-    <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content modal-surface">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="messagesModalLabel">Messenger</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Bezárás"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="mb-2">Ez egy egyszerű chat modal.</p>
-                    <p class="modal-note mb-3">Itt később jöhetnek az üzenetek és valós idejű chat funkciók.</p>
-                    <label for="messageComposeInput" class="form-label visually-hidden">Üzenet</label>
-                    <textarea id="messageComposeInput" name="messageCompose" class="form-control" rows="3"
-                        placeholder="Írj egy üzenetet..."></textarea>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Mégse</button>
-                    <button type="button" class="btn btn-gold">Küldés</button>
-                </div>
-            </div>
-        </div>
-    </div>
     <div class="modal fade" id="addFriendModal" tabindex="-1" aria-labelledby="addFriendModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content modal-surface">

@@ -807,14 +807,7 @@
 
         dom.floatingButton.addEventListener('click', async () => {
             try {
-                bindSocketEvents();
-                if (!state.conversationList.length) {
-                    await loadConversations();
-                }
-
-                if (state.modalInstance) {
-                    state.modalInstance.show();
-                }
+                await openInbox();
             } catch (error) {
                 setFeedback(error.message || 'Nem sikerult megnyitni a chat modalt.', true);
             }
@@ -895,6 +888,19 @@
         }
     }
 
+    async function openInbox() {
+        await init();
+        bindSocketEvents();
+
+        if (!state.conversationList.length) {
+            await loadConversations();
+        }
+
+        if (state.modalInstance) {
+            state.modalInstance.show();
+        }
+    }
+
     function autoInitOnDomReady() {
         const start = () => {
             init().catch((error) => {
@@ -912,6 +918,7 @@
     globalScope.MattMesterChatModal = {
         CHAT_OPEN_EVENT_NAME,
         init,
+        openInbox,
         openConversation,
         openDirectByUserId,
         openByEventPayload: async (payload) => {

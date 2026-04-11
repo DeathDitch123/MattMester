@@ -71,6 +71,12 @@ const friendsState = {
     activeFilter: FRIEND_FILTER_DEFAULT,
     items: []
 };
+const notificationCenterState = {
+    bound: false,
+    items: [],
+    unreadCount: 0,
+    maxItems: 40
+};
 
 async function syncSocketContextForStartup(reason = 'profile-startup') {
     try {
@@ -103,6 +109,8 @@ async function runSafelyAsync(label, handler) {
 document.addEventListener('DOMContentLoaded', () => {
     runSafely('profileDOMContentLoadedBindings', () => {
         window.MattMesterChatModal?.init();
+        bindGlobalChatLaunchers();
+        bindNotificationCenterEvents();
         bindLogoutButton();
         bindTopBarPlayerSearchValidation();
         bindModalPlayerSearchValidation();
@@ -126,6 +134,169 @@ async function parseJson(response) {
         return await response.json();
     } catch (error) {
         return {};
+    }
+}
+
+function getNotificationCenterElements() {
+    return {
+        modal: document.getElementById('notificationsModal'),
+        list: document.getElementById('notificationsList'),
+        empty: document.getElementById('notificationsEmpty'),
+        dot: document.querySelector('.notification-dot')
+    };
+}
+
+function setNotificationDotState() {
+    const { dot } = getNotificationCenterElements();
+    if (dot) {
+        const hasUnread = notificationCenterState.unreadCount > 0;
+        dot.classList.toggle('d-none', !hasUnread);
+    }
+}
+
+function formatNotificationTime(value) {
+    const date = new Date(value || Date.now());
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('hu-HU');
+}
+
+function normalizeNotificationItem(payloadInput = {}) {
+    const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
+    const type = String(payload.type || '').trim().toLowerCase();
+    const conversationId = Number(payload.conversationId) || 0;
+    const fromUserId = Number(payload.fromUserId || payload.targetUserId || payload.senderUserId || payload.userId) || 0;
+    const title = String(payload.title || '').trim() || (type === 'chat_message' ? 'Új chat üzenet' : 'Értesítés');
+    const message = String(payload.message || payload.text || '').trim() || 'Új esemény érkezett.';
+    const receivedAt = payload.receivedAt || new Date().toISOString();
+
+    return {
+        ...payload,
+        type,
+        conversationId,
+        fromUserId,
+        title,
+        message,
+        receivedAt
+    };
+}
+
+function renderNotificationCenterList() {
+    const { list, empty } = getNotificationCenterElements();
+    if (list && empty) {
+        list.innerHTML = '';
+        const hasItems = notificationCenterState.items.length > 0;
+        empty.classList.toggle('d-none', hasItems);
+
+        if (hasItems) {
+            notificationCenterState.items.forEach((item) => {
+                const isChatMessage = item.type === 'chat_message';
+                const canOpenChat = isChatMessage && (item.conversationId > 0 || item.fromUserId > 0);
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `notification-item btn w-100 text-start ${canOpenChat ? 'notification-item-clickable' : ''}`.trim();
+                button.setAttribute('role', 'listitem');
+                button.dataset.notificationType = item.type;
+                button.dataset.conversationId = String(item.conversationId || '');
+                button.dataset.fromUserId = String(item.fromUserId || '');
+                button.dataset.notificationPayload = JSON.stringify(item);
+                button.dataset.notificationClick = canOpenChat ? 'true' : 'false';
+                button.innerHTML = `
+                    <div class="notification-item-head d-flex justify-content-between align-items-start gap-2">
+                        <strong class="text-light">${item.title}</strong>
+                        <small class="text-secondary">${formatNotificationTime(item.receivedAt)}</small>
+                    </div>
+                    <div class="small text-secondary mt-1">${item.message}</div>
+                `;
+
+                list.appendChild(button);
+            });
+        }
+    }
+}
+
+async function openChatInboxFromLauncher() {
+    if (!window.MattMesterChatModal) {
+        throw new Error('A chat modal API nem érhető el.');
+    }
+
+    await window.MattMesterChatModal.openInbox();
+}
+
+function bindGlobalChatLaunchers() {
+    document.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-open-chat="inbox"]');
+        if (trigger) {
+            runSafelyAsync('openChatInboxLauncherClick', async () => {
+                await openChatInboxFromLauncher();
+            });
+        }
+    });
+}
+
+function bindNotificationCenterEvents() {
+    if (!notificationCenterState.bound) {
+        const { list, modal } = getNotificationCenterElements();
+
+        window.addEventListener('mattmester:notification:push', (event) => {
+            runSafely('notificationPushCollect', () => {
+                const notification = normalizeNotificationItem(event?.detail || {});
+                notificationCenterState.items.unshift(notification);
+                if (notificationCenterState.items.length > notificationCenterState.maxItems) {
+                    notificationCenterState.items.length = notificationCenterState.maxItems;
+                }
+
+                notificationCenterState.unreadCount += 1;
+                setNotificationDotState();
+                renderNotificationCenterList();
+            });
+        });
+
+        if (list) {
+            list.addEventListener('click', (event) => {
+                runSafely('notificationListClick', () => {
+                    const item = event.target.closest('[data-notification-click="true"]');
+                    if (item && window.MattMesterSocket?.handleNotificationClick) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const payloadText = String(item.dataset.notificationPayload || '').trim();
+                        let payload = {};
+                        if (payloadText) {
+                            try {
+                                payload = JSON.parse(payloadText);
+                            } catch (error) {
+                                payload = {
+                                    type: item.dataset.notificationType,
+                                    conversationId: item.dataset.conversationId,
+                                    fromUserId: item.dataset.fromUserId
+                                };
+                            }
+                        }
+
+                        window.MattMesterSocket.handleNotificationClick(payload);
+                        notificationCenterState.unreadCount = Math.max(0, notificationCenterState.unreadCount - 1);
+                        setNotificationDotState();
+
+                        if (modal) {
+                            const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
+                            modalInstance.hide();
+                        }
+                    }
+                });
+            });
+        }
+
+        if (modal) {
+            modal.addEventListener('shown.bs.modal', () => {
+                runSafely('notificationModalShown', () => {
+                    notificationCenterState.unreadCount = 0;
+                    setNotificationDotState();
+                    renderNotificationCenterList();
+                });
+            });
+        }
+
+        notificationCenterState.bound = true;
+        setNotificationDotState();
+        renderNotificationCenterList();
     }
 }
 //sessionInfo
