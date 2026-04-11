@@ -1,4 +1,10 @@
 const { services } = require('./services.js');
+const sql = require('./sql/sql_funtions.js');
+
+const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
+const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
+const CHAT_MAX_MESSAGE_LENGTH = 1000;
+const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'hard_block').trim().toLowerCase();
 
 const SOCKET_ROOMS = Object.freeze({
     general: 'general-room',
@@ -41,6 +47,20 @@ function safeString(value, fallback = '') {
     }
 
     return value.trim();
+}
+
+function parsePositiveInteger(value, fallback = null) {
+    const parsed = Number(value);
+    let result = fallback;
+    if (Number.isInteger(parsed) && parsed > 0) {
+        result = parsed;
+    }
+
+    return result;
+}
+
+function getConversationRoomName(conversationId) {
+    return `chat-conversation-${conversationId}`;
 }
 
 function createContextFromSocket(socket) {
@@ -110,6 +130,60 @@ function createSocketHub(io) {
     const socketsById = new Map();
     const clientsById = new Map();
     const roomStateById = new Map();
+    const chatRateLimitByUserId = new Map();
+
+    function validateChatRateLimitOrThrow(userId) {
+        const now = Date.now();
+        const normalizedUserId = parsePositiveInteger(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító a chat rate limithez.');
+        }
+
+        const existing = chatRateLimitByUserId.get(normalizedUserId) || [];
+        const threshold = now - CHAT_RATE_LIMIT_WINDOW_MS;
+        const fresh = existing.filter((timestamp) => Number(timestamp) > threshold);
+
+        if (fresh.length >= CHAT_RATE_LIMIT_MAX_MESSAGES) {
+            chatRateLimitByUserId.set(normalizedUserId, fresh);
+            throw new Error('Túl sok üzenet rövid időn belül. Próbáld újra pár másodperc múlva.');
+        }
+
+        fresh.push(now);
+        chatRateLimitByUserId.set(normalizedUserId, fresh);
+    }
+
+    function createChatErrorPayload(conversationId, error, fallbackMessage) {
+        return {
+            conversationId,
+            message: error?.message || fallbackMessage || 'Chat hiba történt.',
+            timestamp: new Date().toISOString()
+        };
+    }
+
+    async function writeChatSecurityAudit(userId, eventType, conversationId, {
+        success = false,
+        severity = 'warning',
+        message = '',
+        metadata = {}
+    } = {}) {
+        try {
+            await sql.insertUserLog(userId, {
+                eventType,
+                eventCategory: 'security',
+                severity,
+                source: 'socket',
+                success,
+                message: message || null,
+                metadata: {
+                    conversationId,
+                    ...metadata
+                },
+                occurredAt: new Date()
+            });
+        } catch (logError) {
+            console.warn(`Socket chat audit log hiba (${eventType}):`, logError.message);
+        }
+    }
 
     function getPresenceSnapshot() {
         return {
@@ -358,58 +432,148 @@ function createSocketHub(io) {
             socket.emit('presence:state', getPresenceSnapshot());
         });
 
-        socket.on('chat:join', (payload = {}) => {
-            const roomId = safeString(payload.roomId, 'general-chat');
-            socket.join(`chat-room:${roomId}`);
-            socket.emit('chat:joined', {
-                roomId,
-                joinedAt: new Date().toISOString()
-            });
-        });
-
-        socket.on('chat:message', (payload = {}) => {
+        socket.on('chat:join', async (payload = {}) => {
+            const conversationId = parsePositiveInteger(payload?.conversationId, null);
             try {
                 const currentContext = getCurrentSocketContext(socket);
-                const roomId = safeString(payload.roomId, 'general-chat');
-                const message = safeString(payload.message, '');
-
-                if (!message) {
-                    socket.emit('chat:error', {
-                        roomId,
-                        message: 'Az üzenet nem lehet üres.'
-                    });
-                    return;
+                if (!currentContext.userId) {
+                    throw new Error('Chat csatlakozáshoz bejelentkezés szükséges.');
                 }
 
-                const chatPayload = {
-                    roomId,
+                if (!conversationId) {
+                    throw new Error('Érvénytelen conversation azonosító.');
+                }
+
+                await sql.assertConversationParticipant(currentContext.userId, conversationId);
+                socket.join(getConversationRoomName(conversationId));
+
+                socket.emit('chat:join', {
+                    success: true,
+                    conversationId,
+                    joinedAt: new Date().toISOString()
+                });
+            } catch (error) {
+                socket.emit('chat:error', createChatErrorPayload(conversationId, error, 'Chat csatlakozási hiba.'));
+            }
+        });
+
+        socket.on('chat:leave', async (payload = {}) => {
+            const conversationId = parsePositiveInteger(payload?.conversationId, null);
+            try {
+                const currentContext = getCurrentSocketContext(socket);
+                if (!currentContext.userId) {
+                    throw new Error('Chat kilépéshez bejelentkezés szükséges.');
+                }
+
+                if (!conversationId) {
+                    throw new Error('Érvénytelen conversation azonosító.');
+                }
+
+                await sql.assertConversationParticipant(currentContext.userId, conversationId);
+                socket.leave(getConversationRoomName(conversationId));
+
+                socket.emit('chat:leave', {
+                    success: true,
+                    conversationId,
+                    leftAt: new Date().toISOString()
+                });
+            } catch (error) {
+                socket.emit('chat:error', createChatErrorPayload(conversationId, error, 'Chat kilépési hiba.'));
+            }
+        });
+
+        socket.on('chat:message:send', async (payload = {}) => {
+            const conversationId = parsePositiveInteger(payload?.conversationId, null);
+            try {
+                const currentContext = getCurrentSocketContext(socket);
+                if (!currentContext.userId) {
+                    throw new Error('Üzenetküldéshez bejelentkezés szükséges.');
+                }
+
+                if (!conversationId) {
+                    throw new Error('Érvénytelen conversation azonosító.');
+                }
+
+                const message = safeString(payload?.message, '');
+                if (!message) {
+                    throw new Error('Az üzenet nem lehet üres.');
+                }
+
+                if (message.length > CHAT_MAX_MESSAGE_LENGTH) {
+                    throw new Error(`Az üzenet legfeljebb ${CHAT_MAX_MESSAGE_LENGTH} karakter lehet.`);
+                }
+
+                await sql.assertConversationParticipant(currentContext.userId, conversationId);
+                validateChatRateLimitOrThrow(currentContext.userId);
+
+                const containsBlockedWord = sql.containsBlockedWord(message);
+                const policyResult = {
+                    blocked: false,
+                    isMasked: false,
+                    maskedMessage: null
+                };
+
+                if (containsBlockedWord) {
+                    if (CHAT_BLACKLIST_POLICY === 'soft_mask') {
+                        policyResult.isMasked = true;
+                        policyResult.maskedMessage = '***';
+                    } else {
+                        policyResult.blocked = true;
+                    }
+
+                    await writeChatSecurityAudit(currentContext.userId, 'chat_blocked_word', conversationId, {
+                        success: !policyResult.blocked,
+                        severity: policyResult.blocked ? 'warning' : 'info',
+                        message: policyResult.blocked
+                            ? 'Tiltott szó miatt blokkolt socket chat üzenet.'
+                            : 'Tiltott szó miatt maszkolt socket chat üzenet.',
+                        metadata: {
+                            policy: CHAT_BLACKLIST_POLICY,
+                            masked: policyResult.isMasked,
+                            blocked: policyResult.blocked
+                        }
+                    });
+                }
+
+                if (policyResult.blocked) {
+                    throw new Error('Az üzenet tiltott kifejezést tartalmaz.');
+                }
+
+                const insertedMessage = await sql.insertMessageInConversation(
+                    currentContext.userId,
+                    conversationId,
                     message,
-                    author: currentContext.userId ? {
-                        id: currentContext.userId,
-                        username: currentContext.username,
-                        role: currentContext.role,
-                        profile_image: currentContext.profile_image || '/profile_pictures/default.png',
-                        profile_image_status: currentContext.profile_image_status || 'default'
-                    } : {
-                        id: null,
-                        username: 'Vendég',
-                        role: 'guest',
-                        profile_image: '/profile_pictures/default.png',
-                        profile_image_status: 'default'
-                    },
+                    policyResult
+                );
+
+                const messagePayload = {
+                    ...insertedMessage,
+                    conversationId,
                     socketId: socket.id,
                     clientId: currentContext.clientId,
                     tabId: currentContext.tabId,
-                    sentAt: new Date().toISOString()
+                    receivedAt: new Date().toISOString()
                 };
 
-                io.to(`chat-room:${roomId}`).emit('chat:message', chatPayload);
+                io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
             } catch (error) {
-                console.error('chat:message hiba:', error);
-                socket.emit('chat:error', {
-                    roomId: safeString(payload.roomId, 'general-chat'),
-                    message: error.message || 'Üzenetküldési hiba történt.'
-                });
+                const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet')
+                    || String(error?.message || '').toLowerCase().includes('tul sok uzenet');
+
+                if (isRateLimited) {
+                    const currentContext = socketsById.get(socket.id);
+                    await writeChatSecurityAudit(currentContext?.userId || null, 'chat_rate_limited', conversationId, {
+                        success: false,
+                        severity: 'warning',
+                        message: 'Socket chat üzenet rate limit miatt blokkolva.',
+                        metadata: {
+                            limit: CHAT_RATE_LIMIT_MAX_MESSAGES,
+                            windowMs: CHAT_RATE_LIMIT_WINDOW_MS
+                        }
+                    });
+                }
+
+                socket.emit('chat:error', createChatErrorPayload(conversationId, error, 'Üzenetküldési hiba történt.'));
             }
         });
 
@@ -555,8 +719,12 @@ function createSocketHub(io) {
             return payload;
         },
         broadcastChat(roomId, messagePayload) {
-            const normalizedRoomId = safeString(roomId, 'general-chat');
-            io.to(`chat-room:${normalizedRoomId}`).emit('chat:message', messagePayload);
+            const conversationId = parsePositiveInteger(roomId, null);
+            if (!conversationId) {
+                return;
+            }
+
+            io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
         }
     };
 }
