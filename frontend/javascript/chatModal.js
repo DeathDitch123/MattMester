@@ -51,13 +51,11 @@
     };
 
     function ensureStyles() {
-        if (globalScope.document.getElementById('chatModalStyles')) {
-            return;
-        }
-
-        const style = globalScope.document.createElement('style');
-        style.id = 'chatModalStyles';
-        style.textContent = `
+        const existingStyle = globalScope.document.getElementById('chatModalStyles');
+        if (!existingStyle) {
+            const style = globalScope.document.createElement('style');
+            style.id = 'chatModalStyles';
+            style.textContent = `
             .chat-floating-button {
                 position: fixed;
                 right: 20px;
@@ -223,20 +221,20 @@
                     bottom: 14px;
                 }
             }
-        `;
+            `;
 
-        globalScope.document.head.appendChild(style);
+            globalScope.document.head.appendChild(style);
+        }
     }
 
     function ensureMarkup() {
-        if (globalScope.document.getElementById('chatFloatingButton')) {
+        const hasMarkup = Boolean(globalScope.document.getElementById('chatFloatingButton'));
+        if (hasMarkup) {
             cacheDomReferences();
-            return;
-        }
-
-        const wrapper = globalScope.document.createElement('div');
-        wrapper.id = 'chatModalRoot';
-        wrapper.innerHTML = `
+        } else {
+            const wrapper = globalScope.document.createElement('div');
+            wrapper.id = 'chatModalRoot';
+            wrapper.innerHTML = `
             <button id="chatFloatingButton" class="chat-floating-button" type="button" aria-label="Chat" title="Chat">💬</button>
             <div class="modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down chat-modal-dialog">
@@ -275,10 +273,11 @@
                     </div>
                 </div>
             </div>
-        `;
+            `;
 
-        globalScope.document.body.appendChild(wrapper);
-        cacheDomReferences();
+            globalScope.document.body.appendChild(wrapper);
+            cacheDomReferences();
+        }
     }
 
     function cacheDomReferences() {
@@ -307,15 +306,13 @@
     }
 
     function setFeedback(message, isError) {
-        if (!dom.feedback) {
-            return;
+        if (dom.feedback) {
+            const text = String(message || '').trim();
+            dom.feedback.textContent = text;
+            dom.feedback.classList.toggle('d-none', !text);
+            dom.feedback.classList.toggle('text-danger', Boolean(isError));
+            dom.feedback.classList.toggle('text-success', text.length > 0 && !isError);
         }
-
-        const text = String(message || '').trim();
-        dom.feedback.textContent = text;
-        dom.feedback.classList.toggle('d-none', !text);
-        dom.feedback.classList.toggle('text-danger', Boolean(isError));
-        dom.feedback.classList.toggle('text-success', text.length > 0 && !isError);
     }
 
     async function requestJson(url, options) {
@@ -337,15 +334,17 @@
 
     function formatDate(value) {
         const date = new Date(value);
-        if (Number.isNaN(date.getTime())) {
-            return '';
+        let formatted = '';
+        if (!Number.isNaN(date.getTime())) {
+            formatted = date.toLocaleString('hu-HU', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         }
-        return date.toLocaleString('hu-HU', {
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+
+        return formatted;
     }
 
     function getConversationTitle(conversation) {
@@ -360,42 +359,37 @@
     }
 
     function updateConversationEmptyState() {
-        if (!dom.conversationEmpty || !dom.conversationList) {
-            return;
+        if (dom.conversationEmpty && dom.conversationList) {
+            const hasVisibleItem = dom.conversationList.children.length > 0;
+            dom.conversationEmpty.classList.toggle('d-none', hasVisibleItem);
         }
-
-        const hasVisibleItem = dom.conversationList.children.length > 0;
-        dom.conversationEmpty.classList.toggle('d-none', hasVisibleItem);
     }
 
     function renderConversationList() {
-        if (!dom.conversationList) {
-            return;
-        }
+        if (dom.conversationList) {
+            const needle = String(state.searchText || '').trim().toLowerCase();
+            const items = needle
+                ? state.conversationList.filter((conversation) => {
+                    const title = getConversationTitle(conversation).toLowerCase();
+                    const preview = String(conversation.lastMessagePreview || '').toLowerCase();
+                    return title.includes(needle) || preview.includes(needle);
+                })
+                : state.conversationList;
 
-        const needle = String(state.searchText || '').trim().toLowerCase();
-        const items = needle
-            ? state.conversationList.filter((conversation) => {
-                const title = getConversationTitle(conversation).toLowerCase();
-                const preview = String(conversation.lastMessagePreview || '').toLowerCase();
-                return title.includes(needle) || preview.includes(needle);
-            })
-            : state.conversationList;
+            dom.conversationList.innerHTML = '';
 
-        dom.conversationList.innerHTML = '';
+            items.forEach((conversation) => {
+                const element = globalScope.document.createElement('button');
+                element.type = 'button';
+                element.className = 'chat-conversation-item';
+                element.dataset.conversationId = String(conversation.conversationId);
+                if (Number(state.activeConversationId) === Number(conversation.conversationId)) {
+                    element.classList.add('is-active');
+                }
 
-        items.forEach((conversation) => {
-            const element = globalScope.document.createElement('button');
-            element.type = 'button';
-            element.className = 'chat-conversation-item';
-            element.dataset.conversationId = String(conversation.conversationId);
-            if (Number(state.activeConversationId) === Number(conversation.conversationId)) {
-                element.classList.add('is-active');
-            }
-
-            const unreadCount = Number(conversation.unreadCount || 0);
-            const unreadBadge = unreadCount > 0 ? `<span class="chat-unread-badge">${Math.min(unreadCount, 99)}</span>` : '';
-            element.innerHTML = `
+                const unreadCount = Number(conversation.unreadCount || 0);
+                const unreadBadge = unreadCount > 0 ? `<span class="chat-unread-badge">${Math.min(unreadCount, 99)}</span>` : '';
+                element.innerHTML = `
                 <div class="chat-row-top">
                     <strong class="text-truncate">${getConversationTitle(conversation)}</strong>
                     ${unreadBadge}
@@ -404,16 +398,17 @@
                 <div class="small text-secondary mt-1">${formatDate(conversation.lastMessageAt)}</div>
             `;
 
-            element.addEventListener('click', () => {
-                openConversation(conversation.conversationId).catch((error) => {
-                    setFeedback(error.message || 'Nem sikerult megnyitni a beszelgetest.', true);
+                element.addEventListener('click', () => {
+                    openConversation(conversation.conversationId).catch((error) => {
+                        setFeedback(error.message || 'Nem sikerult megnyitni a beszelgetest.', true);
+                    });
                 });
+
+                dom.conversationList.appendChild(element);
             });
 
-            dom.conversationList.appendChild(element);
-        });
-
-        updateConversationEmptyState();
+            updateConversationEmptyState();
+        }
     }
 
     function setConversationLoading(isLoading) {
@@ -429,13 +424,12 @@
     }
 
     function setMessageEmptyState(isEmpty, text) {
-        if (!dom.messageEmpty) {
-            return;
+        if (dom.messageEmpty) {
+            if (text) {
+                dom.messageEmpty.textContent = text;
+            }
+            dom.messageEmpty.classList.toggle('d-none', !isEmpty);
         }
-        if (text) {
-            dom.messageEmpty.textContent = text;
-        }
-        dom.messageEmpty.classList.toggle('d-none', !isEmpty);
     }
 
     function getMessagesForConversation(conversationId) {
@@ -461,51 +455,48 @@
 
     function renderMessageList() {
         const conversationId = Number(state.activeConversationId) || 0;
-        if (!conversationId || !dom.messageList) {
+        const canRenderConversation = Boolean(conversationId && dom.messageList);
+
+        if (canRenderConversation) {
+            const messages = getMessagesForConversation(conversationId);
+            dom.messageList.innerHTML = '';
+
+            messages.forEach((message) => {
+                const element = globalScope.document.createElement('div');
+                element.className = 'chat-message';
+
+                const ownUserId = Number(globalScope.MattMesterSocket?.info?.user?.id || globalScope.MattMesterSocket?.getSnapshot?.()?.user?.id || 0);
+                if (ownUserId && Number(message.senderId) === ownUserId) {
+                    element.classList.add('is-mine');
+                }
+
+                const meta = globalScope.document.createElement('div');
+                meta.className = 'chat-message-meta';
+                meta.textContent = `${message.senderUsername || 'Jatekos'} · ${formatDate(message.sentAt)}`;
+
+                const body = globalScope.document.createElement('div');
+                body.className = 'chat-message-body';
+                body.textContent = String(message.body || '');
+
+                element.appendChild(meta);
+                element.appendChild(body);
+                dom.messageList.appendChild(element);
+            });
+
+            const hasMessages = messages.length > 0;
+            setMessageEmptyState(!hasMessages, hasMessages ? '' : 'Nincs megjelenitheto uzenet.');
+            dom.messageList.scrollTop = dom.messageList.scrollHeight;
+        } else {
             if (dom.messageList) {
                 dom.messageList.innerHTML = '';
             }
             setMessageEmptyState(true, 'Nincs megjelenitheto uzenet.');
-            return;
         }
-
-        const messages = getMessagesForConversation(conversationId);
-        dom.messageList.innerHTML = '';
-
-        messages.forEach((message) => {
-            const element = globalScope.document.createElement('div');
-            element.className = 'chat-message';
-
-            const ownUserId = Number(globalScope.MattMesterSocket?.info?.user?.id || globalScope.MattMesterSocket?.getSnapshot?.()?.user?.id || 0);
-            if (ownUserId && Number(message.senderId) === ownUserId) {
-                element.classList.add('is-mine');
-            }
-
-            const meta = globalScope.document.createElement('div');
-            meta.className = 'chat-message-meta';
-            meta.textContent = `${message.senderUsername || 'Jatekos'} · ${formatDate(message.sentAt)}`;
-
-            const body = globalScope.document.createElement('div');
-            body.className = 'chat-message-body';
-            body.textContent = String(message.body || '');
-
-            element.appendChild(meta);
-            element.appendChild(body);
-            dom.messageList.appendChild(element);
-        });
-
-        const hasMessages = messages.length > 0;
-        setMessageEmptyState(!hasMessages, hasMessages ? '' : 'Nincs megjelenitheto uzenet.');
-        dom.messageList.scrollTop = dom.messageList.scrollHeight;
     }
 
     function markConversationUnread(conversationId) {
         const conversation = findConversation(conversationId);
-        if (!conversation) {
-            return;
-        }
-
-        if (Number(state.activeConversationId) !== Number(conversationId)) {
+        if (conversation && Number(state.activeConversationId) !== Number(conversationId)) {
             conversation.unreadCount = Number(conversation.unreadCount || 0) + 1;
         }
     }
@@ -513,12 +504,10 @@
     function moveConversationToTop(conversationId) {
         const normalizedId = Number(conversationId) || 0;
         const index = state.conversationList.findIndex((item) => Number(item.conversationId) === normalizedId);
-        if (index <= 0) {
-            return;
+        if (index > 0) {
+            const [conversation] = state.conversationList.splice(index, 1);
+            state.conversationList.unshift(conversation);
         }
-
-        const [conversation] = state.conversationList.splice(index, 1);
-        state.conversationList.unshift(conversation);
     }
 
     async function loadConversations() {
@@ -540,7 +529,7 @@
 
         const isLoadOlder = Boolean(options?.older);
         if (state.isLoadingByConversation.get(normalizedId)) {
-            return;
+            return undefined;
         }
 
         state.isLoadingByConversation.set(normalizedId, true);
@@ -586,44 +575,40 @@
 
     function bindSocketEvents() {
         const socket = getSocket();
-        if (!socket || state.boundSocket === socket) {
-            return;
-        }
+        if (socket && state.boundSocket !== socket) {
+            if (state.boundSocket) {
+                state.boundSocket.off('chat:message:new', onSocketMessageNew);
+                state.boundSocket.off('chat:error', onSocketError);
+            }
 
-        if (state.boundSocket) {
-            state.boundSocket.off('chat:message:new', onSocketMessageNew);
-            state.boundSocket.off('chat:error', onSocketError);
+            state.boundSocket = socket;
+            socket.on('chat:message:new', onSocketMessageNew);
+            socket.on('chat:error', onSocketError);
         }
-
-        state.boundSocket = socket;
-        socket.on('chat:message:new', onSocketMessageNew);
-        socket.on('chat:error', onSocketError);
     }
 
     function onSocketMessageNew(messagePayload) {
         const conversationId = Number(messagePayload?.conversationId) || 0;
-        if (!conversationId) {
-            return;
-        }
-
-        pushOrUpdateMessage(conversationId, messagePayload);
-        const conversation = findConversation(conversationId);
-        if (conversation) {
-            conversation.lastMessageAt = messagePayload.sentAt || new Date().toISOString();
-            conversation.lastMessagePreview = String(messagePayload.body || '').slice(0, 120);
-        }
-
-        markConversationUnread(conversationId);
-        moveConversationToTop(conversationId);
-        renderConversationList();
-
-        if (Number(state.activeConversationId) === conversationId) {
-            const activeConversation = findConversation(conversationId);
-            if (activeConversation) {
-                activeConversation.unreadCount = 0;
+        if (conversationId) {
+            pushOrUpdateMessage(conversationId, messagePayload);
+            const conversation = findConversation(conversationId);
+            if (conversation) {
+                conversation.lastMessageAt = messagePayload.sentAt || new Date().toISOString();
+                conversation.lastMessagePreview = String(messagePayload.body || '').slice(0, 120);
             }
+
+            markConversationUnread(conversationId);
+            moveConversationToTop(conversationId);
             renderConversationList();
-            renderMessageList();
+
+            if (Number(state.activeConversationId) === conversationId) {
+                const activeConversation = findConversation(conversationId);
+                if (activeConversation) {
+                    activeConversation.unreadCount = 0;
+                }
+                renderConversationList();
+                renderMessageList();
+            }
         }
     }
 
@@ -637,24 +622,20 @@
 
     async function joinConversationRoom(conversationId) {
         const socket = getSocket();
-        if (!socket) {
-            return;
+        if (socket) {
+            socket.emit('chat:join', {
+                conversationId: Number(conversationId)
+            });
         }
-
-        socket.emit('chat:join', {
-            conversationId: Number(conversationId)
-        });
     }
 
     async function leaveConversationRoom(conversationId) {
         const socket = getSocket();
-        if (!socket || !conversationId) {
-            return;
+        if (socket && conversationId) {
+            socket.emit('chat:leave', {
+                conversationId: Number(conversationId)
+            });
         }
-
-        socket.emit('chat:leave', {
-            conversationId: Number(conversationId)
-        });
     }
 
     async function sendMessageFallbackRest(conversationId, messageText) {
@@ -682,48 +663,44 @@
     }
 
     async function handleSendMessage() {
-        if (state.isSendingMessage) {
-            return;
-        }
+        const canProceed = !state.isSendingMessage;
+        if (canProceed) {
+            const activeId = Number(state.activeConversationId) || 0;
+            const messageText = String(dom.messageInput?.value || '').trim();
 
-        const activeId = Number(state.activeConversationId) || 0;
-        if (!activeId) {
-            setFeedback('Valassz beszelgetest a kuldeshez.', true);
-            return;
-        }
-
-        const messageText = String(dom.messageInput?.value || '').trim();
-        if (!messageText) {
-            setFeedback('Az uzenet nem lehet ures.', true);
-            return;
-        }
-
-        state.isSendingMessage = true;
-        setFeedback('', false);
-        if (dom.sendButton) {
-            dom.sendButton.disabled = true;
-        }
-
-        try {
-            const socket = getSocket();
-            if (socket && socket.connected) {
-                socket.emit('chat:message:send', {
-                    conversationId: activeId,
-                    message: messageText
-                });
+            if (!activeId) {
+                setFeedback('Valassz beszelgetest a kuldeshez.', true);
+            } else if (!messageText) {
+                setFeedback('Az uzenet nem lehet ures.', true);
             } else {
-                await sendMessageFallbackRest(activeId, messageText);
-            }
+                state.isSendingMessage = true;
+                setFeedback('', false);
+                if (dom.sendButton) {
+                    dom.sendButton.disabled = true;
+                }
 
-            if (dom.messageInput) {
-                dom.messageInput.value = '';
-            }
-        } catch (error) {
-            setFeedback(error.message || 'Nem sikerult az uzenet kuldese.', true);
-        } finally {
-            state.isSendingMessage = false;
-            if (dom.sendButton) {
-                dom.sendButton.disabled = false;
+                try {
+                    const socket = getSocket();
+                    if (socket && socket.connected) {
+                        socket.emit('chat:message:send', {
+                            conversationId: activeId,
+                            message: messageText
+                        });
+                    } else {
+                        await sendMessageFallbackRest(activeId, messageText);
+                    }
+
+                    if (dom.messageInput) {
+                        dom.messageInput.value = '';
+                    }
+                } catch (error) {
+                    setFeedback(error.message || 'Nem sikerult az uzenet kuldese.', true);
+                } finally {
+                    state.isSendingMessage = false;
+                    if (dom.sendButton) {
+                        dom.sendButton.disabled = false;
+                    }
+                }
             }
         }
     }
@@ -801,48 +778,40 @@
         try {
             if (conversationId) {
                 await openConversation(conversationId);
-                return;
-            }
-
-            if (fromUserId) {
+            } else if (fromUserId) {
                 await openDirectByUserId(fromUserId);
-                return;
+            } else {
+                throw new Error('A chat open esemény payload hiányos.');
             }
-
-            throw new Error('A chat open esemény payload hiányos.');
         } catch (error) {
             setFeedback(error.message || 'Nem sikerult megnyitni a chat beszelgetest.', true);
         }
     }
 
     function bindGlobalEvents() {
-        if (state.globalEventsBound) {
-            return;
-        }
-
-        globalScope.addEventListener(CHAT_OPEN_EVENT_NAME, (event) => {
-            handleGlobalChatOpenEvent(event).catch((error) => {
-                setFeedback(error.message || 'Globalis chat nyitasi hiba.', true);
+        if (!state.globalEventsBound) {
+            globalScope.addEventListener(CHAT_OPEN_EVENT_NAME, (event) => {
+                handleGlobalChatOpenEvent(event).catch((error) => {
+                    setFeedback(error.message || 'Globalis chat nyitasi hiba.', true);
+                });
             });
-        });
 
-        globalScope.addEventListener('mattmester:notification:push', (event) => {
-            const detail = event?.detail || {};
-            const conversationId = Number(detail.conversationId) || 0;
-            const fromUserId = Number(detail.fromUserId || detail.targetUserId || detail.senderUserId) || 0;
+            globalScope.addEventListener('mattmester:notification:push', (event) => {
+                const detail = event?.detail || {};
+                const conversationId = Number(detail.conversationId) || 0;
+                const fromUserId = Number(detail.fromUserId || detail.targetUserId || detail.senderUserId) || 0;
 
-            if (!conversationId && !fromUserId) {
-                return;
-            }
+                if (conversationId || fromUserId) {
+                    globalScope.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT_NAME, {
+                        detail: conversationId
+                            ? { conversationId }
+                            : { fromUserId }
+                    }));
+                }
+            });
 
-            globalScope.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT_NAME, {
-                detail: conversationId
-                    ? { conversationId }
-                    : { fromUserId }
-            }));
-        });
-
-        state.globalEventsBound = true;
+            state.globalEventsBound = true;
+        }
     }
 
     function bindEvents() {
@@ -894,16 +863,14 @@
         if (dom.messageList) {
             dom.messageList.addEventListener('scroll', () => {
                 const activeId = Number(state.activeConversationId) || 0;
-                if (!activeId) {
-                    return;
-                }
-
-                const hasMore = Boolean(state.hasMoreByConversation.get(activeId));
-                const isLoading = Boolean(state.isLoadingByConversation.get(activeId));
-                if (dom.messageList.scrollTop <= 16 && hasMore && !isLoading) {
-                    loadConversationMessages(activeId, { older: true }).catch((error) => {
-                        setFeedback(error.message || 'Nem sikerult regebbi uzeneteket betolteni.', true);
-                    });
+                if (activeId) {
+                    const hasMore = Boolean(state.hasMoreByConversation.get(activeId));
+                    const isLoading = Boolean(state.isLoadingByConversation.get(activeId));
+                    if (dom.messageList.scrollTop <= 16 && hasMore && !isLoading) {
+                        loadConversationMessages(activeId, { older: true }).catch((error) => {
+                            setFeedback(error.message || 'Nem sikerult regebbi uzeneteket betolteni.', true);
+                        });
+                    }
                 }
             });
         }
@@ -925,22 +892,21 @@
 
         if (state.initialized) {
             bindSocketEvents();
-            return;
+        } else {
+            ensureStyles();
+            ensureMarkup();
+
+            if (!globalScope.bootstrap?.Modal) {
+                throw new Error('A Bootstrap modal API nem erheto el.');
+            }
+
+            state.modalInstance = globalScope.bootstrap.Modal.getOrCreateInstance(dom.modal);
+            bindEvents();
+            bindSocketEvents();
+            bindGlobalEvents();
+
+            state.initialized = true;
         }
-
-        ensureStyles();
-        ensureMarkup();
-
-        if (!globalScope.bootstrap?.Modal) {
-            throw new Error('A Bootstrap modal API nem erheto el.');
-        }
-
-        state.modalInstance = globalScope.bootstrap.Modal.getOrCreateInstance(dom.modal);
-        bindEvents();
-        bindSocketEvents();
-        bindGlobalEvents();
-
-        state.initialized = true;
     }
 
     function autoInitOnDomReady() {

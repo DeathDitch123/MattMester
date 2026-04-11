@@ -31,10 +31,9 @@ function saveSessionAsync(request, errorMessage) {
             if (err) {
                 console.error('Session mentési hiba:', err);
                 reject(new Error(errorMessage));
-                return;
+            } else {
+                resolve();
             }
-
-            resolve();
         });
     });
 }
@@ -45,10 +44,9 @@ function destroySessionAsync(request, errorMessage) {
             if (err) {
                 console.error('Session destroy hiba:', err);
                 reject(new Error(errorMessage));
-                return;
+            } else {
+                resolve();
             }
-
-            resolve();
         });
     });
 }
@@ -73,10 +71,9 @@ const profileImageUpload = multer({
     fileFilter: (request, file, callback) => {
         if (!ALLOWED_PROFILE_IMAGE_MIME_TYPES.has(file.mimetype)) {
             callback(new Error('Nem támogatott képformátum. Csak JPG, PNG és WEBP engedélyezett.'));
-            return;
+        } else {
+            callback(null, true);
         }
-
-        callback(null, true);
     }
 });
 

@@ -720,11 +720,9 @@ function createSocketHub(io) {
         },
         broadcastChat(roomId, messagePayload) {
             const conversationId = parsePositiveInteger(roomId, null);
-            if (!conversationId) {
-                return;
+            if (conversationId) {
+                io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
             }
-
-            io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
         }
     };
 }

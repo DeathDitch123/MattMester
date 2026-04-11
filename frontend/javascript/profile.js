@@ -600,6 +600,7 @@ function createSearchResultListItem(player) {
     item.dataset.userId = String(player.userId || player.id || '');
     item.dataset.username = String(player.username || '');
     item.dataset.friendStatus = String(player.friendStatus || 'none');
+    item.dataset.conversationId = String(player.conversationId || '');
 
     const avatarWrap = document.createElement('div');
     avatarWrap.className = 'position-relative flex-shrink-0';
@@ -668,6 +669,7 @@ function createSearchResultListItem(player) {
         chatButton.dataset.action = 'chat';
         chatButton.dataset.userId = String(player.userId || player.id || '');
         chatButton.dataset.username = String(player.username || '');
+        chatButton.dataset.conversationId = String(player.conversationId || '');
         chatButton.innerHTML = '<i data-lucide="message-circle" style="width: 16px; height: 16px;"></i>';
         actions.appendChild(chatButton);
     } else if (friendStatus === 'blocked') {
@@ -755,18 +757,18 @@ function bindSearchResultsModalEvents() {
 
     modal.addEventListener('hidden.bs.modal', () => {
         const { input: topInput, button: topButton } = getTopBarPlayerSearchElements();
+        let focusTarget = null;
+
         if (topInput && !topInput.disabled) {
-            topInput.focus();
-            return;
+            focusTarget = topInput;
+        } else if (topButton && !topButton.disabled) {
+            focusTarget = topButton;
+        } else if (document.body && typeof document.body.focus === 'function') {
+            focusTarget = document.body;
         }
 
-        if (topButton && !topButton.disabled) {
-            topButton.focus();
-            return;
-        }
-
-        if (document.body && typeof document.body.focus === 'function') {
-            document.body.focus();
+        if (focusTarget && typeof focusTarget.focus === 'function') {
+            focusTarget.focus();
         }
     });
 
@@ -778,6 +780,7 @@ function bindSearchResultsModalEvents() {
             }
 
             const userId = Number(actionButton.dataset.userId);
+            const conversationId = Number(actionButton.dataset.conversationId || 0);
             const username = String(actionButton.dataset.username || '').trim();
             const action = actionButton.dataset.action;
 
@@ -820,25 +823,70 @@ function bindSearchResultsModalEvents() {
                 });
             } else if (action === 'chat') {
                 runSafelyAsync('searchResultOpenDirectChat', async () => {
-                    const eventName = window.MattMesterChatModal?.CHAT_OPEN_EVENT_NAME || 'mattmester:chat:open-conversation';
-                    if (!eventName) {
-                        throw new Error('A chat modal API nem érhető el.');
+                    try {
+                        await openChatConversationFlow({
+                            conversationId,
+                            targetUserId: userId,
+                            source: 'search-results',
+                            username
+                        });
+                    } catch (error) {
+                        setProfileChatFeedbackBySource('search-results', error.message || 'A chat megnyitása sikertelen.', 'error');
+                        throw error;
                     }
-
-                    window.dispatchEvent(new CustomEvent(eventName, {
-                        detail: {
-                            fromUserId: userId
-                        }
-                    }));
                 });
             } else if (action === 'pending-friend' || action === 'accepted-friend' || action === 'blocked-friend') {
                 // Ezek az akciók nem interaktívak, vagy később implementálandók
-                return;
             }
         } catch (error) {
             console.error('Keresési találat akció hiba:', error);
         }
     });
+}
+
+function setProfileChatFeedbackBySource(source, message, type = 'neutral') {
+    const text = String(message || '').trim();
+    const isSearchSource = source === 'search-results';
+    const isFriendsSource = source === 'friends-list';
+
+    if (isSearchSource) {
+        const { feedback } = getModalPlayerSearchElements();
+        if (feedback) {
+            feedback.classList.remove('text-danger', 'text-success', 'text-secondary');
+            feedback.textContent = text;
+
+            if (text) {
+                feedback.classList.add(type === 'error' ? 'text-danger' : (type === 'success' ? 'text-success' : 'text-secondary'));
+            }
+        }
+    }
+
+    if (isFriendsSource) {
+        setFriendsFeedback(text, type === 'error' ? 'error' : (type === 'success' ? 'success' : 'neutral'));
+    }
+}
+
+async function openChatConversationFlow({ conversationId = 0, targetUserId = 0, source = 'friends-list', username = '' } = {}) {
+    if (!window.MattMesterChatModal) {
+        throw new Error('A chat modal API nem érhető el.');
+    }
+
+    await window.MattMesterChatModal.init();
+
+    const normalizedConversationId = Number(conversationId) || 0;
+    const normalizedTargetUserId = Number(targetUserId) || 0;
+    let successMessage = 'Beszélgetés megnyitva.';
+
+    if (normalizedConversationId) {
+        await window.MattMesterChatModal.openConversation(normalizedConversationId);
+    } else if (!normalizedTargetUserId) {
+        throw new Error('Hiányzik a cél felhasználó azonosító a chat nyitáshoz.');
+    } else {
+        await window.MattMesterChatModal.openDirectByUserId(normalizedTargetUserId);
+        successMessage = username ? `Beszélgetés megnyitva: ${username}` : 'Beszélgetés megnyitva.';
+    }
+
+    setProfileChatFeedbackBySource(source, successMessage, 'success');
 }
 
 function getFriendsSectionElements() {
@@ -852,22 +900,18 @@ function getFriendsSectionElements() {
 
 function setFriendsFeedback(message = '', type = 'neutral') {
     const { feedback } = getFriendsSectionElements();
-    if (!feedback) {
-        return;
-    }
+    if (feedback) {
+        const hasMessage = Boolean(message);
+        feedback.classList.remove('d-none', 'is-success', 'is-error');
+        feedback.textContent = message || '';
 
-    feedback.classList.remove('d-none', 'is-success', 'is-error');
-    feedback.textContent = message || '';
-
-    if (!message) {
-        feedback.classList.add('d-none');
-        return;
-    }
-
-    if (type === 'success') {
-        feedback.classList.add('is-success');
-    } else if (type === 'error') {
-        feedback.classList.add('is-error');
+        if (!hasMessage) {
+            feedback.classList.add('d-none');
+        } else if (type === 'success') {
+            feedback.classList.add('is-success');
+        } else if (type === 'error') {
+            feedback.classList.add('is-error');
+        }
     }
 }
 
@@ -987,6 +1031,7 @@ function createFriendListItem(friend) {
     item.setAttribute('role', 'listitem');
     item.dataset.userId = String(friend.userId || '');
     item.dataset.username = String(friend.username || '');
+    item.dataset.conversationId = String(friend.conversationId || '');
     item.dataset.relationStatus = relationMeta.relationStatus;
     item.dataset.listStatus = relationMeta.listStatus;
 
@@ -1087,21 +1132,19 @@ function createFriendListItem(friend) {
 
 function setFriendListLoading(isLoading, label = 'Betöltés folyamatban...') {
     const { list, refreshButton, filterButtons } = getFriendsSectionElements();
-    if (!list) {
-        return;
-    }
+    if (list) {
+        friendsState.loading = Boolean(isLoading);
+        if (refreshButton) {
+            refreshButton.disabled = friendsState.loading;
+        }
 
-    friendsState.loading = Boolean(isLoading);
-    if (refreshButton) {
-        refreshButton.disabled = friendsState.loading;
-    }
+        filterButtons.forEach((button) => {
+            button.disabled = friendsState.loading;
+        });
 
-    filterButtons.forEach((button) => {
-        button.disabled = friendsState.loading;
-    });
-
-    if (friendsState.loading) {
-        list.innerHTML = `<div class="friend-list-empty">${label}</div>`;
+        if (friendsState.loading) {
+            list.innerHTML = `<div class="friend-list-empty">${label}</div>`;
+        }
     }
 }
 
@@ -1115,59 +1158,56 @@ function setFriendFilterButtonsState(activeFilter) {
 
 function renderFriendsList(items = []) {
     const { list } = getFriendsSectionElements();
-    if (!list) {
-        return;
+    if (list) {
+        const hasItems = Array.isArray(items) && items.length > 0;
+        list.innerHTML = '';
+
+        if (!hasItems) {
+            list.innerHTML = '<div class="friend-list-empty">Nincs megjeleníthető kapcsolat ebben a nézetben.</div>';
+        } else {
+            items.forEach((friend) => {
+                list.appendChild(createFriendListItem(friend));
+            });
+
+            lucide.createIcons();
+        }
     }
-
-    list.innerHTML = '';
-    if (!Array.isArray(items) || !items.length) {
-        list.innerHTML = '<div class="friend-list-empty">Nincs megjeleníthető kapcsolat ebben a nézetben.</div>';
-        return;
-    }
-
-    items.forEach((friend) => {
-        list.appendChild(createFriendListItem(friend));
-    });
-
-    lucide.createIcons();
 }
 
 async function refreshFriendsList(filterValue = friendsState.activeFilter) {
     const { list } = getFriendsSectionElements();
-    if (!list) {
-        return;
-    }
+    if (list) {
+        const normalizedFilter = normalizeFriendFilter(filterValue);
+        friendsState.activeFilter = normalizedFilter;
+        setFriendFilterButtonsState(normalizedFilter);
+        setFriendListLoading(true, 'Barátok frissítése...');
 
-    const normalizedFilter = normalizeFriendFilter(filterValue);
-    friendsState.activeFilter = normalizedFilter;
-    setFriendFilterButtonsState(normalizedFilter);
-    setFriendListLoading(true, 'Barátok frissítése...');
+        try {
+            const response = await fetch(`/api/friends/list?status=${encodeURIComponent(normalizedFilter)}`);
+            const result = await parseJson(response);
 
-    try {
-        const response = await fetch(`/api/friends/list?status=${encodeURIComponent(normalizedFilter)}`);
-        const result = await parseJson(response);
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Nem sikerült a barát lista lekérése.');
+            }
 
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Nem sikerült a barát lista lekérése.');
+            friendsState.items = Array.isArray(result.data) ? result.data : [];
+            renderFriendsList(friendsState.items);
+            setFriendsFeedback(result.message || 'Barátok frissítve.', 'success');
+        } catch (error) {
+            friendsState.items = [];
+            list.innerHTML = `<div class="friend-list-empty text-danger">${error.message || 'Sikertelen barát lista frissítés.'}</div>`;
+            setFriendsFeedback(error.message || 'Sikertelen barát lista frissítés.', 'error');
+        } finally {
+            friendsState.loading = false;
+            const { refreshButton, filterButtons } = getFriendsSectionElements();
+            if (refreshButton) {
+                refreshButton.disabled = false;
+            }
+            filterButtons.forEach((button) => {
+                button.disabled = false;
+            });
+            setFriendFilterButtonsState(friendsState.activeFilter);
         }
-
-        friendsState.items = Array.isArray(result.data) ? result.data : [];
-        renderFriendsList(friendsState.items);
-        setFriendsFeedback(result.message || 'Barátok frissítve.', 'success');
-    } catch (error) {
-        friendsState.items = [];
-        list.innerHTML = `<div class="friend-list-empty text-danger">${error.message || 'Sikertelen barát lista frissítés.'}</div>`;
-        setFriendsFeedback(error.message || 'Sikertelen barát lista frissítés.', 'error');
-    } finally {
-        friendsState.loading = false;
-        const { refreshButton, filterButtons } = getFriendsSectionElements();
-        if (refreshButton) {
-            refreshButton.disabled = false;
-        }
-        filterButtons.forEach((button) => {
-            button.disabled = false;
-        });
-        setFriendFilterButtonsState(friendsState.activeFilter);
     }
 }
 
@@ -1217,112 +1257,111 @@ async function executeFriendAction(actionName, targetUserId) {
 
 function bindFriendsSectionEvents() {
     const { list, refreshButton, filterButtons } = getFriendsSectionElements();
-    if (!list || !refreshButton || !filterButtons.length || friendsState.bound) {
-        return;
-    }
-
-    filterButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-            runSafelyAsync('friendsFilterClick', async () => {
-                const nextFilter = normalizeFriendFilter(button.dataset.friendsFilter);
-                await refreshFriendsList(nextFilter);
+    if (list && refreshButton && filterButtons.length && !friendsState.bound) {
+        filterButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                runSafelyAsync('friendsFilterClick', async () => {
+                    const nextFilter = normalizeFriendFilter(button.dataset.friendsFilter);
+                    await refreshFriendsList(nextFilter);
+                });
             });
         });
-    });
 
-    refreshButton.addEventListener('click', () => {
-        runSafelyAsync('friendsRefreshClick', async () => {
-            await refreshFriendsList(friendsState.activeFilter);
+        refreshButton.addEventListener('click', () => {
+            runSafelyAsync('friendsRefreshClick', async () => {
+                await refreshFriendsList(friendsState.activeFilter);
+            });
         });
-    });
 
-    list.addEventListener('click', (event) => {
-        runSafelyAsync('friendsListActionClick', async () => {
-            const actionButton = event.target.closest('button[data-friend-action]');
-            if (!actionButton || friendsState.loading) {
-                return;
-            }
+        list.addEventListener('click', (event) => {
+            runSafelyAsync('friendsListActionClick', async () => {
+                const actionButton = event.target.closest('button[data-friend-action]');
+                if (actionButton && !friendsState.loading) {
+                    const item = actionButton.closest('.friend-item');
+                    const targetUserId = Number(item?.dataset.userId || 0);
+                    const conversationId = Number(item?.dataset.conversationId || 0);
+                    const username = String(item?.dataset.username || '');
+                    const actionName = String(actionButton.dataset.friendAction || '').trim().toLowerCase();
 
-            const item = actionButton.closest('.friend-item');
-            const targetUserId = Number(item?.dataset.userId || 0);
-            const username = String(item?.dataset.username || '');
-            const actionName = String(actionButton.dataset.friendAction || '').trim().toLowerCase();
-
-            if (!actionName || !targetUserId) {
-                throw new Error('Érvénytelen barát lista művelet.');
-            }
-
-            if (actionName === 'view') {
-                await openPlayerProfileModalByUserId(targetUserId);
-                return;
-            }
-
-            if (actionName === 'chat') {
-                const eventName = window.MattMesterChatModal?.CHAT_OPEN_EVENT_NAME || 'mattmester:chat:open-conversation';
-                if (!eventName) {
-                    throw new Error('A chat modal API nem érhető el.');
-                }
-
-                window.dispatchEvent(new CustomEvent(eventName, {
-                    detail: {
-                        fromUserId: targetUserId
+                    if (!actionName || !targetUserId) {
+                        throw new Error('Érvénytelen barát lista művelet.');
                     }
-                }));
-                return;
-            }
 
-            actionButton.disabled = true;
-            const response = await executeFriendAction(actionName, targetUserId);
-            const result = await parseJson(response);
-            if (!response.ok || !result.success) {
-                throw new Error(result.message || 'A friend művelet nem sikerült.');
-            }
+                    let actionHandled = false;
+                    if (actionName === 'view') {
+                        await openPlayerProfileModalByUserId(targetUserId);
+                        actionHandled = true;
+                    }
 
-            setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
-            await refreshFriendsList(friendsState.activeFilter);
-            setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
+                    if (actionName === 'chat') {
+                        try {
+                            await openChatConversationFlow({
+                                conversationId,
+                                targetUserId,
+                                source: 'friends-list',
+                                username
+                            });
+                        } catch (error) {
+                            setProfileChatFeedbackBySource('friends-list', error.message || 'A chat megnyitása sikertelen.', 'error');
+                            throw error;
+                        }
+                        actionHandled = true;
+                    }
+
+                    if (!actionHandled) {
+                        actionButton.disabled = true;
+                        const response = await executeFriendAction(actionName, targetUserId);
+                        const result = await parseJson(response);
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || 'A friend művelet nem sikerült.');
+                        }
+
+                        setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
+                        await refreshFriendsList(friendsState.activeFilter);
+                        setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
+                    }
+                }
+            });
         });
-    });
 
-    setFriendFilterButtonsState(friendsState.activeFilter);
-    friendsState.bound = true;
+        setFriendFilterButtonsState(friendsState.activeFilter);
+        friendsState.bound = true;
+    }
 }
 
 async function handleLogout() {
-    if (logoutState.submitting) {
-        return;
-    }
-
-    const { confirmButton } = getLogoutElements();
-    logoutState.submitting = true;
-    if (confirmButton) {
-        confirmButton.disabled = true;
-        confirmButton.textContent = 'Kijelentkezés...';
-    }
-
-    try {
-        const response = await fetch('/api/logout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        const result = await parseJson(response);
-
-        if (!response.ok) {
-            throw new Error(result.message || 'Sikertelen kijelentkezes.');
-        }
-
-        if (socket) {
-            socket.disconnect();
-            socket.connect();
-        }
-
-        window.location.reload();
-    } catch (error) {
-        console.error('Hiba a kijelentkezes soran:', error);
-        logoutState.submitting = false;
+    if (!logoutState.submitting) {
+        const { confirmButton } = getLogoutElements();
+        logoutState.submitting = true;
         if (confirmButton) {
-            confirmButton.disabled = false;
-            confirmButton.textContent = 'Kijelentkezés';
+            confirmButton.disabled = true;
+            confirmButton.textContent = 'Kijelentkezés...';
+        }
+
+        try {
+            const response = await fetch('/api/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await parseJson(response);
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Sikertelen kijelentkezes.');
+            }
+
+            if (socket) {
+                socket.disconnect();
+                socket.connect();
+            }
+
+            window.location.reload();
+        } catch (error) {
+            console.error('Hiba a kijelentkezes soran:', error);
+            logoutState.submitting = false;
+            if (confirmButton) {
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés';
+            }
         }
     }
 }
@@ -1335,38 +1374,32 @@ function getLogoutElements() {
 }
 
 function bindLogoutButton() {
-    if (logoutState.bound) {
-        return;
-    }
-
     const { modal, confirmButton } = getLogoutElements();
-    if (!modal || !confirmButton) {
-        return;
+    if (!logoutState.bound && modal && confirmButton) {
+        confirmButton.addEventListener('click', () => {
+            runSafelyAsync('logoutConfirmClick', async () => {
+                await handleLogout();
+            });
+        });
+
+        modal.addEventListener('show.bs.modal', () => {
+            runSafely('logoutModalShow', () => {
+                logoutState.submitting = false;
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés';
+            });
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('logoutModalHidden', () => {
+                logoutState.submitting = false;
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés';
+            });
+        });
+
+        logoutState.bound = true;
     }
-
-    confirmButton.addEventListener('click', () => {
-        runSafelyAsync('logoutConfirmClick', async () => {
-            await handleLogout();
-        });
-    });
-
-    modal.addEventListener('show.bs.modal', () => {
-        runSafely('logoutModalShow', () => {
-            logoutState.submitting = false;
-            confirmButton.disabled = false;
-            confirmButton.textContent = 'Kijelentkezés';
-        });
-    });
-
-    modal.addEventListener('hidden.bs.modal', () => {
-        runSafely('logoutModalHidden', () => {
-            logoutState.submitting = false;
-            confirmButton.disabled = false;
-            confirmButton.textContent = 'Kijelentkezés';
-        });
-    });
-
-    logoutState.bound = true;
 }
 
 function getTopBarPlayerSearchElements() {
@@ -2027,162 +2060,151 @@ function resetProfileSettingsConfirmState() {
 
 function openProfileSettingsConfirmModal(changedFieldLabels) {
     const elements = getProfileSettingsElements();
-    if (!elements.confirmModal || !elements.changesList) {
-        return;
-    }
+    if (elements.confirmModal && elements.changesList) {
+        profileSettingsState.requiresPasswordCheck = true;
+        profileSettingsState.passwordVerified = !profileSettingsState.requiresPasswordCheck;
 
-    profileSettingsState.requiresPasswordCheck = true;
-    profileSettingsState.passwordVerified = !profileSettingsState.requiresPasswordCheck;
+        elements.changesList.innerHTML = '';
+        changedFieldLabels.forEach((label) => {
+            const item = document.createElement('li');
+            item.className = 'text-light mb-1';
+            item.textContent = label;
+            elements.changesList.appendChild(item);
+        });
 
-    elements.changesList.innerHTML = '';
-    changedFieldLabels.forEach((label) => {
-        const item = document.createElement('li');
-        item.className = 'text-light mb-1';
-        item.textContent = label;
-        elements.changesList.appendChild(item);
-    });
+        resetProfileSettingsConfirmState();
 
-    resetProfileSettingsConfirmState();
+        if (elements.modalPasswordBlock) {
+            elements.modalPasswordBlock.classList.remove('d-none');
+        }
 
-    if (elements.modalPasswordBlock) {
-        elements.modalPasswordBlock.classList.remove('d-none');
-    }
+        if (profileSettingsState.requiresPasswordCheck) {
+            setModalCurrentPasswordFeedback('neutral', 'A mentéshez add meg a jelenlegi jelszavad.');
+        }
 
-    if (profileSettingsState.requiresPasswordCheck) {
-        setModalCurrentPasswordFeedback('neutral', 'A mentéshez add meg a jelenlegi jelszavad.');
-    }
+        const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
+        modal.show();
 
-    const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
-    modal.show();
+        profileSettingsState.countdownTimer = setInterval(() => {
+            profileSettingsState.countdownLeft -= 1;
 
-    profileSettingsState.countdownTimer = setInterval(() => {
-        profileSettingsState.countdownLeft -= 1;
-
-        if (elements.confirmSaveButton) {
-            if (profileSettingsState.countdownLeft > 0) {
-                elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
-            } else {
-                profileSettingsState.countdownFinished = true;
-                elements.confirmSaveButton.textContent = 'Mentes';
-                updateModalSaveButtonState();
+            if (elements.confirmSaveButton) {
+                if (profileSettingsState.countdownLeft > 0) {
+                    elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
+                } else {
+                    profileSettingsState.countdownFinished = true;
+                    elements.confirmSaveButton.textContent = 'Mentes';
+                    updateModalSaveButtonState();
+                }
             }
-        }
 
-        if (elements.confirmHint) {
-            elements.confirmHint.textContent = profileSettingsState.countdownLeft > 0
-                ? `A mentés gomb ${profileSettingsState.countdownLeft} másodperc múlva lesz aktív.`
-                : 'A mentés gomb most már aktív.';
-        }
+            if (elements.confirmHint) {
+                elements.confirmHint.textContent = profileSettingsState.countdownLeft > 0
+                    ? `A mentés gomb ${profileSettingsState.countdownLeft} másodperc múlva lesz aktív.`
+                    : 'A mentés gomb most már aktív.';
+            }
 
-        if (profileSettingsState.countdownLeft <= 0) {
-            clearInterval(profileSettingsState.countdownTimer);
-            profileSettingsState.countdownTimer = null;
-        }
-    }, 1000);
+            if (profileSettingsState.countdownLeft <= 0) {
+                clearInterval(profileSettingsState.countdownTimer);
+                profileSettingsState.countdownTimer = null;
+            }
+        }, 1000);
+    }
 }
 
 function setModalCurrentPasswordFeedback(state, message) {
     const { modalCurrentPasswordInput, modalCurrentPasswordFeedback } = getProfileSettingsElements();
-    if (!modalCurrentPasswordInput || !modalCurrentPasswordFeedback) {
-        return;
-    }
+    if (modalCurrentPasswordInput && modalCurrentPasswordFeedback) {
+        modalCurrentPasswordInput.classList.remove('is-valid', 'is-invalid');
+        modalCurrentPasswordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
+        modalCurrentPasswordFeedback.textContent = message;
 
-    modalCurrentPasswordInput.classList.remove('is-valid', 'is-invalid');
-    modalCurrentPasswordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
-    modalCurrentPasswordFeedback.textContent = message;
-
-    if (state === 'success') {
-        modalCurrentPasswordInput.classList.add('is-valid');
-        modalCurrentPasswordFeedback.classList.add('text-success');
-    } else if (state === 'error') {
-        modalCurrentPasswordInput.classList.add('is-invalid');
-        modalCurrentPasswordFeedback.classList.add('text-danger');
-    } else {
-        modalCurrentPasswordFeedback.classList.add('text-secondary');
+        if (state === 'success') {
+            modalCurrentPasswordInput.classList.add('is-valid');
+            modalCurrentPasswordFeedback.classList.add('text-success');
+        } else if (state === 'error') {
+            modalCurrentPasswordInput.classList.add('is-invalid');
+            modalCurrentPasswordFeedback.classList.add('text-danger');
+        } else {
+            modalCurrentPasswordFeedback.classList.add('text-secondary');
+        }
     }
 }
 
 function updateModalSaveButtonState() {
     const { confirmSaveButton } = getProfileSettingsElements();
-    if (!confirmSaveButton) {
-        return;
+    if (confirmSaveButton) {
+        const readyByPassword = profileSettingsState.requiresPasswordCheck ? profileSettingsState.passwordVerified : true;
+        confirmSaveButton.disabled = !(profileSettingsState.countdownFinished && readyByPassword);
     }
-
-    const readyByPassword = profileSettingsState.requiresPasswordCheck ? profileSettingsState.passwordVerified : true;
-    confirmSaveButton.disabled = !(profileSettingsState.countdownFinished && readyByPassword);
 }
 
 function verifyModalCurrentPassword() {
     const elements = getProfileSettingsElements();
-    if (!profileSettingsState.requiresPasswordCheck || !elements.modalCurrentPasswordInput) {
-        return;
-    }
+    if (profileSettingsState.requiresPasswordCheck && elements.modalCurrentPasswordInput) {
+        const currentPassword = elements.modalCurrentPasswordInput.value;
+        const passwordValidation = validatePasswordByPolicy(currentPassword, {
+            required: true,
+            minLength: 8,
+            enforceComplexity: true,
+            allowBackslash: false
+        });
 
-    const currentPassword = elements.modalCurrentPasswordInput.value;
-    const passwordValidation = validatePasswordByPolicy(currentPassword, {
-        required: true,
-        minLength: 8,
-        enforceComplexity: true,
-        allowBackslash: false
-    });
+        if (!passwordValidation.isValid) {
+            profileSettingsState.passwordVerified = false;
+            setModalCurrentPasswordFeedback('error', passwordValidation.error);
+        } else {
+            profileSettingsState.passwordVerified = true;
+            setModalCurrentPasswordFeedback('success', 'A jelszó formátuma megfelelő.');
+        }
 
-    if (!passwordValidation.isValid) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', passwordValidation.error);
         updateModalSaveButtonState();
-        return;
     }
-
-    profileSettingsState.passwordVerified = true;
-    setModalCurrentPasswordFeedback('success', 'A jelszó formátuma megfelelő.');
-    updateModalSaveButtonState();
 }
 
 async function submitProfileSettingsChanges() {
     const elements = getProfileSettingsElements();
-    if (!profileSettingsState.pendingPayload || !elements.confirmSaveButton) {
-        return;
-    }
+    if (profileSettingsState.pendingPayload && elements.confirmSaveButton) {
+        elements.confirmSaveButton.disabled = true;
+        elements.confirmSaveButton.textContent = 'Mentés folyamatban...';
 
-    elements.confirmSaveButton.disabled = true;
-    elements.confirmSaveButton.textContent = 'Mentés folyamatban...';
+        try {
+            const response = await fetch('/api/profile/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...profileSettingsState.pendingPayload,
+                    currentPassword: elements.modalCurrentPasswordInput?.value || ''
+                })
+            });
 
-    try {
-        const response = await fetch('/api/profile/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ...profileSettingsState.pendingPayload,
-                currentPassword: elements.modalCurrentPasswordInput?.value || ''
-            })
-        });
+            const result = await parseJson(response);
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
+            }
 
-        const result = await parseJson(response);
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
+            setProfileSettingsMessage('success', result.message || 'A profil beállítások sikeresen frissültek.');
+            profileSettingsState.pendingPayload = null;
+
+            if (elements.newPasswordInput) {
+                elements.newPasswordInput.value = '';
+            }
+            if (elements.confirmPasswordInput) {
+                elements.confirmPasswordInput.value = '';
+            }
+            if (elements.confirmModal) {
+                const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
+                modal.hide();
+            }
+
+            await syncSocketContextOrReconnect('profile-settings-save');
+            await refreshAuthUi('profile-settings-save-success');
+        } catch (error) {
+            setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
+            elements.confirmSaveButton.textContent = 'Mentes';
+            updateModalSaveButtonState();
+            throw new Error(error.message || 'Profil beállítás mentési hiba.');
         }
-
-        setProfileSettingsMessage('success', result.message || 'A profil beállítások sikeresen frissültek.');
-        profileSettingsState.pendingPayload = null;
-
-        if (elements.newPasswordInput) {
-            elements.newPasswordInput.value = '';
-        }
-        if (elements.confirmPasswordInput) {
-            elements.confirmPasswordInput.value = '';
-        }
-        if (elements.confirmModal) {
-            const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
-            modal.hide();
-        }
-
-        await syncSocketContextOrReconnect('profile-settings-save');
-        await refreshAuthUi('profile-settings-save-success');
-    } catch (error) {
-        setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
-        elements.confirmSaveButton.textContent = 'Mentes';
-        updateModalSaveButtonState();
-        throw new Error(error.message || 'Profil beállítás mentési hiba.');
     }
 }
 
@@ -2200,38 +2222,33 @@ function getProfileDeleteElements() {
 
 function setDeleteProfileMessage(type, message) {
     const { message: messageElement } = getProfileDeleteElements();
-    if (!messageElement) {
-        return;
+    if (messageElement) {
+        if (!message) {
+            messageElement.className = 'alert d-none mt-3 mb-0';
+            messageElement.textContent = '';
+        } else {
+            messageElement.className = `alert alert-${type} mt-3 mb-0`;
+            messageElement.textContent = message;
+        }
     }
-
-    if (!message) {
-        messageElement.className = 'alert d-none mt-3 mb-0';
-        messageElement.textContent = '';
-        return;
-    }
-
-    messageElement.className = `alert alert-${type} mt-3 mb-0`;
-    messageElement.textContent = message;
 }
 
 function setDeleteProfilePasswordFeedback(state, message) {
     const { passwordInput, passwordFeedback } = getProfileDeleteElements();
-    if (!passwordInput || !passwordFeedback) {
-        return;
-    }
+    if (passwordInput && passwordFeedback) {
+        passwordInput.classList.remove('is-valid', 'is-invalid');
+        passwordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
+        passwordFeedback.textContent = message;
 
-    passwordInput.classList.remove('is-valid', 'is-invalid');
-    passwordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
-    passwordFeedback.textContent = message;
-
-    if (state === 'error') {
-        passwordInput.classList.add('is-invalid');
-        passwordFeedback.classList.add('text-danger');
-    } else if (state === 'success') {
-        passwordInput.classList.add('is-valid');
-        passwordFeedback.classList.add('text-success');
-    } else {
-        passwordFeedback.classList.add('text-secondary');
+        if (state === 'error') {
+            passwordInput.classList.add('is-invalid');
+            passwordFeedback.classList.add('text-danger');
+        } else if (state === 'success') {
+            passwordInput.classList.add('is-valid');
+            passwordFeedback.classList.add('text-success');
+        } else {
+            passwordFeedback.classList.add('text-secondary');
+        }
     }
 }
 
@@ -2248,29 +2265,27 @@ function validateDeleteProfilePassword(password) {
 
 function updateDeleteProfileConfirmButtonState() {
     const elements = getProfileDeleteElements();
-    if (!elements.confirmButton || !elements.passwordInput || !elements.acknowledgeCheckbox) {
-        return;
+    if (elements.confirmButton && elements.passwordInput && elements.acknowledgeCheckbox) {
+        const password = elements.passwordInput.value || '';
+        const passwordError = validateDeleteProfilePassword(password);
+        const acknowledged = elements.acknowledgeCheckbox.checked;
+
+        if (!password) {
+            setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
+        } else if (passwordError) {
+            setDeleteProfilePasswordFeedback('error', passwordError);
+        } else {
+            setDeleteProfilePasswordFeedback('success', 'A jelszó formátuma megfelelő.');
+        }
+
+        const canSubmit = profileDeleteState.countdownFinished
+            && !profileDeleteState.submitting
+            && acknowledged
+            && password.length > 0
+            && !passwordError;
+
+        elements.confirmButton.disabled = !canSubmit;
     }
-
-    const password = elements.passwordInput.value || '';
-    const passwordError = validateDeleteProfilePassword(password);
-    const acknowledged = elements.acknowledgeCheckbox.checked;
-
-    if (!password) {
-        setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
-    } else if (passwordError) {
-        setDeleteProfilePasswordFeedback('error', passwordError);
-    } else {
-        setDeleteProfilePasswordFeedback('success', 'A jelszó formátuma megfelelő.');
-    }
-
-    const canSubmit = profileDeleteState.countdownFinished
-        && !profileDeleteState.submitting
-        && acknowledged
-        && password.length > 0
-        && !passwordError;
-
-    elements.confirmButton.disabled = !canSubmit;
 }
 
 function resetDeleteProfileModalState() {
@@ -2304,86 +2319,80 @@ function resetDeleteProfileModalState() {
 
 function startDeleteProfileCountdown() {
     const elements = getProfileDeleteElements();
-    if (!elements.confirmButton) {
-        return;
-    }
-
-    if (profileDeleteState.countdownTimer) {
-        clearInterval(profileDeleteState.countdownTimer);
-    }
-
-    profileDeleteState.countdownTimer = setInterval(() => {
-        profileDeleteState.countdownLeft -= 1;
-
-        const { timer } = getProfileDeleteElements();
-        if (timer) {
-            timer.textContent = String(Math.max(profileDeleteState.countdownLeft, 0));
-        }
-
-        if (profileDeleteState.countdownLeft <= 0) {
-            profileDeleteState.countdownFinished = true;
+    if (elements.confirmButton) {
+        if (profileDeleteState.countdownTimer) {
             clearInterval(profileDeleteState.countdownTimer);
-            profileDeleteState.countdownTimer = null;
-            elements.confirmButton.textContent = 'Törlés';
         }
 
-        updateDeleteProfileConfirmButtonState();
-    }, 1000);
+        profileDeleteState.countdownTimer = setInterval(() => {
+            profileDeleteState.countdownLeft -= 1;
+
+            const { timer } = getProfileDeleteElements();
+            if (timer) {
+                timer.textContent = String(Math.max(profileDeleteState.countdownLeft, 0));
+            }
+
+            if (profileDeleteState.countdownLeft <= 0) {
+                profileDeleteState.countdownFinished = true;
+                clearInterval(profileDeleteState.countdownTimer);
+                profileDeleteState.countdownTimer = null;
+                elements.confirmButton.textContent = 'Törlés';
+            }
+
+            updateDeleteProfileConfirmButtonState();
+        }, 1000);
+    }
 }
 
 async function submitDeleteProfile() {
     const elements = getProfileDeleteElements();
-    if (!elements.passwordInput || !elements.acknowledgeCheckbox || !elements.confirmButton) {
-        return;
-    }
+    if (elements.passwordInput && elements.acknowledgeCheckbox && elements.confirmButton) {
+        const currentPassword = elements.passwordInput.value || '';
+        const passwordError = validateDeleteProfilePassword(currentPassword);
+        const missingAcknowledge = !elements.acknowledgeCheckbox.checked;
 
-    const currentPassword = elements.passwordInput.value || '';
-    const passwordError = validateDeleteProfilePassword(currentPassword);
-    if (passwordError) {
-        setDeleteProfilePasswordFeedback('error', passwordError);
-        updateDeleteProfileConfirmButtonState();
-        return;
-    }
+        if (passwordError) {
+            setDeleteProfilePasswordFeedback('error', passwordError);
+            updateDeleteProfileConfirmButtonState();
+        } else if (missingAcknowledge) {
+            setDeleteProfileMessage('danger', 'Fogadd el, hogy a törlés nem visszavonható.');
+            updateDeleteProfileConfirmButtonState();
+        } else {
+            profileDeleteState.submitting = true;
+            elements.confirmButton.disabled = true;
+            elements.confirmButton.textContent = 'Törlés folyamatban...';
+            setDeleteProfileMessage('danger', '');
 
-    if (!elements.acknowledgeCheckbox.checked) {
-        setDeleteProfileMessage('danger', 'Fogadd el, hogy a törlés nem visszavonható.');
-        updateDeleteProfileConfirmButtonState();
-        return;
-    }
+            try {
+                const response = await fetch('/api/profile/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ currentPassword })
+                });
 
-    profileDeleteState.submitting = true;
-    elements.confirmButton.disabled = true;
-    elements.confirmButton.textContent = 'Törlés folyamatban...';
-    setDeleteProfileMessage('danger', '');
+                const result = await parseJson(response);
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || 'A profil törlése nem sikerült.');
+                }
 
-    try {
-        const response = await fetch('/api/profile/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ currentPassword })
-        });
+                if (elements.modal) {
+                    const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
+                    modal.hide();
+                }
 
-        const result = await parseJson(response);
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'A profil törlése nem sikerült.');
+                if (socket) {
+                    socket.disconnect();
+                }
+
+                await refreshAuthUi('profile-delete-success');
+                window.location.href = '/';
+            } catch (error) {
+                profileDeleteState.submitting = false;
+                setDeleteProfileMessage('danger', error.message || 'Hiba történt a profil törlése közben.');
+                updateDeleteProfileConfirmButtonState();
+                throw new Error(error.message || 'Profil törlési hiba.');
+            }
         }
-
-        if (elements.modal) {
-            const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
-            modal.hide();
-        }
-
-        if (socket) {
-            socket.disconnect();
-        }
-
-        await refreshAuthUi('profile-delete-success');
-        window.location.href = '/';
-    } catch (error) {
-        profileDeleteState.submitting = false;
-        setDeleteProfileMessage('danger', error.message || 'Hiba történt a profil törlése közben.');
-        updateDeleteProfileConfirmButtonState();
-        throw new Error(error.message || 'Profil törlési hiba.');
     }
 }
 
@@ -2465,18 +2474,15 @@ function getProfileImageEditorElements() {
 
 function setProfileImageEditorMessage(type, message) {
     const { message: messageElement } = getProfileImageEditorElements();
-    if (!messageElement) {
-        return;
+    if (messageElement) {
+        if (!message) {
+            messageElement.className = 'alert d-none mt-3 mb-0';
+            messageElement.textContent = '';
+        } else {
+            messageElement.className = `alert alert-${type} mt-3 mb-0`;
+            messageElement.textContent = message;
+        }
     }
-
-    if (!message) {
-        messageElement.className = 'alert d-none mt-3 mb-0';
-        messageElement.textContent = '';
-        return;
-    }
-
-    messageElement.className = `alert alert-${type} mt-3 mb-0`;
-    messageElement.textContent = message;
 }
 
 function resetProfileImageEditorState() {

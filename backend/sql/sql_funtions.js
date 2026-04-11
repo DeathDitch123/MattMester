@@ -896,12 +896,10 @@ async function getAllProfileImageReferences() {
 
         [...userRows, ...uploadRows].forEach((row) => {
             const filename = String(row.filename || '').trim();
-            if (!filename || seen.has(filename)) {
-                return;
+            if (filename && !seen.has(filename)) {
+                seen.add(filename);
+                references.push(filename);
             }
-
-            seen.add(filename);
-            references.push(filename);
         });
 
         return references;
@@ -1325,22 +1323,21 @@ async function getFriendListForUser(userId, filter = 'friend') {
             const current = blockedMap.get(item.userId);
             if (!current) {
                 blockedMap.set(item.userId, item);
-                return;
+            } else {
+                blockedMap.set(item.userId, {
+                    ...current,
+                    relationStatus: current.ownBlockActive && item.oppositeBlockActive
+                        ? 'blocked_mutual'
+                        : current.ownBlockActive
+                            ? 'blocked_by_me'
+                            : 'blocked_by_them',
+                    ownBlockActive: Boolean(current.ownBlockActive || item.ownBlockActive),
+                    oppositeBlockActive: Boolean(current.oppositeBlockActive || item.oppositeBlockActive),
+                    canUnblock: Boolean(current.ownBlockActive || item.ownBlockActive),
+                    isBlockedContext: true,
+                    canView: true
+                });
             }
-
-            blockedMap.set(item.userId, {
-                ...current,
-                relationStatus: current.ownBlockActive && item.oppositeBlockActive
-                    ? 'blocked_mutual'
-                    : current.ownBlockActive
-                        ? 'blocked_by_me'
-                        : 'blocked_by_them',
-                ownBlockActive: Boolean(current.ownBlockActive || item.ownBlockActive),
-                oppositeBlockActive: Boolean(current.oppositeBlockActive || item.oppositeBlockActive),
-                canUnblock: Boolean(current.ownBlockActive || item.ownBlockActive),
-                isBlockedContext: true,
-                canView: true
-            });
         });
 
         return Array.from(blockedMap.values()).sort((left, right) => {
@@ -1368,27 +1365,26 @@ async function getFriendListForUser(userId, filter = 'friend') {
         const current = mapByUserId.get(item.userId);
         if (!current) {
             mapByUserId.set(item.userId, item);
-            return;
+        } else {
+            const merged = {
+                ...current,
+                ownBlockActive: Boolean(current.ownBlockActive || item.ownBlockActive),
+                oppositeBlockActive: Boolean(current.oppositeBlockActive || item.oppositeBlockActive),
+                canUnblock: Boolean(current.canUnblock || item.canUnblock),
+                isBlockedContext: Boolean(current.isBlockedContext || item.isBlockedContext)
+            };
+
+            if ((priority[item.relationStatus] || 0) >= (priority[current.relationStatus] || 0)) {
+                merged.relationStatus = item.relationStatus;
+                merged.canAccept = item.canAccept;
+                merged.canReject = item.canReject;
+                merged.canBlock = item.canBlock;
+                merged.canChat = item.canChat;
+                merged.canView = item.canView;
+            }
+
+            mapByUserId.set(item.userId, merged);
         }
-
-        const merged = {
-            ...current,
-            ownBlockActive: Boolean(current.ownBlockActive || item.ownBlockActive),
-            oppositeBlockActive: Boolean(current.oppositeBlockActive || item.oppositeBlockActive),
-            canUnblock: Boolean(current.canUnblock || item.canUnblock),
-            isBlockedContext: Boolean(current.isBlockedContext || item.isBlockedContext)
-        };
-
-        if ((priority[item.relationStatus] || 0) >= (priority[current.relationStatus] || 0)) {
-            merged.relationStatus = item.relationStatus;
-            merged.canAccept = item.canAccept;
-            merged.canReject = item.canReject;
-            merged.canBlock = item.canBlock;
-            merged.canChat = item.canChat;
-            merged.canView = item.canView;
-        }
-
-        mapByUserId.set(item.userId, merged);
     });
 
     return Array.from(mapByUserId.values()).sort((left, right) => {
