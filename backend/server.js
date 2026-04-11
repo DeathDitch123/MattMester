@@ -41,7 +41,19 @@ const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
 
 const corsOptions = {
     origin: (origin, callback) => {
+        // Check if origin is in allowed list, or normalize localhost <-> 127.0.0.1
+        let isAllowed = false;
         if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
+            isAllowed = true;
+        } else {
+            // Handle localhost <-> 127.0.0.1 equivalence
+            isAllowed = ALLOWED_ORIGINS.some(allowed => {
+                const allowedNormalized = allowed.replace('127.0.0.1', 'localhost').replace('localhost', '127.0.0.1');
+                return origin === allowed || origin === allowedNormalized;
+            });
+        }
+        
+        if (isAllowed) {
             callback(null, true);
         } else {
             console.warn(`[CORS] Rejected origin: ${origin}`);
