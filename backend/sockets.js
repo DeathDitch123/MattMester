@@ -167,7 +167,12 @@ function createSocketHub(io) {
         metadata = {}
     } = {}) {
         try {
-            await sql.insertUserLog(userId, {
+            const normalizedUserId = parsePositiveInteger(userId, 0);
+            if (!normalizedUserId) {
+                return;
+            }
+
+            await sql.insertUserLog(normalizedUserId, {
                 eventType,
                 eventCategory: 'security',
                 severity,
@@ -562,7 +567,7 @@ function createSocketHub(io) {
 
                 if (isRateLimited) {
                     const currentContext = socketsById.get(socket.id);
-                    await writeChatSecurityAudit(currentContext?.userId || null, 'chat_rate_limited', conversationId, {
+                    await writeChatSecurityAudit(currentContext?.userId || 0, 'chat_rate_limited', conversationId, {
                         success: false,
                         severity: 'warning',
                         message: 'Socket chat üzenet rate limit miatt blokkolva.',

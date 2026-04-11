@@ -1226,7 +1226,12 @@ async function writeChatSecurityAudit(userId, eventType, conversationId, {
     metadata = {}
 } = {}) {
     try {
-        await sql.insertUserLog(userId, {
+        const normalizedUserId = parsePositiveInteger(userId, 0);
+        if (!normalizedUserId) {
+            return;
+        }
+
+        await sql.insertUserLog(normalizedUserId, {
             eventType,
             eventCategory: 'security',
             severity,
@@ -1401,7 +1406,7 @@ router.post('/chat/conversations/:conversationId/messages', isAuthenticated, asy
 
         if (isRateLimited) {
             const conversationId = parsePositiveInteger(request.params?.conversationId, null);
-            const currentUserId = Number(request.session?.userId) || 0;
+            const currentUserId = parsePositiveInteger(request.session?.userId, 0);
             await writeChatSecurityAudit(currentUserId, 'chat_rate_limited', conversationId, {
                 success: false,
                 severity: 'warning',

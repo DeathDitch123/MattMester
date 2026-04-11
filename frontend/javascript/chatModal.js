@@ -60,13 +60,16 @@
                 max-width: 1100px;
             }
             .chat-modal-content {
-                height: min(80vh, 860px);
+                height: min(86vh, 900px);
+                max-height: min(86vh, 900px);
+                overflow: hidden;
                 background: #0f172a;
                 border: 1px solid #1e293b;
                 color: #e2e8f0;
             }
             .chat-layout {
                 height: 100%;
+                overflow: hidden;
             }
             .chat-left {
                 border-right: 1px solid #1e293b;
@@ -74,6 +77,7 @@
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
+                overflow: hidden;
             }
             .chat-search-wrap {
                 padding: 12px;
@@ -99,7 +103,7 @@
                 background: #0b1220;
                 border: 1px solid #233041;
                 border-radius: 10px;
-                padding: 10px;
+                padding: 10px 11px;
                 cursor: pointer;
             }
             .chat-conversation-item.is-active {
@@ -111,6 +115,46 @@
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
+            }
+            .chat-title-wrap {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                min-width: 0;
+                flex: 1;
+            }
+            .chat-profile-image {
+                width: clamp(30px, 2.5vw, 36px);
+                height: clamp(30px, 2.5vw, 36px);
+                border-radius: 50%;
+                border: 1px solid #334155;
+                object-fit: cover;
+                object-position: center;
+                flex-shrink: 0;
+                background: #0f172a;
+            }
+            .chat-profile-image.is-pending {
+                filter: blur(3px) saturate(0.75);
+            }
+            .chat-user-name {
+                color: #ffffff;
+                display: block;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .chat-conversation-preview {
+                color: #94a3b8;
+                font-size: 12px;
+                margin-top: 6px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .chat-conversation-date {
+                color: #64748b;
+                font-size: 11px;
+                margin-top: 4px;
             }
             .chat-unread-badge {
                 min-width: 18px;
@@ -129,6 +173,7 @@
                 flex-direction: column;
                 min-width: 0;
                 min-height: 0;
+                overflow: hidden;
             }
             .chat-header {
                 border-bottom: 1px solid #1e293b;
@@ -158,9 +203,33 @@
                 background: #1f2937;
             }
             .chat-message-meta {
-                font-size: 11px;
-                opacity: 0.8;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                color: #ffffff;
+                font-size: 12px;
                 margin-bottom: 4px;
+            }
+            .chat-message-profile-image {
+                width: clamp(24px, 2vw, 30px);
+                height: clamp(24px, 2vw, 30px);
+                border-radius: 50%;
+                border: 1px solid #334155;
+                object-fit: cover;
+                object-position: center;
+                flex-shrink: 0;
+                background: #0f172a;
+            }
+            .chat-message-profile-image.is-pending {
+                filter: blur(3px) saturate(0.75);
+            }
+            .chat-message-sender {
+                color: #ffffff;
+                font-weight: 600;
+            }
+            .chat-message-date {
+                color: #94a3b8;
+                font-size: 11px;
             }
             .chat-composer {
                 border-top: 1px solid #1e293b;
@@ -191,12 +260,13 @@
             @media (max-width: 991.98px) {
                 .chat-modal-content {
                     height: 100vh;
+                    max-height: 100vh;
                     border-radius: 0;
                 }
                 .chat-left {
                     border-right: 0;
                     border-bottom: 1px solid #1e293b;
-                    max-height: 36vh;
+                    max-height: 34vh;
                 }
             }
             `;
@@ -330,6 +400,19 @@
             || `Beszelgetes #${conversation?.conversationId || '?'}`;
     }
 
+    function resolveProfileImageSrc(imagePath) {
+        const value = String(imagePath || '').trim();
+        if (!value) {
+            return '/profile_pictures/default.png';
+        }
+
+        return value;
+    }
+
+    function isPendingProfileImageStatus(statusValue) {
+        return String(statusValue || '').trim().toLowerCase() === 'pending';
+    }
+
     function findConversation(conversationId) {
         const normalizedId = Number(conversationId) || 0;
         return state.conversationList.find((item) => Number(item.conversationId) === normalizedId) || null;
@@ -365,15 +448,47 @@
                 }
 
                 const unreadCount = Number(conversation.unreadCount || 0);
-                const unreadBadge = unreadCount > 0 ? `<span class="chat-unread-badge">${Math.min(unreadCount, 99)}</span>` : '';
-                element.innerHTML = `
-                <div class="chat-row-top">
-                    <strong class="text-truncate">${getConversationTitle(conversation)}</strong>
-                    ${unreadBadge}
-                </div>
-                <div class="small text-secondary text-truncate mt-1">${String(conversation.lastMessagePreview || 'Nincs uzenet.')}</div>
-                <div class="small text-secondary mt-1">${formatDate(conversation.lastMessageAt)}</div>
-            `;
+                const topRow = globalScope.document.createElement('div');
+                topRow.className = 'chat-row-top';
+
+                const titleWrap = globalScope.document.createElement('div');
+                titleWrap.className = 'chat-title-wrap';
+
+                const profileImage = globalScope.document.createElement('img');
+                profileImage.className = 'chat-profile-image';
+                profileImage.src = resolveProfileImageSrc(conversation?.otherUser?.profileImage);
+                profileImage.alt = `${getConversationTitle(conversation)} profile image`;
+
+                if (isPendingProfileImageStatus(conversation?.otherUser?.profileImageStatus)) {
+                    profileImage.classList.add('is-pending');
+                }
+
+                const title = globalScope.document.createElement('strong');
+                title.className = 'chat-user-name';
+                title.textContent = getConversationTitle(conversation);
+
+                titleWrap.appendChild(profileImage);
+                titleWrap.appendChild(title);
+                topRow.appendChild(titleWrap);
+
+                if (unreadCount > 0) {
+                    const unreadBadge = globalScope.document.createElement('span');
+                    unreadBadge.className = 'chat-unread-badge';
+                    unreadBadge.textContent = String(Math.min(unreadCount, 99));
+                    topRow.appendChild(unreadBadge);
+                }
+
+                const preview = globalScope.document.createElement('div');
+                preview.className = 'chat-conversation-preview';
+                preview.textContent = String(conversation.lastMessagePreview || 'Nincs uzenet.');
+
+                const date = globalScope.document.createElement('div');
+                date.className = 'chat-conversation-date';
+                date.textContent = formatDate(conversation.lastMessageAt);
+
+                element.appendChild(topRow);
+                element.appendChild(preview);
+                element.appendChild(date);
 
                 element.addEventListener('click', () => {
                     openConversation(conversation.conversationId).catch((error) => {
@@ -452,7 +567,26 @@
 
                 const meta = globalScope.document.createElement('div');
                 meta.className = 'chat-message-meta';
-                meta.textContent = `${message.senderUsername || 'Jatekos'} · ${formatDate(message.sentAt)}`;
+
+                const messageProfileImage = globalScope.document.createElement('img');
+                messageProfileImage.className = 'chat-message-profile-image';
+                messageProfileImage.src = resolveProfileImageSrc(message.senderProfileImage);
+                messageProfileImage.alt = `${message.senderUsername || 'Jatekos'} profile image`;
+                if (isPendingProfileImageStatus(message.senderProfileImageStatus)) {
+                    messageProfileImage.classList.add('is-pending');
+                }
+
+                const sender = globalScope.document.createElement('span');
+                sender.className = 'chat-message-sender';
+                sender.textContent = message.senderUsername || 'Jatekos';
+
+                const sentDate = globalScope.document.createElement('span');
+                sentDate.className = 'chat-message-date';
+                sentDate.textContent = formatDate(message.sentAt);
+
+                meta.appendChild(messageProfileImage);
+                meta.appendChild(sender);
+                meta.appendChild(sentDate);
 
                 const body = globalScope.document.createElement('div');
                 body.className = 'chat-message-body';

@@ -1934,7 +1934,8 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
                 ) AS participant_count,
                 other_user.id AS other_user_id,
                 other_user.username AS other_user_username,
-                other_user.profile_image AS other_user_profile_image
+                other_user.profile_image AS other_user_profile_image,
+                other_user.profile_image_status AS other_user_profile_image_status
             FROM chat_participants current_participant
             JOIN chat_conversations c ON c.id = current_participant.conversation_id
             LEFT JOIN chat_messages last_message ON last_message.id = (
@@ -1981,7 +1982,8 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
             ? {
                 userId: row.other_user_id,
                 username: row.other_user_username,
-                profileImage: row.other_user_profile_image || DEFAULT_PROFILE_IMAGE_PATH
+                profileImage: row.other_user_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+                profileImageStatus: row.other_user_profile_image_status || 'default'
             }
             : null
     }));
@@ -2028,7 +2030,8 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
                 m.is_body_masked,
                 m.sent_at,
                 u.username AS sender_username,
-                u.profile_image AS sender_profile_image
+                u.profile_image AS sender_profile_image,
+                u.profile_image_status AS sender_profile_image_status
             FROM chat_messages m
             JOIN users u ON u.id = m.sender_id
             WHERE m.conversation_id = ?
@@ -2049,6 +2052,7 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
             senderId: row.sender_id,
             senderUsername: row.sender_username,
             senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+            senderProfileImageStatus: row.sender_profile_image_status || 'default',
             body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
             bodyOriginal: row.body,
             isBodyMasked: Boolean(row.is_body_masked),
@@ -2234,7 +2238,8 @@ async function insertMessageInConversation(userId, conversationId, message, poli
                     m.is_body_masked,
                     m.sent_at,
                     u.username AS sender_username,
-                    u.profile_image AS sender_profile_image
+                    u.profile_image AS sender_profile_image,
+                    u.profile_image_status AS sender_profile_image_status
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
                 WHERE m.id = ?
@@ -2256,6 +2261,7 @@ async function insertMessageInConversation(userId, conversationId, message, poli
             senderId: row.sender_id,
             senderUsername: row.sender_username,
             senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+            senderProfileImageStatus: row.sender_profile_image_status || 'default',
             body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
             bodyOriginal: row.body,
             isBodyMasked: Boolean(row.is_body_masked),
