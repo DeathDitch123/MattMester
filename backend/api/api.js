@@ -884,11 +884,12 @@ router.post('/friends/add', isAuthenticated, async (request, response) => {
 
 function parseTargetUserId(value) {
     const parsed = Number(value);
-    if (!Number.isInteger(parsed) || parsed <= 0) {
-        return null;
+    let targetUserId = null;
+    if (Number.isInteger(parsed) && parsed > 0) {
+        targetUserId = parsed;
     }
 
-    return parsed;
+    return targetUserId;
 }
 
 router.get('/friends/list', isAuthenticated, async (request, response) => {
@@ -1103,6 +1104,216 @@ router.delete('/friends/:targetUserId', isAuthenticated, async (request, respons
             message: error.message || 'Szerverhiba a barát kapcsolat törlése során.'
         });
     }
+});
+
+function parsePositiveInteger(value, fallback = null) {
+    const parsed = Number(value);
+    let result = fallback;
+    if (Number.isInteger(parsed) && parsed > 0) {
+        result = parsed;
+    }
+
+    return result;
+}
+
+function parseChatListLimit(value, fallback = 30, min = 1, max = 50) {
+    const parsed = parsePositiveInteger(value, fallback);
+    let normalized = fallback;
+    if (parsed) {
+        normalized = Math.min(Math.max(parsed, min), max);
+    }
+
+    return normalized;
+}
+
+function getAuthenticatedUserIdOrThrow(request) {
+    const currentUserId = Number(request.session?.userId) || 0;
+    if (!currentUserId) {
+        throw new Error('Nincs bejelentkezett felhasználó.');
+    }
+
+    return currentUserId;
+}
+
+function resolveStatusCodeByError(error, defaultStatusCode = 500) {
+    const message = String(error?.message || '').toLowerCase();
+    let statusCode = defaultStatusCode;
+
+    if (message.includes('nincs bejelentkezett')) {
+        statusCode = 401;
+    } else if (message.includes('érvénytelen') || message.includes('ervenytelen') || message.includes('nem lehet üres') || message.includes('legfeljebb')) {
+        statusCode = 400;
+    } else if (message.includes('nem résztvevője') || message.includes('nem resztvevoje') || message.includes('nem nyitható meg tiltás miatt') || message.includes('nem nyithato meg tiltas miatt')) {
+        statusCode = 403;
+    } else if (message.includes('nem található') || message.includes('nem talalhato')) {
+        statusCode = 404;
+    }
+
+    return statusCode;
+}
+
+router.get('/chat/conversations', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = {
+        success: false,
+        data: [],
+        message: 'Szerverhiba a beszélgetések lekérése során.',
+        cursor: null,
+        hasMore: false
+    };
+
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+
+        const limit = parseChatListLimit(request.query?.limit, 30, 1, 50);
+        const cursor = parsePositiveInteger(request.query?.cursor, null);
+        const result = await sql.getUserConversations(currentUserId, limit, cursor);
+
+        payload = {
+            success: true,
+            data: result.data,
+            message: result.data.length
+                ? `${result.data.length} beszélgetés betöltve.`
+                : 'Nincs beszélgetés.',
+            cursor: result.nextCursor,
+            hasMore: Boolean(result.hasMore)
+        };
+    } catch (error) {
+        statusCode = resolveStatusCodeByError(error, 500);
+        payload.message = error.message || payload.message;
+    }
+
+    return response.status(statusCode).json(payload);
+});
+
+router.get('/chat/conversations/:conversationId/messages', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = {
+        success: false,
+        data: [],
+        message: 'Szerverhiba a beszélgetés üzeneteinek lekérése során.',
+        cursor: null,
+        hasMore: false
+    };
+
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+
+        const conversationId = parsePositiveInteger(request.params?.conversationId, null);
+        if (!conversationId) {
+            throw new Error('Érvénytelen beszélgetés azonosító.');
+        }
+
+        const limit = parseChatListLimit(request.query?.limit, 30, 1, 50);
+        const beforeMessageId = parsePositiveInteger(request.query?.before, null);
+
+        await sql.assertConversationParticipant(currentUserId, conversationId);
+        const result = await sql.getConversationMessages(currentUserId, conversationId, beforeMessageId, limit);
+
+        payload = {
+            success: true,
+            data: result.data,
+            message: result.data.length
+                ? `${result.data.length} üzenet betöltve.`
+                : 'Nincs megjeleníthető üzenet.',
+            cursor: result.nextCursor,
+            hasMore: Boolean(result.hasMore)
+        };
+    } catch (error) {
+        statusCode = resolveStatusCodeByError(error, 500);
+        payload.message = error.message || payload.message;
+    }
+
+    return response.status(statusCode).json(payload);
+});
+
+router.post('/chat/conversations/:conversationId/messages', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = {
+        success: false,
+        data: null,
+        message: 'Szerverhiba az üzenet küldése során.'
+    };
+
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+
+        const conversationId = parsePositiveInteger(request.params?.conversationId, null);
+        if (!conversationId) {
+            throw new Error('Érvénytelen beszélgetés azonosító.');
+        }
+
+        const message = String(request.body?.message || '').trim();
+        if (!message) {
+            throw new Error('Az üzenet nem lehet üres.');
+        }
+
+        if (message.length > 1000) {
+            throw new Error('Az üzenet legfeljebb 1000 karakter lehet.');
+        }
+
+        await sql.assertConversationParticipant(currentUserId, conversationId);
+
+        const policyResult = sql.containsBlockedWord(message)
+            ? {
+                blocked: true,
+                message: 'Az üzenet tiltott kifejezést tartalmaz.'
+            }
+            : { blocked: false };
+
+        const data = await sql.insertMessageInConversation(currentUserId, conversationId, message, policyResult);
+        payload = {
+            success: true,
+            data,
+            message: 'Üzenet elküldve.'
+        };
+    } catch (error) {
+        statusCode = resolveStatusCodeByError(error, 500);
+        payload.message = error.message || payload.message;
+    }
+
+    return response.status(statusCode).json(payload);
+});
+
+router.post('/chat/conversations/direct', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = {
+        success: false,
+        data: null,
+        message: 'Szerverhiba a privát beszélgetés megnyitása során.'
+    };
+
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+
+        const targetUserId = parsePositiveInteger(request.body?.targetUserId, null);
+        if (!targetUserId) {
+            throw new Error('Érvénytelen target user ID.');
+        }
+
+        if (currentUserId === targetUserId) {
+            throw new Error('Önmagaddal nem nyithatsz privát beszélgetést.');
+        }
+
+        const openResult = await sql.createOrGetDirectConversation(currentUserId, targetUserId);
+        await sql.assertConversationParticipant(currentUserId, openResult.conversationId);
+
+        payload = {
+            success: true,
+            data: {
+                conversationId: openResult.conversationId,
+                created: Boolean(openResult.created)
+            },
+            message: openResult.created
+                ? 'Privát beszélgetés létrehozva.'
+                : 'Privát beszélgetés megnyitva.'
+        };
+    } catch (error) {
+        statusCode = resolveStatusCodeByError(error, 500);
+        payload.message = error.message || payload.message;
+    }
+
+    return response.status(statusCode).json(payload);
 });
 
 module.exports = router;
