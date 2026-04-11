@@ -546,6 +546,27 @@
         <i data-lucide="swords" style="width: 26px; height: 26px;"></i>
     </button>
 
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="logoutModalLabel">
+                        <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                        Kijelentkezés megerősítése
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Biztosan ki szeretnél jelentkezni?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmLogoutButton">Kijelentkezés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content modal-surface">

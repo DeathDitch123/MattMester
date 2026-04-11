@@ -61,6 +61,10 @@ const profileRealtimeSyncState = {
     bound: false,
     unsubscribe: null
 };
+const logoutState = {
+    bound: false,
+    submitting: false
+};
 const friendsState = {
     bound: false,
     loading: false,
@@ -142,7 +146,6 @@ async function logSessionAndSocketInfo(sessionInfoInput = null, contextLabel = '
     try {
         const sessionInfo = sessionInfoInput || await fetchSessionInfo();
 
-        console.clear();
         console.log('--- Auth Status Report ---');
         console.log('Context:', contextLabel);
         console.log('Session info:', sessionInfo);
@@ -1265,6 +1268,17 @@ function bindFriendsSectionEvents() {
 }
 
 async function handleLogout() {
+    if (logoutState.submitting) {
+        return;
+    }
+
+    const { confirmButton } = getLogoutElements();
+    logoutState.submitting = true;
+    if (confirmButton) {
+        confirmButton.disabled = true;
+        confirmButton.textContent = 'Kijelentkezés...';
+    }
+
     try {
         const response = await fetch('/api/logout', {
             method: 'POST',
@@ -1284,19 +1298,54 @@ async function handleLogout() {
         window.location.reload();
     } catch (error) {
         console.error('Hiba a kijelentkezes soran:', error);
+        logoutState.submitting = false;
+        if (confirmButton) {
+            confirmButton.disabled = false;
+            confirmButton.textContent = 'Kijelentkezés';
+        }
     }
 }
 
+function getLogoutElements() {
+    return {
+        modal: document.getElementById('logoutModal'),
+        confirmButton: document.getElementById('confirmLogoutButton')
+    };
+}
+
 function bindLogoutButton() {
-    const logoutButtons = document.querySelectorAll('[data-bs-target="#logoutModal"]');
-    logoutButtons.forEach((button) => {
-        button.addEventListener('click', (event) => {
-            runSafelyAsync('logoutButtonClick', async () => {
-                event.preventDefault();
-                await handleLogout();
-            });
+    if (logoutState.bound) {
+        return;
+    }
+
+    const { modal, confirmButton } = getLogoutElements();
+    if (!modal || !confirmButton) {
+        return;
+    }
+
+    confirmButton.addEventListener('click', () => {
+        runSafelyAsync('logoutConfirmClick', async () => {
+            await handleLogout();
         });
     });
+
+    modal.addEventListener('show.bs.modal', () => {
+        runSafely('logoutModalShow', () => {
+            logoutState.submitting = false;
+            confirmButton.disabled = false;
+            confirmButton.textContent = 'Kijelentkezés';
+        });
+    });
+
+    modal.addEventListener('hidden.bs.modal', () => {
+        runSafely('logoutModalHidden', () => {
+            logoutState.submitting = false;
+            confirmButton.disabled = false;
+            confirmButton.textContent = 'Kijelentkezés';
+        });
+    });
+
+    logoutState.bound = true;
 }
 
 function getTopBarPlayerSearchElements() {
@@ -1507,24 +1556,6 @@ function showStats(sessionInfo) {
         const rankClasses = ['rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster'];
         const roleBadgeClasses = ['admin', 'badge-custom', 'badge-admin', 'badge-player'];
         const statBadgeClasses = ['badge-custom', 'badge-win', 'badge-loss', 'badge-draw', 'badge-ongoing'];
-        const getRankForElo = (eloValue) => {
-            const elo = toNumber(eloValue);
-            let rank = { label: 'Grandmaster', className: 'rank-grandmaster' };
-
-            if (elo < 1100) {
-                rank = { label: 'Beginner', className: 'rank-beginner' };
-            } else if (elo < 1400) {
-                rank = { label: 'Intermediate', className: 'rank-intermediate' };
-            } else if (elo < 1700) {
-                rank = { label: 'Advanced', className: 'rank-advanced' };
-            } else if (elo < 2000) {
-                rank = { label: 'Expert', className: 'rank-expert' };
-            } else if (elo < 2300) {
-                rank = { label: 'Master', className: 'rank-master' };
-            }
-
-            return rank;
-        };
 
         document.querySelectorAll('.top-bar-user-name').forEach((element) => {
             element.textContent = username;
@@ -1576,7 +1607,7 @@ function showStats(sessionInfo) {
         eloValues.forEach((eloValue, index) => {
             const rankElement = eloRanks[index];
             if (rankElement) {
-                const rank = getRankForElo(eloValue);
+                const rank = getRankForEloValue(toNumber(eloValue));
                 rankElement.classList.remove(...rankClasses);
                 rankElement.classList.add(rank.className);
                 rankElement.textContent = rank.label;
@@ -1775,6 +1806,33 @@ function applyInputFeedback(inputElement, feedbackElement, state, message) {
     }
 }
 
+function validatePasswordByPolicy(passwordInput, {
+    required = true,
+    minLength = 8,
+    enforceComplexity = true,
+    allowBackslash = false
+} = {}) {
+    const password = String(passwordInput || '');
+    let error = '';
+
+    if (!password) {
+        if (required) {
+            error = 'A jelenlegi jelszó kötelező.';
+        }
+    } else if (!allowBackslash && password.includes('\\')) {
+        error = 'A jelszó nem megengedett karaktert tartalmaz.';
+    } else if (password.length < minLength) {
+        error = `A jelszónak legalább ${minLength} karakter hosszú kell legyen.`;
+    } else if (enforceComplexity && !PASSWORD_REGEX.test(password)) {
+        error = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
+    }
+
+    return {
+        isValid: !error,
+        error
+    };
+}
+
 function setProfileSettingsMessage(type, message) {
     const { formMessage, modalMessage } = getProfileSettingsElements();
     const messageTargets = [formMessage, modalMessage].filter(Boolean);
@@ -1837,13 +1895,13 @@ function validateProfileSettingsForm() {
     }
 
     if (values.newPassword) {
-        if (values.newPassword.includes('\\')) {
-            fieldErrors.newPassword = 'A jelszó nem megengedett karaktert tartalmaz.';
-        } else if (values.newPassword.length < 8) {
-            fieldErrors.newPassword = 'A jelszónak legalább 8 karakter hosszú kell legyen.';
-        } else if (!PASSWORD_REGEX.test(values.newPassword)) {
-            fieldErrors.newPassword = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
-        }
+        const passwordValidation = validatePasswordByPolicy(values.newPassword, {
+            required: false,
+            minLength: 8,
+            enforceComplexity: true,
+            allowBackslash: false
+        });
+        fieldErrors.newPassword = passwordValidation.error;
     }
 
     if (values.newPassword || values.confirmPassword) {
@@ -2040,30 +2098,16 @@ function verifyModalCurrentPassword() {
     }
 
     const currentPassword = elements.modalCurrentPasswordInput.value;
-    if (!currentPassword) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelenlegi jelszó kötelező.');
-        updateModalSaveButtonState();
-        return;
-    }
+    const passwordValidation = validatePasswordByPolicy(currentPassword, {
+        required: true,
+        minLength: 8,
+        enforceComplexity: true,
+        allowBackslash: false
+    });
 
-    if (currentPassword.includes('\\')) {
+    if (!passwordValidation.isValid) {
         profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelszó nem megengedett karaktert tartalmaz.');
-        updateModalSaveButtonState();
-        return;
-    }
-
-    if (currentPassword.length < 8) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelszónak legalább 8 karakter hosszú kell legyen.');
-        updateModalSaveButtonState();
-        return;
-    }
-
-    if (!PASSWORD_REGEX.test(currentPassword)) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
+        setModalCurrentPasswordFeedback('error', passwordValidation.error);
         updateModalSaveButtonState();
         return;
     }
@@ -2171,19 +2215,14 @@ function setDeleteProfilePasswordFeedback(state, message) {
 }
 
 function validateDeleteProfilePassword(password) {
-    if (!password) {
-        return 'A jelenlegi jelszó kötelező.';
-    }
-    if (password.includes('\\')) {
-        return 'A jelszó nem megengedett karaktert tartalmaz.';
-    }
-    if (password.length < 8) {
-        return 'A jelszónak legalább 8 karakter hosszú kell legyen.';
-    }
-    if (!PASSWORD_REGEX.test(password)) {
-        return 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
-    }
-    return '';
+    const passwordValidation = validatePasswordByPolicy(password, {
+        required: true,
+        minLength: 8,
+        enforceComplexity: true,
+        allowBackslash: false
+    });
+
+    return passwordValidation.error;
 }
 
 function updateDeleteProfileConfirmButtonState() {
