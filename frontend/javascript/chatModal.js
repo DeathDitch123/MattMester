@@ -56,10 +56,10 @@
             const style = globalScope.document.createElement('style');
             style.id = 'chatModalStyles';
             style.textContent = `
-            .chat-modal-dialog {
+            #chatModal .chat-modal-dialog {
                 max-width: 1100px;
             }
-            .chat-modal-content {
+            #chatModal .chat-modal-content {
                 height: min(86vh, 900px);
                 max-height: min(86vh, 900px);
                 overflow: hidden;
@@ -67,23 +67,24 @@
                 border: 1px solid #1e293b;
                 color: #e2e8f0;
             }
-            .chat-layout {
+            #chatModal .chat-layout {
                 height: 100%;
                 overflow: hidden;
             }
-            .chat-left {
+            #chatModal .chat-left {
                 border-right: 1px solid #1e293b;
                 background: #111827;
                 display: flex;
                 flex-direction: column;
+                min-width: 0;
                 min-height: 0;
                 overflow: hidden;
             }
-            .chat-search-wrap {
+            #chatModal .chat-search-wrap {
                 padding: 12px;
                 border-bottom: 1px solid #1e293b;
             }
-            .chat-search-input {
+            #chatModal .chat-search-input {
                 width: 100%;
                 background: #0b1220;
                 border: 1px solid #334155;
@@ -91,39 +92,42 @@
                 border-radius: 10px;
                 padding: 10px 12px;
             }
-            .chat-conversation-list {
+            #chatModal .chat-conversation-list {
                 overflow-y: auto;
                 padding: 10px;
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
                 min-height: 0;
+                min-width: 0;
             }
-            .chat-conversation-item {
+            #chatModal .chat-conversation-item {
                 background: #0b1220;
                 border: 1px solid #233041;
                 border-radius: 10px;
                 padding: 10px 11px;
                 cursor: pointer;
+                width: 100%;
+                min-width: 0;
             }
-            .chat-conversation-item.is-active {
+            #chatModal .chat-conversation-item.is-active {
                 border-color: #d4af37;
                 box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.35) inset;
             }
-            .chat-row-top {
+            #chatModal .chat-row-top {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
             }
-            .chat-title-wrap {
+            #chatModal .chat-title-wrap {
                 display: flex;
                 align-items: center;
                 gap: 10px;
                 min-width: 0;
                 flex: 1;
             }
-            .chat-profile-image {
+            #chatModal .chat-profile-image {
                 width: clamp(30px, 2.5vw, 36px);
                 height: clamp(30px, 2.5vw, 36px);
                 border-radius: 50%;
@@ -133,17 +137,17 @@
                 flex-shrink: 0;
                 background: #0f172a;
             }
-            .chat-profile-image.is-pending {
+            #chatModal .chat-profile-image.is-pending {
                 filter: blur(3px) saturate(0.75);
             }
-            .chat-user-name {
+            #chatModal .chat-user-name {
                 color: #ffffff;
                 display: block;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
-            .chat-conversation-preview {
+            #chatModal .chat-conversation-preview {
                 color: #94a3b8;
                 font-size: 12px;
                 margin-top: 6px;
@@ -151,12 +155,12 @@
                 text-overflow: ellipsis;
                 white-space: nowrap;
             }
-            .chat-conversation-date {
+            #chatModal .chat-conversation-date {
                 color: #64748b;
                 font-size: 11px;
                 margin-top: 4px;
             }
-            .chat-unread-badge {
+            #chatModal .chat-unread-badge {
                 min-width: 18px;
                 height: 18px;
                 border-radius: 999px;
@@ -168,19 +172,19 @@
                 justify-content: center;
                 padding: 0 6px;
             }
-            .chat-right {
+            #chatModal .chat-right {
                 display: flex;
                 flex-direction: column;
                 min-width: 0;
                 min-height: 0;
                 overflow: hidden;
             }
-            .chat-header {
+            #chatModal .chat-header {
                 border-bottom: 1px solid #1e293b;
                 padding: 14px 16px;
                 background: #0f172a;
             }
-            .chat-message-list {
+            #chatModal .chat-message-list {
                 flex: 1;
                 overflow-y: auto;
                 padding: 14px 16px;
@@ -189,28 +193,34 @@
                 gap: 10px;
                 background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 45%), #0b1220;
                 min-height: 0;
+                min-width: 0;
             }
-            .chat-message {
+            #chatModal .chat-message {
                 max-width: 80%;
                 padding: 10px 12px;
                 border-radius: 12px;
                 border: 1px solid #2b3d50;
                 background: #0f172a;
+                min-width: 0;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+                align-self: flex-start;
             }
-            .chat-message.is-mine {
-                margin-left: auto;
+            #chatModal .chat-message.is-mine {
+                align-self: flex-end;
                 border-color: #d4af37;
                 background: #1f2937;
             }
-            .chat-message-meta {
+            #chatModal .chat-message-meta {
                 display: flex;
                 align-items: center;
                 gap: 8px;
                 color: #ffffff;
                 font-size: 12px;
                 margin-bottom: 4px;
+                min-width: 0;
             }
-            .chat-message-profile-image {
+            #chatModal .chat-message-profile-image {
                 width: clamp(24px, 2vw, 30px);
                 height: clamp(24px, 2vw, 30px);
                 border-radius: 50%;
@@ -220,18 +230,29 @@
                 flex-shrink: 0;
                 background: #0f172a;
             }
-            .chat-message-profile-image.is-pending {
+            #chatModal .chat-message-profile-image.is-pending {
                 filter: blur(3px) saturate(0.75);
             }
-            .chat-message-sender {
+            #chatModal .chat-message-sender {
                 color: #ffffff;
                 font-weight: 600;
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
-            .chat-message-date {
+            #chatModal .chat-message-date {
                 color: #94a3b8;
                 font-size: 11px;
+                white-space: nowrap;
+                margin-left: auto;
             }
-            .chat-composer {
+            #chatModal .chat-message-body {
+                white-space: pre-wrap;
+                overflow-wrap: anywhere;
+                word-break: break-word;
+            }
+            #chatModal .chat-composer {
                 border-top: 1px solid #1e293b;
                 padding: 12px;
                 background: #0f172a;
@@ -239,31 +260,33 @@
                 flex-direction: column;
                 gap: 8px;
             }
-            .chat-input-row {
+            #chatModal .chat-input-row {
                 display: flex;
                 gap: 8px;
+                min-width: 0;
             }
-            .chat-input {
+            #chatModal .chat-input {
                 flex: 1;
                 border: 1px solid #334155;
                 background: #0b1220;
                 color: #e2e8f0;
                 border-radius: 10px;
                 padding: 10px 12px;
+                min-width: 0;
             }
-            .chat-placeholder {
+            #chatModal .chat-placeholder {
                 color: #94a3b8;
                 font-size: 13px;
                 padding: 12px;
                 text-align: center;
             }
             @media (max-width: 991.98px) {
-                .chat-modal-content {
+                #chatModal .chat-modal-content {
                     height: 100vh;
                     max-height: 100vh;
                     border-radius: 0;
                 }
-                .chat-left {
+                #chatModal .chat-left {
                     border-right: 0;
                     border-bottom: 1px solid #1e293b;
                     max-height: 34vh;
