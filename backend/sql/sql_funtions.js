@@ -1575,6 +1575,529 @@ async function deleteFriendConnection(currentUserId, targetUserId) {
     }
 }
 
+const CHAT_MAX_MESSAGE_LENGTH = 1000;
+const CHAT_BLOCKED_WORDS = [
+    'spam',
+    'scam',
+    'phishing'
+];
+
+function normalizeTextForModeration(message) {
+    const raw = String(message || '');
+    return raw
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function containsBlockedWord(message) {
+    const normalizedMessage = normalizeTextForModeration(message);
+    if (!normalizedMessage) {
+        return false;
+    }
+
+    return CHAT_BLOCKED_WORDS.some((word) => {
+        const normalizedWord = normalizeTextForModeration(word);
+        if (!normalizedWord) {
+            return false;
+        }
+
+        const escapedWord = normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`(^|\\s)${escapedWord}($|\\s)`, 'i');
+        return regex.test(normalizedMessage);
+    });
+}
+
+async function ensureChatTables(executor) {
+    await executor.execute(`
+        CREATE TABLE IF NOT EXISTS chat_conversations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            type ENUM('private', 'group') NOT NULL,
+            name VARCHAR(255) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_message_at TIMESTAMP NULL DEFAULT NULL,
+            last_message_preview VARCHAR(255) NULL,
+            UNIQUE KEY unique_group_name (name),
+            INDEX idx_chat_conversations_last_message_at (last_message_at)
+        )
+    `);
+
+    await executor.execute(`
+        CREATE TABLE IF NOT EXISTS chat_participants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            conversation_id INT NOT NULL,
+            user_id INT NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_read_message_id INT NULL,
+            UNIQUE KEY unique_chat_participant (conversation_id, user_id),
+            INDEX idx_chat_participants_user (user_id),
+            INDEX idx_chat_participants_conversation (conversation_id),
+            FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    `);
+
+    await executor.execute(`
+        CREATE TABLE IF NOT EXISTS chat_messages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            conversation_id INT NOT NULL,
+            sender_id INT NOT NULL,
+            body TEXT NOT NULL,
+            body_masked TEXT NULL,
+            is_body_masked BOOLEAN DEFAULT FALSE,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_chat_messages_conversation_sent_at (conversation_id, sent_at),
+            INDEX idx_chat_messages_sender (sender_id)
+        )
+    `);
+}
+
+function normalizePositiveInt(value, fallback = 0) {
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+        return fallback;
+    }
+    return parsed;
+}
+
+function normalizeListLimit(value, fallback = 20, max = 50) {
+    const parsed = normalizePositiveInt(value, fallback);
+    return Math.min(Math.max(parsed, 1), max);
+}
+
+function resolvePreviewFromBody(body, maxLength = 120) {
+    const normalized = String(body || '').replace(/\s+/g, ' ').trim();
+    if (!normalized) {
+        return '';
+    }
+
+    if (normalized.length <= maxLength) {
+        return normalized;
+    }
+
+    return `${normalized.slice(0, maxLength - 1)}…`;
+}
+
+async function assertConversationParticipant(userId, conversationId) {
+    const pool = getPool();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+
+    if (!normalizedUserId || !normalizedConversationId) {
+        throw new Error('Érvénytelen felhasználó vagy beszélgetés azonosító.');
+    }
+
+    await ensureChatTables(pool);
+    const [rows] = await pool.execute(
+        `
+            SELECT cp.id
+            FROM chat_participants cp
+            JOIN users u ON u.id = cp.user_id
+            WHERE cp.conversation_id = ?
+              AND cp.user_id = ?
+              AND u.is_banned = FALSE
+            LIMIT 1
+        `,
+        [normalizedConversationId, normalizedUserId]
+    );
+
+    if (!rows.length) {
+        throw new Error('A felhasználó nem résztvevője a beszélgetésnek.');
+    }
+
+    return true;
+}
+
+async function getUserConversations(userId, limit = 20, cursor = null) {
+    const pool = getPool();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    if (!normalizedUserId) {
+        throw new Error('Érvénytelen felhasználó azonosító.');
+    }
+
+    await ensureChatTables(pool);
+    const normalizedLimit = normalizeListLimit(limit, 20, 50);
+    const normalizedCursor = normalizePositiveInt(cursor, 0);
+
+    const params = [normalizedUserId];
+    let cursorClause = '';
+    if (normalizedCursor) {
+        cursorClause = 'AND c.id < ?';
+        params.push(normalizedCursor);
+    }
+
+    params.push(normalizedLimit + 1);
+
+    const [rows] = await pool.execute(
+        `
+            SELECT
+                c.id AS conversation_id,
+                c.type,
+                c.name,
+                c.created_at,
+                c.last_message_at,
+                c.last_message_preview,
+                COALESCE(last_message.id, 0) AS last_message_id,
+                COALESCE(last_message.sender_id, 0) AS last_message_sender_id,
+                COALESCE(last_message_body.username, '') AS last_message_sender_username,
+                COALESCE(last_message.sent_at, c.last_message_at, c.created_at) AS sort_time,
+                COALESCE(
+                    (
+                        SELECT COUNT(*)
+                        FROM chat_messages unread_messages
+                        WHERE unread_messages.conversation_id = c.id
+                          AND unread_messages.id > COALESCE(current_participant.last_read_message_id, 0)
+                          AND unread_messages.sender_id <> ?
+                    ),
+                    0
+                ) AS unread_count,
+                (
+                    SELECT COUNT(*)
+                    FROM chat_participants participant_count
+                    WHERE participant_count.conversation_id = c.id
+                ) AS participant_count,
+                other_user.id AS other_user_id,
+                other_user.username AS other_user_username,
+                other_user.profile_image AS other_user_profile_image
+            FROM chat_participants current_participant
+            JOIN chat_conversations c ON c.id = current_participant.conversation_id
+            LEFT JOIN chat_messages last_message ON last_message.id = (
+                SELECT max_message.id
+                FROM chat_messages max_message
+                WHERE max_message.conversation_id = c.id
+                ORDER BY max_message.id DESC
+                LIMIT 1
+            )
+            LEFT JOIN users last_message_body ON last_message_body.id = last_message.sender_id
+            LEFT JOIN chat_participants other_participant
+                ON other_participant.conversation_id = c.id
+               AND other_participant.user_id <> current_participant.user_id
+            LEFT JOIN users other_user ON other_user.id = other_participant.user_id
+            WHERE current_participant.user_id = ?
+              ${cursorClause}
+            ORDER BY sort_time DESC, c.id DESC
+            LIMIT ?
+        `,
+        [normalizedUserId, ...params]
+    );
+
+    const hasMore = rows.length > normalizedLimit;
+    const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
+
+    const data = sliced.map((row) => ({
+        conversationId: row.conversation_id,
+        type: row.type,
+        name: row.name,
+        createdAt: row.created_at,
+        lastMessageAt: row.last_message_at,
+        lastMessagePreview: row.last_message_preview || '',
+        lastMessage: row.last_message_id
+            ? {
+                id: row.last_message_id,
+                senderId: row.last_message_sender_id,
+                senderUsername: row.last_message_sender_username,
+                sentAt: row.sort_time
+            }
+            : null,
+        unreadCount: Number(row.unread_count || 0),
+        participantCount: Number(row.participant_count || 0),
+        otherUser: row.other_user_id
+            ? {
+                userId: row.other_user_id,
+                username: row.other_user_username,
+                profileImage: row.other_user_profile_image || DEFAULT_PROFILE_IMAGE_PATH
+            }
+            : null
+    }));
+
+    return {
+        data,
+        hasMore,
+        nextCursor: hasMore && data.length ? data[data.length - 1].conversationId : null
+    };
+}
+
+async function getConversationMessages(userId, conversationId, beforeMessageId = null, limit = 30) {
+    const pool = getPool();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+
+    if (!normalizedUserId || !normalizedConversationId) {
+        throw new Error('Érvénytelen felhasználó vagy beszélgetés azonosító.');
+    }
+
+    await ensureChatTables(pool);
+    await assertConversationParticipant(normalizedUserId, normalizedConversationId);
+
+    const normalizedLimit = normalizeListLimit(limit, 30, 50);
+    const normalizedBeforeMessageId = normalizePositiveInt(beforeMessageId, 0);
+
+    const params = [normalizedConversationId];
+    let beforeClause = '';
+    if (normalizedBeforeMessageId) {
+        beforeClause = 'AND m.id < ?';
+        params.push(normalizedBeforeMessageId);
+    }
+
+    params.push(normalizedLimit + 1);
+
+    const [rows] = await pool.execute(
+        `
+            SELECT
+                m.id,
+                m.conversation_id,
+                m.sender_id,
+                m.body,
+                m.body_masked,
+                m.is_body_masked,
+                m.sent_at,
+                u.username AS sender_username,
+                u.profile_image AS sender_profile_image
+            FROM chat_messages m
+            JOIN users u ON u.id = m.sender_id
+            WHERE m.conversation_id = ?
+              ${beforeClause}
+            ORDER BY m.id DESC
+            LIMIT ?
+        `,
+        params
+    );
+
+    const hasMore = rows.length > normalizedLimit;
+    const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
+    const chronological = [...sliced].reverse();
+
+    return {
+        data: chronological.map((row) => ({
+            id: row.id,
+            conversationId: row.conversation_id,
+            senderId: row.sender_id,
+            senderUsername: row.sender_username,
+            senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+            body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
+            bodyOriginal: row.body,
+            isBodyMasked: Boolean(row.is_body_masked),
+            sentAt: row.sent_at
+        })),
+        hasMore,
+        nextCursor: hasMore && sliced.length ? sliced[sliced.length - 1].id : null
+    };
+}
+
+async function createOrGetDirectConversation(currentUserId, targetUserId) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+
+    const normalizedCurrentUserId = normalizePositiveInt(currentUserId, 0);
+    const normalizedTargetUserId = normalizePositiveInt(targetUserId, 0);
+
+    if (!normalizedCurrentUserId || !normalizedTargetUserId) {
+        throw new Error('Érvénytelen felhasználó azonosító.');
+    }
+
+    if (normalizedCurrentUserId === normalizedTargetUserId) {
+        throw new Error('Önmagaddal nem nyithatsz privát beszélgetést.');
+    }
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatTables(connection);
+        await ensureFriendBlocksTable(connection);
+
+        if (await isEitherUserBlocked(normalizedCurrentUserId, normalizedTargetUserId, connection)) {
+            throw new Error('A privát beszélgetés nem nyitható meg tiltás miatt.');
+        }
+
+        const [user1Id, user2Id] = normalizeFriendPair(normalizedCurrentUserId, normalizedTargetUserId);
+        const [friendRows] = await connection.execute(
+            `
+                SELECT id
+                FROM friends
+                WHERE user1_id = ?
+                  AND user2_id = ?
+                  AND status = 'accepted'
+                LIMIT 1
+            `,
+            [user1Id, user2Id]
+        );
+
+        if (!friendRows.length) {
+            throw new Error('A privát beszélgetés csak elfogadott barátok között nyitható meg.');
+        }
+
+        const [existingRows] = await connection.execute(
+            `
+                SELECT c.id
+                FROM chat_conversations c
+                JOIN chat_participants cp ON cp.conversation_id = c.id
+                WHERE c.type = 'private'
+                  AND cp.user_id IN (?, ?)
+                GROUP BY c.id
+                HAVING COUNT(*) = 2
+                   AND COUNT(DISTINCT cp.user_id) = 2
+                   AND (
+                        SELECT COUNT(*)
+                        FROM chat_participants cp_count
+                        WHERE cp_count.conversation_id = c.id
+                   ) = 2
+                ORDER BY c.id DESC
+                LIMIT 1
+            `,
+            [normalizedCurrentUserId, normalizedTargetUserId]
+        );
+
+        if (existingRows.length) {
+            await connection.commit();
+            return {
+                conversationId: existingRows[0].id,
+                created: false
+            };
+        }
+
+        const [insertConversationResult] = await connection.execute(
+            `
+                INSERT INTO chat_conversations (type, name, created_at, last_message_at, last_message_preview)
+                VALUES ('private', NULL, NOW(), NULL, NULL)
+            `
+        );
+
+        const conversationId = insertConversationResult.insertId;
+        await connection.execute(
+            `
+                INSERT INTO chat_participants (conversation_id, user_id)
+                VALUES (?, ?), (?, ?)
+            `,
+            [conversationId, normalizedCurrentUserId, conversationId, normalizedTargetUserId]
+        );
+
+        await connection.commit();
+        return {
+            conversationId,
+            created: true
+        };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+async function insertMessageInConversation(userId, conversationId, message, policyResult = {}) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+    const normalizedMessage = String(message || '').trim();
+
+    if (!normalizedUserId || !normalizedConversationId) {
+        throw new Error('Érvénytelen felhasználó vagy beszélgetés azonosító.');
+    }
+
+    if (!normalizedMessage) {
+        throw new Error('Az üzenet nem lehet üres.');
+    }
+
+    if (normalizedMessage.length > CHAT_MAX_MESSAGE_LENGTH) {
+        throw new Error(`Az üzenet legfeljebb ${CHAT_MAX_MESSAGE_LENGTH} karakter lehet.`);
+    }
+
+    if (policyResult?.blocked) {
+        throw new Error(policyResult.message || 'Az üzenetet a tartalmi szabályzat blokkolta.');
+    }
+
+    const isBodyMasked = Boolean(policyResult?.isMasked);
+    const bodyMasked = isBodyMasked
+        ? String(policyResult?.maskedMessage || '').trim() || '***'
+        : null;
+    const previewText = resolvePreviewFromBody(isBodyMasked ? bodyMasked : normalizedMessage);
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatTables(connection);
+        await assertConversationParticipant(normalizedUserId, normalizedConversationId);
+
+        const [insertResult] = await connection.execute(
+            `
+                INSERT INTO chat_messages (conversation_id, sender_id, body, body_masked, is_body_masked, sent_at)
+                VALUES (?, ?, ?, ?, ?, NOW())
+            `,
+            [normalizedConversationId, normalizedUserId, normalizedMessage, bodyMasked, isBodyMasked]
+        );
+
+        const messageId = insertResult.insertId;
+
+        await connection.execute(
+            `
+                UPDATE chat_conversations
+                SET last_message_at = NOW(),
+                    last_message_preview = ?
+                WHERE id = ?
+            `,
+            [previewText, normalizedConversationId]
+        );
+
+        await connection.execute(
+            `
+                UPDATE chat_participants
+                SET last_read_message_id = ?
+                WHERE conversation_id = ?
+                  AND user_id = ?
+            `,
+            [messageId, normalizedConversationId, normalizedUserId]
+        );
+
+        const [rows] = await connection.execute(
+            `
+                SELECT
+                    m.id,
+                    m.conversation_id,
+                    m.sender_id,
+                    m.body,
+                    m.body_masked,
+                    m.is_body_masked,
+                    m.sent_at,
+                    u.username AS sender_username,
+                    u.profile_image AS sender_profile_image
+                FROM chat_messages m
+                JOIN users u ON u.id = m.sender_id
+                WHERE m.id = ?
+                LIMIT 1
+            `,
+            [messageId]
+        );
+
+        await connection.commit();
+
+        if (!rows.length) {
+            throw new Error('Az üzenet létrejött, de a visszaolvasás nem sikerült.');
+        }
+
+        const row = rows[0];
+        return {
+            id: row.id,
+            conversationId: row.conversation_id,
+            senderId: row.sender_id,
+            senderUsername: row.sender_username,
+            senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+            body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
+            bodyOriginal: row.body,
+            isBodyMasked: Boolean(row.is_body_masked),
+            sentAt: row.sent_at
+        };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
@@ -1615,5 +2138,12 @@ module.exports = {
     rejectFriendRequest,
     blockUserDirectional,
     unblockUserDirectional,
-    deleteFriendConnection
+    deleteFriendConnection,
+    getUserConversations,
+    getConversationMessages,
+    createOrGetDirectConversation,
+    insertMessageInConversation,
+    assertConversationParticipant,
+    containsBlockedWord,
+    normalizeTextForModeration
 };
