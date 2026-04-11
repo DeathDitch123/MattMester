@@ -16,6 +16,10 @@ const { profile } = require('console');
 
 const PROFILE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 const ALLOWED_PROFILE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
+const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
+const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'hard_block').trim().toLowerCase();
+const chatRateLimitByUserId = new Map();
 
 function getRequestIpAddress(request) {
     return request.headers['x-forwarded-for'] || request.socket.remoteAddress || 'ismeretlen';
@@ -1135,12 +1139,86 @@ function getAuthenticatedUserIdOrThrow(request) {
     return currentUserId;
 }
 
+function validateChatRateLimitOrThrow(userId) {
+    const now = Date.now();
+    const normalizedUserId = Number(userId) || 0;
+    if (!normalizedUserId) {
+        throw new Error('Érvénytelen felhasználó azonosító a rate limithez.');
+    }
+
+    const existingTimestamps = chatRateLimitByUserId.get(normalizedUserId) || [];
+    const threshold = now - CHAT_RATE_LIMIT_WINDOW_MS;
+    const freshTimestamps = existingTimestamps.filter((timestamp) => Number(timestamp) > threshold);
+
+    if (freshTimestamps.length >= CHAT_RATE_LIMIT_MAX_MESSAGES) {
+        chatRateLimitByUserId.set(normalizedUserId, freshTimestamps);
+        throw new Error('Túl sok üzenet rövid időn belül. Próbáld újra pár másodperc múlva.');
+    }
+
+    freshTimestamps.push(now);
+    chatRateLimitByUserId.set(normalizedUserId, freshTimestamps);
+}
+
+function buildChatModerationPolicyResult(message) {
+    const hasBlockedWord = sql.containsBlockedWord(message);
+    const normalizedMessage = sql.normalizeTextForModeration(message);
+
+    const policyResult = {
+        blocked: false,
+        isMasked: false,
+        maskedMessage: null,
+        containsBlockedWord: hasBlockedWord,
+        policy: CHAT_BLACKLIST_POLICY,
+        normalizedLength: normalizedMessage.length
+    };
+
+    if (!hasBlockedWord) {
+        return policyResult;
+    }
+
+    if (CHAT_BLACKLIST_POLICY === 'soft_mask') {
+        policyResult.isMasked = true;
+        policyResult.maskedMessage = '***';
+    } else {
+        policyResult.blocked = true;
+    }
+
+    return policyResult;
+}
+
+async function writeChatSecurityAudit(userId, eventType, conversationId, {
+    success = false,
+    severity = 'warning',
+    message = '',
+    metadata = {}
+} = {}) {
+    try {
+        await sql.insertUserLog(userId, {
+            eventType,
+            eventCategory: 'security',
+            severity,
+            source: 'backend',
+            success,
+            message: message || null,
+            metadata: {
+                conversationId,
+                ...metadata
+            },
+            occurredAt: new Date()
+        });
+    } catch (logError) {
+        console.warn(`Chat security audit log hiba (${eventType}):`, logError.message);
+    }
+}
+
 function resolveStatusCodeByError(error, defaultStatusCode = 500) {
     const message = String(error?.message || '').toLowerCase();
     let statusCode = defaultStatusCode;
 
     if (message.includes('nincs bejelentkezett')) {
         statusCode = 401;
+    } else if (message.includes('túl sok üzenet') || message.includes('tul sok uzenet')) {
+        statusCode = 429;
     } else if (message.includes('érvénytelen') || message.includes('ervenytelen') || message.includes('nem lehet üres') || message.includes('legfeljebb')) {
         statusCode = 400;
     } else if (message.includes('nem résztvevője') || message.includes('nem resztvevoje') || message.includes('nem nyitható meg tiltás miatt') || message.includes('nem nyithato meg tiltas miatt')) {
@@ -1253,13 +1331,28 @@ router.post('/chat/conversations/:conversationId/messages', isAuthenticated, asy
         }
 
         await sql.assertConversationParticipant(currentUserId, conversationId);
+        validateChatRateLimitOrThrow(currentUserId);
 
-        const policyResult = sql.containsBlockedWord(message)
-            ? {
-                blocked: true,
-                message: 'Az üzenet tiltott kifejezést tartalmaz.'
-            }
-            : { blocked: false };
+        const policyResult = buildChatModerationPolicyResult(message);
+
+        if (policyResult.containsBlockedWord) {
+            await writeChatSecurityAudit(currentUserId, 'chat_blocked_word', conversationId, {
+                success: !policyResult.blocked,
+                severity: policyResult.blocked ? 'warning' : 'info',
+                message: policyResult.blocked
+                    ? 'Tiltott szó miatt blokkolt chat üzenet.'
+                    : 'Tiltott szó miatt maszkolt chat üzenet.',
+                metadata: {
+                    policy: policyResult.policy,
+                    masked: policyResult.isMasked,
+                    blocked: policyResult.blocked
+                }
+            });
+        }
+
+        if (policyResult.blocked) {
+            throw new Error('Az üzenet tiltott kifejezést tartalmaz.');
+        }
 
         const data = await sql.insertMessageInConversation(currentUserId, conversationId, message, policyResult);
         payload = {
@@ -1268,6 +1361,23 @@ router.post('/chat/conversations/:conversationId/messages', isAuthenticated, asy
             message: 'Üzenet elküldve.'
         };
     } catch (error) {
+        const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet')
+            || String(error?.message || '').toLowerCase().includes('tul sok uzenet');
+
+        if (isRateLimited) {
+            const conversationId = parsePositiveInteger(request.params?.conversationId, null);
+            const currentUserId = Number(request.session?.userId) || 0;
+            await writeChatSecurityAudit(currentUserId, 'chat_rate_limited', conversationId, {
+                success: false,
+                severity: 'warning',
+                message: 'Chat üzenetküldés rate limit miatt blokkolva.',
+                metadata: {
+                    limit: CHAT_RATE_LIMIT_MAX_MESSAGES,
+                    windowMs: CHAT_RATE_LIMIT_WINDOW_MS
+                }
+            });
+        }
+
         statusCode = resolveStatusCodeByError(error, 500);
         payload.message = error.message || payload.message;
     }
