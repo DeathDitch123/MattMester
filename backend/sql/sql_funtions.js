@@ -1084,42 +1084,50 @@ function normalizeFriendPair(firstUserId, secondUserId) {
 }
 
 async function ensureFriendBlocksTable(executor) {
-    await executor.execute(`
-        CREATE TABLE IF NOT EXISTS friend_blocks (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            blocker_user_id INT NOT NULL,
-            blocked_user_id INT NOT NULL,
-            active BOOLEAN DEFAULT TRUE,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY unique_friend_block (blocker_user_id, blocked_user_id),
-            CHECK (blocker_user_id <> blocked_user_id),
-            FOREIGN KEY (blocker_user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    `);
+    try {
+        await executor.execute(`
+            CREATE TABLE IF NOT EXISTS friend_blocks (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                blocker_user_id INT NOT NULL,
+                blocked_user_id INT NOT NULL,
+                active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_friend_block (blocker_user_id, blocked_user_id),
+                CHECK (blocker_user_id <> blocked_user_id),
+                FOREIGN KEY (blocker_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        `);
+    } catch (error) {
+        throw new Error('Hiba a friend_blocks tabla letrehozasa soran.');
+    }
 }
 
 async function isEitherUserBlocked(currentUserId, targetUserId, executor = null) {
     const db = executor || getPool();
-    await ensureFriendBlocksTable(db);
+    try {
+        await ensureFriendBlocksTable(db);
 
-    const [rows] = await db.execute(
-        `
-            SELECT id
-            FROM friend_blocks
-            WHERE active = TRUE
-              AND (
-                (blocker_user_id = ? AND blocked_user_id = ?)
-                OR
-                (blocker_user_id = ? AND blocked_user_id = ?)
-              )
-            LIMIT 1
-        `,
-        [currentUserId, targetUserId, targetUserId, currentUserId]
-    );
+        const [rows] = await db.execute(
+            `
+                SELECT id
+                FROM friend_blocks
+                WHERE active = TRUE
+                  AND (
+                    (blocker_user_id = ? AND blocked_user_id = ?)
+                    OR
+                    (blocker_user_id = ? AND blocked_user_id = ?)
+                  )
+                LIMIT 1
+            `,
+            [currentUserId, targetUserId, targetUserId, currentUserId]
+        );
 
-    return rows.length > 0;
+        return rows.length > 0;
+    } catch (error) {
+        throw new Error('Hiba a felhasznaloi tiltas ellenorzese soran.');
+    }
 }
 
 function buildFriendListItem(row, relationStatus) {
@@ -1149,247 +1157,267 @@ function buildFriendListItem(row, relationStatus) {
 
 async function getAcceptedFriendsForUser(userId) {
     const pool = getPool();
-    await ensureFriendBlocksTable(pool);
+    try {
+        await ensureFriendBlocksTable(pool);
 
-    const query = `
-        SELECT
-            u.id,
-            u.username,
-            u.profile_image,
-            CASE
-                WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
-                ELSE COALESCE(
-                    (
-                        SELECT piu.status
-                        FROM profile_image_uploads piu
-                        WHERE piu.user_id = u.id
-                        ORDER BY piu.upload_time DESC, piu.id DESC
-                        LIMIT 1
-                    ),
-                    'approved'
-                )
-            END AS profile_image_status
-        FROM friends f
-        JOIN users u ON (
-            (f.user1_id = ? AND u.id = f.user2_id)
-            OR
-            (f.user2_id = ? AND u.id = f.user1_id)
-        )
-        LEFT JOIN friend_blocks own_block ON own_block.blocker_user_id = ? AND own_block.blocked_user_id = u.id AND own_block.active = TRUE
-        LEFT JOIN friend_blocks opposite_block ON opposite_block.blocker_user_id = u.id AND opposite_block.blocked_user_id = ? AND opposite_block.active = TRUE
-        WHERE (f.user1_id = ? OR f.user2_id = ?)
-          AND f.status = 'accepted'
-          AND own_block.id IS NULL
-          AND opposite_block.id IS NULL
-          AND u.is_banned = FALSE
-        ORDER BY u.username ASC
-    `;
+        const query = `
+            SELECT
+                u.id,
+                u.username,
+                u.profile_image,
+                CASE
+                    WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                    ELSE COALESCE(
+                        (
+                            SELECT piu.status
+                            FROM profile_image_uploads piu
+                            WHERE piu.user_id = u.id
+                            ORDER BY piu.upload_time DESC, piu.id DESC
+                            LIMIT 1
+                        ),
+                        'approved'
+                    )
+                END AS profile_image_status
+            FROM friends f
+            JOIN users u ON (
+                (f.user1_id = ? AND u.id = f.user2_id)
+                OR
+                (f.user2_id = ? AND u.id = f.user1_id)
+            )
+            LEFT JOIN friend_blocks own_block ON own_block.blocker_user_id = ? AND own_block.blocked_user_id = u.id AND own_block.active = TRUE
+            LEFT JOIN friend_blocks opposite_block ON opposite_block.blocker_user_id = u.id AND opposite_block.blocked_user_id = ? AND opposite_block.active = TRUE
+            WHERE (f.user1_id = ? OR f.user2_id = ?)
+              AND f.status = 'accepted'
+              AND own_block.id IS NULL
+              AND opposite_block.id IS NULL
+              AND u.is_banned = FALSE
+            ORDER BY u.username ASC
+        `;
 
-    const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId]);
-    return rows.map((row) => buildFriendListItem(row, 'friends'));
+        const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId]);
+        return rows.map((row) => buildFriendListItem(row, 'friends'));
+    } catch (error) {
+        throw new Error('Hiba a baratlista lekerdezese soran.');
+    }
 }
 
 async function getIncomingPendingFriendsForUser(userId) {
     const pool = getPool();
-    await ensureFriendBlocksTable(pool);
+    try {
+        await ensureFriendBlocksTable(pool);
 
-    const query = `
-        SELECT
-            u.id,
-            u.username,
-            u.profile_image,
-            CASE
-                WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
-                ELSE COALESCE(
-                    (
-                        SELECT piu.status
-                        FROM profile_image_uploads piu
-                        WHERE piu.user_id = u.id
-                        ORDER BY piu.upload_time DESC, piu.id DESC
-                        LIMIT 1
-                    ),
-                    'approved'
-                )
-            END AS profile_image_status
-        FROM friends f
-        JOIN users u ON (
-            (f.user1_id = ? AND u.id = f.user2_id)
-            OR
-            (f.user2_id = ? AND u.id = f.user1_id)
-        )
-        LEFT JOIN friend_blocks own_block ON own_block.blocker_user_id = ? AND own_block.blocked_user_id = u.id AND own_block.active = TRUE
-        LEFT JOIN friend_blocks opposite_block ON opposite_block.blocker_user_id = u.id AND opposite_block.blocked_user_id = ? AND opposite_block.active = TRUE
-        WHERE (f.user1_id = ? OR f.user2_id = ?)
-          AND f.status = 'pending'
-          AND f.action_user_id <> ?
-          AND own_block.id IS NULL
-          AND opposite_block.id IS NULL
-          AND u.is_banned = FALSE
-        ORDER BY u.username ASC
-    `;
+        const query = `
+            SELECT
+                u.id,
+                u.username,
+                u.profile_image,
+                CASE
+                    WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                    ELSE COALESCE(
+                        (
+                            SELECT piu.status
+                            FROM profile_image_uploads piu
+                            WHERE piu.user_id = u.id
+                            ORDER BY piu.upload_time DESC, piu.id DESC
+                            LIMIT 1
+                        ),
+                        'approved'
+                    )
+                END AS profile_image_status
+            FROM friends f
+            JOIN users u ON (
+                (f.user1_id = ? AND u.id = f.user2_id)
+                OR
+                (f.user2_id = ? AND u.id = f.user1_id)
+            )
+            LEFT JOIN friend_blocks own_block ON own_block.blocker_user_id = ? AND own_block.blocked_user_id = u.id AND own_block.active = TRUE
+            LEFT JOIN friend_blocks opposite_block ON opposite_block.blocker_user_id = u.id AND opposite_block.blocked_user_id = ? AND opposite_block.active = TRUE
+            WHERE (f.user1_id = ? OR f.user2_id = ?)
+              AND f.status = 'pending'
+              AND f.action_user_id <> ?
+              AND own_block.id IS NULL
+              AND opposite_block.id IS NULL
+              AND u.is_banned = FALSE
+            ORDER BY u.username ASC
+        `;
 
-    const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId, userId]);
-    return rows.map((row) => buildFriendListItem(row, 'incoming_pending'));
+        const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId, userId]);
+        return rows.map((row) => buildFriendListItem(row, 'incoming_pending'));
+    } catch (error) {
+        throw new Error('Hiba a bejovo baratkerelmek lekerdezese soran.');
+    }
 }
 
 async function getBlockedUsersForUser(userId) {
     const pool = getPool();
-    await ensureFriendBlocksTable(pool);
+    try {
+        await ensureFriendBlocksTable(pool);
 
-    const query = `
-        SELECT
-            u.id,
-            u.username,
-            u.profile_image,
-            CASE
-                WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
-                ELSE COALESCE(
-                    (
-                        SELECT piu.status
-                        FROM profile_image_uploads piu
-                        WHERE piu.user_id = u.id
-                        ORDER BY piu.upload_time DESC, piu.id DESC
-                        LIMIT 1
-                    ),
-                    'approved'
-                )
-            END AS profile_image_status
-        FROM friend_blocks fb
-        JOIN users u ON u.id = fb.blocked_user_id
-        WHERE fb.blocker_user_id = ?
-          AND fb.active = TRUE
-          AND u.is_banned = FALSE
-        ORDER BY u.username ASC
-    `;
+        const query = `
+            SELECT
+                u.id,
+                u.username,
+                u.profile_image,
+                CASE
+                    WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                    ELSE COALESCE(
+                        (
+                            SELECT piu.status
+                            FROM profile_image_uploads piu
+                            WHERE piu.user_id = u.id
+                            ORDER BY piu.upload_time DESC, piu.id DESC
+                            LIMIT 1
+                        ),
+                        'approved'
+                    )
+                END AS profile_image_status
+            FROM friend_blocks fb
+            JOIN users u ON u.id = fb.blocked_user_id
+            WHERE fb.blocker_user_id = ?
+              AND fb.active = TRUE
+              AND u.is_banned = FALSE
+            ORDER BY u.username ASC
+        `;
 
-    const [rows] = await pool.execute(query, [userId]);
-    return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 1, opposite_block_active: 0 }, 'blocked_by_me'));
+        const [rows] = await pool.execute(query, [userId]);
+        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 1, opposite_block_active: 0 }, 'blocked_by_me'));
+    } catch (error) {
+        throw new Error('Hiba a tiltott felhasznalok lekerdezese soran.');
+    }
 }
 
 async function getBlockedByThemForUser(userId) {
     const pool = getPool();
-    await ensureFriendBlocksTable(pool);
+    try {
+        await ensureFriendBlocksTable(pool);
 
-    const query = `
-        SELECT
-            u.id,
-            u.username,
-            u.profile_image,
-            CASE
-                WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
-                ELSE COALESCE(
-                    (
-                        SELECT piu.status
-                        FROM profile_image_uploads piu
-                        WHERE piu.user_id = u.id
-                        ORDER BY piu.upload_time DESC, piu.id DESC
-                        LIMIT 1
-                    ),
-                    'approved'
-                )
-            END AS profile_image_status
-        FROM friend_blocks fb
-        JOIN users u ON u.id = fb.blocker_user_id
-        WHERE fb.blocked_user_id = ?
-          AND fb.active = TRUE
-          AND u.is_banned = FALSE
-        ORDER BY u.username ASC
-    `;
+        const query = `
+            SELECT
+                u.id,
+                u.username,
+                u.profile_image,
+                CASE
+                    WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                    ELSE COALESCE(
+                        (
+                            SELECT piu.status
+                            FROM profile_image_uploads piu
+                            WHERE piu.user_id = u.id
+                            ORDER BY piu.upload_time DESC, piu.id DESC
+                            LIMIT 1
+                        ),
+                        'approved'
+                    )
+                END AS profile_image_status
+            FROM friend_blocks fb
+            JOIN users u ON u.id = fb.blocker_user_id
+            WHERE fb.blocked_user_id = ?
+              AND fb.active = TRUE
+              AND u.is_banned = FALSE
+            ORDER BY u.username ASC
+        `;
 
-    const [rows] = await pool.execute(query, [userId]);
-    return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 0, opposite_block_active: 1 }, 'blocked_by_them'));
+        const [rows] = await pool.execute(query, [userId]);
+        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 0, opposite_block_active: 1 }, 'blocked_by_them'));
+    } catch (error) {
+        throw new Error('Hiba a masik fel altal tiltott lista lekerdezese soran.');
+    }
 }
 
 async function getFriendListForUser(userId, filter = 'friend') {
-    const normalizedFilter = String(filter || 'friend').trim().toLowerCase();
+    try {
+        const normalizedFilter = String(filter || 'friend').trim().toLowerCase();
 
-    if (normalizedFilter === 'friend') {
-        return getAcceptedFriendsForUser(userId);
-    }
+        if (normalizedFilter === 'friend') {
+            return getAcceptedFriendsForUser(userId);
+        }
 
-    if (normalizedFilter === 'pending') {
-        return getIncomingPendingFriendsForUser(userId);
-    }
+        if (normalizedFilter === 'pending') {
+            return getIncomingPendingFriendsForUser(userId);
+        }
 
-    if (normalizedFilter === 'blocked') {
-        const [blockedByMe, blockedByThem] = await Promise.all([
+        if (normalizedFilter === 'blocked') {
+            const [blockedByMe, blockedByThem] = await Promise.all([
+                getBlockedUsersForUser(userId),
+                getBlockedByThemForUser(userId)
+            ]);
+
+            const blockedMap = new Map();
+
+            [...blockedByMe, ...blockedByThem].forEach((item) => {
+                const current = blockedMap.get(item.userId);
+                if (!current) {
+                    blockedMap.set(item.userId, item);
+                } else {
+                    blockedMap.set(item.userId, {
+                        ...current,
+                        relationStatus: current.ownBlockActive && item.oppositeBlockActive
+                            ? 'blocked_mutual'
+                            : current.ownBlockActive
+                                ? 'blocked_by_me'
+                                : 'blocked_by_them',
+                        ownBlockActive: Boolean(current.ownBlockActive || item.ownBlockActive),
+                        oppositeBlockActive: Boolean(current.oppositeBlockActive || item.oppositeBlockActive),
+                        canUnblock: Boolean(current.ownBlockActive || item.ownBlockActive),
+                        isBlockedContext: true,
+                        canView: true
+                    });
+                }
+            });
+
+            return Array.from(blockedMap.values()).sort((left, right) => {
+                return String(left.username || '').localeCompare(String(right.username || ''), 'hu');
+            });
+        }
+
+        const [friends, pending, blockedByMe, blockedByThem] = await Promise.all([
+            getAcceptedFriendsForUser(userId),
+            getIncomingPendingFriendsForUser(userId),
             getBlockedUsersForUser(userId),
             getBlockedByThemForUser(userId)
         ]);
 
-        const blockedMap = new Map();
+        const priority = {
+            blocked_mutual: 4,
+            blocked_by_me: 3,
+            blocked_by_them: 2,
+            incoming_pending: 1,
+            friends: 0
+        };
 
-        [...blockedByMe, ...blockedByThem].forEach((item) => {
-            const current = blockedMap.get(item.userId);
+        const mapByUserId = new Map();
+        [...friends, ...pending, ...blockedByMe, ...blockedByThem].forEach((item) => {
+            const current = mapByUserId.get(item.userId);
             if (!current) {
-                blockedMap.set(item.userId, item);
+                mapByUserId.set(item.userId, item);
             } else {
-                blockedMap.set(item.userId, {
+                const merged = {
                     ...current,
-                    relationStatus: current.ownBlockActive && item.oppositeBlockActive
-                        ? 'blocked_mutual'
-                        : current.ownBlockActive
-                            ? 'blocked_by_me'
-                            : 'blocked_by_them',
                     ownBlockActive: Boolean(current.ownBlockActive || item.ownBlockActive),
                     oppositeBlockActive: Boolean(current.oppositeBlockActive || item.oppositeBlockActive),
-                    canUnblock: Boolean(current.ownBlockActive || item.ownBlockActive),
-                    isBlockedContext: true,
-                    canView: true
-                });
+                    canUnblock: Boolean(current.canUnblock || item.canUnblock),
+                    isBlockedContext: Boolean(current.isBlockedContext || item.isBlockedContext)
+                };
+
+                if ((priority[item.relationStatus] || 0) >= (priority[current.relationStatus] || 0)) {
+                    merged.relationStatus = item.relationStatus;
+                    merged.canAccept = item.canAccept;
+                    merged.canReject = item.canReject;
+                    merged.canBlock = item.canBlock;
+                    merged.canChat = item.canChat;
+                    merged.canView = item.canView;
+                }
+
+                mapByUserId.set(item.userId, merged);
             }
         });
 
-        return Array.from(blockedMap.values()).sort((left, right) => {
+        return Array.from(mapByUserId.values()).sort((left, right) => {
             return String(left.username || '').localeCompare(String(right.username || ''), 'hu');
         });
+    } catch (error) {
+        throw new Error('Hiba a barat lista osszeallitasa soran.');
     }
-
-    const [friends, pending, blockedByMe, blockedByThem] = await Promise.all([
-        getAcceptedFriendsForUser(userId),
-        getIncomingPendingFriendsForUser(userId),
-        getBlockedUsersForUser(userId),
-        getBlockedByThemForUser(userId)
-    ]);
-
-    const priority = {
-        blocked_mutual: 4,
-        blocked_by_me: 3,
-        blocked_by_them: 2,
-        incoming_pending: 1,
-        friends: 0
-    };
-
-    const mapByUserId = new Map();
-    [...friends, ...pending, ...blockedByMe, ...blockedByThem].forEach((item) => {
-        const current = mapByUserId.get(item.userId);
-        if (!current) {
-            mapByUserId.set(item.userId, item);
-        } else {
-            const merged = {
-                ...current,
-                ownBlockActive: Boolean(current.ownBlockActive || item.ownBlockActive),
-                oppositeBlockActive: Boolean(current.oppositeBlockActive || item.oppositeBlockActive),
-                canUnblock: Boolean(current.canUnblock || item.canUnblock),
-                isBlockedContext: Boolean(current.isBlockedContext || item.isBlockedContext)
-            };
-
-            if ((priority[item.relationStatus] || 0) >= (priority[current.relationStatus] || 0)) {
-                merged.relationStatus = item.relationStatus;
-                merged.canAccept = item.canAccept;
-                merged.canReject = item.canReject;
-                merged.canBlock = item.canBlock;
-                merged.canChat = item.canChat;
-                merged.canView = item.canView;
-            }
-
-            mapByUserId.set(item.userId, merged);
-        }
-    });
-
-    return Array.from(mapByUserId.values()).sort((left, right) => {
-        return String(left.username || '').localeCompare(String(right.username || ''), 'hu');
-    });
 }
 
 async function acceptFriendRequest(currentUserId, targetUserId) {
@@ -1891,108 +1919,112 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
         throw new Error('Érvénytelen felhasználó azonosító.');
     }
 
-    await ensureChatTables(pool);
-    const normalizedLimit = normalizeListLimit(limit, 20, 50);
-    const normalizedCursor = normalizePositiveInt(cursor, 0);
+    try {
+        await ensureChatTables(pool);
+        const normalizedLimit = normalizeListLimit(limit, 20, 50);
+        const normalizedCursor = normalizePositiveInt(cursor, 0);
 
-    const params = [normalizedUserId];
-    let cursorClause = '';
-    if (normalizedCursor) {
-        cursorClause = 'AND c.id < ?';
-        params.push(normalizedCursor);
-    }
+        const params = [normalizedUserId];
+        let cursorClause = '';
+        if (normalizedCursor) {
+            cursorClause = 'AND c.id < ?';
+            params.push(normalizedCursor);
+        }
 
-    params.push(normalizedLimit + 1);
+        params.push(normalizedLimit + 1);
 
-    const [rows] = await pool.execute(
-        `
-            SELECT
-                c.id AS conversation_id,
-                c.type,
-                c.name,
-                c.created_at,
-                c.last_message_at,
-                c.last_message_preview,
-                COALESCE(last_message.id, 0) AS last_message_id,
-                COALESCE(last_message.sender_id, 0) AS last_message_sender_id,
-                COALESCE(last_message_body.username, '') AS last_message_sender_username,
-                COALESCE(last_message.sent_at, c.last_message_at, c.created_at) AS sort_time,
-                COALESCE(
+        const [rows] = await pool.execute(
+            `
+                SELECT
+                    c.id AS conversation_id,
+                    c.type,
+                    c.name,
+                    c.created_at,
+                    c.last_message_at,
+                    c.last_message_preview,
+                    COALESCE(last_message.id, 0) AS last_message_id,
+                    COALESCE(last_message.sender_id, 0) AS last_message_sender_id,
+                    COALESCE(last_message_body.username, '') AS last_message_sender_username,
+                    COALESCE(last_message.sent_at, c.last_message_at, c.created_at) AS sort_time,
+                    COALESCE(
+                        (
+                            SELECT COUNT(*)
+                            FROM chat_messages unread_messages
+                            WHERE unread_messages.conversation_id = c.id
+                              AND unread_messages.id > COALESCE(current_participant.last_read_message_id, 0)
+                              AND unread_messages.sender_id <> ?
+                        ),
+                        0
+                    ) AS unread_count,
                     (
                         SELECT COUNT(*)
-                        FROM chat_messages unread_messages
-                        WHERE unread_messages.conversation_id = c.id
-                          AND unread_messages.id > COALESCE(current_participant.last_read_message_id, 0)
-                          AND unread_messages.sender_id <> ?
-                    ),
-                    0
-                ) AS unread_count,
-                (
-                    SELECT COUNT(*)
-                    FROM chat_participants participant_count
-                    WHERE participant_count.conversation_id = c.id
-                ) AS participant_count,
-                other_user.id AS other_user_id,
-                other_user.username AS other_user_username,
-                other_user.profile_image AS other_user_profile_image,
-                other_user.profile_image_status AS other_user_profile_image_status
-            FROM chat_participants current_participant
-            JOIN chat_conversations c ON c.id = current_participant.conversation_id
-            LEFT JOIN chat_messages last_message ON last_message.id = (
-                SELECT max_message.id
-                FROM chat_messages max_message
-                WHERE max_message.conversation_id = c.id
-                ORDER BY max_message.id DESC
-                LIMIT 1
-            )
-            LEFT JOIN users last_message_body ON last_message_body.id = last_message.sender_id
-            LEFT JOIN chat_participants other_participant
-                ON other_participant.conversation_id = c.id
-               AND other_participant.user_id <> current_participant.user_id
-            LEFT JOIN users other_user ON other_user.id = other_participant.user_id
-            WHERE current_participant.user_id = ?
-              ${cursorClause}
-            ORDER BY sort_time DESC, c.id DESC
-            LIMIT ?
-        `,
-        [normalizedUserId, ...params]
-    );
+                        FROM chat_participants participant_count
+                        WHERE participant_count.conversation_id = c.id
+                    ) AS participant_count,
+                    other_user.id AS other_user_id,
+                    other_user.username AS other_user_username,
+                    other_user.profile_image AS other_user_profile_image,
+                    'default' AS other_user_profile_image_status
+                FROM chat_participants current_participant
+                JOIN chat_conversations c ON c.id = current_participant.conversation_id
+                LEFT JOIN chat_messages last_message ON last_message.id = (
+                    SELECT max_message.id
+                    FROM chat_messages max_message
+                    WHERE max_message.conversation_id = c.id
+                    ORDER BY max_message.id DESC
+                    LIMIT 1
+                )
+                LEFT JOIN users last_message_body ON last_message_body.id = last_message.sender_id
+                LEFT JOIN chat_participants other_participant
+                    ON other_participant.conversation_id = c.id
+                   AND other_participant.user_id <> current_participant.user_id
+                LEFT JOIN users other_user ON other_user.id = other_participant.user_id
+                WHERE current_participant.user_id = ?
+                  ${cursorClause}
+                ORDER BY sort_time DESC, c.id DESC
+                LIMIT ?
+            `,
+            [normalizedUserId, ...params]
+        );
 
-    const hasMore = rows.length > normalizedLimit;
-    const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
+        const hasMore = rows.length > normalizedLimit;
+        const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
 
-    const data = sliced.map((row) => ({
-        conversationId: row.conversation_id,
-        type: row.type,
-        name: row.name,
-        createdAt: row.created_at,
-        lastMessageAt: row.last_message_at,
-        lastMessagePreview: row.last_message_preview || '',
-        lastMessage: row.last_message_id
-            ? {
-                id: row.last_message_id,
-                senderId: row.last_message_sender_id,
-                senderUsername: row.last_message_sender_username,
-                sentAt: row.sort_time
-            }
-            : null,
-        unreadCount: Number(row.unread_count || 0),
-        participantCount: Number(row.participant_count || 0),
-        otherUser: row.other_user_id
-            ? {
-                userId: row.other_user_id,
-                username: row.other_user_username,
-                profileImage: row.other_user_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
-                profileImageStatus: row.other_user_profile_image_status || 'default'
-            }
-            : null
-    }));
+        const data = sliced.map((row) => ({
+            conversationId: row.conversation_id,
+            type: row.type,
+            name: row.name,
+            createdAt: row.created_at,
+            lastMessageAt: row.last_message_at,
+            lastMessagePreview: row.last_message_preview || '',
+            lastMessage: row.last_message_id
+                ? {
+                    id: row.last_message_id,
+                    senderId: row.last_message_sender_id,
+                    senderUsername: row.last_message_sender_username,
+                    sentAt: row.sort_time
+                }
+                : null,
+            unreadCount: Number(row.unread_count || 0),
+            participantCount: Number(row.participant_count || 0),
+            otherUser: row.other_user_id
+                ? {
+                    userId: row.other_user_id,
+                    username: row.other_user_username,
+                    profileImage: row.other_user_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+                    profileImageStatus: row.other_user_profile_image_status || 'default'
+                }
+                : null
+        }));
 
-    return {
-        data,
-        hasMore,
-        nextCursor: hasMore && data.length ? data[data.length - 1].conversationId : null
-    };
+        return {
+            data,
+            hasMore,
+            nextCursor: hasMore && data.length ? data[data.length - 1].conversationId : null
+        };
+    } catch (error) {
+        throw new Error('Hiba a beszelgetes lista lekerdezese soran.');
+    }
 }
 
 async function getConversationMessages(userId, conversationId, beforeMessageId = null, limit = 30) {
@@ -2004,63 +2036,70 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
         throw new Error('Érvénytelen felhasználó vagy beszélgetés azonosító.');
     }
 
-    await ensureChatTables(pool);
-    await assertConversationParticipant(normalizedUserId, normalizedConversationId);
+    try {
+        await ensureChatTables(pool);
+        await assertConversationParticipant(normalizedUserId, normalizedConversationId);
 
-    const normalizedLimit = normalizeListLimit(limit, 30, 50);
-    const normalizedBeforeMessageId = normalizePositiveInt(beforeMessageId, 0);
+        const normalizedLimit = normalizeListLimit(limit, 30, 50);
+        const normalizedBeforeMessageId = normalizePositiveInt(beforeMessageId, 0);
 
-    const params = [normalizedConversationId];
-    let beforeClause = '';
-    if (normalizedBeforeMessageId) {
-        beforeClause = 'AND m.id < ?';
-        params.push(normalizedBeforeMessageId);
+        const params = [normalizedConversationId];
+        let beforeClause = '';
+        if (normalizedBeforeMessageId) {
+            beforeClause = 'AND m.id < ?';
+            params.push(normalizedBeforeMessageId);
+        }
+
+        params.push(normalizedLimit + 1);
+
+        const [rows] = await pool.execute(
+            `
+                SELECT
+                    m.id,
+                    m.conversation_id,
+                    m.sender_id,
+                    m.body,
+                    m.body_masked,
+                    m.is_body_masked,
+                    m.sent_at,
+                    u.username AS sender_username,
+                    u.profile_image AS sender_profile_image,
+                    'default' AS sender_profile_image_status
+                FROM chat_messages m
+                JOIN users u ON u.id = m.sender_id
+                WHERE m.conversation_id = ?
+                  ${beforeClause}
+                ORDER BY m.id DESC
+                LIMIT ?
+            `,
+            params
+        );
+
+        const hasMore = rows.length > normalizedLimit;
+        const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
+
+        return {
+            data: sliced.map((row) => ({
+                id: row.id,
+                conversationId: row.conversation_id,
+                senderId: row.sender_id,
+                senderUsername: row.sender_username,
+                senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+                senderProfileImageStatus: row.sender_profile_image_status || 'default',
+                body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
+                bodyOriginal: row.body,
+                isBodyMasked: Boolean(row.is_body_masked),
+                sentAt: row.sent_at
+            })),
+            hasMore,
+            nextCursor: hasMore && sliced.length ? sliced[sliced.length - 1].id : null
+        };
+    } catch (error) {
+        if (error.message === 'A felhasználó nem résztvevője a beszélgetésnek.') {
+            throw error;
+        }
+        throw new Error('Hiba az uzenetek lekerdezese soran.');
     }
-
-    params.push(normalizedLimit + 1);
-
-    const [rows] = await pool.execute(
-        `
-            SELECT
-                m.id,
-                m.conversation_id,
-                m.sender_id,
-                m.body,
-                m.body_masked,
-                m.is_body_masked,
-                m.sent_at,
-                u.username AS sender_username,
-                u.profile_image AS sender_profile_image,
-                u.profile_image_status AS sender_profile_image_status
-            FROM chat_messages m
-            JOIN users u ON u.id = m.sender_id
-            WHERE m.conversation_id = ?
-              ${beforeClause}
-            ORDER BY m.id DESC
-            LIMIT ?
-        `,
-        params
-    );
-
-    const hasMore = rows.length > normalizedLimit;
-    const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
-
-    return {
-        data: sliced.map((row) => ({
-            id: row.id,
-            conversationId: row.conversation_id,
-            senderId: row.sender_id,
-            senderUsername: row.sender_username,
-            senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
-            senderProfileImageStatus: row.sender_profile_image_status || 'default',
-            body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
-            bodyOriginal: row.body,
-            isBodyMasked: Boolean(row.is_body_masked),
-            sentAt: row.sent_at
-        })),
-        hasMore,
-        nextCursor: hasMore && sliced.length ? sliced[sliced.length - 1].id : null
-    };
 }
 
 async function createOrGetDirectConversation(currentUserId, targetUserId) {
@@ -2239,7 +2278,7 @@ async function insertMessageInConversation(userId, conversationId, message, poli
                     m.sent_at,
                     u.username AS sender_username,
                     u.profile_image AS sender_profile_image,
-                    u.profile_image_status AS sender_profile_image_status
+                    'default' AS sender_profile_image_status
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
                 WHERE m.id = ?
