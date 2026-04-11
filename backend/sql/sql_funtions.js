@@ -1577,10 +1577,181 @@ async function deleteFriendConnection(currentUserId, targetUserId) {
 
 const CHAT_MAX_MESSAGE_LENGTH = 1000;
 const CHAT_BLOCKED_WORDS = [
-    'spam',
-    'scam',
-    'phishing'
+    // English profanity
+    'fuck',
+    'fucking',
+    'fucker',
+    'fucked',
+    'fk',
+    'shit',
+    'shitty',
+    'bullshit',
+    'crap',
+    'bitch',
+    'son of a bitch',
+    'bastard',
+    'asshole',
+    'ass',
+    'dick',
+    'dickhead',
+    'douche',
+    'douchebag',
+    'jerkoff',
+    'wanker',
+    'piss off',
+    'prick',
+    'slut',
+    'whore',
+    'retard',
+    'motherfucker',
+    'mf',
+    'fml',
+    'stfu',
+    'gtfo',
+    'damn',
+    'goddamn',
+    'jackass',
+    'dipshit',
+    'shithead',
+    'piece of shit',
+    'screw you',
+    'screw off',
+    'suck it',
+    'pussy',
+    'cum',
+    'cunt',
+    'twat',
+    'bloody hell',
+    'arsehole',
+    'tosser',
+    'slag',
+    'numbnuts',
+    'knobhead',
+    'jerk',
+    'idiot',
+    'moron',
+    'loser',
+    'dumbass',
+    'trash',
+    'screwup',
+    // Hungarian profanity
+    'fasz',
+    'faszom',
+    'faszfej',
+    'geci',
+    'gecifej',
+    'kurva',
+    'kurvara',
+    'kurva anyad',
+    'anyad',
+    'anyad picsaja',
+    'bazdmeg',
+    'basszameg',
+    'baszd meg',
+    'baszod',
+    'baszki',
+    'szopd le',
+    'szopjal le',
+    'bekaphatod',
+    'rohadt',
+    'rohadek',
+    'szar',
+    'szaros',
+    'fos',
+    'hulye',
+    'idiota',
+    'hulye fasz',
+    'hulye kurva',
+    'gyoker',
+    'barom',
+    'csicska',
+    'picsaba',
+    'picsa',
+    'szopas',
+    'szopatlak',
+    'szopjal',
+    'szopo',
+    'kocsog',
+    'kocsogok',
+    'kocsogfej',
+    'takarodj',
+    'menj a picsaba',
+    'huzz a picsaba',
+    'rohadjal meg',
+    'dogolj meg',
+    'hulye',
+    'hulyegyerek',
+    'idióta',
+    'nyomorek',
+    'seggfej',
+    'segg',
+    'seggnyalo',
+    'fereg',
+    'szemetlada',
+    'tetu',
+    'ribanc',
+    'kurvajo',
+    // Spanish profanity
+    'mierda',
+    'joder',
+    'cojones',
+    'puta',
+    'puto',
+    'cabron',
+    'gilipollas',
+    'idiota de mierda',
+    'vete a la mierda',
+    // French profanity
+    'merde',
+    'putain',
+    'connard',
+    'connasse',
+    'salope',
+    'encule',
+    'va te faire foutre',
+    // German profanity
+    'scheisse',
+    'fick dich',
+    'arschloch',
+    'hurensohn',
+    'verpiss dich',
+    'miststuck',
+    // Italian profanity
+    'cazzo',
+    'stronzo',
+    'vaffanculo',
+    'troia',
+    'pezzo di merda',
+    // Portuguese profanity
+    'merda',
+    'caralho',
+    'foda se',
+    'filho da puta',
+    'vai te foder',
+    // Polish profanity
+    'kurwa',
+    'cholera',
+    'spierdalaj',
+    'pierdol sie',
+    'debil',
+    // Turkish profanity
+    'siktir',
+    'amk',
+    'orospu',
+    'pic',
+    // Dutch profanity
+    'klootzak',
+    'tering',
+    'godverdomme',
+    // Romanian profanity
+    'dracu',
+    'pula',
+    'muie'
 ];
+
+function escapeRegex(input) {
+    return String(input || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function normalizeTextForModeration(message) {
     const raw = String(message || '');
@@ -1588,6 +1759,7 @@ function normalizeTextForModeration(message) {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
 }
@@ -1598,15 +1770,19 @@ function containsBlockedWord(message) {
         return false;
     }
 
-    return CHAT_BLOCKED_WORDS.some((word) => {
-        const normalizedWord = normalizeTextForModeration(word);
+    return CHAT_BLOCKED_WORDS.some((term) => {
+        const normalizedWord = normalizeTextForModeration(term);
         if (!normalizedWord) {
             return false;
         }
 
-        const escapedWord = normalizedWord.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(`(^|\\s)${escapedWord}($|\\s)`, 'i');
-        return regex.test(normalizedMessage);
+        if (normalizedWord.includes(' ')) {
+            return normalizedMessage.includes(normalizedWord);
+        }
+
+        const escapedWord = escapeRegex(normalizedWord);
+        const boundaryRegex = new RegExp(`(^|\\s)${escapedWord}($|\\s)`, 'i');
+        return boundaryRegex.test(normalizedMessage);
     });
 }
 
