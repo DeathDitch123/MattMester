@@ -1,4 +1,6 @@
 (function initMattMesterChatModal(globalScope) {
+    const CHAT_OPEN_EVENT_NAME = 'mattmester:chat:open-conversation';
+
     const DEFAULTS = {
         conversationsEndpoint: '/api/chat/conversations',
         conversationMessagesEndpoint: (conversationId, beforeCursor, limit) => {
@@ -16,6 +18,7 @@
 
     const state = {
         initialized: false,
+        globalEventsBound: false,
         options: { ...DEFAULTS },
         activeConversationId: null,
         conversationList: [],
@@ -74,24 +77,23 @@
                 font-weight: 700;
             }
             .chat-modal-dialog {
-                max-width: 980px;
+                max-width: 1100px;
             }
             .chat-modal-content {
-                min-height: 72vh;
+                height: min(80vh, 860px);
                 background: #0f172a;
                 border: 1px solid #1e293b;
                 color: #e2e8f0;
             }
             .chat-layout {
-                display: grid;
-                grid-template-columns: 320px 1fr;
-                min-height: 72vh;
+                height: 100%;
             }
             .chat-left {
                 border-right: 1px solid #1e293b;
                 background: #111827;
                 display: flex;
                 flex-direction: column;
+                min-height: 0;
             }
             .chat-search-wrap {
                 padding: 12px;
@@ -111,6 +113,7 @@
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
+                min-height: 0;
             }
             .chat-conversation-item {
                 background: #0b1220;
@@ -145,6 +148,7 @@
                 display: flex;
                 flex-direction: column;
                 min-width: 0;
+                min-height: 0;
             }
             .chat-header {
                 border-bottom: 1px solid #1e293b;
@@ -159,6 +163,7 @@
                 flex-direction: column;
                 gap: 10px;
                 background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 45%), #0b1220;
+                min-height: 0;
             }
             .chat-message {
                 max-width: 80%;
@@ -204,22 +209,14 @@
                 text-align: center;
             }
             @media (max-width: 991.98px) {
-                .chat-modal-dialog {
-                    max-width: 100%;
-                    margin: 0;
-                    height: 100vh;
-                }
                 .chat-modal-content {
-                    min-height: 100vh;
+                    height: 100vh;
                     border-radius: 0;
                 }
-                .chat-layout {
-                    grid-template-columns: 1fr;
-                }
                 .chat-left {
-                    border-right: none;
+                    border-right: 0;
                     border-bottom: 1px solid #1e293b;
-                    max-height: 40vh;
+                    max-height: 36vh;
                 }
                 .chat-floating-button {
                     right: 14px;
@@ -242,18 +239,22 @@
         wrapper.innerHTML = `
             <button id="chatFloatingButton" class="chat-floating-button" type="button" aria-label="Chat" title="Chat">💬</button>
             <div class="modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered modal-xl chat-modal-dialog">
+                <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down chat-modal-dialog">
                     <div class="modal-content chat-modal-content">
-                        <div class="chat-layout">
-                            <aside class="chat-left">
+                        <div class="chat-layout container-fluid h-100 p-0">
+                            <div class="row g-0 h-100">
+                            <aside class="chat-left col-12 col-lg-4">
                                 <div class="chat-search-wrap">
-                                    <input id="chatConversationSearch" class="chat-search-input" type="text" placeholder="Kereses beszelgetesben..." />
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text bg-dark text-secondary border-secondary">🔎</span>
+                                        <input id="chatConversationSearch" class="chat-search-input form-control border-secondary" type="text" placeholder="Kereses beszelgetesben..." />
+                                    </div>
                                 </div>
                                 <div id="chatConversationLoading" class="chat-placeholder d-none">Beszelgetesek betoltese...</div>
                                 <div id="chatConversationEmpty" class="chat-placeholder d-none">Nincs beszelgetes.</div>
                                 <div id="chatConversationList" class="chat-conversation-list" role="list"></div>
                             </aside>
-                            <section class="chat-right">
+                            <section class="chat-right col-12 col-lg-8">
                                 <header class="chat-header">
                                     <div id="chatHeaderTitle" class="fw-semibold">Valassz beszelgetest</div>
                                     <div id="chatHeaderSubtitle" class="small text-secondary">Realtime chat</div>
@@ -264,11 +265,12 @@
                                 <div class="chat-composer">
                                     <div id="chatFeedback" class="small text-danger d-none"></div>
                                     <div class="chat-input-row">
-                                        <input id="chatMessageInput" class="chat-input" type="text" maxlength="1000" placeholder="Irj uzenetet..." />
-                                        <button id="chatSendButton" class="btn btn-warning" type="button">Kuldes</button>
+                                        <input id="chatMessageInput" class="chat-input form-control border-secondary" type="text" maxlength="1000" placeholder="Irj uzenetet..." />
+                                        <button id="chatSendButton" class="btn btn-warning flex-shrink-0" type="button">Kuldes</button>
                                     </div>
                                 </div>
                             </section>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -791,6 +793,58 @@
         await openConversation(conversationId);
     }
 
+    async function handleGlobalChatOpenEvent(customEvent) {
+        const detail = customEvent?.detail || {};
+        const conversationId = Number(detail.conversationId) || 0;
+        const fromUserId = Number(detail.fromUserId || detail.targetUserId || detail.userId) || 0;
+
+        try {
+            if (conversationId) {
+                await openConversation(conversationId);
+                return;
+            }
+
+            if (fromUserId) {
+                await openDirectByUserId(fromUserId);
+                return;
+            }
+
+            throw new Error('A chat open esemény payload hiányos.');
+        } catch (error) {
+            setFeedback(error.message || 'Nem sikerult megnyitni a chat beszelgetest.', true);
+        }
+    }
+
+    function bindGlobalEvents() {
+        if (state.globalEventsBound) {
+            return;
+        }
+
+        globalScope.addEventListener(CHAT_OPEN_EVENT_NAME, (event) => {
+            handleGlobalChatOpenEvent(event).catch((error) => {
+                setFeedback(error.message || 'Globalis chat nyitasi hiba.', true);
+            });
+        });
+
+        globalScope.addEventListener('mattmester:notification:push', (event) => {
+            const detail = event?.detail || {};
+            const conversationId = Number(detail.conversationId) || 0;
+            const fromUserId = Number(detail.fromUserId || detail.targetUserId || detail.senderUserId) || 0;
+
+            if (!conversationId && !fromUserId) {
+                return;
+            }
+
+            globalScope.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT_NAME, {
+                detail: conversationId
+                    ? { conversationId }
+                    : { fromUserId }
+            }));
+        });
+
+        state.globalEventsBound = true;
+    }
+
     function bindEvents() {
         if (!dom.floatingButton || !dom.modal) {
             throw new Error('A chat modal DOM elemei nem talalhatok.');
@@ -884,14 +938,38 @@
         state.modalInstance = globalScope.bootstrap.Modal.getOrCreateInstance(dom.modal);
         bindEvents();
         bindSocketEvents();
+        bindGlobalEvents();
 
         state.initialized = true;
     }
 
+    function autoInitOnDomReady() {
+        const start = () => {
+            init().catch((error) => {
+                console.error('Chat modal auto init hiba:', error);
+            });
+        };
+
+        if (globalScope.document.readyState === 'loading') {
+            globalScope.document.addEventListener('DOMContentLoaded', start, { once: true });
+        } else {
+            start();
+        }
+    }
+
     globalScope.MattMesterChatModal = {
+        CHAT_OPEN_EVENT_NAME,
         init,
         openConversation,
         openDirectByUserId,
+        openByEventPayload: async (payload) => {
+            await handleGlobalChatOpenEvent({ detail: payload || {} });
+        },
+        dispatchOpenConversation: (payload) => {
+            globalScope.dispatchEvent(new CustomEvent(CHAT_OPEN_EVENT_NAME, {
+                detail: payload || {}
+            }));
+        },
         getState: () => ({
             activeConversationId: state.activeConversationId,
             conversationList: [...state.conversationList],
@@ -900,4 +978,6 @@
             isLoadingByConversation: new Map(state.isLoadingByConversation)
         })
     };
+
+    autoInitOnDomReady();
 })(window);

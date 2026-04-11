@@ -820,11 +820,16 @@ function bindSearchResultsModalEvents() {
                 });
             } else if (action === 'chat') {
                 runSafelyAsync('searchResultOpenDirectChat', async () => {
-                    if (!window.MattMesterChatModal?.openDirectByUserId) {
+                    const eventName = window.MattMesterChatModal?.CHAT_OPEN_EVENT_NAME || 'mattmester:chat:open-conversation';
+                    if (!eventName) {
                         throw new Error('A chat modal API nem érhető el.');
                     }
 
-                    await window.MattMesterChatModal.openDirectByUserId(userId);
+                    window.dispatchEvent(new CustomEvent(eventName, {
+                        detail: {
+                            fromUserId: userId
+                        }
+                    }));
                 });
             } else if (action === 'pending-friend' || action === 'accepted-friend' || action === 'blocked-friend') {
                 // Ezek az akciók nem interaktívak, vagy később implementálandók
@@ -1253,11 +1258,16 @@ function bindFriendsSectionEvents() {
             }
 
             if (actionName === 'chat') {
-                if (!window.MattMesterChatModal?.openDirectByUserId) {
+                const eventName = window.MattMesterChatModal?.CHAT_OPEN_EVENT_NAME || 'mattmester:chat:open-conversation';
+                if (!eventName) {
                     throw new Error('A chat modal API nem érhető el.');
                 }
 
-                await window.MattMesterChatModal.openDirectByUserId(targetUserId);
+                window.dispatchEvent(new CustomEvent(eventName, {
+                    detail: {
+                        fromUserId: targetUserId
+                    }
+                }));
                 return;
             }
 

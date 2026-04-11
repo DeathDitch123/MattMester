@@ -625,6 +625,14 @@
             updateSocketInfoPanel(socketState);
         });
 
+        socket.on('notification:push', (payload = {}) => {
+            // Notification payload továbbítása globális eseményként a közös moduloknak.
+            dispatchSocketClientEvent('mattmester:notification:push', {
+                ...payload,
+                receivedAt: new Date().toISOString()
+            });
+        });
+
         socket.on('stats:public', (stats) => {
             // Publikus statisztika mentése + custom event továbbítás.
             socketState.statsPublic = stats || null;
