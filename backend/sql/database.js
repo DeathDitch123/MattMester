@@ -201,6 +201,44 @@ async function createTables() {
             FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
         )`,
 
+        `CREATE TABLE IF NOT EXISTS chat_conversations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            type ENUM('private', 'group') NOT NULL,
+            name VARCHAR(255) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_message_at TIMESTAMP NULL DEFAULT NULL,
+            last_message_preview VARCHAR(255) NULL,
+            UNIQUE KEY unique_group_name (name),
+            INDEX idx_chat_conversations_last_message_at (last_message_at)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS chat_participants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            conversation_id INT NOT NULL,
+            user_id INT NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_read_message_id INT NULL,
+            UNIQUE KEY unique_chat_participant (conversation_id, user_id),
+            INDEX idx_chat_participants_user (user_id),
+            INDEX idx_chat_participants_conversation (conversation_id),
+            FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS chat_messages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            conversation_id INT NOT NULL,
+            sender_id INT NOT NULL,
+            body TEXT NOT NULL,
+            body_masked TEXT NULL,
+            is_body_masked BOOLEAN DEFAULT FALSE,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_chat_messages_conversation_sent_at (conversation_id, sent_at),
+            INDEX idx_chat_messages_sender (sender_id)
+        )`,
+
         `CREATE TABLE IF NOT EXISTS user_logs (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
