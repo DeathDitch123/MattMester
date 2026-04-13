@@ -40,7 +40,15 @@ function jatekLetrehoz() {
         nehezseg: null,         // 1-8 nehézségi szint
         dbGameId: null,         // DB games.id
         idoVegeUzenet: null,    // időlejárat üzenet
-        eloValtozas: null       // játékvégi ELO összegzés a kliensnek
+        eloValtozas: null,      // játékvégi ELO összegzés a kliensnek
+        // ── PVP MEZŐK ──
+        pvpAktiv: false,            // ez PvP játék?
+        pvpStatusz: null,           // 'waiting' | 'active' | 'finished'
+        pvpJatekosNevek: null,      // { white: username, black: username }
+        disconnectTimer: null,      // grace period timer ref
+        disconnectSzin: null,       // melyik szín disconnectelt
+        onIdoLejar: null,           // callback: timer.js hívja amikor lejár az idő
+        drawAjanlat: null           // melyik szín ajánlott döntetlent: 'white' | 'black' | null
     };
     jatekok.set(gameId, jatek);
     return { gameId, jatek };
@@ -63,6 +71,7 @@ function jatekTorol(gameId) {
         // Timer leállítás ha fut
         if (jatek.jatekosok.white.timer) clearInterval(jatek.jatekosok.white.timer);
         if (jatek.jatekosok.black.timer) clearInterval(jatek.jatekosok.black.timer);
+        if (jatek.disconnectTimer) clearTimeout(jatek.disconnectTimer);
         jatekok.delete(gameId);
     }
 }
@@ -133,7 +142,12 @@ function jatekAllapotKliens(jatek) {
         botSzin: jatek.botSzin,
         nehezseg: jatek.nehezseg,
         botGondolkodik: jatek.botGondolkodik || false,
-        eloValtozas: jatek.eloValtozas || null
+        eloValtozas: jatek.eloValtozas || null,
+        // ── PVP INFÓ A KLIENSNEK ──
+        pvpAktiv: jatek.pvpAktiv,
+        pvpStatusz: jatek.pvpStatusz,
+        pvpJatekosNevek: jatek.pvpJatekosNevek,
+        drawAjanlat: jatek.drawAjanlat
     };
 }
 

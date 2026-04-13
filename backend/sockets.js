@@ -1,5 +1,6 @@
 const { services } = require('./services.js');
 const sql = require('./sql/sql_funtions.js');
+const { registerPvpHandlers, handlePvpDisconnect } = require('./chess/pvp.js');
 
 const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
 const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
@@ -405,6 +406,9 @@ function createSocketHub(io) {
             socket.emit('stats:admin', currentStats.admin);
         }
 
+        // ── PVP sakk handler-ek regisztrálása ──
+        registerPvpHandlers(socket, io);
+
         socket.on('socket:sync', () => {
             try {
                 const refreshedContext = refreshSocketContextFromSession(socket);
@@ -655,6 +659,13 @@ function createSocketHub(io) {
                         clientsById.delete(currentContext.clientId);
                     }
                 }
+            }
+
+            // ── PVP disconnect kezelés ──
+            if (currentContext && currentContext.userId) {
+                handlePvpDisconnect(currentContext.userId, io).catch((error) => {
+                    console.error('PvP disconnect kezelési hiba:', error);
+                });
             }
 
             syncPresence();

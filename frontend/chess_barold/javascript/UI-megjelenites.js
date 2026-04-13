@@ -8,14 +8,17 @@
 /**
  * Kirajzolja a táblát a szerver által küldött állapotból.
  * @param {object} allapot - szerver válasz: { tabla, koronLevo, vege, utolsoLepes, sakkPoz, ido }
+ * @param {boolean} flip - true = fekete játékos nézete (tábla fejjel lefelé)
  */
-export function tablaRajzol(allapot) {
+export function tablaRajzol(allapot, flip = false) {
     const boardElem = document.getElementById("board");
     if (!boardElem) return;
     boardElem.innerHTML = "";
 
-    for (let y = 0; y < 8; y++) {
-        for (let x = 0; x < 8; x++) {
+    for (let renderY = 0; renderY < 8; renderY++) {
+        for (let renderX = 0; renderX < 8; renderX++) {
+            const x = flip ? (7 - renderX) : renderX;
+            const y = flip ? (7 - renderY) : renderY;
             const mezo = allapot.tabla.find(m => m.x === x && m.y === y);
             const mezoDiv = document.createElement("div");
 
@@ -26,14 +29,14 @@ export function tablaRajzol(allapot) {
             mezoDiv.dataset.y = y;
             mezoDiv.dataset.pos = mezo.pos;
 
-            if (x === 0) {
+            if (renderX === 0) {
                 const rank = document.createElement("span");
                 rank.className = "coord-rank";
                 rank.textContent = String(8 - y);
                 mezoDiv.appendChild(rank);
             }
 
-            if (y === 7) {
+            if (renderY === 7) {
                 const file = document.createElement("span");
                 file.className = "coord-file";
                 file.textContent = String.fromCharCode(97 + x);

@@ -44,6 +44,7 @@ function idoTikk(jatek, szin) {
         const nyertes = (szin === "white") ? "black" : "white";
         jatek.idoVegeUzenet = szin + " időtúllépés — " + nyertes + " nyert";
         idoLeall(jatek);
+        if (jatek.onIdoLejar) jatek.onIdoLejar(szin);
     }
 }
 
