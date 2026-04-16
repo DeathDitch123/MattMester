@@ -5,6 +5,10 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const socket = window.MattMesterSocket?.socket || io();
 const requestController = window.createRequestController(300);
 
+function rethrowIfAborted(error) {
+    if (error?.name === 'AbortError') throw error;
+}
+
 function runSafely(label, handler) {
     try {
         return handler();
@@ -82,11 +86,7 @@ async function fetchSessionInfo() {
             data = await parseJson(response);
         }
     } catch (error) {
-        if (error?.name === 'AbortError') {
-            const abortError = new Error('A session informacio lekerdezese megszakadt.');
-            abortError.name = 'AbortError';
-            throw abortError;
-        }
+        rethrowIfAborted(error);
         console.error('Hiba a session informacio lekerdezese soran:', error);
     } finally {
         requestController.clearSignal('sessionInfo');
@@ -115,11 +115,7 @@ async function loadLeaderBoard() {
         };
         renderLeaderBoard();
     } catch (error) {
-        if (error?.name === 'AbortError') {
-            const abortError = new Error('A ranglista lekerdezese megszakadt.');
-            abortError.name = 'AbortError';
-            throw abortError;
-        }
+        rethrowIfAborted(error);
         console.error('Hiba a ranglista lekérdezése során:', error);
     } finally {
         requestController.clearSignal('leaderboard');
@@ -250,9 +246,7 @@ function bindLoginForm() {
                         }
                         await refreshAuthUi('login-success');
                     } catch (error) {
-                        if (error?.name === 'AbortError') {
-                            throw error;
-                        }
+                        rethrowIfAborted(error);
                         showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
                         console.error('Hiba a bejelentkezes soran:', error);
                     } finally {
@@ -312,9 +306,7 @@ function bindRegisterForm() {
                         await refreshAuthUi('register-success');
                         showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
                     } catch (error) {
-                        if (error?.name === 'AbortError') {
-                            throw error;
-                        }
+                        rethrowIfAborted(error);
                         showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
                         console.error('Hiba a regisztráció soran:', error);
                     } finally {
@@ -370,9 +362,7 @@ async function handleLogout() {
         }
         await refreshAuthUi('logout-success');
     } catch (error) {
-        if (error?.name === 'AbortError') {
-            throw error;
-        }
+        rethrowIfAborted(error);
         console.error('Hiba a kijelentkezés során:', error);
         showToast(error.message || 'Hiba történt a kijelentkezés során.');
     } finally {

@@ -59,7 +59,8 @@ CREATE TABLE IF NOT EXISTS profile_image_uploads (
     review_time TIMESTAMP NULL,
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
     FOREIGN KEY (reviewed_by) REFERENCES users (id) ON DELETE
-    SET NULL
+    SET NULL,
+    INDEX idx_profile_image_uploads_user_status (user_id, status)
 );
 -- 2. Bejelentkezési előzmények
 CREATE TABLE IF NOT EXISTS login_history (
@@ -68,7 +69,8 @@ CREATE TABLE IF NOT EXISTS login_history (
     ip_address VARCHAR(45) NOT NULL,
     user_agent VARCHAR(255),
     login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+    INDEX idx_login_history_ip_time (ip_address, login_time)
 );
 -- 3. Statisztikák tábla
 CREATE TABLE IF NOT EXISTS statistics (
@@ -109,7 +111,8 @@ CREATE TABLE IF NOT EXISTS games (
     status ENUM ('ongoing', 'finished', 'abandoned', 'draw') DEFAULT 'ongoing',
     FOREIGN KEY (white_player_id) REFERENCES users (id),
     FOREIGN KEY (black_player_id) REFERENCES users (id),
-    FOREIGN KEY (winner_id) REFERENCES users (id)
+    FOREIGN KEY (winner_id) REFERENCES users (id),
+    INDEX idx_games_status (status)
 );
 -- 6. Játék alatti chatek
 CREATE TABLE IF NOT EXISTS game_chats (
@@ -141,7 +144,8 @@ CREATE TABLE IF NOT EXISTS moves (
     promotion_piece VARCHAR(10),
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE,
-    FOREIGN KEY (player_id) REFERENCES users (id)
+    FOREIGN KEY (player_id) REFERENCES users (id),
+    INDEX idx_moves_game (game_id)
 );
 -- 8. Képességhasználati napló
 CREATE TABLE IF NOT EXISTS ability_log (
@@ -157,7 +161,8 @@ CREATE TABLE IF NOT EXISTS ability_log (
     FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE,
     FOREIGN KEY (move_id) REFERENCES moves (id) ON DELETE CASCADE,
     FOREIGN KEY (player_id) REFERENCES users (id),
-    FOREIGN KEY (ability_id) REFERENCES abilities (id)
+    FOREIGN KEY (ability_id) REFERENCES abilities (id),
+    INDEX idx_ability_log_game (game_id)
 );
 -- 9. Barátok tábla
 CREATE TABLE IF NOT EXISTS friends (

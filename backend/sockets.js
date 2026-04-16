@@ -1,6 +1,7 @@
 const { services } = require('./services.js');
 const sql = require('./sql/sql_funtions.js');
 const { registerPvpHandlers, handlePvpDisconnect } = require('./chess/pvp.js');
+const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
 
 const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
 const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
@@ -64,11 +65,17 @@ function getConversationRoomName(conversationId) {
     return `chat-conversation-${conversationId}`;
 }
 
+function getSessionProfileImage(session) {
+    return safeString(session.profile_image, '/profile_pictures/default.png') || '/profile_pictures/default.png';
+}
+
+function getSessionProfileImageStatus(session) {
+    return safeString(session.profile_image_status, 'default') || 'default';
+}
+
 function createContextFromSocket(socket) {
     const session = socket.request?.session || {};
     const auth = socket.handshake?.auth || {};
-    const profileImage = safeString(session.profile_image, '/profile_pictures/default.png') || '/profile_pictures/default.png';
-    const profileImageStatus = safeString(session.profile_image_status, 'default') || 'default';
 
     return {
         socketId: socket.id,
@@ -79,8 +86,8 @@ function createContextFromSocket(socket) {
         userId: session.userId || null,
         username: session.username || 'Vendég',
         role: session.role || 'guest',
-        profile_image: profileImage,
-        profile_image_status: profileImageStatus,
+        profile_image: getSessionProfileImage(session),
+        profile_image_status: getSessionProfileImageStatus(session),
         connectedAt: new Date().toISOString(),
         lastSeenAt: new Date().toISOString()
     };
@@ -133,62 +140,12 @@ function createSocketHub(io) {
     const roomStateById = new Map();
     const chatRateLimitByUserId = new Map();
 
-    function validateChatRateLimitOrThrow(userId) {
-        const now = Date.now();
-        const normalizedUserId = parsePositiveInteger(userId, 0);
-        if (!normalizedUserId) {
-            throw new Error('Érvénytelen felhasználó azonosító a chat rate limithez.');
-        }
-
-        const existing = chatRateLimitByUserId.get(normalizedUserId) || [];
-        const threshold = now - CHAT_RATE_LIMIT_WINDOW_MS;
-        const fresh = existing.filter((timestamp) => Number(timestamp) > threshold);
-
-        if (fresh.length >= CHAT_RATE_LIMIT_MAX_MESSAGES) {
-            chatRateLimitByUserId.set(normalizedUserId, fresh);
-            throw new Error('Túl sok üzenet rövid időn belül. Próbáld újra pár másodperc múlva.');
-        }
-
-        fresh.push(now);
-        chatRateLimitByUserId.set(normalizedUserId, fresh);
-    }
-
     function createChatErrorPayload(conversationId, error, fallbackMessage) {
         return {
             conversationId,
             message: error?.message || fallbackMessage || 'Chat hiba történt.',
             timestamp: new Date().toISOString()
         };
-    }
-
-    async function writeChatSecurityAudit(userId, eventType, conversationId, {
-        success = false,
-        severity = 'warning',
-        message = '',
-        metadata = {}
-    } = {}) {
-        try {
-            const normalizedUserId = parsePositiveInteger(userId, 0);
-            if (!normalizedUserId) {
-                return;
-            }
-
-            await sql.insertUserLog(normalizedUserId, {
-                eventType,
-                eventCategory: 'security',
-                severity,
-                source: 'socket',
-                success,
-                message: message || null,
-                metadata: {
-                    conversationId,
-                    ...metadata
-                },
-                occurredAt: new Date()
-            });
-        } catch (logError) {
-            console.warn(`Socket chat audit log hiba (${eventType}):`, logError.message);
-        }
     }
 
     function getPresenceSnapshot() {
@@ -513,7 +470,7 @@ function createSocketHub(io) {
                 }
 
                 await sql.assertConversationParticipant(currentContext.userId, conversationId);
-                validateChatRateLimitOrThrow(currentContext.userId);
+                validateRateLimit(chatRateLimitByUserId, currentContext.userId, CHAT_RATE_LIMIT_MAX_MESSAGES, CHAT_RATE_LIMIT_WINDOW_MS);
 
                 const containsBlockedWord = sql.containsBlockedWord(message);
                 const policyResult = {
@@ -540,7 +497,8 @@ function createSocketHub(io) {
                             policy: CHAT_BLACKLIST_POLICY,
                             masked: policyResult.isMasked,
                             blocked: policyResult.blocked
-                        }
+                        },
+                        source: 'socket'
                     });
                 }
 
@@ -566,8 +524,7 @@ function createSocketHub(io) {
 
                 io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
             } catch (error) {
-                const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet')
-                    || String(error?.message || '').toLowerCase().includes('tul sok uzenet');
+                const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet');
 
                 if (isRateLimited) {
                     const currentContext = socketsById.get(socket.id);
@@ -578,7 +535,8 @@ function createSocketHub(io) {
                         metadata: {
                             limit: CHAT_RATE_LIMIT_MAX_MESSAGES,
                             windowMs: CHAT_RATE_LIMIT_WINDOW_MS
-                        }
+                        },
+                        source: 'socket'
                     });
                 }
 
@@ -617,8 +575,8 @@ function createSocketHub(io) {
                 });
             } catch (error) {
                 console.error('room:state:update hiba:', error);
-                socket.emit('room:state:error', {
-                    roomId: safeString(payload.roomId, 'general-room'),
+                socket.emit('room:error', {
+                    success: false,
                     message: error.message || 'Szobaállapot frissítési hiba történt.'
                 });
             }

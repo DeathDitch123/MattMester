@@ -1,18 +1,16 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt'); //?npm install bcrypt
-const database = require('../sql/database.js');
 const sql = require('../sql/sql_funtions.js');
 const fs = require('fs/promises');
 const { leaderboardService } = require('../services.js');
+const { usernameRegex, emailRegex, passwordRegex } = require('./validation.js');
+const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./chatUtils.js');
 
 //!Multer
 const multer = require('multer'); //?npm install multer
 const path = require('path');
-const { request } = require('http');
-const { stat } = require('fs');
 const { isAdmin, isAuthenticated } = require('./funtions.js');
-const { profile } = require('console');
 
 const PROFILE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
 const ALLOWED_PROFILE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
@@ -85,235 +83,178 @@ router.get('/test', isAdmin, (request, response) => {
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
 router.post('/login', async (request, response) => {
     let statusCode = 200;
-    let currentUser = null;
+    let payload = { success: false, message: '' };
     try {
         const { usernameOrMail, password, remember } = request.body;
         if (!usernameOrMail || !password) {
             statusCode = 400;
-            throw new Error("Nincs megadva username/email vagy jelszó");
+            throw new Error('Nincs megadva username/email vagy jelszó');
         }
-        else {
-            let user = await sql.getUserByUsername(usernameOrMail);
-            if (!user) {
-                user = await sql.getUserByEmail(usernameOrMail);
-            }
-            if (!user) {
-                statusCode = 401;
-                throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
-            }
-            else {
-                const isMatch = await bcrypt.compare(password, user.password_hash);
-                if (!isMatch) {
-                    statusCode = 401;
-                    throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
-                }
-                else {
-                    currentUser = user;
 
-                    request.session.userId = user.id;
-                    request.session.username = user.username;
-                    request.session.role = user.role;
-                    request.session.elo = user.elo;
-                    request.session.elo_MM = user.elo_MM;
-                    request.session.elo_bullet = user.elo_bullet;
-                    request.session.profile_image = user.profile_image || '/profile_pictures/default.png';
-                    request.session.profile_image_status = user.profile_image_status || 'default';
-                    if (remember) {
-                        request.session.cookie.maxAge = 1000 * 60 * 60 * 24 * 7; // 7 nap
-                    } else {
-                        request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
-                    }
-                    const ipAdress = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
-                    console.log(`Bejelentkezés: ${user.username} - IP: ${ipAdress}`);
-                    const userAgent = request.headers['user-agent'] || 'Ismeretlen';
-                    console.log(`User Agent: ${userAgent}`);
-
-                    await sql.logLoginAttempt(user.id, ipAdress, userAgent);
-
-                    await new Promise((resolve, reject) => {
-                        request.session.save((err) => {
-                            if (err) {
-                                console.error('Session mentési hiba:', err);
-                                return reject(new Error('Hiba a munkamenet mentésekor.'));
-                            }
-                            resolve();
-                        });
-                    });
-
-                    return response.status(statusCode).json({
-                        success: true,
-                        message: 'Sikeres bejelentkezés.',
-                        user: {
-                            id: currentUser.id,
-                            username: currentUser.username,
-                            email: currentUser.email,
-                            role: currentUser.role,
-                            elo: currentUser.elo,
-                            elo_MM: currentUser.elo_MM,
-                            elo_bullet: currentUser.elo_bullet
-                        },
-                    });
-                }
-            }
+        let user = await sql.getUserByUsername(usernameOrMail);
+        if (!user) user = await sql.getUserByEmail(usernameOrMail);
+        if (!user) {
+            statusCode = 401;
+            throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
         }
+
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            statusCode = 401;
+            throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
+        }
+
+        request.session.userId = user.id;
+        request.session.username = user.username;
+        request.session.role = user.role;
+        request.session.elo = user.elo;
+        request.session.elo_MM = user.elo_MM;
+        request.session.elo_bullet = user.elo_bullet;
+        request.session.profile_image = user.profile_image || '/profile_pictures/default.png';
+        request.session.profile_image_status = user.profile_image_status || 'default';
+        request.session.cookie.maxAge = remember ? 1000 * 60 * 60 * 24 * 7 : null;
+
+        const ipAddress = getRequestIpAddress(request);
+        const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+        console.log(`Bejelentkezés: ${user.username} - IP: ${ipAddress}`);
+        console.log(`User Agent: ${userAgent}`);
+
+        await sql.logLoginAttempt(user.id, ipAddress, userAgent);
+        await saveSessionAsync(request, 'Hiba a munkamenet mentésekor.');
+
+        payload = {
+            success: true,
+            message: 'Sikeres bejelentkezés.',
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email,
+                role: user.role,
+                elo: user.elo,
+                elo_MM: user.elo_MM,
+                elo_bullet: user.elo_bullet
+            }
+        };
     } catch (error) {
         console.error('Login hiba:', error);
-        const finalStatusCode = statusCode === 200 ? 500 : statusCode;
-        return response.status(finalStatusCode).json({ success: false, message: error.message });
+        if (statusCode === 200) statusCode = 500;
+        payload.message = error.message;
     }
+    response.status(statusCode).json(payload);
 });
 // ?GET /api/logout - session lezárása és cookie törlése
 const logoutHandler = async (request, response) => {
     let statusCode = 200;
-    let message = 'Sikeres kijelentkezés.';
-
+    let payload = { success: true, message: 'Nincs aktív session.' };
     try {
-        if (!request.session || !request.session.userId) {
-            message = 'Nincs aktív session.';
+        if (request.session?.userId) {
+            await destroySessionAsync(request, 'Sikertelen kijelentkezés.');
+            response.clearCookie('connect.sid');
+            console.log('Session sikeresen megsemmisítve.');
+            payload.message = 'Sikeres kijelentkezés.';
         }
-        else {
-            await new Promise((resolve, reject) => {
-                request.session.destroy(err => {
-                    if (err) {
-                        console.error('Session destroy hiba:', err);
-                        statusCode = 500;
-                        message = 'Sikertelen kijelentkezés.';
-                        resolve(); // Akkor is resolve, hogy a try folytatódjon a beállított adatokkal
-                    } else {
-                        console.log('Session sikeresen megsemmisítve.');
-                        response.clearCookie('connect.sid');
-                        resolve();
-                    }
-                });
-            });
-        }
-        response.status(statusCode).json({ success: statusCode < 400, message });
     } catch (error) {
         console.error('Logout hiba:', error);
-        return response.status(500).json({ success: false, message: 'Szerverhiba a kijelentkezés során.' });
+        statusCode = 500;
+        payload = { success: false, message: error.message };
     }
+    response.status(statusCode).json(payload);
 };
 router.get('/logout', logoutHandler);
 router.post('/logout', logoutHandler);
 // ?POST /api/register - új felhasználó regisztrációja
 router.post('/register', async (request, response) => {
     let statusCode = 200;
+    let payload = { success: false, message: '' };
     try {
         const { username, password, email } = request.body;
         if (!username || !password || !email) {
             statusCode = 400;
             throw new Error('Minden mező kitöltése kötelező.');
         }
-        else {
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            if (!emailRegex.test(email)) {
-                statusCode = 400;
-                throw new Error('Érvénytelen email cím formátum!');
-            }
-            else {
-                if (username.length < 3 || username.length > 50) {
-                    statusCode = 400;
-                    throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie!');
-                }
-                else {
-                    const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
-                    if (!usernameRegex.test(username)) {
-                        statusCode = 400;
-                        throw new Error('A felhasználónév csak alfanumerikus karaktereket, pontot, aláhúzást és kötőjelet tartalmazhat!');
-                    }
-                    else {
-                        if (password.includes("\\")) {
-                            statusCode = 400;
-                            throw new Error('A jelszó nem megengedett karaktert tartalmaz!');
-                        }
-                        else {
-                            if (password.length < 8) {
-                                statusCode = 400;
-                                throw new Error('A jelszónak legalább 8 karakter hosszúnak kell lennie!');
-                            }
-                            else {
-                                const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
-                                if (!passwordRegex.test(password)) {
-                                    statusCode = 400;
-                                    throw new Error('A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot!');
-                                }
-                                else {
-                                    let existingUserByEmail = await sql.getUserByEmail(email);
-                                    if (existingUserByEmail) {
-                                        statusCode = 409;
-                                        throw new Error('Az email cím már foglalt!');
-                                    }
-                                    else {
-                                        let existingUserByUsername = await sql.getUserByUsername(username);
-                                        if (existingUserByUsername) {
-                                            statusCode = 409;
-                                            throw new Error('A felhasználónév már foglalt!');
-                                        }
-                                        else {
-                                            const saltRounds = 10;
-                                            const passwordHash = await bcrypt.hash(password, saltRounds);
-                                            const result = await sql.insertUser(username, passwordHash, email);
 
-                                            request.session.userId = result.insertId;
-                                            request.session.username = username;
-                                            request.session.role = 'player';
-                                            request.session.elo = 800;
-                                            request.session.elo_MM = 800;
-                                            request.session.elo_bullet = 800;
-                                            request.session.profile_image = '/profile_pictures/default.png';
-                                            request.session.profile_image_status = 'default';
-                                            request.session.cookie.maxAge = null; // session cookie (böngésző bezárásáig)
-
-                                            const ipAdress = request.headers['x-forwarded-for'] || request.socket.remoteAddress;
-                                            console.log(`Új regisztráció: ${username} (${email}) - IP: ${ipAdress}`);
-                                            const userAgent = request.headers['user-agent'] || 'Ismeretlen';
-                                            console.log(`User Agent: ${userAgent}`);
-
-                                            statusCode = 201;
-
-                                            await new Promise((resolve, reject) => {
-                                                request.session.save((err) => {
-                                                    if (err) {
-                                                        console.error('Session mentési hiba:', err);
-                                                        return reject(new Error('Sikertelen regisztráció.'));
-                                                    }
-                                                    resolve();
-                                                });
-                                            });
-
-                                            console.log('Session sikeresen mentése a regisztráció után.');
-                                            await sql.logLoginAttempt(result.insertId, ipAdress, userAgent);
-                                            return response.status(statusCode).json({
-                                                success: true,
-                                                message: 'Sikeres regisztráció',
-                                                user: {
-                                                    id: result.insertId,
-                                                    username,
-                                                    email,
-                                                    role: 'player',
-                                                    elo: 1200,
-                                                    elo_MM: 1200,
-                                                    elo_bullet: 1200
-                                                },
-                                            });
-
-                                        }
-                                    }
-
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        if (!emailRegex.test(email)) {
+            statusCode = 400;
+            throw new Error('Érvénytelen email cím formátum!');
         }
 
+        if (username.length < 3 || username.length > 50) {
+            statusCode = 400;
+            throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie!');
+        }
 
+        if (!usernameRegex.test(username)) {
+            statusCode = 400;
+            throw new Error('A felhasználónév csak alfanumerikus karaktereket, pontot, aláhúzást és kötőjelet tartalmazhat!');
+        }
+
+        if (password.includes('\\')) {
+            statusCode = 400;
+            throw new Error('A jelszó nem megengedett karaktert tartalmaz!');
+        }
+
+        if (password.length < 8) {
+            statusCode = 400;
+            throw new Error('A jelszónak legalább 8 karakter hosszúnak kell lennie!');
+        }
+
+        if (!passwordRegex.test(password)) {
+            statusCode = 400;
+            throw new Error('A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot!');
+        }
+
+        if (await sql.getUserByEmail(email)) {
+            statusCode = 409;
+            throw new Error('Az email cím már foglalt!');
+        }
+
+        if (await sql.getUserByUsername(username)) {
+            statusCode = 409;
+            throw new Error('A felhasználónév már foglalt!');
+        }
+
+        const passwordHash = await bcrypt.hash(password, 10);
+        const result = await sql.insertUser(username, passwordHash, email);
+
+        request.session.userId = result.insertId;
+        request.session.username = username;
+        request.session.role = 'player';
+        request.session.elo = 800;
+        request.session.elo_MM = 800;
+        request.session.elo_bullet = 800;
+        request.session.profile_image = '/profile_pictures/default.png';
+        request.session.profile_image_status = 'default';
+        request.session.cookie.maxAge = null;
+
+        const ipAddress = getRequestIpAddress(request);
+        const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+        console.log(`Új regisztráció: ${username} (${email}) - IP: ${ipAddress}`);
+        console.log(`User Agent: ${userAgent}`);
+
+        statusCode = 201;
+        await saveSessionAsync(request, 'Sikertelen regisztráció.');
+        console.log('Session sikeresen mentve a regisztráció után.');
+        await sql.logLoginAttempt(result.insertId, ipAddress, userAgent);
+
+        payload = {
+            success: true,
+            message: 'Sikeres regisztráció',
+            user: {
+                id: result.insertId,
+                username,
+                email,
+                role: 'player',
+                elo: 800,
+                elo_MM: 800,
+                elo_bullet: 800
+            }
+        };
     } catch (error) {
         console.error('Regisztrációs hiba:', error);
-        const FinalStatusCode = statusCode === 200 ? 500 : statusCode;
-        return response.status(FinalStatusCode).json({ success: false, message: error.message });
+        if (statusCode === 200) statusCode = 500;
+        payload.message = error.message;
     }
+    response.status(statusCode).json(payload);
 });
 // ?GET /api/sessioninfo - aktuális session információk lekérdezése
 router.get('/sessionInfo', async (request, response) => {
@@ -369,8 +310,6 @@ router.get('/sessionInfo', async (request, response) => {
                 };
             }
         }
-
-        return response.status(statusCode).json(result);
     } catch (error) {
         console.error('Session info hiba:', error);
         statusCode = 500;
@@ -380,8 +319,8 @@ router.get('/sessionInfo', async (request, response) => {
             user: null,
             message: 'Szerverhiba a session információ lekérdezése során.'
         };
-        return response.status(statusCode).json(result);
     }
+    response.status(statusCode).json(result);
 });
 
 router.post('/profile/verify-current-password', isAuthenticated, async (request, response) => {
@@ -405,20 +344,18 @@ router.post('/profile/verify-current-password', isAuthenticated, async (request,
             }
         }
 
-        return response.status(statusCode).json(result);
     } catch (error) {
         console.error('Current password verify hiba:', error);
-        return response.status(500).json({ success: false, valid: false, message: 'Szerverhiba az ellenőrzés során.' });
+        statusCode = 500;
+        result = { success: false, valid: false, message: 'Szerverhiba az ellenőrzés során.' };
     }
+    response.status(statusCode).json(result);
 });
 
 router.post('/profile/settings', isAuthenticated, async (request, response) => {
     let statusCode = 200;
+    let payload = { success: false, message: '' };
     try {
-        const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
-
         const body = request.body || {};
         const username = typeof body.username === 'string' ? body.username.trim() : '';
         const email = typeof body.email === 'string' ? body.email.trim() : '';
@@ -508,14 +445,7 @@ router.post('/profile/settings', isAuthenticated, async (request, response) => {
             request.session.username = updateResult.username;
         }
 
-        await new Promise((resolve, reject) => {
-            request.session.save((error) => {
-                if (error) {
-                    return reject(error);
-                }
-                resolve();
-            });
-        });
+        await saveSessionAsync(request, 'Hiba a session mentésekor profil frissítés után.');
 
         const changedFields = [];
         if (updateResult.usernameChanged) {
@@ -544,33 +474,24 @@ router.post('/profile/settings', isAuthenticated, async (request, response) => {
             console.warn('Profile settings log hiba:', logError.message);
         }
 
-        return response.status(statusCode).json({
+        payload = {
             success: true,
             message: 'A profil beállítások sikeresen frissültek.',
             changedFields
-        });
+        };
     } catch (error) {
         console.error('Profile settings hiba:', error);
-
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        if (error?.code === 'ER_DUP_ENTRY' || error.message?.includes('foglalt')) {
-            statusCode = 409;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a profil beállítások mentése közben.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        if (error?.code === 'ER_DUP_ENTRY' || error.message?.includes('foglalt')) statusCode = 409;
+        payload = { success: false, message: error.message || 'Szerverhiba a profil beállítások mentése közben.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.post('/profile/delete', isAuthenticated, async (request, response) => {
     let statusCode = 200;
+    let payload = { success: false, message: '' };
     try {
-        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
         const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
 
         if (!currentPassword) {
@@ -606,56 +527,30 @@ router.post('/profile/delete', isAuthenticated, async (request, response) => {
         }
 
         const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
+        await destroySessionAsync(request, 'Session törlési hiba profil törlés után.');
+        response.clearCookie('connect.sid');
 
-        await new Promise((resolve, reject) => {
-            request.session.destroy((error) => {
-                if (error) {
-                    return reject(new Error(`Session törlési hiba profil törlés után: ${error.message}`));
-                }
-                response.clearCookie('connect.sid');
-                resolve();
-            });
-        });
-
-        return response.status(200).json({
+        payload = {
             success: true,
             message: 'A profil sikeresen törölve lett.',
             userId: deleteResult.userId,
             username: deleteResult.username
-        });
+        };
     } catch (error) {
         console.error('Profile delete hiba:', error);
-        let responseMessage = error?.message || 'Szerverhiba a profil törlése közben.';
-
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        if (error.message === 'Admin profil nem törölhető.' || error.message === 'Admin profil nem torolheto.') {
-            statusCode = 403;
-            responseMessage = 'Admin profil nem törölhető.';
-        }
-
-        if (error.message === 'A felhasználó nem található.' || error.message === 'A felhasznalo nem talalhato.') {
-            statusCode = 404;
-            responseMessage = 'A felhasználó nem található.';
-        }
-
-        if (error.message === 'A jelenlegi jelszó hibás.' || error.message === 'A jelenlegi jelszo hibas.') {
-            statusCode = 401;
-            responseMessage = 'A jelenlegi jelszó hibás.';
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: responseMessage
-        });
+        if (statusCode === 200) statusCode = 500;
+        if (error.message === 'Admin profil nem törölhető.') statusCode = 403;
+        else if (error.message === 'A felhasználó nem található.') statusCode = 404;
+        else if (error.message === 'A jelenlegi jelszó hibás.') statusCode = 401;
+        payload.message = error.message || 'Szerverhiba a profil törlése közben.';
     }
+    response.status(statusCode).json(payload);
 });
 
 router.post('/profile/upload-image', isAuthenticated, (request, response) => {
     profileImageUpload.single('image')(request, response, async (uploadError) => {
         let statusCode = 200;
+        let payload = { success: false, message: '' };
         let uploadedPath = null;
         try {
             if (uploadError) {
@@ -679,12 +574,12 @@ router.post('/profile/upload-image', isAuthenticated, (request, response) => {
             request.session.profile_image_status = uploadResult.status;
             await saveSessionAsync(request, 'Hiba a profilkép feltöltése utáni session mentésekor.');
 
-            return response.status(200).json({
+            payload = {
                 success: true,
                 message: 'A profilkép sikeresen feltöltve, elbírálásra vár.',
                 profile_image: uploadResult.profileImage,
                 profile_image_status: uploadResult.status
-            });
+            };
         } catch (error) {
             if (uploadedPath) {
                 try {
@@ -694,78 +589,56 @@ router.post('/profile/upload-image', isAuthenticated, (request, response) => {
                     console.warn('Feltöltött kép törlése nem sikerült:', deleteError.message);
                 }
             }
-
-            if (statusCode === 200) {
-                statusCode = 500;
-            }
-
-            return response.status(statusCode).json({
-                success: false,
-                message: error.message || 'Szerverhiba a képfeltöltés közben.'
-            });
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || 'Szerverhiba a képfeltöltés közben.' };
         }
+        response.status(statusCode).json(payload);
     });
 });
 
 router.post('/profile/remove-image', isAuthenticated, async (request, response) => {
     let statusCode = 200;
+    let payload = { success: false, message: '' };
     try {
         const removeResult = await sql.resetUserProfileImageToDefault(request.session.userId);
         request.session.profile_image = removeResult.profileImage;
         request.session.profile_image_status = removeResult.profileImageStatus;
         await saveSessionAsync(request, 'Hiba a profilkép eltávolítása utáni session mentésekor.');
-
-        return response.status(200).json({
+        payload = {
             success: true,
             message: 'A profilkép visszaállítva az alapértelmezett képre.',
             profile_image: removeResult.profileImage,
             profile_image_status: removeResult.profileImageStatus
-        });
+        };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        if (error.message === 'A felhasználó nem található.') {
-            statusCode = 404;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a profilkép eltávolítása közben.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        if (error.message === 'A felhasználó nem található.') statusCode = 404;
+        payload = { success: false, message: error.message || 'Szerverhiba a profilkép eltávolítása közben.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.get('/leaderboard', async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: '' };
     try {
-        const leaderboardData = leaderboardService.getLeaderBoard();
-        return response.status(200).json({ success: true, data: leaderboardData });
+        payload = { success: true, data: leaderboardService.getLeaderBoard() };
     } catch (error) {
         console.error('Leaderboard hiba:', error);
-        return response.status(500).json({ success: false, message: 'Szerverhiba a ranglista lekérdezése során.' });
+        statusCode = 500;
+        payload.message = 'Szerverhiba a ranglista lekérdezése során.';
     }
+    response.status(statusCode).json(payload);
 });
 router.get('/searchPlayer', isAuthenticated, async (request, response) => {
     let statusCode = 200;
+    let payload = { success: false, message: '' };
     try {
-        const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
         const username = typeof request.query.username === 'string' ? request.query.username.trim() : '';
 
-        if (!username) {
-            statusCode = 400;
-            throw new Error('A felhasználónév kötelező.');
-        }
-
-        if (username.length < 3 || username.length > 50) {
-            statusCode = 400;
-            throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie.');
-        }
-
-        if (!usernameRegex.test(username)) {
-            statusCode = 400;
-            throw new Error('A felhasználónév formátuma érvénytelen.');
-        }
+        if (!username) { statusCode = 400; throw new Error('A felhasználónév kötelező.'); }
+        if (username.length < 3 || username.length > 50) { statusCode = 400; throw new Error('A felhasználónévnek 3 és 50 karakter között kell lennie.'); }
+        if (!usernameRegex.test(username)) { statusCode = 400; throw new Error('A felhasználónév formátuma érvénytelen.'); }
 
         const currentUserId = Number(request.session?.userId) || 0;
         const users = await sql.searchUsersByUsernameContains(username, currentUserId);
@@ -776,43 +649,29 @@ router.get('/searchPlayer', isAuthenticated, async (request, response) => {
             profileImageStatus: user.profile_image_status || 'approved',
             friendStatus: user.friend_status || 'none'
         }));
-
-        return response.status(200).json({
+        payload = {
             success: true,
             data,
-            message: data.length
-                ? `${data.length} találat`
-                : 'Nincs találat a megadott keresésre.'
-        });
+            message: data.length ? `${data.length} találat` : 'Nincs találat a megadott keresésre.'
+        };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a játékos keresése során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a játékos keresése során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.get('/players/:targetUserId/profile', isAuthenticated, async (request, response) => {
     let statusCode = 200;
-
+    let payload = { success: false, message: '' };
     try {
         const targetUserId = Number(request.params?.targetUserId) || 0;
-        if (!targetUserId) {
-            statusCode = 400;
-            throw new Error('Érvénytelen játékos azonosító.');
-        }
+        if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen játékos azonosító.'); }
 
         const profile = await sql.getPublicPlayerProfileById(targetUserId);
-        if (!profile) {
-            statusCode = 404;
-            throw new Error('A játékos nem található.');
-        }
+        if (!profile) { statusCode = 404; throw new Error('A játékos nem található.'); }
 
-        return response.status(200).json({
+        payload = {
             success: true,
             data: {
                 userId: profile.id,
@@ -830,281 +689,154 @@ router.get('/players/:targetUserId/profile', isAuthenticated, async (request, re
                 draws: profile.draws,
                 winRate: profile.winrate_percent
             }
-        });
+        };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a játékos profil lekérése során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a játékos profil lekérése során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 // ?POST /api/friends/add - barát kérelem küldése
 router.post('/friends/add', isAuthenticated, async (request, response) => {
     let statusCode = 200;
+    let payload = { success: false, message: '' };
     try {
         const currentUserId = Number(request.session?.userId) || 0;
         const { targetUserId } = request.body;
 
-        if (!currentUserId) {
-            statusCode = 401;
-            throw new Error('Nincs bejelentkezett felhasználó.');
-        }
-
-        if (!targetUserId || typeof targetUserId !== 'number') {
-            statusCode = 400;
-            throw new Error('Érvénytelen target user ID.');
-        }
-
-        if (currentUserId === targetUserId) {
-            statusCode = 400;
-            throw new Error('Nem adhatsz hozzá magadat barátnak.');
-        }
+        if (!currentUserId) { statusCode = 401; throw new Error('Nincs bejelentkezett felhasználó.'); }
+        if (!targetUserId || typeof targetUserId !== 'number') { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
+        if (currentUserId === targetUserId) { statusCode = 400; throw new Error('Nem adhatsz hozzá magadat barátnak.'); }
 
         const result = await sql.addFriendRequest(currentUserId, targetUserId);
-        
-        return response.status(200).json({
-            success: true,
-            message: result.message
-        });
+        payload = { success: true, message: result.message };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a barát kérelem küldése során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a barát kérelem küldése során.' };
     }
+    response.status(statusCode).json(payload);
 });
-
-function parseTargetUserId(value) {
-    const parsed = Number(value);
-    let targetUserId = null;
-    if (Number.isInteger(parsed) && parsed > 0) {
-        targetUserId = parsed;
-    }
-
-    return targetUserId;
-}
 
 router.get('/friends/list', isAuthenticated, async (request, response) => {
     let statusCode = 200;
-
+    let payload = { success: false, message: '' };
     try {
         const currentUserId = Number(request.session?.userId) || 0;
         const requestedStatus = String(request.query?.status || 'friend').trim().toLowerCase();
         const allowedStatuses = new Set(['all', 'pending', 'friend', 'blocked']);
 
-        if (!currentUserId) {
-            statusCode = 401;
-            throw new Error('Nincs bejelentkezett felhasználó.');
-        }
-
-        if (!allowedStatuses.has(requestedStatus)) {
-            statusCode = 400;
-            throw new Error('Érvénytelen státusz szűrő.');
-        }
+        if (!currentUserId) { statusCode = 401; throw new Error('Nincs bejelentkezett felhasználó.'); }
+        if (!allowedStatuses.has(requestedStatus)) { statusCode = 400; throw new Error('Érvénytelen státusz szűrő.'); }
 
         const data = await sql.getFriendListForUser(currentUserId, requestedStatus);
-        return response.status(200).json({
+        payload = {
             success: true,
             data,
             filter: requestedStatus,
-            message: data.length
-                ? `${data.length} találat`
-                : 'Nincs megjeleníthető kapcsolat a kiválasztott szűrőre.'
-        });
+            message: data.length ? `${data.length} találat` : 'Nincs megjeleníthető kapcsolat a kiválasztott szűrőre.'
+        };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a barát lista lekérése során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a barát lista lekérése során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.post('/friends/accept', isAuthenticated, async (request, response) => {
     let statusCode = 200;
-
+    let payload = { success: false, message: '' };
     try {
         const currentUserId = Number(request.session?.userId) || 0;
-        const targetUserId = parseTargetUserId(request.body?.targetUserId);
+        const targetUserId = parsePositiveInteger(request.body?.targetUserId, null);
 
-        if (!currentUserId) {
-            statusCode = 401;
-            throw new Error('Nincs bejelentkezett felhasználó.');
-        }
-
-        if (!targetUserId) {
-            statusCode = 400;
-            throw new Error('Érvénytelen target user ID.');
-        }
+        if (!currentUserId) { statusCode = 401; throw new Error('Nincs bejelentkezett felhasználó.'); }
+        if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.acceptFriendRequest(currentUserId, targetUserId);
-        return response.status(200).json({
-            success: true,
-            message: result.message
-        });
+        payload = { success: true, message: result.message };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a barát kérelem elfogadása során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a barát kérelem elfogadása során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.post('/friends/reject', isAuthenticated, async (request, response) => {
     let statusCode = 200;
-
+    let payload = { success: false, message: '' };
     try {
         const currentUserId = Number(request.session?.userId) || 0;
-        const targetUserId = parseTargetUserId(request.body?.targetUserId);
+        const targetUserId = parsePositiveInteger(request.body?.targetUserId, null);
 
-        if (!currentUserId) {
-            statusCode = 401;
-            throw new Error('Nincs bejelentkezett felhasználó.');
-        }
-
-        if (!targetUserId) {
-            statusCode = 400;
-            throw new Error('Érvénytelen target user ID.');
-        }
+        if (!currentUserId) { statusCode = 401; throw new Error('Nincs bejelentkezett felhasználó.'); }
+        if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.rejectFriendRequest(currentUserId, targetUserId);
-        return response.status(200).json({
-            success: true,
-            message: result.message
-        });
+        payload = { success: true, message: result.message };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a barát kérelem elutasítása során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a barát kérelem elutasítása során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.post('/friends/block', isAuthenticated, async (request, response) => {
     let statusCode = 200;
-
+    let payload = { success: false, message: '' };
     try {
         const currentUserId = Number(request.session?.userId) || 0;
-        const targetUserId = parseTargetUserId(request.body?.targetUserId);
+        const targetUserId = parsePositiveInteger(request.body?.targetUserId, null);
 
-        if (!currentUserId) {
-            statusCode = 401;
-            throw new Error('Nincs bejelentkezett felhasználó.');
-        }
-
-        if (!targetUserId) {
-            statusCode = 400;
-            throw new Error('Érvénytelen target user ID.');
-        }
-
-        if (currentUserId === targetUserId) {
-            statusCode = 400;
-            throw new Error('Nem tilthatod le saját magadat.');
-        }
+        if (!currentUserId) { statusCode = 401; throw new Error('Nincs bejelentkezett felhasználó.'); }
+        if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
+        if (currentUserId === targetUserId) { statusCode = 400; throw new Error('Nem tilthatod le saját magadat.'); }
 
         const result = await sql.blockUserDirectional(currentUserId, targetUserId);
-        return response.status(200).json({
-            success: true,
-            message: result.message
-        });
+        payload = { success: true, message: result.message };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a tiltás során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a tiltás során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.delete('/friends/unblock/:targetUserId', isAuthenticated, async (request, response) => {
     let statusCode = 200;
-
+    let payload = { success: false, message: '' };
     try {
         const currentUserId = Number(request.session?.userId) || 0;
-        const targetUserId = parseTargetUserId(request.params?.targetUserId);
+        const targetUserId = parsePositiveInteger(request.params?.targetUserId, null);
 
-        if (!currentUserId) {
-            statusCode = 401;
-            throw new Error('Nincs bejelentkezett felhasználó.');
-        }
-
-        if (!targetUserId) {
-            statusCode = 400;
-            throw new Error('Érvénytelen target user ID.');
-        }
+        if (!currentUserId) { statusCode = 401; throw new Error('Nincs bejelentkezett felhasználó.'); }
+        if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.unblockUserDirectional(currentUserId, targetUserId);
-        return response.status(200).json({
-            success: true,
-            message: result.message
-        });
+        payload = { success: true, message: result.message };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a tiltás feloldása során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a tiltás feloldása során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 router.delete('/friends/:targetUserId', isAuthenticated, async (request, response) => {
     let statusCode = 200;
-
+    let payload = { success: false, message: '' };
     try {
         const currentUserId = Number(request.session?.userId) || 0;
-        const targetUserId = parseTargetUserId(request.params?.targetUserId);
+        const targetUserId = parsePositiveInteger(request.params?.targetUserId, null);
 
-        if (!currentUserId) {
-            statusCode = 401;
-            throw new Error('Nincs bejelentkezett felhasználó.');
-        }
-
-        if (!targetUserId) {
-            statusCode = 400;
-            throw new Error('Érvénytelen target user ID.');
-        }
+        if (!currentUserId) { statusCode = 401; throw new Error('Nincs bejelentkezett felhasználó.'); }
+        if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.deleteFriendConnection(currentUserId, targetUserId);
-        return response.status(200).json({
-            success: true,
-            message: result.message
-        });
+        payload = { success: true, message: result.message };
     } catch (error) {
-        if (statusCode === 200) {
-            statusCode = 500;
-        }
-
-        return response.status(statusCode).json({
-            success: false,
-            message: error.message || 'Szerverhiba a barát kapcsolat törlése során.'
-        });
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a barát kapcsolat törlése során.' };
     }
+    response.status(statusCode).json(payload);
 });
 
 function parsePositiveInteger(value, fallback = null) {
@@ -1134,26 +866,6 @@ function getAuthenticatedUserIdOrThrow(request) {
     }
 
     return currentUserId;
-}
-
-function validateChatRateLimitOrThrow(userId) {
-    const now = Date.now();
-    const normalizedUserId = Number(userId) || 0;
-    if (!normalizedUserId) {
-        throw new Error('Érvénytelen felhasználó azonosító a rate limithez.');
-    }
-
-    const existingTimestamps = chatRateLimitByUserId.get(normalizedUserId) || [];
-    const threshold = now - CHAT_RATE_LIMIT_WINDOW_MS;
-    const freshTimestamps = existingTimestamps.filter((timestamp) => Number(timestamp) > threshold);
-
-    if (freshTimestamps.length >= CHAT_RATE_LIMIT_MAX_MESSAGES) {
-        chatRateLimitByUserId.set(normalizedUserId, freshTimestamps);
-        throw new Error('Túl sok üzenet rövid időn belül. Próbáld újra pár másodperc múlva.');
-    }
-
-    freshTimestamps.push(now);
-    chatRateLimitByUserId.set(normalizedUserId, freshTimestamps);
 }
 
 function initChatRateLimiterCleanup() {
@@ -1205,63 +917,32 @@ function buildChatModerationPolicyResult(message) {
         normalizedLength: normalizedMessage.length
     };
 
-    if (!hasBlockedWord) {
-        return policyResult;
-    }
-
-    if (CHAT_BLACKLIST_POLICY === 'soft_mask') {
-        policyResult.isMasked = true;
-        policyResult.maskedMessage = '***';
-    } else {
-        policyResult.blocked = true;
+    if (hasBlockedWord) {
+        if (CHAT_BLACKLIST_POLICY === 'soft_mask') {
+            policyResult.isMasked = true;
+            policyResult.maskedMessage = '***';
+        } else {
+            policyResult.blocked = true;
+        }
     }
 
     return policyResult;
 }
 
-async function writeChatSecurityAudit(userId, eventType, conversationId, {
-    success = false,
-    severity = 'warning',
-    message = '',
-    metadata = {}
-} = {}) {
-    try {
-        const normalizedUserId = parsePositiveInteger(userId, 0);
-        if (!normalizedUserId) {
-            return;
-        }
-
-        await sql.insertUserLog(normalizedUserId, {
-            eventType,
-            eventCategory: 'security',
-            severity,
-            source: 'backend',
-            success,
-            message: message || null,
-            metadata: {
-                conversationId,
-                ...metadata
-            },
-            occurredAt: new Date()
-        });
-    } catch (logError) {
-        console.warn(`Chat security audit log hiba (${eventType}):`, logError.message);
-    }
-}
-
 function resolveStatusCodeByError(error, defaultStatusCode = 500) {
+    if (error?.statusCode) return error.statusCode;
     const message = String(error?.message || '').toLowerCase();
     let statusCode = defaultStatusCode;
 
     if (message.includes('nincs bejelentkezett')) {
         statusCode = 401;
-    } else if (message.includes('túl sok üzenet') || message.includes('tul sok uzenet')) {
+    } else if (message.includes('túl sok üzenet')) {
         statusCode = 429;
-    } else if (message.includes('érvénytelen') || message.includes('ervenytelen') || message.includes('nem lehet üres') || message.includes('legfeljebb')) {
+    } else if (message.includes('érvénytelen') || message.includes('nem lehet üres') || message.includes('legfeljebb')) {
         statusCode = 400;
-    } else if (message.includes('nem résztvevője') || message.includes('nem resztvevoje') || message.includes('nem nyitható meg tiltás miatt') || message.includes('nem nyithato meg tiltas miatt')) {
+    } else if (message.includes('nem résztvevője') || message.includes('nem nyitható meg tiltás miatt')) {
         statusCode = 403;
-    } else if (message.includes('nem található') || message.includes('nem talalhato')) {
+    } else if (message.includes('nem található')) {
         statusCode = 404;
     }
 
@@ -1371,7 +1052,7 @@ router.post('/chat/conversations/:conversationId/messages', isAuthenticated, asy
         }
 
         await sql.assertConversationParticipant(currentUserId, conversationId);
-        validateChatRateLimitOrThrow(currentUserId);
+        validateRateLimit(chatRateLimitByUserId, currentUserId, CHAT_RATE_LIMIT_MAX_MESSAGES, CHAT_RATE_LIMIT_WINDOW_MS);
 
         const policyResult = buildChatModerationPolicyResult(message);
 
@@ -1401,8 +1082,7 @@ router.post('/chat/conversations/:conversationId/messages', isAuthenticated, asy
             message: 'Üzenet elküldve.'
         };
     } catch (error) {
-        const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet')
-            || String(error?.message || '').toLowerCase().includes('tul sok uzenet');
+        const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet');
 
         if (isRateLimited) {
             const conversationId = parsePositiveInteger(request.params?.conversationId, null);
@@ -1442,7 +1122,9 @@ router.post('/chat/conversations/direct', isAuthenticated, async (request, respo
         }
 
         if (currentUserId === targetUserId) {
-            throw new Error('Önmagaddal nem nyithatsz privát beszélgetést.');
+            const selfErr = new Error('Önmagaddal nem nyithatsz privát beszélgetést.');
+            selfErr.statusCode = 400;
+            throw selfErr;
         }
 
         const openResult = await sql.createOrGetDirectConversation(currentUserId, targetUserId);
