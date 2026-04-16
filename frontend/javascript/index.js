@@ -67,16 +67,19 @@ async function parseJson(response) {
         return {};
     }
 }
+
+
 //sessionInfo
 async function fetchSessionInfo() {
-    let result = { success: false, loggedIn: false };
+    let data = { success: false, loggedIn: false };
+
     try {
         const response = await fetch('/api/sessionInfo', {
             signal: requestController.withAbortSignal('sessionInfo')
         });
         const data = await parseJson(response);
         if (response.ok) {
-            result = data;
+            data = await parseJson(response);
         }
     } catch (error) {
         if (error?.name === 'AbortError') {
@@ -88,7 +91,8 @@ async function fetchSessionInfo() {
     } finally {
         requestController.clearSignal('sessionInfo');
     }
-    return result;
+
+    return data;
 }
 
 async function loadLeaderBoard() {
