@@ -121,6 +121,15 @@ async function veresegMentDb(userId) {
     await pool.execute(query, [userId]);
 }
 
+/**
+ * Döntetlen rögzítése a statisztikába.
+ */
+async function dontetlenMentDb(userId) {
+    const pool = getPool();
+    const query = `UPDATE statistics SET draws = draws + 1 WHERE user_id = ?`;
+    await pool.execute(query, [userId]);
+}
+
 // ────────────────────────────────────────────
 // ELO frissítés
 // ────────────────────────────────────────────
@@ -166,6 +175,7 @@ module.exports = {
     lepesekLekerdezDb,
     gyozelemMentDb,
     veresegMentDb,
+    dontetlenMentDb,
     eloFrissitDb,
     eloLekerdezDb,
     meccsekSzamDb

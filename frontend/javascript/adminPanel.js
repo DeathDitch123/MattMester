@@ -1,8 +1,57 @@
 //MINDEN API AMI ITT MEG VAN HÍVVA ISADMIN() VALIDÁLÁSSAL KELL TÖRTÉNJEN A BACKENDEN, HOGY CSAK ADMINOK FÉRHESSENEK HOZZÁJUK
+const requestController = window.createRequestController(300);
+
+function runSafely(label, handler) {
+    try {
+        return handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
+async function runSafelyAsync(label, handler) {
+    try {
+        return await handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
+async function logAuthStatusReport(contextLabel = 'admin-logout') {
+    try {
+        const response = await fetch('/api/sessionInfo');
+        const data = await response.json().catch(() => ({}));
+
+        console.clear();
+        console.log('--- Auth Status Report ---');
+        console.log('Context:', contextLabel);
+        console.log('Session info:', response.ok ? data : { success: false, loggedIn: false });
+
+        if (window.MattMesterSocket?.socket) {
+            console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
+                socketId: window.MattMesterSocket.socket.id,
+                connected: window.MattMesterSocket.socket.connected,
+                sessionBound: window.MattMesterSocket.socket.connected ? 'Active' : 'Disconnected/Pending'
+            });
+        } else {
+            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+        }
+
+        console.log('--------------------------');
+    } catch (error) {
+        console.error('Hiba az auth status report naplozasakor:', error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', function () {
-    initChart();
-    initRevealAnimations();
-    initResponsiveSidebar();
+    runSafely('adminDOMContentLoaded', () => {
+        initChart();
+        initRevealAnimations();
+        initResponsiveSidebar();
+        window.MattMesterChatModal?.init();
+    });
 });
 
 function showSection(sectionId, event) {
@@ -30,27 +79,37 @@ function toggleSidebar() {
 
 function exportUsers() {
     // MÉG FEJLESZTENI
-    fetch('/admin/export-users')
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Hiba történt a felhasználók exportálása során.');
+    runSafelyAsync('exportUsers', async () => {
+        requestController.schedule('exportUsers', async () => {
+            try {
+                const response = await fetch('/admin/export-users', {
+                    signal: requestController.withAbortSignal('exportUsers')
+                });
+
+                if (!response.ok) {
+                    throw new Error('Hiba történt a felhasználók exportálása során.');
+                }
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'users.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                if (error?.name === 'AbortError') {
+                    throw error;
+                }
+                console.error('Hiba:', error);
+                alert(error.message || 'Hiba történt a felhasználók exportálása során.');
+            } finally {
+                requestController.clearSignal('exportUsers');
             }
-            return response.blob();
-        })
-        .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'users.csv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        })
-        .catch(error => {
-            console.error('Hiba:', error);
-            alert('Hiba történt a felhasználók exportálása során.');
         });
+    });
 }
 
 function viewUser(userId) {
@@ -61,15 +120,39 @@ function viewUser(userId) {
 
 function logout() {
     if (confirm('Are you sure you want to logout?')) {
-        fetch('/api/logout', { method: 'POST' })
-            .then(() => { window.location.href = '/'; })
-            .catch(() => { window.location.href = '/'; });
+        runSafelyAsync('adminLogout', async () => {
+            requestController.schedule('logout', async () => {
+                try {
+                    const response = await fetch('/api/logout', {
+                        method: 'POST',
+                        signal: requestController.withAbortSignal('logout')
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Sikertelen kijelentkezes.');
+                    }
+
+                    await logAuthStatusReport('admin-logout-success');
+                } catch (error) {
+                    if (error?.name === 'AbortError') {
+                        throw error;
+                    }
+                    console.error('Logout hiba:', error);
+                    throw error;
+                } finally {
+                    requestController.clearSignal('logout');
+                    window.location.href = '/';
+                }
+            });
+        });
     }
 }
 
 function initChart() {
     const canvas = document.getElementById('activityChart');
-    if (!canvas) return;
+    if (!canvas) {
+        throw new Error('Az activityChart canvas nem található.');
+    }
 
     const ctx = canvas.getContext('2d');
     const gradient = ctx.createLinearGradient(0, 0, 0, 300);

@@ -24,6 +24,10 @@ let currentStats = {
 };
 
 const services = {
+    getCurrentStats() {
+        return currentStats;
+    },
+
     async refreshStats(io) {
         try {
             const pool = getPool();

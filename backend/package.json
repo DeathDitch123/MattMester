@@ -4,14 +4,38 @@
     "description": "Template project",
     "main": "server.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
+        "test": "jest --detectOpenHandles --forceExit",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage",
         "start": "node server.js",
-        "dev": "nodemon"
+        "dev": "kill-port 3000 && nodemon",
+        "dev:raw": "nodemon"
     },
     "author": "Kardos Krisztián",
     "license": "ISC",
+    "jest": {
+        "testEnvironment": "node",
+        "testMatch": ["**/__tests__/**/*.test.js", "**/*.test.js"],
+        "collectCoverageFrom": [
+            "api/**/*.js",
+            "sockets.js",
+            "services.js",
+            "!**/*.test.js"
+        ],
+        "coverageThreshold": {
+            "global": {
+                "branches": 50,
+                "functions": 50,
+                "lines": 50,
+                "statements": 50
+            }
+        }
+    },
     "devDependencies": {
-        "nodemon": "^3.1.10"
+        "kill-port": "^2.0.1",
+        "nodemon": "^3.1.10",
+        "jest": "^29.7.0",
+        "supertest": "^6.3.3"
     },
     "dependencies": {
         "bcrypt": "^6.0.0",
@@ -19,6 +43,7 @@
         "express-session": "^1.18.2",
         "multer": "^2.0.2",
         "mysql2": "^3.15.2",
-        "socket.io": "^4.8.3"
+        "socket.io": "^4.8.3",
+        "cors": "^2.8.5"
     }
 }

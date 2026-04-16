@@ -42,9 +42,15 @@
 
 4. Backend indítása fejlesztés alatt: _(Fájlok szerkesztésének az esetén újraindul a szerver.)_<br>
    `npm run dev`<br>
+   _(Automatikusan indul: CORS middleware + Chat Rate Limiter cleanup)_<br>
 
 5. Backend indítása élesben: _(Fájlok szerkesztésének az esetén nem indul újra a szerver.)_<br>
    `npm run start`<br>
+
+6. Tesztek futtatása:<br>
+   `npm test` - Összes teszt futtatása<br>
+   `npm run test:watch` - Tesztek figyelési módban<br>
+   `npm run test:coverage` - Code coverage report<br>
 
 ## NPM hiba esetén<br>
 
@@ -76,11 +82,19 @@ Nyisd meg a böngésződben a **http://localhost:3000** címet.
 
 ## Felhasznált npm package-ek backend-en:<br>
 
-`nodemon`<br>
-`express`<br>
-`express-session`<br>
-`multer`<br>
-`mysql2`<br>
+### Production Dependencies:<br>
+`express` - Web framework<br>
+`express-session` - Session management<br>
+`mysql2` - MySQL database driver<br>
+`bcrypt` - Password hashing<br>
+`multer` - File upload handling<br>
+`socket.io` - Real-time communication<br>
+`cors` - Cross-Origin Resource Sharing<br>
+
+### Development Dependencies:<br>
+`nodemon` - Auto-restart on file changes<br>
+`jest` - Testing framework<br>
+`supertest` - HTTP assertion library<br>
 
 ## nodemon.json felépítése:<br>
 
@@ -152,3 +166,51 @@ Nyisd meg a böngésződben a **http://localhost:3000** címet.
 `npx kill-port port`<br>
 
 `npx kill-port 3000`<br>
+
+## Chat System - Konfigurációs Beállítások<br>
+
+### CORS Beállítás (Production-hez):
+
+
+ Létrehozz egy `.env` fájlt a backend mappában:
+
+```
+ALLOWED_ORIGINS=http://localhost:3000,https://mattmester.com,https://www.mattmester.com
+SESSION_SECRET=<kriptográfiailag biztonságos string>
+CHAT_BLACKLIST_POLICY=hard_block
+NODE_ENV=production
+```
+
+### Chat Rate Limiter Beállítások:
+
+Az alábbi konstansok módosítható az `api.js`-ben:
+
+```javascript
+const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;    // Üzenetek szám / időablakon
+const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000; // 10 másodperces ablak
+```
+
+**Rate Limiter Cleanup:** Automatikusan fut 5 percenként, feldolgozza a memóriát és megtisztítja a régi adatokat.<br>
+
+### Jest Testing<br>
+
+A projekt Jest tesztsuite-tal rendelkezik. A tesztek a következő területeket fedik le:
+
+- **Chat API Endpoints** - Konverzáció listázása, üzenetkezelés, privát chat<br>
+- **Rate Limiting** - Rate limit logika validációja<br>
+- **Error Handling** - Hibakezelés és validáció<br>
+
+Tesztek futtatása:
+
+```bash
+# Összes teszt futtatása
+npm test
+
+# Tesztek figyelési módban (auto-reload)
+npm run test:watch
+
+# Code coverage report
+npm run test:coverage
+```
+
+Tesztek helye: `backend/__tests__/`<br>

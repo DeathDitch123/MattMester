@@ -2,13 +2,17 @@ const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
-const socket = io();
+const socket = window.MattMesterSocket?.socket || io();
 lucide.createIcons();
 
 const PROFILE_SETTINGS_CONFIRM_SECONDS = 10;
 const PROFILE_DELETE_CONFIRM_SECONDS = 5;
 const PROFILE_IMAGE_MAX_SIZE_BYTES = 3 * 1024 * 1024;
 const PROFILE_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const PLAYER_SEARCH_DEBOUNCE_MS = 300;
+const PROFILE_CROSS_TAB_REFRESH_THROTTLE_MS = 1200;
+const FRIEND_FILTER_DEFAULT = 'all';
+const FRIEND_FILTER_VALUES = new Set(['all', 'pending', 'friend', 'blocked']);
 
 const profileSettingsState = {
     bound: false,
@@ -41,14 +45,87 @@ const profileImageEditorState = {
     uploading: false,
     bufferCanvas: document.createElement('canvas')
 };
+const playerSearchState = {
+    topbar: {
+        debounceTimer: null,
+        abortController: null,
+        requestToken: 0
+    },
+    modal: {
+        debounceTimer: null,
+        abortController: null,
+        requestToken: 0
+    }
+};
+const profileRealtimeSyncState = {
+    bound: false,
+    unsubscribe: null
+};
+const logoutState = {
+    bound: false,
+    submitting: false
+};
+const friendsState = {
+    bound: false,
+    loading: false,
+    activeFilter: FRIEND_FILTER_DEFAULT,
+    items: []
+};
+const notificationCenterState = {
+    bound: false,
+    items: [],
+    unreadCount: 0,
+    maxItems: 40
+};
+
+async function syncSocketContextForStartup(reason = 'profile-startup') {
+    try {
+        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
+        }
+    } catch (error) {
+        console.warn('Profile startup socket context sync hiba:', error.message || error);
+    }
+}
+
+function runSafely(label, handler) {
+    try {
+        return handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
+async function runSafelyAsync(label, handler) {
+    try {
+        return await handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
 
 document.addEventListener('DOMContentLoaded', () => {
-    bindLogoutButton();
-    bindProfileDeleteModalEvents();
-    bindProfileImageUploadEvents();
-    bindRemoveAvatarEvents();
-    refreshAuthUi().catch((error) => {
-        console.error('Hiba az auth UI frissitesekor:', error);
+    runSafely('profileDOMContentLoadedBindings', () => {
+        window.MattMesterChatModal?.init();
+        bindGlobalChatLaunchers();
+        bindNotificationCenterEvents();
+        bindLogoutButton();
+        bindTopBarPlayerSearchValidation();
+        bindModalPlayerSearchValidation();
+        bindSearchResultsModalEvents();
+        bindFriendsSectionEvents();
+        bindProfileDeleteModalEvents();
+        bindProfileImageUploadEvents();
+        bindRemoveAvatarEvents();
+        bindCrossTabProfileRefreshEvents();
+    });
+
+    runSafelyAsync('profileInitialLoadSequence', async () => {
+        await syncSocketContextForStartup('profile-initial-load');
+        await refreshAuthUi('profile-initial-load');
+        await refreshFriendsList(FRIEND_FILTER_DEFAULT);
     });
 });
 // Ez parsol
@@ -57,6 +134,179 @@ async function parseJson(response) {
         return await response.json();
     } catch (error) {
         return {};
+    }
+}
+
+function getNotificationCenterElements() {
+    return {
+        modal: document.getElementById('notificationsModal'),
+        list: document.getElementById('notificationsList'),
+        empty: document.getElementById('notificationsEmpty'),
+        dot: document.querySelector('.notification-dot')
+    };
+}
+
+function setNotificationDotState() {
+    const { dot } = getNotificationCenterElements();
+    if (dot) {
+        const hasUnread = notificationCenterState.unreadCount > 0;
+        dot.classList.toggle('d-none', !hasUnread);
+    }
+}
+
+function formatNotificationTime(value) {
+    const date = new Date(value || Date.now());
+    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('hu-HU');
+}
+
+function normalizeNotificationItem(payloadInput = {}) {
+    const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
+    const type = String(payload.type || '').trim().toLowerCase();
+    const conversationId = Number(payload.conversationId) || 0;
+    const fromUserId = Number(payload.fromUserId || payload.targetUserId || payload.senderUserId || payload.userId) || 0;
+    const title = String(payload.title || '').trim() || (type === 'chat_message' ? 'Új chat üzenet' : 'Értesítés');
+    const message = String(payload.message || payload.text || '').trim() || 'Új esemény érkezett.';
+    const receivedAt = payload.receivedAt || new Date().toISOString();
+
+    return {
+        ...payload,
+        type,
+        conversationId,
+        fromUserId,
+        title,
+        message,
+        receivedAt
+    };
+}
+
+function renderNotificationCenterList() {
+    const { list, empty } = getNotificationCenterElements();
+    if (list && empty) {
+        list.innerHTML = '';
+        const hasItems = notificationCenterState.items.length > 0;
+        empty.classList.toggle('d-none', hasItems);
+
+        if (hasItems) {
+            notificationCenterState.items.forEach((item) => {
+                const isChatMessage = item.type === 'chat_message';
+                const canOpenChat = isChatMessage && (item.conversationId > 0 || item.fromUserId > 0);
+                const button = document.createElement('button');
+                button.type = 'button';
+                button.className = `notification-item btn w-100 text-start ${canOpenChat ? 'notification-item-clickable' : ''}`.trim();
+                button.setAttribute('role', 'listitem');
+                button.dataset.notificationType = item.type;
+                button.dataset.conversationId = String(item.conversationId || '');
+                button.dataset.fromUserId = String(item.fromUserId || '');
+                button.dataset.notificationPayload = JSON.stringify(item);
+                button.dataset.notificationClick = canOpenChat ? 'true' : 'false';
+                button.innerHTML = `
+                    <div class="notification-item-head d-flex justify-content-between align-items-start gap-2">
+                        <strong class="text-light">${item.title}</strong>
+                        <small class="text-secondary">${formatNotificationTime(item.receivedAt)}</small>
+                    </div>
+                    <div class="small text-secondary mt-1">${item.message}</div>
+                `;
+
+                list.appendChild(button);
+            });
+        }
+    }
+}
+
+async function openChatInboxFromLauncher() {
+    if (!window.MattMesterChatModal) {
+        throw new Error('A chat modal API nem érhető el.');
+    }
+
+    await window.MattMesterChatModal.openInbox();
+}
+
+function bindGlobalChatLaunchers() {
+    document.addEventListener('click', (event) => {
+        const trigger = event.target.closest('[data-open-chat="inbox"]');
+        if (trigger) {
+            runSafelyAsync('openChatInboxLauncherClick', async () => {
+                await openChatInboxFromLauncher();
+            });
+        }
+    });
+}
+
+function bindNotificationCenterEvents() {
+    if (!notificationCenterState.bound) {
+        const { list, modal } = getNotificationCenterElements();
+
+        window.addEventListener('mattmester:notification:push', (event) => {
+            runSafely('notificationPushCollect', () => {
+                const notification = normalizeNotificationItem(event?.detail || {});
+                notificationCenterState.items.unshift(notification);
+                if (notificationCenterState.items.length > notificationCenterState.maxItems) {
+                    notificationCenterState.items.length = notificationCenterState.maxItems;
+                }
+
+                notificationCenterState.unreadCount += 1;
+                setNotificationDotState();
+                renderNotificationCenterList();
+            });
+        });
+
+        if (list) {
+            list.addEventListener('click', (event) => {
+                runSafely('notificationListClick', () => {
+                    const item = event.target.closest('[data-notification-click="true"]');
+                    if (item && window.MattMesterSocket?.handleNotificationClick) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const payloadText = String(item.dataset.notificationPayload || '').trim();
+                        let payload = {};
+                        if (payloadText) {
+                            try {
+                                payload = JSON.parse(payloadText);
+                            } catch (error) {
+                                payload = {
+                                    type: item.dataset.notificationType,
+                                    conversationId: item.dataset.conversationId,
+                                    fromUserId: item.dataset.fromUserId
+                                };
+                            }
+                        }
+
+                        const triggerChatOpen = () => {
+                            window.MattMesterSocket.handleNotificationClick(payload);
+                            notificationCenterState.unreadCount = Math.max(0, notificationCenterState.unreadCount - 1);
+                            setNotificationDotState();
+                        };
+
+                        if (modal) {
+                            modal.addEventListener('hidden.bs.modal', () => {
+                                runSafely('notificationModalHiddenChatOpen', () => {
+                                    triggerChatOpen();
+                                });
+                            }, { once: true });
+
+                            const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
+                            modalInstance.hide();
+                        } else {
+                            triggerChatOpen();
+                        }
+                    }
+                });
+            });
+        }
+
+        if (modal) {
+            modal.addEventListener('shown.bs.modal', () => {
+                runSafely('notificationModalShown', () => {
+                    notificationCenterState.unreadCount = 0;
+                    setNotificationDotState();
+                    renderNotificationCenterList();
+                });
+            });
+        }
+
+        notificationCenterState.bound = true;
+        setNotificationDotState();
+        renderNotificationCenterList();
     }
 }
 //sessionInfo
@@ -74,72 +324,1368 @@ async function fetchSessionInfo() {
     return result;
 }
 
-async function logSessionAndSocketInfo(sessionInfoInput = null) {
+async function logSessionAndSocketInfo(sessionInfoInput = null, contextLabel = 'auth-refresh') {
     try {
-        const sessionInfo = sessionInfoInput || await fetchSessionInfo();
+        const debugEnabled = String(window.localStorage?.getItem('mattmester.debugAuthLogs') || 'false').toLowerCase() === 'true';
+        
+        if (debugEnabled) {
+            const sessionInfo = sessionInfoInput || await fetchSessionInfo();
 
-        console.clear();
-        console.log('--- Auth Status Report ---');
-        console.log('Session info:', sessionInfo);
+            console.log('--- Auth Status Report ---');
+            console.log('Context:', contextLabel);
+            console.log('Session info:', sessionInfo);
 
-        if (typeof socket !== 'undefined') {
-            console.log('SocketInfo:', {
-                socketId: socket.id,
-                connected: socket.connected,
-                sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
-            });
-        } else {
-            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+            if (socket) {
+                console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
+                    socketId: socket.id,
+                    connected: socket.connected,
+                    sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
+                });
+            } else {
+                console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
+            }
+
+            console.log('--------------------------');
         }
-
-        console.log('--------------------------');
     } catch (error) {
         console.error('Hiba a session/socket informacio naplozasakor:', error);
     }
 }
 
-async function refreshAuthUi() {
+async function refreshAuthUi(contextLabel = 'auth-refresh') {
     try {
         const sessionInfo = await fetchSessionInfo();
         showStats(sessionInfo);
         handleProfileSettings(sessionInfo);
-        logSessionAndSocketInfo(sessionInfo);
+        logSessionAndSocketInfo(sessionInfo, contextLabel);
     } catch (error) {
         console.error('refreshAuthUi hiba:', error);
     }
 }
 
-async function handleLogout() {
+async function syncSocketContextOrReconnect(reason = 'session-mutation') {
     try {
-        const response = await fetch('/api/logout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-        const result = await parseJson(response);
-
-        if (!response.ok) {
-            throw new Error(result.message || 'Sikertelen kijelentkezes.');
+        if (!window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            throw new Error('A közös socket sync API nem érhető el.');
         }
 
-        if (typeof socket !== 'undefined') {
-            socket.disconnect();
-            socket.connect();
-        }
-
-        window.location.reload();
+        await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
     } catch (error) {
-        console.error('Hiba a kijelentkezes soran:', error);
+        throw new Error(`Socket context szinkronizálási hiba: ${error.message}`);
     }
 }
 
+function bindCrossTabProfileRefreshEvents() {
+    try {
+        if (!profileRealtimeSyncState.bound) {
+            if (!window.MattMesterSocket?.subscribeSessionContextChanges) {
+                throw new Error('A közös session context observer API nem érhető el.');
+            }
+
+            const unsubscribe = window.MattMesterSocket.subscribeSessionContextChanges(async (eventPayload = {}) => {
+                try {
+                    await refreshAuthUi();
+                } catch (error) {
+                    throw new Error(`Cross-tab profil frissítési hiba: ${error.message}`);
+                }
+            }, {
+                throttleMs: PROFILE_CROSS_TAB_REFRESH_THROTTLE_MS
+            });
+
+            if (typeof unsubscribe !== 'function') {
+                throw new Error('A session context observer leiratkozó függvény nem érkezett meg.');
+            }
+
+            profileRealtimeSyncState.unsubscribe = unsubscribe;
+            profileRealtimeSyncState.bound = true;
+
+            window.addEventListener('beforeunload', () => {
+                runSafely('profileRealtimeSyncUnsubscribe', () => {
+                    try {
+                        if (typeof profileRealtimeSyncState.unsubscribe === 'function') {
+                            profileRealtimeSyncState.unsubscribe();
+                        }
+                        profileRealtimeSyncState.unsubscribe = null;
+                        profileRealtimeSyncState.bound = false;
+                    } catch (error) {
+                        throw new Error(`Cross-tab observer leiratkozási hiba: ${error.message}`);
+                    }
+                });
+            }, { once: true });
+        }
+    } catch (error) {
+        throw new Error(`Cross-tab profil refresh eseménykötési hiba: ${error.message}`);
+    }
+}
+
+function getPlayerSearchRuntime(source = 'topbar') {
+    return source === 'modal' ? playerSearchState.modal : playerSearchState.topbar;
+}
+
+function cancelPlayerSearch(source = 'topbar', abortInFlight = true) {
+    const runtime = getPlayerSearchRuntime(source);
+    if (runtime.debounceTimer) {
+        clearTimeout(runtime.debounceTimer);
+        runtime.debounceTimer = null;
+    }
+
+    if (abortInFlight && runtime.abortController) {
+        runtime.abortController.abort();
+        runtime.abortController = null;
+    }
+}
+
+function schedulePlayerSearch(source = 'topbar', delayMs = PLAYER_SEARCH_DEBOUNCE_MS) {
+    const runtime = getPlayerSearchRuntime(source);
+    if (runtime.debounceTimer) {
+        clearTimeout(runtime.debounceTimer);
+        runtime.debounceTimer = null;
+    }
+
+    runtime.debounceTimer = setTimeout(() => {
+        runtime.debounceTimer = null;
+        searchPlayer(source).catch((error) => {
+            if (error?.name === 'AbortError' || error?.name === 'SearchStaleError') {
+                console.debug('Keresés megszakítva vagy elavult:', error.message);
+            } else {
+                console.error('Keresés hiba:', error);
+            }
+        });
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+async function searchPlayer(source = 'topbar'){
+    const runtime = getPlayerSearchRuntime(source);
+    const requestToken = runtime.requestToken + 1;
+    runtime.requestToken = requestToken;
+
+    try {
+        const elements = source === 'modal'
+            ? getModalPlayerSearchElements()
+            : getTopBarPlayerSearchElements();
+        const { input, button, feedback } = elements;
+        if (!input || !button || !feedback) {
+            throw new Error('A kereső elemek nem találhatók a DOM-ban.');
+        }
+
+        const username = (input.value || '').trim();
+        if (!username || username.length < 3 || username.length > 50 || !USERNAME_REGEX.test(username)) {
+            throw new Error('Érvénytelen felhasználónév a kereséshez.');
+        }
+        const searchText = username;
+
+        feedback.classList.remove('text-danger', 'text-success');
+        feedback.classList.add('text-secondary');
+        feedback.textContent = 'Keresés folyamatban...';
+        button.disabled = true;
+
+        if (runtime.abortController) {
+            runtime.abortController.abort();
+        }
+        runtime.abortController = new AbortController();
+
+        const response = await fetch(`/api/searchPlayer?username=${encodeURIComponent(username)}`, {
+            signal: runtime.abortController.signal
+        });
+
+        if (runtime.requestToken !== requestToken) {
+            const staleError = new Error('A keresés elavulttá vált.');
+            staleError.name = 'SearchStaleError';
+            throw staleError;
+        }
+
+        const result = await parseJson(response);
+        if (!response.ok || !result.success) {
+            throw new Error(result.message || 'Sikertelen keresés.');
+        }
+
+        feedback.classList.remove('text-secondary', 'text-danger');
+        feedback.classList.add('text-success');
+        feedback.textContent = `A keresés eredményes: ${result.data.length} találat.`;
+
+        openSearchResultsModal(Array.isArray(result.data) ? result.data : [], searchText);
+        clearPlayerSearchInputs();
+    } catch (error) {
+        if (error?.name === 'AbortError' || error?.name === 'SearchStaleError') {
+            throw error;
+        }
+
+        const { feedback } = source === 'modal'
+            ? getModalPlayerSearchElements()
+            : getTopBarPlayerSearchElements();
+        if (feedback) {
+            feedback.classList.remove('text-secondary', 'text-success');
+            feedback.classList.add('text-danger');
+            feedback.textContent = error.message || 'Hiba történt a játékos keresése során.';
+        }
+        clearPlayerSearchInputs();
+        console.error('Hiba a jatekos kereses soran:', error);
+    } finally {
+        if (runtime.requestToken === requestToken) {
+            runtime.abortController = null;
+        }
+
+        if (source === 'modal') {
+            validatePlayerSearchElements(getModalPlayerSearchElements());
+        } else {
+            validatePlayerSearchElements(getTopBarPlayerSearchElements());
+        }
+    }
+}
+
+function getSearchResultsModalElements() {
+    return {
+        modal: document.getElementById('searchResultsModal'),
+        titleText: document.getElementById('searchResultsModalTitleText'),
+        list: document.getElementById('searchResultsList'),
+        summary: document.getElementById('searchResultsSummary'),
+        empty: document.getElementById('searchResultsEmpty')
+    };
+}
+
+function getPlayerProfileModalElements() {
+    return {
+        modal: document.getElementById('playerProfileModal'),
+        titleText: document.getElementById('playerProfileModalTitleText'),
+        feedback: document.getElementById('playerProfileModalFeedback'),
+        avatar: document.getElementById('playerProfileAvatar'),
+        username: document.getElementById('playerProfileUsername'),
+        role: document.getElementById('playerProfileRole'),
+        joinedAt: document.getElementById('playerProfileJoinedAt'),
+        lastActiveAt: document.getElementById('playerProfileLastActiveAt'),
+        eloClassic: document.getElementById('playerProfileEloClassic'),
+        eloClassicRank: document.getElementById('playerProfileEloClassicRank'),
+        eloMM: document.getElementById('playerProfileEloMM'),
+        eloMMRank: document.getElementById('playerProfileEloMMRank'),
+        eloBullet: document.getElementById('playerProfileEloBullet'),
+        eloBulletRank: document.getElementById('playerProfileEloBulletRank'),
+        wins: document.getElementById('playerProfileWins'),
+        losses: document.getElementById('playerProfileLosses'),
+        draws: document.getElementById('playerProfileDraws'),
+        winRate: document.getElementById('playerProfileWinRate')
+    };
+}
+
+function toNumberSafe(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatNumberHu(value) {
+    return toNumberSafe(value).toLocaleString('hu-HU');
+}
+
+function getRankForEloValue(eloValue) {
+    const elo = toNumberSafe(eloValue);
+    if (elo < 1100) {
+        return { label: 'Beginner', className: 'rank-beginner' };
+    }
+    if (elo < 1400) {
+        return { label: 'Intermediate', className: 'rank-intermediate' };
+    }
+    if (elo < 1700) {
+        return { label: 'Advanced', className: 'rank-advanced' };
+    }
+    if (elo < 2000) {
+        return { label: 'Expert', className: 'rank-expert' };
+    }
+    if (elo < 2300) {
+        return { label: 'Master', className: 'rank-master' };
+    }
+
+    return { label: 'Grandmaster', className: 'rank-grandmaster' };
+}
+
+function applyRankBadge(rankElement, eloValue) {
+    if (!rankElement) {
+        return;
+    }
+
+    const rank = getRankForEloValue(eloValue);
+    rankElement.classList.remove('rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster');
+    rankElement.classList.add(rank.className);
+    rankElement.textContent = rank.label;
+}
+
+function formatDateTimeHuman(value) {
+    if (!value) {
+        return 'Nincs adat';
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return 'Nincs adat';
+    }
+
+    return date.toLocaleString('hu-HU', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function setPlayerProfileModalFeedback(message = '', type = 'neutral') {
+    const { feedback } = getPlayerProfileModalElements();
+    if (!feedback) {
+        return;
+    }
+
+    feedback.classList.remove('d-none', 'is-success', 'is-error');
+    feedback.textContent = message || '';
+
+    if (!message) {
+        feedback.classList.add('d-none');
+        return;
+    }
+
+    if (type === 'success') {
+        feedback.classList.add('is-success');
+    } else if (type === 'error') {
+        feedback.classList.add('is-error');
+    }
+}
+
+function fillPlayerProfileModal(player) {
+    const elements = getPlayerProfileModalElements();
+    if (!elements.modal) {
+        throw new Error('A játékos profil modal elemei nem találhatók a DOM-ban.');
+    }
+
+    const profileImageStatus = String(player.profileImageStatus || '').trim().toLowerCase();
+    const isPendingProfileImage = profileImageStatus === 'pending';
+
+    if (elements.titleText) {
+        elements.titleText.textContent = `${player.username || 'Játékos'} profilja`;
+    }
+
+    if (elements.avatar) {
+        elements.avatar.src = player.profileImage || '/profile_pictures/default.png';
+        elements.avatar.alt = `${player.username || 'Játékos'} profilképe`;
+        elements.avatar.classList.toggle('search-result-avatar-pending', isPendingProfileImage);
+    }
+
+    if (elements.username) {
+        elements.username.textContent = player.username || 'Ismeretlen játékos';
+    }
+
+    if (elements.role) {
+        const roleValue = String(player.role || 'player').toLowerCase();
+        elements.role.textContent = roleValue === 'admin' ? 'Admin' : 'Player';
+        elements.role.classList.remove('admin');
+        if (roleValue === 'admin') {
+            elements.role.classList.add('admin');
+        }
+    }
+
+    if (elements.joinedAt) {
+        elements.joinedAt.textContent = formatDateTimeHuman(player.joinedAt);
+    }
+
+    if (elements.lastActiveAt) {
+        elements.lastActiveAt.textContent = formatDateTimeHuman(player.lastActiveAt);
+    }
+
+    const eloClassic = toNumberSafe(player.elo);
+    const eloMM = toNumberSafe(player.eloMM);
+    const eloBullet = toNumberSafe(player.eloBullet);
+
+    if (elements.eloClassic) {
+        elements.eloClassic.textContent = formatNumberHu(eloClassic);
+    }
+    if (elements.eloMM) {
+        elements.eloMM.textContent = formatNumberHu(eloMM);
+    }
+    if (elements.eloBullet) {
+        elements.eloBullet.textContent = formatNumberHu(eloBullet);
+    }
+
+    applyRankBadge(elements.eloClassicRank, eloClassic);
+    applyRankBadge(elements.eloMMRank, eloMM);
+    applyRankBadge(elements.eloBulletRank, eloBullet);
+
+    if (elements.wins) {
+        elements.wins.textContent = formatNumberHu(player.wins);
+    }
+    if (elements.losses) {
+        elements.losses.textContent = formatNumberHu(player.losses);
+    }
+    if (elements.draws) {
+        elements.draws.textContent = formatNumberHu(player.draws);
+    }
+    if (elements.winRate) {
+        elements.winRate.textContent = `${toNumberSafe(player.winRate).toFixed(2)}%`;
+    }
+}
+
+async function fetchPlayerPublicProfile(userId) {
+    const response = await fetch(`/api/players/${encodeURIComponent(userId)}/profile`);
+    const result = await parseJson(response);
+
+    if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Nem sikerült a játékos profil betöltése.');
+    }
+
+    return result.data || null;
+}
+
+async function openPlayerProfileModalByUserId(userId) {
+    const elements = getPlayerProfileModalElements();
+    if (!elements.modal) {
+        throw new Error('A játékos profil modal nem található.');
+    }
+
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(elements.modal);
+    setPlayerProfileModalFeedback('Játékos adatok betöltése...', 'success');
+    modalInstance.show();
+
+    try {
+        const playerData = await fetchPlayerPublicProfile(userId);
+        fillPlayerProfileModal(playerData || {});
+        setPlayerProfileModalFeedback('Profil adatok betöltve.', 'success');
+        lucide.createIcons();
+    } catch (error) {
+        setPlayerProfileModalFeedback(error.message || 'Nem sikerült a játékos profil betöltése.', 'error');
+        throw error;
+    }
+}
+
+function clearPlayerSearchInputs() {
+    const { input: topInput } = getTopBarPlayerSearchElements();
+    const { input: modalInput } = getModalPlayerSearchElements();
+
+    if (topInput) {
+        topInput.value = '';
+    }
+
+    if (modalInput) {
+        modalInput.value = '';
+    }
+
+    validatePlayerSearchElements(getTopBarPlayerSearchElements());
+    validatePlayerSearchElements(getModalPlayerSearchElements());
+}
+
+function getModalPlayerSearchElements() {
+    return {
+        input: document.getElementById('modalPlayerSearchInput'),
+        button: document.getElementById('modalPlayerSearchButton'),
+        feedback: document.getElementById('modalPlayerSearchFeedback')
+    };
+}
+
+function createSearchResultListItem(player) {
+    const item = document.createElement('div');
+    item.className = 'search-results-item';
+    item.setAttribute('role', 'listitem');
+    item.dataset.userId = String(player.userId || player.id || '');
+    item.dataset.username = String(player.username || '');
+    item.dataset.friendStatus = String(player.friendStatus || 'none');
+    item.dataset.conversationId = String(player.conversationId || '');
+
+    const avatarWrap = document.createElement('div');
+    avatarWrap.className = 'position-relative flex-shrink-0';
+
+    const avatar = document.createElement('img');
+    avatar.className = 'friend-avatar rounded-circle';
+    if ((player.profileImageStatus || '').toLowerCase() === 'pending') {
+        avatar.classList.add('search-result-avatar-pending');
+    }
+    avatar.style.width = '40px';
+    avatar.style.height = '40px';
+    avatar.style.objectFit = 'cover';
+    avatar.alt = `${player.username || 'Jatekos'} profilkepe`;
+    avatar.src = player.profileImage || '/profile_pictures/default.png';
+    avatarWrap.appendChild(avatar);
+
+    const info = document.createElement('div');
+    info.className = 'flex-grow-1 min-width-0';
+
+    const name = document.createElement('h6');
+    name.className = 'mb-0 text-white text-truncate';
+    name.style.fontSize = '0.9rem';
+    name.textContent = player.username || 'Ismeretlen jatekos';
+    info.appendChild(name);
+
+    const actions = document.createElement('div');
+    actions.className = 'search-results-actions';
+
+    const friendStatus = String(player.friendStatus || 'none');
+    let actionButton, chatButton;
+
+    // Friend gomb az eredeti Friend Add helyett
+    if (friendStatus === 'none' || friendStatus === 'rejected') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
+        actionButton.title = 'Barát hozzáadása';
+        actionButton.dataset.action = 'add-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.dataset.username = String(player.username || '');
+        actionButton.innerHTML = '<i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+    } else if (friendStatus === 'pending') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-warning py-1 px-2';
+        actionButton.title = 'Barát kérelem: függőben';
+        actionButton.dataset.action = 'pending-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.innerHTML = '<i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+    } else if (friendStatus === 'accepted') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-success py-1 px-2';
+        actionButton.title = 'Barát: elfogadva';
+        actionButton.dataset.action = 'accepted-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.innerHTML = '<i data-lucide="check" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+
+        chatButton = document.createElement('button');
+        chatButton.type = 'button';
+        chatButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
+        chatButton.title = 'Üzenet küldése';
+        chatButton.dataset.action = 'chat';
+        chatButton.dataset.userId = String(player.userId || player.id || '');
+        chatButton.dataset.username = String(player.username || '');
+        chatButton.dataset.conversationId = String(player.conversationId || '');
+        chatButton.innerHTML = '<i data-lucide="message-circle" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(chatButton);
+    } else if (friendStatus === 'blocked') {
+        actionButton = document.createElement('button');
+        actionButton.type = 'button';
+        actionButton.className = 'btn btn-sm btn-outline-danger py-1 px-2';
+        actionButton.title = 'Felhasználó: letiltva';
+        actionButton.dataset.action = 'blocked-friend';
+        actionButton.dataset.userId = String(player.userId || player.id || '');
+        actionButton.disabled = true;
+        actionButton.innerHTML = '<i data-lucide="slash-circle" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(actionButton);
+    }
+
+    const viewButton = document.createElement('button');
+    viewButton.type = 'button';
+    viewButton.className = 'btn btn-sm btn-outline-gold py-1 px-2';
+    viewButton.title = 'Megtekintés';
+    viewButton.dataset.action = 'view-profile';
+    viewButton.dataset.userId = String(player.userId || player.id || '');
+    viewButton.dataset.username = String(player.username || '');
+    viewButton.innerHTML = '<i data-lucide="eye" style="width: 16px; height: 16px;"></i>';
+    actions.appendChild(viewButton);
+
+    item.appendChild(avatarWrap);
+    item.appendChild(info);
+    item.appendChild(actions);
+
+    return item;
+}
+
+function openSearchResultsModal(players, searchText = '') {
+    const { modal, titleText, list, summary, empty } = getSearchResultsModalElements();
+    if (!modal || !list || !summary || !empty) {
+        throw new Error('A keresési találatok modal elemei nem találhatók a DOM-ban.');
+    }
+
+    if (titleText) {
+        const normalizedSearchText = String(searchText || '').trim();
+        titleText.textContent = normalizedSearchText
+            ? `Keresési találatok: "${normalizedSearchText}"`
+            : 'Keresési találatok';
+    }
+
+    list.innerHTML = '';
+    const normalizedPlayers = Array.isArray(players) ? players : [];
+
+    if (!normalizedPlayers.length) {
+        summary.textContent = 'A keresés nem adott találatot.';
+        empty.classList.remove('d-none');
+        list.classList.add('d-none');
+    } else {
+        summary.textContent = `${normalizedPlayers.length} találat a keresésre.`;
+        empty.classList.add('d-none');
+        list.classList.remove('d-none');
+        normalizedPlayers.forEach((player) => {
+            list.appendChild(createSearchResultListItem(player));
+        });
+    }
+
+    const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
+    modalInstance.show();
+    validatePlayerSearchElements(getModalPlayerSearchElements());
+    lucide.createIcons();
+}
+
+function bindSearchResultsModalEvents() {
+    const { modal, list } = getSearchResultsModalElements();
+    const { input: modalInput } = getModalPlayerSearchElements();
+    if (!modal || !modalInput || !list) {
+        throw new Error('A keresési modal eseménykezelő elemei nem találhatók.');
+    }
+
+    modal.addEventListener('shown.bs.modal', () => {
+        modalInput.focus();
+        modalInput.select();
+    });
+
+    modal.addEventListener('hide.bs.modal', () => {
+        const activeElement = document.activeElement;
+        if (activeElement && modal.contains(activeElement) && typeof activeElement.blur === 'function') {
+            activeElement.blur();
+        }
+    });
+
+    modal.addEventListener('hidden.bs.modal', () => {
+        const { input: topInput, button: topButton } = getTopBarPlayerSearchElements();
+        let focusTarget = null;
+
+        if (topInput && !topInput.disabled) {
+            focusTarget = topInput;
+        } else if (topButton && !topButton.disabled) {
+            focusTarget = topButton;
+        } else if (document.body && typeof document.body.focus === 'function') {
+            focusTarget = document.body;
+        }
+
+        if (focusTarget && typeof focusTarget.focus === 'function') {
+            focusTarget.focus();
+        }
+    });
+
+    list.addEventListener('click', (event) => {
+        try {
+            const actionButton = event.target.closest('button[data-action]');
+            if (!actionButton) {
+                return;
+            }
+
+            const userId = Number(actionButton.dataset.userId);
+            const conversationId = Number(actionButton.dataset.conversationId || 0);
+            const username = String(actionButton.dataset.username || '').trim();
+            const action = actionButton.dataset.action;
+
+            if (!userId && action !== 'pending-friend' && action !== 'accepted-friend' && action !== 'blocked-friend') {
+                if (action === 'add-friend' || action === 'view-profile' || action === 'chat') {
+                    throw new Error('Hiányzó userId a keresési találat akciónál.');
+                }
+            }
+
+            if (action === 'add-friend') {
+                runSafelyAsync('searchResultAddFriend', async () => {
+                    try {
+                        const response = await fetch('/api/friends/add', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ targetUserId: userId })
+                        });
+
+                        const result = await parseJson(response);
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || 'Nem sikerült a barát kérelem küldése.');
+                        }
+
+                        // Gomb frissítése pending státuszra
+                        actionButton.dataset.action = 'pending-friend';
+                        actionButton.className = 'btn btn-sm btn-outline-warning py-1 px-2';
+                        actionButton.title = 'Barát kérelem: elküldve';
+                        actionButton.innerHTML = '<i data-lucide="arrow-up-right" style="width: 16px; height: 16px;"></i>';
+                        lucide.createIcons();
+
+                        console.log('Barát kérelem elküldve:', { userId, username });
+                    } catch (error) {
+                        console.error('Barát kérelem hiba:', error);
+                        throw error;
+                    }
+                });
+            } else if (action === 'view-profile') {
+                runSafelyAsync('searchResultViewProfile', async () => {
+                    await openPlayerProfileModalByUserId(userId);
+                });
+            } else if (action === 'chat') {
+                runSafelyAsync('searchResultOpenDirectChat', async () => {
+                    try {
+                        await openChatConversationFlow({
+                            conversationId,
+                            targetUserId: userId,
+                            source: 'search-results',
+                            username
+                        });
+                    } catch (error) {
+                        setProfileChatFeedbackBySource('search-results', error.message || 'A chat megnyitása sikertelen.', 'error');
+                        throw error;
+                    }
+                });
+            } else if (action === 'pending-friend' || action === 'accepted-friend' || action === 'blocked-friend') {
+                // Ezek az akciók nem interaktívak, vagy később implementálandók
+            }
+        } catch (error) {
+            console.error('Keresési találat akció hiba:', error);
+        }
+    });
+}
+
+function setProfileChatFeedbackBySource(source, message, type = 'neutral') {
+    const text = String(message || '').trim();
+    const isSearchSource = source === 'search-results';
+    const isFriendsSource = source === 'friends-list';
+
+    if (isSearchSource) {
+        const { feedback } = getModalPlayerSearchElements();
+        if (feedback) {
+            feedback.classList.remove('text-danger', 'text-success', 'text-secondary');
+            feedback.textContent = text;
+
+            if (text) {
+                feedback.classList.add(type === 'error' ? 'text-danger' : (type === 'success' ? 'text-success' : 'text-secondary'));
+            }
+        }
+    }
+
+    if (isFriendsSource) {
+        setFriendsFeedback(text, type === 'error' ? 'error' : (type === 'success' ? 'success' : 'neutral'));
+    }
+}
+
+async function openChatConversationFlow({ conversationId = 0, targetUserId = 0, source = 'friends-list', username = '' } = {}) {
+    if (!window.MattMesterChatModal) {
+        throw new Error('A chat modal API nem érhető el.');
+    }
+
+    await window.MattMesterChatModal.init();
+
+    const normalizedConversationId = Number(conversationId) || 0;
+    const normalizedTargetUserId = Number(targetUserId) || 0;
+    let successMessage = 'Beszélgetés megnyitva.';
+
+    if (normalizedConversationId) {
+        await window.MattMesterChatModal.openConversation(normalizedConversationId);
+    } else if (!normalizedTargetUserId) {
+        throw new Error('Hiányzik a cél felhasználó azonosító a chat nyitáshoz.');
+    } else {
+        await window.MattMesterChatModal.openDirectByUserId(normalizedTargetUserId);
+        successMessage = username ? `Beszélgetés megnyitva: ${username}` : 'Beszélgetés megnyitva.';
+    }
+
+    setProfileChatFeedbackBySource(source, successMessage, 'success');
+}
+
+function getFriendsSectionElements() {
+    return {
+        list: document.getElementById('friendsList'),
+        refreshButton: document.getElementById('refreshFriendsButton'),
+        filterButtons: document.querySelectorAll('[data-friends-filter]'),
+        feedback: document.getElementById('friendsFeedback')
+    };
+}
+
+function setFriendsFeedback(message = '', type = 'neutral') {
+    const { feedback } = getFriendsSectionElements();
+    if (feedback) {
+        const hasMessage = Boolean(message);
+        feedback.classList.remove('d-none', 'is-success', 'is-error');
+        feedback.textContent = message || '';
+
+        if (!hasMessage) {
+            feedback.classList.add('d-none');
+        } else if (type === 'success') {
+            feedback.classList.add('is-success');
+        } else if (type === 'error') {
+            feedback.classList.add('is-error');
+        }
+    }
+}
+
+function normalizeFriendFilter(filterValue) {
+    const normalized = String(filterValue || FRIEND_FILTER_DEFAULT).trim().toLowerCase();
+    return FRIEND_FILTER_VALUES.has(normalized) ? normalized : FRIEND_FILTER_DEFAULT;
+}
+
+function getRelationMeta(relationStatusInput) {
+    const relationStatus = String(relationStatusInput || '').trim().toLowerCase();
+
+    if (relationStatus === 'incoming_pending') {
+        return {
+            relationStatus,
+            listStatus: 'pending',
+            statusLabel: 'Függő kérés',
+            statusClass: 'text-warning'
+        };
+    }
+
+    if (relationStatus === 'blocked_by_me') {
+        return {
+            relationStatus,
+            listStatus: 'blocked',
+            statusLabel: 'Tiltott',
+            statusClass: 'text-danger'
+        };
+    }
+
+    if (relationStatus === 'blocked_by_them') {
+        return {
+            relationStatus,
+            listStatus: 'blocked',
+            statusLabel: 'Engem tiltott',
+            statusClass: 'text-danger'
+        };
+    }
+
+    if (relationStatus === 'blocked_mutual') {
+        return {
+            relationStatus,
+            listStatus: 'blocked',
+            statusLabel: 'Kölcsönös tiltás',
+            statusClass: 'text-danger'
+        };
+    }
+
+    return {
+        relationStatus: 'friends',
+        listStatus: 'friend',
+        statusLabel: 'Már barát',
+        statusClass: 'text-success'
+    };
+}
+
+function createFriendActionButton(actionName, title, iconName, variantClass = 'btn-outline-gold') {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = `btn btn-sm ${variantClass} py-1 px-2`;
+    if (actionName === 'delete-friend') {
+        button.classList.add('friend-action-delete');
+    }
+    button.dataset.friendAction = actionName;
+    button.title = title;
+    button.setAttribute('aria-label', title);
+    button.innerHTML = `<i data-lucide="${iconName}" style="width: 16px; height: 16px;"></i>`;
+    return button;
+}
+
+function createFriendDropdownAction(actionName, label, iconName, variantClass = '') {
+    const actionButton = document.createElement('button');
+    actionButton.type = 'button';
+    actionButton.className = `dropdown-item d-flex align-items-center gap-2 ${variantClass}`.trim();
+    actionButton.dataset.friendAction = actionName;
+    actionButton.innerHTML = `<i data-lucide="${iconName}" style="width: 16px; height: 16px;"></i><span>${label}</span>`;
+    return actionButton;
+}
+
+function getFriendActionConfigs(friend) {
+    const actions = [];
+
+    if (friend.canChat) {
+        actions.push({ action: 'chat', title: 'Üzenet küldése', label: 'Üzenet küldése', icon: 'message-square', buttonClass: 'btn-outline-gold' });
+    }
+
+    if (friend.canDeleteFriend) {
+        actions.push({ action: 'delete-friend', title: 'Barát törlése', label: 'Barát törlése', icon: 'user-x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+    }
+
+    if (friend.canAccept) {
+        actions.push({ action: 'accept', title: 'Barát kérelem elfogadása', label: 'Elfogadás', icon: 'check', buttonClass: 'btn-outline-success', dropdownClass: 'text-success' });
+    }
+
+    if (friend.canReject) {
+        actions.push({ action: 'reject', title: 'Barát kérelem elutasítása', label: 'Elutasítás', icon: 'x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+    }
+
+    if (friend.canBlock) {
+        actions.push({ action: 'block', title: 'Felhasználó tiltása', label: 'Tiltás', icon: 'ban', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+    }
+
+    if (friend.canUnblock) {
+        actions.push({ action: 'unblock', title: 'Tiltás visszavonása', label: 'Tiltás visszavonása', icon: 'shield-check', buttonClass: 'btn-outline-warning', dropdownClass: 'text-warning' });
+    }
+
+    if (friend.canView) {
+        actions.push({ action: 'view', title: 'Profil megtekintése', label: 'Profil megtekintése', icon: 'eye', buttonClass: 'btn-outline-gold' });
+    }
+
+    return actions;
+}
+
+function createFriendListItem(friend) {
+    const relationMeta = getRelationMeta(friend.relationStatus);
+    const item = document.createElement('div');
+    item.className = 'friend-item';
+    item.setAttribute('role', 'listitem');
+    item.dataset.userId = String(friend.userId || '');
+    item.dataset.username = String(friend.username || '');
+    item.dataset.conversationId = String(friend.conversationId || '');
+    item.dataset.relationStatus = relationMeta.relationStatus;
+    item.dataset.listStatus = relationMeta.listStatus;
+
+    const avatarWrap = document.createElement('div');
+    avatarWrap.className = 'position-relative flex-shrink-0';
+
+    const avatar = document.createElement('img');
+    avatar.className = 'friend-avatar rounded-circle';
+    if ((friend.profileImageStatus || '').toLowerCase() === 'pending') {
+        avatar.classList.add('search-result-avatar-pending');
+    }
+    avatar.alt = `${friend.username || 'Jatekos'} profilkepe`;
+    avatar.style.width = '40px';
+    avatar.style.height = '40px';
+    avatar.style.objectFit = 'cover';
+    avatar.src = friend.profileImage || '/profile_pictures/default.png';
+
+    const statusDot = document.createElement('span');
+    statusDot.className = 'friend-status offline';
+    avatarWrap.appendChild(avatar);
+    avatarWrap.appendChild(statusDot);
+
+    const info = document.createElement('div');
+    info.className = 'flex-grow-1 min-width-0';
+
+    const username = document.createElement('h6');
+    username.className = 'mb-0 text-white text-truncate';
+    username.style.fontSize = '0.9rem';
+    username.textContent = friend.username || 'Ismeretlen jatekos';
+
+    const relation = document.createElement('small');
+    relation.className = `${relationMeta.statusClass} d-block text-truncate`;
+    relation.textContent = relationMeta.statusLabel;
+
+    if (friend.isBlockedContext || friend.ownBlockActive || friend.oppositeBlockActive) {
+        relation.dataset.blockState = friend.ownBlockActive && friend.oppositeBlockActive
+            ? 'mutual'
+            : friend.ownBlockActive
+                ? 'own'
+                : 'incoming';
+    }
+
+    info.appendChild(username);
+    info.appendChild(relation);
+
+    const actionConfigs = getFriendActionConfigs(friend);
+    const actions = document.createElement('div');
+    actions.className = 'friend-actions d-flex align-items-center gap-2 flex-shrink-0';
+
+    const inlineActions = document.createElement('div');
+    inlineActions.className = 'd-none d-md-flex flex-wrap justify-content-end gap-2';
+    actionConfigs.forEach((actionConfig) => {
+        inlineActions.appendChild(
+            createFriendActionButton(
+                actionConfig.action,
+                actionConfig.title,
+                actionConfig.icon,
+                actionConfig.buttonClass
+            )
+        );
+    });
+
+    const dropdownWrapper = document.createElement('div');
+    dropdownWrapper.className = 'dropdown d-md-none';
+
+    const dropdownToggle = document.createElement('button');
+    dropdownToggle.type = 'button';
+    dropdownToggle.className = 'btn btn-sm btn-outline-gold dropdown-toggle';
+    dropdownToggle.dataset.bsToggle = 'dropdown';
+    dropdownToggle.setAttribute('aria-expanded', 'false');
+    dropdownToggle.innerHTML = '<i data-lucide="ellipsis-vertical" style="width: 16px; height: 16px;"></i><span class="ms-1">Műveletek</span>';
+
+    const dropdownMenu = document.createElement('div');
+    dropdownMenu.className = 'dropdown-menu dropdown-menu-end friend-actions-menu';
+    actionConfigs.forEach((actionConfig) => {
+        dropdownMenu.appendChild(
+            createFriendDropdownAction(
+                actionConfig.action,
+                actionConfig.label,
+                actionConfig.icon,
+                actionConfig.dropdownClass
+            )
+        );
+    });
+
+    dropdownWrapper.appendChild(dropdownToggle);
+    dropdownWrapper.appendChild(dropdownMenu);
+
+    actions.appendChild(inlineActions);
+    actions.appendChild(dropdownWrapper);
+
+    item.appendChild(avatarWrap);
+    item.appendChild(info);
+    item.appendChild(actions);
+
+    return item;
+}
+
+function setFriendListLoading(isLoading, label = 'Betöltés folyamatban...') {
+    const { list, refreshButton, filterButtons } = getFriendsSectionElements();
+    if (list) {
+        friendsState.loading = Boolean(isLoading);
+        if (refreshButton) {
+            refreshButton.disabled = friendsState.loading;
+        }
+
+        filterButtons.forEach((button) => {
+            button.disabled = friendsState.loading;
+        });
+
+        if (friendsState.loading) {
+            list.innerHTML = `<div class="friend-list-empty">${label}</div>`;
+        }
+    }
+}
+
+function setFriendFilterButtonsState(activeFilter) {
+    const { filterButtons } = getFriendsSectionElements();
+    filterButtons.forEach((button) => {
+        const isActive = button.dataset.friendsFilter === activeFilter;
+        button.classList.toggle('is-active', isActive);
+    });
+}
+
+function renderFriendsList(items = []) {
+    const { list } = getFriendsSectionElements();
+    if (list) {
+        const hasItems = Array.isArray(items) && items.length > 0;
+        list.innerHTML = '';
+
+        if (!hasItems) {
+            list.innerHTML = '<div class="friend-list-empty">Nincs megjeleníthető kapcsolat ebben a nézetben.</div>';
+        } else {
+            items.forEach((friend) => {
+                list.appendChild(createFriendListItem(friend));
+            });
+
+            lucide.createIcons();
+        }
+    }
+}
+
+async function refreshFriendsList(filterValue = friendsState.activeFilter) {
+    const { list } = getFriendsSectionElements();
+    if (list) {
+        const normalizedFilter = normalizeFriendFilter(filterValue);
+        friendsState.activeFilter = normalizedFilter;
+        setFriendFilterButtonsState(normalizedFilter);
+        setFriendListLoading(true, 'Barátok frissítése...');
+
+        try {
+            const response = await fetch(`/api/friends/list?status=${encodeURIComponent(normalizedFilter)}`);
+            const result = await parseJson(response);
+
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Nem sikerült a barát lista lekérése.');
+            }
+
+            friendsState.items = Array.isArray(result.data) ? result.data : [];
+            renderFriendsList(friendsState.items);
+            setFriendsFeedback(result.message || 'Barátok frissítve.', 'success');
+        } catch (error) {
+            friendsState.items = [];
+            list.innerHTML = `<div class="friend-list-empty text-danger">${error.message || 'Sikertelen barát lista frissítés.'}</div>`;
+            setFriendsFeedback(error.message || 'Sikertelen barát lista frissítés.', 'error');
+        } finally {
+            friendsState.loading = false;
+            const { refreshButton, filterButtons } = getFriendsSectionElements();
+            if (refreshButton) {
+                refreshButton.disabled = false;
+            }
+            filterButtons.forEach((button) => {
+                button.disabled = false;
+            });
+            setFriendFilterButtonsState(friendsState.activeFilter);
+        }
+    }
+}
+
+async function executeFriendAction(actionName, targetUserId) {
+    if (!targetUserId) {
+        throw new Error('Hiányzó cél felhasználó azonosító.');
+    }
+
+    if (actionName === 'accept') {
+        return fetch('/api/friends/accept', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUserId })
+        });
+    }
+
+    if (actionName === 'reject') {
+        return fetch('/api/friends/reject', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUserId })
+        });
+    }
+
+    if (actionName === 'block') {
+        return fetch('/api/friends/block', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetUserId })
+        });
+    }
+
+    if (actionName === 'unblock') {
+        return fetch(`/api/friends/unblock/${encodeURIComponent(targetUserId)}`, {
+            method: 'DELETE'
+        });
+    }
+
+    if (actionName === 'delete-friend') {
+        return fetch(`/api/friends/${encodeURIComponent(targetUserId)}`, {
+            method: 'DELETE'
+        });
+    }
+
+    throw new Error('Ismeretlen friend akció.');
+}
+
+function bindFriendsSectionEvents() {
+    const { list, refreshButton, filterButtons } = getFriendsSectionElements();
+    if (list && refreshButton && filterButtons.length && !friendsState.bound) {
+        filterButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                runSafelyAsync('friendsFilterClick', async () => {
+                    const nextFilter = normalizeFriendFilter(button.dataset.friendsFilter);
+                    await refreshFriendsList(nextFilter);
+                });
+            });
+        });
+
+        refreshButton.addEventListener('click', () => {
+            runSafelyAsync('friendsRefreshClick', async () => {
+                await refreshFriendsList(friendsState.activeFilter);
+            });
+        });
+
+        list.addEventListener('click', (event) => {
+            runSafelyAsync('friendsListActionClick', async () => {
+                const actionButton = event.target.closest('button[data-friend-action]');
+                if (actionButton && !friendsState.loading) {
+                    const item = actionButton.closest('.friend-item');
+                    const targetUserId = Number(item?.dataset.userId || 0);
+                    const conversationId = Number(item?.dataset.conversationId || 0);
+                    const username = String(item?.dataset.username || '');
+                    const actionName = String(actionButton.dataset.friendAction || '').trim().toLowerCase();
+
+                    if (!actionName || !targetUserId) {
+                        throw new Error('Érvénytelen barát lista művelet.');
+                    }
+
+                    let actionHandled = false;
+                    if (actionName === 'view') {
+                        await openPlayerProfileModalByUserId(targetUserId);
+                        actionHandled = true;
+                    }
+
+                    if (actionName === 'chat') {
+                        try {
+                            await openChatConversationFlow({
+                                conversationId,
+                                targetUserId,
+                                source: 'friends-list',
+                                username
+                            });
+                        } catch (error) {
+                            setProfileChatFeedbackBySource('friends-list', error.message || 'A chat megnyitása sikertelen.', 'error');
+                            throw error;
+                        }
+                        actionHandled = true;
+                    }
+
+                    if (!actionHandled) {
+                        actionButton.disabled = true;
+                        const response = await executeFriendAction(actionName, targetUserId);
+                        const result = await parseJson(response);
+                        if (!response.ok || !result.success) {
+                            throw new Error(result.message || 'A friend művelet nem sikerült.');
+                        }
+
+                        setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
+                        await refreshFriendsList(friendsState.activeFilter);
+                        setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
+                    }
+                }
+            });
+        });
+
+        setFriendFilterButtonsState(friendsState.activeFilter);
+        friendsState.bound = true;
+    }
+}
+
+async function handleLogout() {
+    if (!logoutState.submitting) {
+        const { confirmButton } = getLogoutElements();
+        logoutState.submitting = true;
+        if (confirmButton) {
+            confirmButton.disabled = true;
+            confirmButton.textContent = 'Kijelentkezés...';
+        }
+
+        try {
+            const response = await fetch('/api/logout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await parseJson(response);
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Sikertelen kijelentkezes.');
+            }
+
+            if (socket) {
+                socket.disconnect();
+                socket.connect();
+            }
+
+            window.location.reload();
+        } catch (error) {
+            console.error('Hiba a kijelentkezes soran:', error);
+            logoutState.submitting = false;
+            if (confirmButton) {
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés';
+            }
+        }
+    }
+}
+
+function getLogoutElements() {
+    return {
+        modal: document.getElementById('logoutModal'),
+        confirmButton: document.getElementById('confirmLogoutButton')
+    };
+}
+
 function bindLogoutButton() {
-    const logoutButtons = document.querySelectorAll('[data-bs-target="#logoutModal"]');
-    logoutButtons.forEach((button) => {
-        button.addEventListener('click', (event) => {
-            event.preventDefault();
-            handleLogout();
+    const { modal, confirmButton } = getLogoutElements();
+    if (!logoutState.bound && modal && confirmButton) {
+        confirmButton.addEventListener('click', () => {
+            runSafelyAsync('logoutConfirmClick', async () => {
+                await handleLogout();
+            });
+        });
+
+        modal.addEventListener('show.bs.modal', () => {
+            runSafely('logoutModalShow', () => {
+                logoutState.submitting = false;
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés';
+            });
+        });
+
+        modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('logoutModalHidden', () => {
+                logoutState.submitting = false;
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés';
+            });
+        });
+
+        logoutState.bound = true;
+    }
+}
+
+function getTopBarPlayerSearchElements() {
+    return {
+        input: document.getElementById('playerSearchInput'),
+        button: document.getElementById('playerSearchButton'),
+        feedback: document.getElementById('playerSearchFeedback')
+    };
+}
+
+function validatePlayerSearchElements(elements) {
+    const { input, button, feedback } = elements || {};
+    if (!input || !button || !feedback) {
+        return false;
+    }
+
+    const value = (input.value || '').trim();
+    const hasValue = value.length > 0;
+    let errorMessage = '';
+
+    if (hasValue && (value.length < 3 || value.length > 50)) {
+        errorMessage = 'A keresett felhasználónévnek 3 és 50 karakter között kell lennie.';
+    } else if (hasValue && !USERNAME_REGEX.test(value)) {
+        errorMessage = 'A keresett felhasználónév formátuma érvénytelen.';
+    }
+
+    const isValid = hasValue && !errorMessage;
+    button.disabled = !isValid;
+
+    input.classList.remove('is-valid', 'is-invalid');
+    feedback.classList.remove('text-danger', 'text-success');
+    if (!hasValue) {
+        input.removeAttribute('aria-invalid');
+        feedback.textContent = '';
+        input.title = 'Adj meg legalább 3 karakteres felhasználónevet a kereséshez.';
+        button.title = 'Adj meg felhasználónevet a kereséshez.';
+    } else if (errorMessage) {
+        input.classList.add('is-invalid');
+        input.setAttribute('aria-invalid', 'true');
+        feedback.classList.add('text-danger');
+        feedback.textContent = errorMessage;
+        input.title = errorMessage;
+        button.title = errorMessage;
+    } else {
+        input.classList.add('is-valid');
+        input.removeAttribute('aria-invalid');
+        feedback.classList.add('text-success');
+        feedback.textContent = 'A felhasználónév formátuma megfelelő.';
+        input.title = 'A formátum megfelelő, indítható a keresés.';
+        button.title = 'Keresés';
+    }
+
+    return isValid;
+}
+
+function bindPlayerSearchValidation(source, getElements) {
+    const elements = getElements();
+    const { input, button } = elements;
+    if (!input || !button) {
+        throw new Error(`Hianyzik a kereso input vagy gomb (${source}).`);
+    }
+
+    const validate = () => {
+        return validatePlayerSearchElements(elements);
+    };
+
+    input.addEventListener('input', () => {
+        runSafely('playerSearchInput', () => {
+            validate();
         });
     });
+    input.addEventListener('blur', () => {
+        runSafely('playerSearchBlur', () => {
+            validate();
+        });
+    });
+
+    button.addEventListener('click', () => {
+        runSafely('playerSearchClick', () => {
+            if (!button.disabled) {
+                schedulePlayerSearch(source, 0);
+            }
+        });
+    });
+
+    input.addEventListener('keydown', (event) => {
+        runSafely('playerSearchKeydown', () => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+            }
+        });
+    });
+
+    runSafely('playerSearchInitialValidate', () => {
+        validate();
+    });
+}
+
+function bindTopBarPlayerSearchValidation() {
+    bindPlayerSearchValidation('topbar', getTopBarPlayerSearchElements);
+}
+
+function bindModalPlayerSearchValidation() {
+    bindPlayerSearchValidation('modal', getModalPlayerSearchElements);
 }
 
 function getProfileImageStatusMeta(statusInput) {
@@ -246,24 +1792,6 @@ function showStats(sessionInfo) {
         const rankClasses = ['rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster'];
         const roleBadgeClasses = ['admin', 'badge-custom', 'badge-admin', 'badge-player'];
         const statBadgeClasses = ['badge-custom', 'badge-win', 'badge-loss', 'badge-draw', 'badge-ongoing'];
-        const getRankForElo = (eloValue) => {
-            const elo = toNumber(eloValue);
-            let rank = { label: 'Grandmaster', className: 'rank-grandmaster' };
-
-            if (elo < 1100) {
-                rank = { label: 'Beginner', className: 'rank-beginner' };
-            } else if (elo < 1400) {
-                rank = { label: 'Intermediate', className: 'rank-intermediate' };
-            } else if (elo < 1700) {
-                rank = { label: 'Advanced', className: 'rank-advanced' };
-            } else if (elo < 2000) {
-                rank = { label: 'Expert', className: 'rank-expert' };
-            } else if (elo < 2300) {
-                rank = { label: 'Master', className: 'rank-master' };
-            }
-
-            return rank;
-        };
 
         document.querySelectorAll('.top-bar-user-name').forEach((element) => {
             element.textContent = username;
@@ -315,7 +1843,7 @@ function showStats(sessionInfo) {
         eloValues.forEach((eloValue, index) => {
             const rankElement = eloRanks[index];
             if (rankElement) {
-                const rank = getRankForElo(eloValue);
+                const rank = getRankForEloValue(toNumber(eloValue));
                 rankElement.classList.remove(...rankClasses);
                 rankElement.classList.add(rank.className);
                 rankElement.textContent = rank.label;
@@ -400,57 +1928,73 @@ function handleProfileSettings(sessionInfo) {
 }
 
 function bindProfileSettingsEvents() {
-    const elements = getProfileSettingsElements();
-    if (!elements.form) {
-        return;
-    }
-
-    const onInputChange = () => {
-        validateProfileSettingsForm();
-    };
-
-    [elements.usernameInput, elements.emailInput, elements.newPasswordInput, elements.confirmPasswordInput]
-        .filter(Boolean)
-        .forEach((element) => {
-            element.addEventListener('input', onInputChange);
-            element.addEventListener('blur', onInputChange);
-        });
-
-    elements.form.addEventListener('submit', (event) => {
-        event.preventDefault();
-
-        const validation = validateProfileSettingsForm();
-        if (!validation.isValid) {
-            return;
+    try {
+        const elements = getProfileSettingsElements();
+        if (!elements.form) {
+            throw new Error('Hianyzik a profile settings form.');
         }
 
-        profileSettingsState.pendingPayload = validation.payload;
-        openProfileSettingsConfirmModal(validation.changedFieldLabels);
-    });
+        const onInputChange = () => {
+            runSafely('profileSettingsOnInputChange', () => {
+                validateProfileSettingsForm();
+            });
+        };
 
-    if (elements.confirmSaveButton) {
-        elements.confirmSaveButton.addEventListener('click', async () => {
-            await submitProfileSettingsChanges();
-        });
-    }
+        [elements.usernameInput, elements.emailInput, elements.newPasswordInput, elements.confirmPasswordInput]
+            .filter(Boolean)
+            .forEach((element) => {
+                element.addEventListener('input', onInputChange);
+                element.addEventListener('blur', onInputChange);
+            });
 
-    if (elements.modalCurrentPasswordInput) {
-        elements.modalCurrentPasswordInput.addEventListener('input', () => {
-            verifyModalCurrentPassword();
+        elements.form.addEventListener('submit', (event) => {
+            runSafely('profileSettingsSubmit', () => {
+                event.preventDefault();
+
+                const validation = validateProfileSettingsForm();
+                if (!validation.isValid) {
+                    throw new Error('Ervenytelen profile settings form.');
+                }
+
+                profileSettingsState.pendingPayload = validation.payload;
+                openProfileSettingsConfirmModal(validation.changedFieldLabels);
+            });
         });
 
-        elements.modalCurrentPasswordInput.addEventListener('blur', () => {
-            verifyModalCurrentPassword();
-        });
-    }
+        if (elements.confirmSaveButton) {
+            elements.confirmSaveButton.addEventListener('click', async () => {
+                await runSafelyAsync('profileSettingsConfirmSave', async () => {
+                    await submitProfileSettingsChanges();
+                });
+            });
+        }
 
-    if (elements.confirmModal) {
-        elements.confirmModal.addEventListener('hidden.bs.modal', () => {
-            profileSettingsState.pendingPayload = null;
-            profileSettingsState.passwordVerified = false;
-            profileSettingsState.requiresPasswordCheck = false;
-            resetProfileSettingsConfirmState();
-        });
+        if (elements.modalCurrentPasswordInput) {
+            elements.modalCurrentPasswordInput.addEventListener('input', () => {
+                runSafely('profileSettingsModalPasswordInput', () => {
+                    verifyModalCurrentPassword();
+                });
+            });
+
+            elements.modalCurrentPasswordInput.addEventListener('blur', () => {
+                runSafely('profileSettingsModalPasswordBlur', () => {
+                    verifyModalCurrentPassword();
+                });
+            });
+        }
+
+        if (elements.confirmModal) {
+            elements.confirmModal.addEventListener('hidden.bs.modal', () => {
+                runSafely('profileSettingsModalHidden', () => {
+                    profileSettingsState.pendingPayload = null;
+                    profileSettingsState.passwordVerified = false;
+                    profileSettingsState.requiresPasswordCheck = false;
+                    resetProfileSettingsConfirmState();
+                });
+            });
+        }
+    } catch (error) {
+        console.error('bindProfileSettingsEvents hiba:', error);
     }
 }
 
@@ -496,6 +2040,33 @@ function applyInputFeedback(inputElement, feedbackElement, state, message) {
     } else {
         feedbackElement.classList.add('text-secondary');
     }
+}
+
+function validatePasswordByPolicy(passwordInput, {
+    required = true,
+    minLength = 8,
+    enforceComplexity = true,
+    allowBackslash = false
+} = {}) {
+    const password = String(passwordInput || '');
+    let error = '';
+
+    if (!password) {
+        if (required) {
+            error = 'A jelenlegi jelszó kötelező.';
+        }
+    } else if (!allowBackslash && password.includes('\\')) {
+        error = 'A jelszó nem megengedett karaktert tartalmaz.';
+    } else if (password.length < minLength) {
+        error = `A jelszónak legalább ${minLength} karakter hosszú kell legyen.`;
+    } else if (enforceComplexity && !PASSWORD_REGEX.test(password)) {
+        error = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
+    }
+
+    return {
+        isValid: !error,
+        error
+    };
 }
 
 function setProfileSettingsMessage(type, message) {
@@ -560,13 +2131,13 @@ function validateProfileSettingsForm() {
     }
 
     if (values.newPassword) {
-        if (values.newPassword.includes('\\')) {
-            fieldErrors.newPassword = 'A jelszó nem megengedett karaktert tartalmaz.';
-        } else if (values.newPassword.length < 8) {
-            fieldErrors.newPassword = 'A jelszónak legalább 8 karakter hosszú kell legyen.';
-        } else if (!PASSWORD_REGEX.test(values.newPassword)) {
-            fieldErrors.newPassword = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
-        }
+        const passwordValidation = validatePasswordByPolicy(values.newPassword, {
+            required: false,
+            minLength: 8,
+            enforceComplexity: true,
+            allowBackslash: false
+        });
+        fieldErrors.newPassword = passwordValidation.error;
     }
 
     if (values.newPassword || values.confirmPassword) {
@@ -671,174 +2242,151 @@ function resetProfileSettingsConfirmState() {
 
 function openProfileSettingsConfirmModal(changedFieldLabels) {
     const elements = getProfileSettingsElements();
-    if (!elements.confirmModal || !elements.changesList) {
-        return;
-    }
+    if (elements.confirmModal && elements.changesList) {
+        profileSettingsState.requiresPasswordCheck = true;
+        profileSettingsState.passwordVerified = !profileSettingsState.requiresPasswordCheck;
 
-    profileSettingsState.requiresPasswordCheck = true;
-    profileSettingsState.passwordVerified = !profileSettingsState.requiresPasswordCheck;
+        elements.changesList.innerHTML = '';
+        changedFieldLabels.forEach((label) => {
+            const item = document.createElement('li');
+            item.className = 'text-light mb-1';
+            item.textContent = label;
+            elements.changesList.appendChild(item);
+        });
 
-    elements.changesList.innerHTML = '';
-    changedFieldLabels.forEach((label) => {
-        const item = document.createElement('li');
-        item.className = 'text-light mb-1';
-        item.textContent = label;
-        elements.changesList.appendChild(item);
-    });
+        resetProfileSettingsConfirmState();
 
-    resetProfileSettingsConfirmState();
+        if (elements.modalPasswordBlock) {
+            elements.modalPasswordBlock.classList.remove('d-none');
+        }
 
-    if (elements.modalPasswordBlock) {
-        elements.modalPasswordBlock.classList.remove('d-none');
-    }
+        if (profileSettingsState.requiresPasswordCheck) {
+            setModalCurrentPasswordFeedback('neutral', 'A mentéshez add meg a jelenlegi jelszavad.');
+        }
 
-    if (profileSettingsState.requiresPasswordCheck) {
-        setModalCurrentPasswordFeedback('neutral', 'A mentéshez add meg a jelenlegi jelszavad.');
-    }
+        const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
+        modal.show();
 
-    const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
-    modal.show();
+        profileSettingsState.countdownTimer = setInterval(() => {
+            profileSettingsState.countdownLeft -= 1;
 
-    profileSettingsState.countdownTimer = setInterval(() => {
-        profileSettingsState.countdownLeft -= 1;
-
-        if (elements.confirmSaveButton) {
-            if (profileSettingsState.countdownLeft > 0) {
-                elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
-            } else {
-                profileSettingsState.countdownFinished = true;
-                elements.confirmSaveButton.textContent = 'Mentes';
-                updateModalSaveButtonState();
+            if (elements.confirmSaveButton) {
+                if (profileSettingsState.countdownLeft > 0) {
+                    elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
+                } else {
+                    profileSettingsState.countdownFinished = true;
+                    elements.confirmSaveButton.textContent = 'Mentes';
+                    updateModalSaveButtonState();
+                }
             }
-        }
 
-        if (elements.confirmHint) {
-            elements.confirmHint.textContent = profileSettingsState.countdownLeft > 0
-                ? `A mentés gomb ${profileSettingsState.countdownLeft} másodperc múlva lesz aktív.`
-                : 'A mentés gomb most már aktív.';
-        }
+            if (elements.confirmHint) {
+                elements.confirmHint.textContent = profileSettingsState.countdownLeft > 0
+                    ? `A mentés gomb ${profileSettingsState.countdownLeft} másodperc múlva lesz aktív.`
+                    : 'A mentés gomb most már aktív.';
+            }
 
-        if (profileSettingsState.countdownLeft <= 0) {
-            clearInterval(profileSettingsState.countdownTimer);
-            profileSettingsState.countdownTimer = null;
-        }
-    }, 1000);
+            if (profileSettingsState.countdownLeft <= 0) {
+                clearInterval(profileSettingsState.countdownTimer);
+                profileSettingsState.countdownTimer = null;
+            }
+        }, 1000);
+    }
 }
 
 function setModalCurrentPasswordFeedback(state, message) {
     const { modalCurrentPasswordInput, modalCurrentPasswordFeedback } = getProfileSettingsElements();
-    if (!modalCurrentPasswordInput || !modalCurrentPasswordFeedback) {
-        return;
-    }
+    if (modalCurrentPasswordInput && modalCurrentPasswordFeedback) {
+        modalCurrentPasswordInput.classList.remove('is-valid', 'is-invalid');
+        modalCurrentPasswordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
+        modalCurrentPasswordFeedback.textContent = message;
 
-    modalCurrentPasswordInput.classList.remove('is-valid', 'is-invalid');
-    modalCurrentPasswordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
-    modalCurrentPasswordFeedback.textContent = message;
-
-    if (state === 'success') {
-        modalCurrentPasswordInput.classList.add('is-valid');
-        modalCurrentPasswordFeedback.classList.add('text-success');
-    } else if (state === 'error') {
-        modalCurrentPasswordInput.classList.add('is-invalid');
-        modalCurrentPasswordFeedback.classList.add('text-danger');
-    } else {
-        modalCurrentPasswordFeedback.classList.add('text-secondary');
+        if (state === 'success') {
+            modalCurrentPasswordInput.classList.add('is-valid');
+            modalCurrentPasswordFeedback.classList.add('text-success');
+        } else if (state === 'error') {
+            modalCurrentPasswordInput.classList.add('is-invalid');
+            modalCurrentPasswordFeedback.classList.add('text-danger');
+        } else {
+            modalCurrentPasswordFeedback.classList.add('text-secondary');
+        }
     }
 }
 
 function updateModalSaveButtonState() {
     const { confirmSaveButton } = getProfileSettingsElements();
-    if (!confirmSaveButton) {
-        return;
+    if (confirmSaveButton) {
+        const readyByPassword = profileSettingsState.requiresPasswordCheck ? profileSettingsState.passwordVerified : true;
+        confirmSaveButton.disabled = !(profileSettingsState.countdownFinished && readyByPassword);
     }
-
-    const readyByPassword = profileSettingsState.requiresPasswordCheck ? profileSettingsState.passwordVerified : true;
-    confirmSaveButton.disabled = !(profileSettingsState.countdownFinished && readyByPassword);
 }
 
 function verifyModalCurrentPassword() {
     const elements = getProfileSettingsElements();
-    if (!profileSettingsState.requiresPasswordCheck || !elements.modalCurrentPasswordInput) {
-        return;
-    }
+    if (profileSettingsState.requiresPasswordCheck && elements.modalCurrentPasswordInput) {
+        const currentPassword = elements.modalCurrentPasswordInput.value;
+        const passwordValidation = validatePasswordByPolicy(currentPassword, {
+            required: true,
+            minLength: 8,
+            enforceComplexity: true,
+            allowBackslash: false
+        });
 
-    const currentPassword = elements.modalCurrentPasswordInput.value;
-    if (!currentPassword) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelenlegi jelszó kötelező.');
+        if (!passwordValidation.isValid) {
+            profileSettingsState.passwordVerified = false;
+            setModalCurrentPasswordFeedback('error', passwordValidation.error);
+        } else {
+            profileSettingsState.passwordVerified = true;
+            setModalCurrentPasswordFeedback('success', 'A jelszó formátuma megfelelő.');
+        }
+
         updateModalSaveButtonState();
-        return;
     }
-
-    if (currentPassword.includes('\\')) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelszó nem megengedett karaktert tartalmaz.');
-        updateModalSaveButtonState();
-        return;
-    }
-
-    if (currentPassword.length < 8) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelszónak legalább 8 karakter hosszú kell legyen.');
-        updateModalSaveButtonState();
-        return;
-    }
-
-    if (!PASSWORD_REGEX.test(currentPassword)) {
-        profileSettingsState.passwordVerified = false;
-        setModalCurrentPasswordFeedback('error', 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
-        updateModalSaveButtonState();
-        return;
-    }
-
-    profileSettingsState.passwordVerified = true;
-    setModalCurrentPasswordFeedback('success', 'A jelszó formátuma megfelelő.');
-    updateModalSaveButtonState();
 }
 
 async function submitProfileSettingsChanges() {
     const elements = getProfileSettingsElements();
-    if (!profileSettingsState.pendingPayload || !elements.confirmSaveButton) {
-        return;
-    }
+    if (profileSettingsState.pendingPayload && elements.confirmSaveButton) {
+        elements.confirmSaveButton.disabled = true;
+        elements.confirmSaveButton.textContent = 'Mentés folyamatban...';
 
-    elements.confirmSaveButton.disabled = true;
-    elements.confirmSaveButton.textContent = 'Mentés folyamatban...';
+        try {
+            const response = await fetch('/api/profile/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...profileSettingsState.pendingPayload,
+                    currentPassword: elements.modalCurrentPasswordInput?.value || ''
+                })
+            });
 
-    try {
-        const response = await fetch('/api/profile/settings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                ...profileSettingsState.pendingPayload,
-                currentPassword: elements.modalCurrentPasswordInput?.value || ''
-            })
-        });
+            const result = await parseJson(response);
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
+            }
 
-        const result = await parseJson(response);
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
+            setProfileSettingsMessage('success', result.message || 'A profil beállítások sikeresen frissültek.');
+            profileSettingsState.pendingPayload = null;
+
+            if (elements.newPasswordInput) {
+                elements.newPasswordInput.value = '';
+            }
+            if (elements.confirmPasswordInput) {
+                elements.confirmPasswordInput.value = '';
+            }
+            if (elements.confirmModal) {
+                const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
+                modal.hide();
+            }
+
+            await syncSocketContextOrReconnect('profile-settings-save');
+            await refreshAuthUi('profile-settings-save-success');
+        } catch (error) {
+            setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
+            elements.confirmSaveButton.textContent = 'Mentes';
+            updateModalSaveButtonState();
+            throw new Error(error.message || 'Profil beállítás mentési hiba.');
         }
-
-        setProfileSettingsMessage('success', result.message || 'A profil beállítások sikeresen frissültek.');
-        profileSettingsState.pendingPayload = null;
-
-        if (elements.newPasswordInput) {
-            elements.newPasswordInput.value = '';
-        }
-        if (elements.confirmPasswordInput) {
-            elements.confirmPasswordInput.value = '';
-        }
-        if (elements.confirmModal) {
-            const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
-            modal.hide();
-        }
-
-        await refreshAuthUi();
-    } catch (error) {
-        setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
-        elements.confirmSaveButton.textContent = 'Mentes';
-        updateModalSaveButtonState();
     }
 }
 
@@ -856,82 +2404,70 @@ function getProfileDeleteElements() {
 
 function setDeleteProfileMessage(type, message) {
     const { message: messageElement } = getProfileDeleteElements();
-    if (!messageElement) {
-        return;
+    if (messageElement) {
+        if (!message) {
+            messageElement.className = 'alert d-none mt-3 mb-0';
+            messageElement.textContent = '';
+        } else {
+            messageElement.className = `alert alert-${type} mt-3 mb-0`;
+            messageElement.textContent = message;
+        }
     }
-
-    if (!message) {
-        messageElement.className = 'alert d-none mt-3 mb-0';
-        messageElement.textContent = '';
-        return;
-    }
-
-    messageElement.className = `alert alert-${type} mt-3 mb-0`;
-    messageElement.textContent = message;
 }
 
 function setDeleteProfilePasswordFeedback(state, message) {
     const { passwordInput, passwordFeedback } = getProfileDeleteElements();
-    if (!passwordInput || !passwordFeedback) {
-        return;
-    }
+    if (passwordInput && passwordFeedback) {
+        passwordInput.classList.remove('is-valid', 'is-invalid');
+        passwordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
+        passwordFeedback.textContent = message;
 
-    passwordInput.classList.remove('is-valid', 'is-invalid');
-    passwordFeedback.classList.remove('text-secondary', 'text-success', 'text-danger');
-    passwordFeedback.textContent = message;
-
-    if (state === 'error') {
-        passwordInput.classList.add('is-invalid');
-        passwordFeedback.classList.add('text-danger');
-    } else if (state === 'success') {
-        passwordInput.classList.add('is-valid');
-        passwordFeedback.classList.add('text-success');
-    } else {
-        passwordFeedback.classList.add('text-secondary');
+        if (state === 'error') {
+            passwordInput.classList.add('is-invalid');
+            passwordFeedback.classList.add('text-danger');
+        } else if (state === 'success') {
+            passwordInput.classList.add('is-valid');
+            passwordFeedback.classList.add('text-success');
+        } else {
+            passwordFeedback.classList.add('text-secondary');
+        }
     }
 }
 
 function validateDeleteProfilePassword(password) {
-    if (!password) {
-        return 'A jelenlegi jelszó kötelező.';
-    }
-    if (password.includes('\\')) {
-        return 'A jelszó nem megengedett karaktert tartalmaz.';
-    }
-    if (password.length < 8) {
-        return 'A jelszónak legalább 8 karakter hosszú kell legyen.';
-    }
-    if (!PASSWORD_REGEX.test(password)) {
-        return 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
-    }
-    return '';
+    const passwordValidation = validatePasswordByPolicy(password, {
+        required: true,
+        minLength: 8,
+        enforceComplexity: true,
+        allowBackslash: false
+    });
+
+    return passwordValidation.error;
 }
 
 function updateDeleteProfileConfirmButtonState() {
     const elements = getProfileDeleteElements();
-    if (!elements.confirmButton || !elements.passwordInput || !elements.acknowledgeCheckbox) {
-        return;
+    if (elements.confirmButton && elements.passwordInput && elements.acknowledgeCheckbox) {
+        const password = elements.passwordInput.value || '';
+        const passwordError = validateDeleteProfilePassword(password);
+        const acknowledged = elements.acknowledgeCheckbox.checked;
+
+        if (!password) {
+            setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
+        } else if (passwordError) {
+            setDeleteProfilePasswordFeedback('error', passwordError);
+        } else {
+            setDeleteProfilePasswordFeedback('success', 'A jelszó formátuma megfelelő.');
+        }
+
+        const canSubmit = profileDeleteState.countdownFinished
+            && !profileDeleteState.submitting
+            && acknowledged
+            && password.length > 0
+            && !passwordError;
+
+        elements.confirmButton.disabled = !canSubmit;
     }
-
-    const password = elements.passwordInput.value || '';
-    const passwordError = validateDeleteProfilePassword(password);
-    const acknowledged = elements.acknowledgeCheckbox.checked;
-
-    if (!password) {
-        setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
-    } else if (passwordError) {
-        setDeleteProfilePasswordFeedback('error', passwordError);
-    } else {
-        setDeleteProfilePasswordFeedback('success', 'A jelszó formátuma megfelelő.');
-    }
-
-    const canSubmit = profileDeleteState.countdownFinished
-        && !profileDeleteState.submitting
-        && acknowledged
-        && password.length > 0
-        && !passwordError;
-
-    elements.confirmButton.disabled = !canSubmit;
 }
 
 function resetDeleteProfileModalState() {
@@ -965,127 +2501,143 @@ function resetDeleteProfileModalState() {
 
 function startDeleteProfileCountdown() {
     const elements = getProfileDeleteElements();
-    if (!elements.confirmButton) {
-        return;
-    }
-
-    if (profileDeleteState.countdownTimer) {
-        clearInterval(profileDeleteState.countdownTimer);
-    }
-
-    profileDeleteState.countdownTimer = setInterval(() => {
-        profileDeleteState.countdownLeft -= 1;
-
-        const { timer } = getProfileDeleteElements();
-        if (timer) {
-            timer.textContent = String(Math.max(profileDeleteState.countdownLeft, 0));
-        }
-
-        if (profileDeleteState.countdownLeft <= 0) {
-            profileDeleteState.countdownFinished = true;
+    if (elements.confirmButton) {
+        if (profileDeleteState.countdownTimer) {
             clearInterval(profileDeleteState.countdownTimer);
-            profileDeleteState.countdownTimer = null;
-            elements.confirmButton.textContent = 'Törlés';
         }
 
-        updateDeleteProfileConfirmButtonState();
-    }, 1000);
+        profileDeleteState.countdownTimer = setInterval(() => {
+            profileDeleteState.countdownLeft -= 1;
+
+            const { timer } = getProfileDeleteElements();
+            if (timer) {
+                timer.textContent = String(Math.max(profileDeleteState.countdownLeft, 0));
+            }
+
+            if (profileDeleteState.countdownLeft <= 0) {
+                profileDeleteState.countdownFinished = true;
+                clearInterval(profileDeleteState.countdownTimer);
+                profileDeleteState.countdownTimer = null;
+                elements.confirmButton.textContent = 'Törlés';
+            }
+
+            updateDeleteProfileConfirmButtonState();
+        }, 1000);
+    }
 }
 
 async function submitDeleteProfile() {
     const elements = getProfileDeleteElements();
-    if (!elements.passwordInput || !elements.acknowledgeCheckbox || !elements.confirmButton) {
-        return;
-    }
+    if (elements.passwordInput && elements.acknowledgeCheckbox && elements.confirmButton) {
+        const currentPassword = elements.passwordInput.value || '';
+        const passwordError = validateDeleteProfilePassword(currentPassword);
+        const missingAcknowledge = !elements.acknowledgeCheckbox.checked;
 
-    const currentPassword = elements.passwordInput.value || '';
-    const passwordError = validateDeleteProfilePassword(currentPassword);
-    if (passwordError) {
-        setDeleteProfilePasswordFeedback('error', passwordError);
-        updateDeleteProfileConfirmButtonState();
-        return;
-    }
+        if (passwordError) {
+            setDeleteProfilePasswordFeedback('error', passwordError);
+            updateDeleteProfileConfirmButtonState();
+        } else if (missingAcknowledge) {
+            setDeleteProfileMessage('danger', 'Fogadd el, hogy a törlés nem visszavonható.');
+            updateDeleteProfileConfirmButtonState();
+        } else {
+            profileDeleteState.submitting = true;
+            elements.confirmButton.disabled = true;
+            elements.confirmButton.textContent = 'Törlés folyamatban...';
+            setDeleteProfileMessage('danger', '');
 
-    if (!elements.acknowledgeCheckbox.checked) {
-        setDeleteProfileMessage('danger', 'Fogadd el, hogy a törlés nem visszavonható.');
-        updateDeleteProfileConfirmButtonState();
-        return;
-    }
+            try {
+                const response = await fetch('/api/profile/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ currentPassword })
+                });
 
-    profileDeleteState.submitting = true;
-    elements.confirmButton.disabled = true;
-    elements.confirmButton.textContent = 'Törlés folyamatban...';
-    setDeleteProfileMessage('danger', '');
+                const result = await parseJson(response);
+                if (!response.ok || !result.success) {
+                    throw new Error(result.message || 'A profil törlése nem sikerült.');
+                }
 
-    try {
-        const response = await fetch('/api/profile/delete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ currentPassword })
-        });
+                if (elements.modal) {
+                    const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
+                    modal.hide();
+                }
 
-        const result = await parseJson(response);
-        if (!response.ok || !result.success) {
-            throw new Error(result.message || 'A profil törlése nem sikerült.');
+                if (socket) {
+                    socket.disconnect();
+                }
+
+                await refreshAuthUi('profile-delete-success');
+                window.location.href = '/';
+            } catch (error) {
+                profileDeleteState.submitting = false;
+                setDeleteProfileMessage('danger', error.message || 'Hiba történt a profil törlése közben.');
+                updateDeleteProfileConfirmButtonState();
+                throw new Error(error.message || 'Profil törlési hiba.');
+            }
         }
-
-        if (elements.modal) {
-            const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
-            modal.hide();
-        }
-
-        if (typeof socket !== 'undefined') {
-            socket.disconnect();
-        }
-
-        window.location.href = '/';
-    } catch (error) {
-        profileDeleteState.submitting = false;
-        setDeleteProfileMessage('danger', error.message || 'Hiba történt a profil törlése közben.');
-        updateDeleteProfileConfirmButtonState();
     }
 }
 
 function bindProfileDeleteModalEvents() {
-    const elements = getProfileDeleteElements();
-    if (!elements.modal || profileDeleteState.bound) {
-        return;
-    }
+    try {
+        const elements = getProfileDeleteElements();
+        if (!elements.modal) {
+            throw new Error('Hianyzik a delete profile modal.');
+        }
 
-    profileDeleteState.bound = true;
+        if (profileDeleteState.bound) {
+            throw new Error('A delete profile esemenyek mar be vannak kotve.');
+        }
 
-    if (elements.passwordInput) {
-        elements.passwordInput.addEventListener('input', () => {
-            setDeleteProfileMessage('danger', '');
-            updateDeleteProfileConfirmButtonState();
+        profileDeleteState.bound = true;
+
+        if (elements.passwordInput) {
+            elements.passwordInput.addEventListener('input', () => {
+                runSafely('deleteProfilePasswordInput', () => {
+                    setDeleteProfileMessage('danger', '');
+                    updateDeleteProfileConfirmButtonState();
+                });
+            });
+
+            elements.passwordInput.addEventListener('blur', () => {
+                runSafely('deleteProfilePasswordBlur', () => {
+                    updateDeleteProfileConfirmButtonState();
+                });
+            });
+        }
+
+        if (elements.acknowledgeCheckbox) {
+            elements.acknowledgeCheckbox.addEventListener('change', () => {
+                runSafely('deleteProfileAcknowledgeChange', () => {
+                    setDeleteProfileMessage('danger', '');
+                    updateDeleteProfileConfirmButtonState();
+                });
+            });
+        }
+
+        if (elements.confirmButton) {
+            elements.confirmButton.addEventListener('click', async () => {
+                await runSafelyAsync('deleteProfileConfirmClick', async () => {
+                    await submitDeleteProfile();
+                });
+            });
+        }
+
+        elements.modal.addEventListener('show.bs.modal', () => {
+            runSafely('deleteProfileModalShow', () => {
+                resetDeleteProfileModalState();
+                startDeleteProfileCountdown();
+            });
         });
 
-        elements.passwordInput.addEventListener('blur', () => {
-            updateDeleteProfileConfirmButtonState();
+        elements.modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('deleteProfileModalHidden', () => {
+                resetDeleteProfileModalState();
+            });
         });
+    } catch (error) {
+        console.error('bindProfileDeleteModalEvents hiba:', error);
     }
-
-    if (elements.acknowledgeCheckbox) {
-        elements.acknowledgeCheckbox.addEventListener('change', () => {
-            setDeleteProfileMessage('danger', '');
-            updateDeleteProfileConfirmButtonState();
-        });
-    }
-
-    if (elements.confirmButton) {
-        elements.confirmButton.addEventListener('click', async () => {
-            await submitDeleteProfile();
-        });
-    }
-
-    elements.modal.addEventListener('show.bs.modal', () => {
-        resetDeleteProfileModalState();
-        startDeleteProfileCountdown();
-    });
-
-    elements.modal.addEventListener('hidden.bs.modal', () => {
-        resetDeleteProfileModalState();
-    });
 }
 
 function getProfileImageEditorElements() {
@@ -1104,18 +2656,15 @@ function getProfileImageEditorElements() {
 
 function setProfileImageEditorMessage(type, message) {
     const { message: messageElement } = getProfileImageEditorElements();
-    if (!messageElement) {
-        return;
+    if (messageElement) {
+        if (!message) {
+            messageElement.className = 'alert d-none mt-3 mb-0';
+            messageElement.textContent = '';
+        } else {
+            messageElement.className = `alert alert-${type} mt-3 mb-0`;
+            messageElement.textContent = message;
+        }
     }
-
-    if (!message) {
-        messageElement.className = 'alert d-none mt-3 mb-0';
-        messageElement.textContent = '';
-        return;
-    }
-
-    messageElement.className = `alert alert-${type} mt-3 mb-0`;
-    messageElement.textContent = message;
 }
 
 function resetProfileImageEditorState() {
@@ -1430,9 +2979,11 @@ async function submitProfileImageUpload() {
             elements.uploadInput.value = '';
         }
 
-        await refreshAuthUi();
+        await syncSocketContextOrReconnect('profile-image-upload');
+        await refreshAuthUi('profile-image-upload-success');
     } catch (error) {
         setProfileImageEditorMessage('danger', error.message || 'Hiba történt a képfeltöltés közben.');
+        throw new Error(error.message || 'Profilkép feltöltési hiba.');
     } finally {
         profileImageEditorState.uploading = false;
         if (elements.saveButton) {
@@ -1443,77 +2994,99 @@ async function submitProfileImageUpload() {
 }
 
 function bindProfileImageUploadEvents() {
-    const elements = getProfileImageEditorElements();
-    if (!elements.uploadInput || !elements.modal || profileImageEditorState.bound) {
-        return;
-    }
-
-    profileImageEditorState.bound = true;
-
-    elements.uploadInput.addEventListener('change', async (event) => {
-        const file = event.target.files?.[0] || null;
-        const fileError = validateProfileImageFile(file);
-
-        if (fileError) {
-            setProfileSettingsMessage('danger', fileError);
-            elements.uploadInput.value = '';
-            return;
+    try {
+        const elements = getProfileImageEditorElements();
+        if (!elements.uploadInput || !elements.modal) {
+            throw new Error('Hianyzik a profile image upload input vagy modal.');
         }
 
-        try {
-            await openProfileImageEditorFromFile(file);
-        } catch (error) {
-            setProfileSettingsMessage('danger', error.message || 'A kiválasztott kép nem nyitható meg.');
-            elements.uploadInput.value = '';
+        if (profileImageEditorState.bound) {
+            throw new Error('A profile image upload esemenyek mar be vannak kotve.');
         }
-    });
 
-    if (elements.zoomInput) {
-        elements.zoomInput.addEventListener('input', () => {
-            profileImageEditorState.scale = Number(elements.zoomInput.value) || 1;
-            renderProfileImageEditor();
+        profileImageEditorState.bound = true;
+
+        elements.uploadInput.addEventListener('change', async (event) => {
+            await runSafelyAsync('profileImageUploadChange', async () => {
+                try {
+                    const file = event.target.files?.[0] || null;
+                    const fileError = validateProfileImageFile(file);
+
+                    if (fileError) {
+                        throw new Error(fileError);
+                    }
+
+                    await openProfileImageEditorFromFile(file);
+                } catch (error) {
+                    setProfileSettingsMessage('danger', error.message || 'A kiválasztott kép nem nyitható meg.');
+                    elements.uploadInput.value = '';
+                    throw error;
+                }
+            });
         });
-    }
 
-    if (elements.rotateInput) {
-        elements.rotateInput.addEventListener('input', () => {
-            profileImageEditorState.rotationDeg = Number(elements.rotateInput.value) || 0;
-            renderProfileImageEditor();
-        });
-    }
-
-    if (elements.resetButton) {
-        elements.resetButton.addEventListener('click', () => {
-            resetProfileImageEditorState();
-            renderProfileImageEditor();
-        });
-    }
-
-    if (elements.saveButton) {
-        elements.saveButton.addEventListener('click', async () => {
-            await submitProfileImageUpload();
-        });
-    }
-
-    bindProfileImageEditorCanvasEvents();
-
-    elements.modal.addEventListener('shown.bs.modal', () => {
-        renderProfileImageEditor();
-    });
-
-    elements.modal.addEventListener('hidden.bs.modal', () => {
-        clearProfileImageEditorImage();
-        if (elements.uploadInput) {
-            elements.uploadInput.value = '';
+        if (elements.zoomInput) {
+            elements.zoomInput.addEventListener('input', () => {
+                runSafely('profileImageZoomInput', () => {
+                    profileImageEditorState.scale = Number(elements.zoomInput.value) || 1;
+                    renderProfileImageEditor();
+                });
+            });
         }
-    });
 
-    window.addEventListener('resize', () => {
-        if (!profileImageEditorState.image) {
-            return;
+        if (elements.rotateInput) {
+            elements.rotateInput.addEventListener('input', () => {
+                runSafely('profileImageRotateInput', () => {
+                    profileImageEditorState.rotationDeg = Number(elements.rotateInput.value) || 0;
+                    renderProfileImageEditor();
+                });
+            });
         }
-        renderProfileImageEditor();
-    });
+
+        if (elements.resetButton) {
+            elements.resetButton.addEventListener('click', () => {
+                runSafely('profileImageResetClick', () => {
+                    resetProfileImageEditorState();
+                    renderProfileImageEditor();
+                });
+            });
+        }
+
+        if (elements.saveButton) {
+            elements.saveButton.addEventListener('click', async () => {
+                await runSafelyAsync('profileImageSaveClick', async () => {
+                    await submitProfileImageUpload();
+                });
+            });
+        }
+
+        bindProfileImageEditorCanvasEvents();
+
+        elements.modal.addEventListener('shown.bs.modal', () => {
+            runSafely('profileImageModalShown', () => {
+                renderProfileImageEditor();
+            });
+        });
+
+        elements.modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('profileImageModalHidden', () => {
+                clearProfileImageEditorImage();
+                if (elements.uploadInput) {
+                    elements.uploadInput.value = '';
+                }
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            runSafely('profileImageWindowResize', () => {
+                if (profileImageEditorState.image) {
+                    renderProfileImageEditor();
+                }
+            });
+        });
+    } catch (error) {
+        console.error('bindProfileImageUploadEvents hiba:', error);
+    }
 }
 
 function getRemoveAvatarElements() {
@@ -1568,9 +3141,11 @@ async function submitRemoveAvatar() {
             modal.hide();
         }
 
-        await refreshAuthUi();
+        await syncSocketContextOrReconnect('profile-image-remove');
+        await refreshAuthUi('profile-image-remove-success');
     } catch (error) {
         setRemoveAvatarMessage('danger', error.message || 'Hiba történt a profilkép eltávolítása közben.');
+        throw new Error(error.message || 'Profilkép eltávolítási hiba.');
     } finally {
         elements.confirmButton.disabled = false;
         elements.confirmButton.textContent = 'Eltávolítás';
@@ -1578,22 +3153,32 @@ async function submitRemoveAvatar() {
 }
 
 function bindRemoveAvatarEvents() {
-    const elements = getRemoveAvatarElements();
-    if (!elements.modal || !elements.confirmButton) {
-        return;
+    try {
+        const elements = getRemoveAvatarElements();
+        if (!elements.modal || !elements.confirmButton) {
+            throw new Error('Hianyzik a remove avatar modal vagy confirm gomb.');
+        }
+
+        elements.confirmButton.addEventListener('click', async () => {
+            await runSafelyAsync('removeAvatarConfirmClick', async () => {
+                await submitRemoveAvatar();
+            });
+        });
+
+        elements.modal.addEventListener('show.bs.modal', () => {
+            runSafely('removeAvatarModalShow', () => {
+                setRemoveAvatarMessage('danger', '');
+            });
+        });
+
+        elements.modal.addEventListener('hidden.bs.modal', () => {
+            runSafely('removeAvatarModalHidden', () => {
+                setRemoveAvatarMessage('danger', '');
+            });
+        });
+    } catch (error) {
+        console.error('bindRemoveAvatarEvents hiba:', error);
     }
-
-    elements.confirmButton.addEventListener('click', async () => {
-        await submitRemoveAvatar();
-    });
-
-    elements.modal.addEventListener('show.bs.modal', () => {
-        setRemoveAvatarMessage('danger', '');
-    });
-
-    elements.modal.addEventListener('hidden.bs.modal', () => {
-        setRemoveAvatarMessage('danger', '');
-    });
 }
 
 // Mobile Sidebar Toggle

@@ -29,6 +29,7 @@ function jatekLetrehoz() {
         lepesszam: 0,       // teljes lépésszám
         felLepes: 0,        // 50 lépés szabályhoz
         lepesTortenet: [],   // visszajátszáshoz
+        pozicioTortenet: [], // háromszori ismétlés ellenőrzéshez (pozíció hash-ek)
         jatekosok: {
             white: { ido: 600, timer: null },
             black: { ido: 600, timer: null }
@@ -38,7 +39,16 @@ function jatekLetrehoz() {
         botSzin: null,          // 'white' | 'black' — melyik oldalon játszik a bot
         nehezseg: null,         // 1-8 nehézségi szint
         dbGameId: null,         // DB games.id
-        idoVegeUzenet: null     // időlejárat üzenet
+        idoVegeUzenet: null,    // időlejárat üzenet
+        eloValtozas: null,      // játékvégi ELO összegzés a kliensnek
+        // ── PVP MEZŐK ──
+        pvpAktiv: false,            // ez PvP játék?
+        pvpStatusz: null,           // 'waiting' | 'active' | 'finished'
+        pvpJatekosNevek: null,      // { white: username, black: username }
+        disconnectTimer: null,      // grace period timer ref
+        disconnectSzin: null,       // melyik szín disconnectelt
+        onIdoLejar: null,           // callback: timer.js hívja amikor lejár az idő
+        drawAjanlat: null           // melyik szín ajánlott döntetlent: 'white' | 'black' | null
     };
     jatekok.set(gameId, jatek);
     return { gameId, jatek };
@@ -61,6 +71,7 @@ function jatekTorol(gameId) {
         // Timer leállítás ha fut
         if (jatek.jatekosok.white.timer) clearInterval(jatek.jatekosok.white.timer);
         if (jatek.jatekosok.black.timer) clearInterval(jatek.jatekosok.black.timer);
+        if (jatek.disconnectTimer) clearTimeout(jatek.disconnectTimer);
         jatekok.delete(gameId);
     }
 }
@@ -71,7 +82,7 @@ function jatekTorol(gameId) {
  */
 function mezoKeres(jatek, x, y) {
     if (x < 0 || x > 7 || y < 0 || y > 7) return null;
-    return jatek.tabla.find(m => m.x === x && m.y === y);
+    return jatek.tabla[y * 8 + x];
 }
 
 /**
@@ -108,7 +119,9 @@ function jatekAllapotKliens(jatek) {
     if (jatek.utolsoLepes) {
         utolsoLepes = {
             from: { x: jatek.utolsoLepes.from.x, y: jatek.utolsoLepes.from.y },
-            to: { x: jatek.utolsoLepes.to.x, y: jatek.utolsoLepes.to.y }
+            to: { x: jatek.utolsoLepes.to.x, y: jatek.utolsoLepes.to.y },
+            capture: !!jatek.utolsoLepes.capture,
+            special: jatek.utolsoLepes.special || null
         };
     }
 
@@ -127,7 +140,14 @@ function jatekAllapotKliens(jatek) {
         // ── BOT INFÓ A KLIENSNEK ──
         botAktiv: jatek.botAktiv,
         botSzin: jatek.botSzin,
-        nehezseg: jatek.nehezseg
+        nehezseg: jatek.nehezseg,
+        botGondolkodik: jatek.botGondolkodik || false,
+        eloValtozas: jatek.eloValtozas || null,
+        // ── PVP INFÓ A KLIENSNEK ──
+        pvpAktiv: jatek.pvpAktiv,
+        pvpStatusz: jatek.pvpStatusz,
+        pvpJatekosNevek: jatek.pvpJatekosNevek,
+        drawAjanlat: jatek.drawAjanlat
     };
 }
 

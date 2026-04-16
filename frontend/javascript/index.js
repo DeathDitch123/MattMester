@@ -2,7 +2,26 @@ const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
-const socket = io();
+const socket = window.MattMesterSocket?.socket || io();
+const requestController = window.createRequestController(300);
+
+function runSafely(label, handler) {
+    try {
+        return handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
+
+async function runSafelyAsync(label, handler) {
+    try {
+        return await handler();
+    } catch (error) {
+        console.error(`${label} hiba:`, error);
+        return undefined;
+    }
+}
 
 let LeaderboardData = {
     elo: [],
@@ -12,17 +31,33 @@ let LeaderboardData = {
     lastUpdated: null
 };
 
+async function syncSocketContextForStartup(reason = 'index-startup') {
+    try {
+        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            await window.MattMesterSocket.syncSocketContextOrReconnect(reason);
+        }
+    } catch (error) {
+        console.warn('Startup socket context sync hiba:', error.message || error);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    installModalFocusGuards();
-    bindLoginForm();
-    bindRegisterForm();
-    bindLogoutButtonUser();
-    bindLogoutButtonAdmin();
-    bindLeaderBoardControls();
-    restoreLastMode();
-    loadLeaderBoard();
-    socketHandler();
-    refreshAuthUi();
+    runSafely('indexDOMContentLoadedBindings', () => {
+        installModalFocusGuards();
+        bindLoginForm();
+        bindRegisterForm();
+        bindLogoutButtonUser();
+        bindLogoutButtonAdmin();
+        bindLeaderBoardControls();
+        restoreLastMode();
+        socketHandler();
+    });
+
+    runSafelyAsync('indexInitialLoadSequence', async () => {
+        await syncSocketContextForStartup('index-initial-load');
+        await loadLeaderBoard();
+        await refreshAuthUi();
+    });
 });
 // Ez parsol
 async function parseJson(response) {
@@ -39,13 +74,22 @@ async function fetchSessionInfo() {
     let data = { success: false, loggedIn: false };
 
     try {
-        const response = await fetch('/api/sessionInfo');
-
+        const response = await fetch('/api/sessionInfo', {
+            signal: requestController.withAbortSignal('sessionInfo')
+        });
+        const data = await parseJson(response);
         if (response.ok) {
             data = await parseJson(response);
         }
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            const abortError = new Error('A session informacio lekerdezese megszakadt.');
+            abortError.name = 'AbortError';
+            throw abortError;
+        }
         console.error('Hiba a session informacio lekerdezese soran:', error);
+    } finally {
+        requestController.clearSignal('sessionInfo');
     }
 
     return data;
@@ -53,7 +97,9 @@ async function fetchSessionInfo() {
 
 async function loadLeaderBoard() {
     try {
-        const response = await fetch('/api/leaderboard');
+        const response = await fetch('/api/leaderboard', {
+            signal: requestController.withAbortSignal('leaderboard')
+        });
         const payload = await parseJson(response);
 
         if (!response.ok || !payload.success) {
@@ -69,7 +115,14 @@ async function loadLeaderBoard() {
         };
         renderLeaderBoard();
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            const abortError = new Error('A ranglista lekerdezese megszakadt.');
+            abortError.name = 'AbortError';
+            throw abortError;
+        }
         console.error('Hiba a ranglista lekérdezése során:', error);
+    } finally {
+        requestController.clearSignal('leaderboard');
     }
 }
 
@@ -77,13 +130,21 @@ function bindLeaderBoardControls() {
     const filterElement = document.getElementById('leaderboardEloFilter');
     const limitElement = document.getElementById('leaderboardLimit');
 
-    if (filterElement) {
-        filterElement.addEventListener('change', renderLeaderBoard);
+    if (!filterElement || !limitElement) {
+        throw new Error('A leaderboard vezérlők nem találhatók.');
     }
 
-    if (limitElement) {
-        limitElement.addEventListener('change', renderLeaderBoard);
-    }
+    filterElement.addEventListener('change', () => {
+        runSafely('leaderboardFilterChange', () => {
+            renderLeaderBoard();
+        });
+    });
+
+    limitElement.addEventListener('change', () => {
+        runSafely('leaderboardLimitChange', () => {
+            renderLeaderBoard();
+        });
+    });
 }
 
 function renderLeaderBoard() {
@@ -94,7 +155,7 @@ function renderLeaderBoard() {
     const lastUpdatedElement = document.getElementById('lastUpdated');
 
     if (!filterElement || !limitElement || !tbody) {
-        return;
+        throw new Error('A leaderboard DOM elemei nem találhatók.');
     }
 
     const filter = filterElement.value;
@@ -141,49 +202,64 @@ function bindLoginForm() {
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
         loginForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
+            await runSafelyAsync('loginSubmitHandler', async () => {
+                event.preventDefault();
 
-            const messageElement = document.getElementById('loginMessage');
-            const usernameOrMail = document.getElementById('loginUsername').value.trim();
-            const password = document.getElementById('loginPassword').value;
-            const rememberElement = document.getElementById('rememberMe');
-            const remember = rememberElement ? rememberElement.checked : false;
+                const messageElement = document.getElementById('loginMessage');
+                const usernameInput = document.getElementById('loginUsername');
+                const passwordInput = document.getElementById('loginPassword');
+                const rememberElement = document.getElementById('rememberMe');
 
-            clearFormMessage(messageElement);
+                if (!usernameInput || !passwordInput) {
+                    throw new Error('A login mezok nem talalhatok.');
+                }
 
-            if (!usernameOrMail || !password) {
-                showFormMessage(messageElement, 'danger', 'Minden mező kitöltése kötelező.');
-            } else {
-                try {
-                    const response = await fetch('/api/login', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ usernameOrMail, password, remember })
-                    });
-                    const result = await parseJson(response);
+                const usernameOrMail = usernameInput.value.trim();
+                const password = passwordInput.value;
+                const remember = rememberElement ? rememberElement.checked : false;
 
-                    if (!response.ok) {
-                        showFormMessage(messageElement, 'danger', result.message || 'Sikertelen bejelentkezes.');
-                        return;
-                    }
-                    else {
+                clearFormMessage(messageElement);
+
+                if (!usernameOrMail || !password) {
+                    throw new Error('Minden mező kitöltése kötelező.');
+                }
+
+                requestController.schedule('loginSubmit', async () => {
+                    try {
+                        const response = await fetch('/api/login', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ usernameOrMail, password, remember }),
+                            signal: requestController.withAbortSignal('login')
+                        });
+                        const result = await parseJson(response);
+
+                        if (!response.ok) {
+                            throw new Error(result.message || 'Sikertelen bejelentkezes.');
+                        }
+
                         showFormMessage(messageElement, 'success', result.message || 'Sikeres bejelentkezes.');
                         loginForm.reset();
                         hideModalById('loginModal');
                         showToast('Sikeres bejelentkezes.');
 
-                        if (typeof socket !== 'undefined') {
+                        if (socket) {
                             console.log('Login form successful, refreshing stats via socket...');
-                            socket.disconnect(); //?Először bontjuk a kapcsolatot, hogy a szerver felismerje a session változást
-                            socket.connect(); //?Újra csatlakoztatjuk a socketet, hogy a szerver felismerje az új session-t és frissítse a statisztikákat
+                            socket.disconnect();
+                            socket.connect();
                         }
-                        await refreshAuthUi();
+                        await refreshAuthUi('login-success');
+                    } catch (error) {
+                        if (error?.name === 'AbortError') {
+                            throw error;
+                        }
+                        showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                        console.error('Hiba a bejelentkezes soran:', error);
+                    } finally {
+                        requestController.clearSignal('login');
                     }
-                } catch (error) {
-                    showFormMessage(messageElement, 'danger', 'Nem sikerult csatlakozni a szerverhez.');
-                    console.error('Hiba a bejelentkezes soran:', error);
-                }
-            }
+                });
+            });
         });
     }
 }
@@ -192,44 +268,60 @@ function bindRegisterForm() {
     const registerForm = document.getElementById('registerForm');
     if (registerForm) {
         registerForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
+            await runSafelyAsync('registerSubmitHandler', async () => {
+                event.preventDefault();
 
-            const messageElement = document.getElementById('registerMessage');
-            const username = document.getElementById('registerUsername').value.trim();
-            const email = document.getElementById('registerEmail').value.trim();
-            const password = document.getElementById('registerPassword').value;
+                const messageElement = document.getElementById('registerMessage');
+                const usernameInput = document.getElementById('registerUsername');
+                const emailInput = document.getElementById('registerEmail');
+                const passwordInput = document.getElementById('registerPassword');
 
-            clearFormMessage(messageElement);
+                if (!usernameInput || !emailInput || !passwordInput) {
+                    throw new Error('A register mezok nem talalhatok.');
+                }
 
-            const validationMessage = validateRegisterInput(username, email, password);
-            if (validationMessage != "") {
-                showFormMessage(messageElement, 'danger', validationMessage);
-            }
-            else {
-                try {
-                    const response = await fetch('/api/register', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ username, email, password })
-                    });
+                const username = usernameInput.value.trim();
+                const email = emailInput.value.trim();
+                const password = passwordInput.value;
 
-                    const result = await parseJson(response);
+                clearFormMessage(messageElement);
 
-                    if (!response.ok) {
-                        showFormMessage(messageElement, 'danger', result.message || 'Sikertelen regisztráció.');
-                    }
-                    else {
+                const validationMessage = validateRegisterInput(username, email, password);
+                if (validationMessage !== '') {
+                    throw new Error(validationMessage);
+                }
+
+                requestController.schedule('registerSubmit', async () => {
+                    try {
+                        const response = await fetch('/api/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, email, password }),
+                            signal: requestController.withAbortSignal('register')
+                        });
+
+                        const result = await parseJson(response);
+
+                        if (!response.ok) {
+                            throw new Error(result.message || 'Sikertelen regisztráció.');
+                        }
+
                         showFormMessage(messageElement, 'success', result.message || 'Sikeres regisztráció.');
                         registerForm.reset();
                         hideModalById('registerModal');
-                        await refreshAuthUi();
+                        await refreshAuthUi('register-success');
                         showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
+                    } catch (error) {
+                        if (error?.name === 'AbortError') {
+                            throw error;
+                        }
+                        showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                        console.error('Hiba a regisztráció soran:', error);
+                    } finally {
+                        requestController.clearSignal('register');
                     }
-                } catch (error) {
-                    showFormMessage(messageElement, 'danger', 'Nem sikerult csatlakozni a szerverhez.');
-                    console.error('Hiba a regisztráció soran:', error);
-                }
-            }
+                });
+            });
         });
     }
 }
@@ -262,22 +354,29 @@ async function handleLogout() {
     try {
         const response = await fetch('/api/logout', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            signal: requestController.withAbortSignal('logout')
         });
         const result = await parseJson(response);
 
-        if (response.ok) {
-            showToast(result.message || 'Sikeres kijelentkezés.');
-            if (typeof socket !== 'undefined') {
-                socket.disconnect();
-                socket.connect();
-            }
-            await refreshAuthUi();
-        } else {
-            showToast(result.message || 'Sikertelen kijelentkezés.');
+        if (!response.ok) {
+            throw new Error(result.message || 'Sikertelen kijelentkezés.');
         }
+
+        showToast(result.message || 'Sikeres kijelentkezés.');
+        if (socket) {
+            socket.disconnect();
+            socket.connect();
+        }
+        await refreshAuthUi('logout-success');
     } catch (error) {
+        if (error?.name === 'AbortError') {
+            throw error;
+        }
         console.error('Hiba a kijelentkezés során:', error);
+        showToast(error.message || 'Hiba történt a kijelentkezés során.');
+    } finally {
+        requestController.clearSignal('logout');
     }
 }
 
@@ -291,7 +390,7 @@ function bindLogoutButtonAdmin() {
     if (btn) btn.addEventListener('click', handleLogout);
 }
 
-async function refreshAuthUi() {
+async function refreshAuthUi(contextLabel = 'auth-refresh') {
     const guestActions = document.getElementById('guestActions');
     const userActions = document.getElementById('userActions');
     const adminActions = document.getElementById('adminActions');
@@ -314,14 +413,14 @@ async function refreshAuthUi() {
 
         console.clear();
         console.log('--- Auth Status Report ---');
+        console.log('Context:', contextLabel);
         console.log('Session info:', data);
 
-        if (typeof socket !== 'undefined') {
-            console.log('SocketInfo:', {
+        if (socket) {
+            console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
                 socketId: socket.id,
                 connected: socket.connected,
-                // Itt láthatod, hogy a szerver felismerte-e a session-t a socketen keresztül
-                sessionBound: socket.connected ? "Active" : "Disconnected/Pending"
+                sessionBound: socket.connected ? 'Active' : 'Disconnected/Pending'
             });
         }
         else {
@@ -361,7 +460,7 @@ function eloDisplayrefresh(user) {
             };
             for (const [key, value] of Object.entries(eloMap)) {
                 const element = document.querySelector(`[data-stat="${key}"]`);
-                if (element) element.textContent = value !== undefined ? value : '1200';
+                if (element) element.textContent = value !== undefined ? value : '800';
             }
             const stats = user.stats || {};
             const totalGames = (stats.wins || 0) + (stats.losses || 0) + (stats.draws || 0);
@@ -379,9 +478,8 @@ function eloDisplayrefresh(user) {
     }
 }
 function socketHandler() {
-    if (typeof socket !== 'undefined') {
+    if (socket) {
         socket.on('stats:public', (stats) => {
-            // stats tartalma: { onlineUsers, totalUsers, totalGames, onlineGames }
             updateGlobalStats(stats);
         });
     }

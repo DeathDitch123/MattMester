@@ -47,9 +47,9 @@ async function createTables() {
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
             profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
-            elo INT DEFAULT 1200,
-            elo_MM INT DEFAULT 1200,
-            elo_bullet INT DEFAULT 1200,
+            elo INT DEFAULT 800,
+            elo_MM INT DEFAULT 800,
+            elo_bullet INT DEFAULT 800,
             role ENUM('player', 'admin') DEFAULT 'player',
             is_banned BOOLEAN DEFAULT FALSE,
             ban_reason VARCHAR(255),
@@ -166,13 +166,26 @@ async function createTables() {
             user1_id INT NOT NULL,
             user2_id INT NOT NULL,
             action_user_id INT NOT NULL,
-            status ENUM('pending', 'accepted', 'blocked') DEFAULT 'pending',
+            status ENUM('pending', 'accepted', 'rejected', 'blocked') DEFAULT 'pending',
             invite_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE KEY unique_friendship (user1_id, user2_id),
             CHECK (user1_id < user2_id),
             FOREIGN KEY (user1_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (user2_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (action_user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS friend_blocks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            blocker_user_id INT NOT NULL,
+            blocked_user_id INT NOT NULL,
+            active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_friend_block (blocker_user_id, blocked_user_id),
+            CHECK (blocker_user_id <> blocked_user_id),
+            FOREIGN KEY (blocker_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (blocked_user_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
 
         `CREATE TABLE IF NOT EXISTS profile_image_uploads (
@@ -186,6 +199,44 @@ async function createTables() {
             review_time TIMESTAMP NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS chat_conversations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            type ENUM('private', 'group') NOT NULL,
+            name VARCHAR(255) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_message_at TIMESTAMP NULL DEFAULT NULL,
+            last_message_preview VARCHAR(255) NULL,
+            UNIQUE KEY unique_group_name (name),
+            INDEX idx_chat_conversations_last_message_at (last_message_at)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS chat_participants (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            conversation_id INT NOT NULL,
+            user_id INT NOT NULL,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_read_message_id INT NULL,
+            UNIQUE KEY unique_chat_participant (conversation_id, user_id),
+            INDEX idx_chat_participants_user (user_id),
+            INDEX idx_chat_participants_conversation (conversation_id),
+            FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS chat_messages (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            conversation_id INT NOT NULL,
+            sender_id INT NOT NULL,
+            body TEXT NOT NULL,
+            body_masked TEXT NULL,
+            is_body_masked BOOLEAN DEFAULT FALSE,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_chat_messages_conversation_sent_at (conversation_id, sent_at),
+            INDEX idx_chat_messages_sender (sender_id)
         )`,
 
         `CREATE TABLE IF NOT EXISTS user_logs (

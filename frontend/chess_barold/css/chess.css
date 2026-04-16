@@ -116,6 +116,36 @@ body
     position: relative;  /* Relatív pozíció (kiemelések elhelyezéséhez) */
 }
 
+.coord-file,
+.coord-rank {
+    position: absolute;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1;
+    pointer-events: none;
+    opacity: 0.9;
+}
+
+.coord-file {
+    right: 4px;
+    bottom: 3px;
+}
+
+.coord-rank {
+    left: 4px;
+    top: 3px;
+}
+
+.square[role="light"] .coord-file,
+.square[role="light"] .coord-rank {
+    color: rgba(60, 60, 60, 0.85);
+}
+
+.square[role="dark"] .coord-file,
+.square[role="dark"] .coord-rank {
+    color: rgba(245, 245, 245, 0.85);
+}
+
 /* Világos mező színe */
 .square[role="light"] /* Attribútum szelektor: csak azokra a .square elemekre vonatkozik, ahol role="light" */
 {
@@ -205,6 +235,26 @@ body
     background: #222;  /* Sötét háttér */
     padding: 8px;  /* Belső margó */
     border-radius: 6px;  /* Lekerekített sarkok */
+}
+
+.bot-thinking {
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(255, 193, 7, 0.14);
+    border: 1px solid rgba(255, 193, 7, 0.35);
+    color: #ffd777;
+    font-size: 0.9rem;
+    animation: thinkingPulse 1.2s ease-in-out infinite;
+}
+
+.bot-thinking.hidden {
+    display: none;
+}
+
+@keyframes thinkingPulse {
+    0% { opacity: 0.7; }
+    50% { opacity: 1; }
+    100% { opacity: 0.7; }
 }
 
 /* Új játék gomb */
@@ -339,6 +389,11 @@ body
     width:100%;  /* Teljes szélesség */
     max-width:560px;  /* Maximum sakktábla szélessége */
   }
+
+    .coord-file,
+    .coord-rank {
+        font-size: 0.66rem;
+    }
 }
 
 /* HÚZÁS KÖZBEN (dragging állapot) */
@@ -349,6 +404,16 @@ body
   transform: scale(1.15);  /* 15% nagyítás */
   filter: drop-shadow(0 10px 20px rgba(0,0,0,0.7));  /* Árnyék hatás */
   transition: none;  /* Nincs animáció (azonnali követés) */
+}
+
+/* SLIDE ANIMÁCIÓ (bot/ellenfél lépésénél) */
+.piece.sliding {
+  transition: transform 150ms ease-out;
+}
+
+/* KIJELÖLT BÁBU (click-to-move) */
+.square.selected {
+  background: var(--from) !important;
 }
 
 /* 
@@ -686,4 +751,215 @@ body
 .surrender-cancel-btn:hover {
     color: #f4f4f4;
     border-color: #999;
+}
+
+/* ============================================================
+   PVP — barát lista, queue, meghívás, döntetlen, disconnect
+   ============================================================ */
+
+.friend-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 320px;
+    overflow-y: auto;
+    margin: 12px 0;
+    padding-right: 4px;
+}
+
+.friend-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: #2a2a2a;
+    color: #f4f4f4;
+    border: 1px solid #444;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    font: inherit;
+    text-align: left;
+}
+
+.friend-btn:hover {
+    background: #353535;
+    border-color: #666;
+}
+
+.friend-name {
+    font-weight: 600;
+}
+
+.friend-action {
+    color: #8fd08f;
+    font-size: 0.85em;
+}
+
+/* Queue spinner (random matchmaking) */
+.queue-spinner {
+    width: 48px;
+    height: 48px;
+    margin: 20px auto;
+    border: 4px solid #333;
+    border-top-color: #8fd08f;
+    border-radius: 50%;
+    animation: queue-spin 0.9s linear infinite;
+}
+
+@keyframes queue-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* PvP várakozás overlay */
+.pvp-waiting,
+.pvp-invite {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.pvp-waiting.hidden,
+.pvp-invite.hidden {
+    display: none;
+}
+
+.pvp-waiting-content,
+.pvp-invite-content {
+    background: #1f1f1f;
+    color: #f4f4f4;
+    padding: 28px 40px;
+    border-radius: 12px;
+    border: 1px solid #444;
+    text-align: center;
+    min-width: 280px;
+}
+
+.pvp-waiting-name {
+    font-weight: 700;
+    margin-top: 6px;
+    color: #8fd08f;
+}
+
+.pvp-invite-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+    justify-content: center;
+}
+
+.pvp-invite-btn {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 600;
+    transition: opacity 0.15s;
+}
+
+.pvp-invite-btn.accept {
+    background: #4a7a4a;
+    color: #fff;
+}
+
+.pvp-invite-btn.decline {
+    background: #7a4a4a;
+    color: #fff;
+}
+
+.pvp-invite-btn:hover {
+    opacity: 0.85;
+}
+
+/* Döntetlen ajánlat gomb (sidebar) */
+.draw-btn {
+    margin: 8px 0;
+    padding: 8px 14px;
+    background: #3a4a7a;
+    color: #f4f4f4;
+    border: 1px solid #5a6a9a;
+    border-radius: 6px;
+    cursor: pointer;
+    font: inherit;
+    transition: background 0.15s;
+}
+
+.draw-btn:hover:not(:disabled) {
+    background: #4a5a8a;
+}
+
+.draw-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.draw-btn.hidden {
+    display: none;
+}
+
+/* Bejövő döntetlen ajánlat */
+.draw-offer {
+    margin: 10px 0;
+    padding: 12px;
+    background: #2a2a3a;
+    border: 1px solid #4a5a7a;
+    border-radius: 8px;
+    text-align: center;
+}
+
+.draw-offer.hidden {
+    display: none;
+}
+
+.draw-offer p {
+    margin: 0 0 10px 0;
+    font-size: 0.9em;
+}
+
+.draw-offer-buttons {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+}
+
+/* Disconnect jelzés */
+.opponent-dc {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: #4a2a2a;
+    color: #ffcaca;
+    border: 1px solid #7a4a4a;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 0.9em;
+}
+
+.opponent-dc.hidden {
+    display: none;
+}
+
+#dc-countdown {
+    font-weight: 700;
+    color: #ffe0e0;
+}
+
+/* ELO kijelzés a mód modal-ban */
+.user-elo-display {
+    margin-top: 16px;
+    padding: 8px 14px;
+    background: #252525;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    text-align: center;
+    font-size: 0.9em;
+    color: #ccc;
+}
+
+.user-elo-display strong {
+    color: #8fd08f;
 }

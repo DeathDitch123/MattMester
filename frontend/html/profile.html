@@ -7,7 +7,7 @@
             connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
             script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
             style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
-            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob: https://ui-avatars.com;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Profil</title>
 
@@ -22,6 +22,8 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
     <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/socketClient.js" defer></script>
+    <script src="../javascript/chatModal.js" defer></script>
     <script src="../javascript/profile.js" defer></script>
 </head>
 
@@ -87,8 +89,18 @@
                     onclick="toggleSidebar()" style="height: 40px; width: 40px; border-radius: 12px;">
                     <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
                 </button>
+                <button class="top-bar-btn d-lg-none" type="button" data-tooltip="Keresés" data-bs-toggle="modal"
+                    data-bs-target="#searchResultsModal" aria-label="Keresés játékosokra">
+                    <i data-lucide="search" style="width: 18px; height: 18px;"></i>
+                </button>
                 <div class="top-bar-search d-none d-lg-block">
-                    <input type="text" placeholder="Keresés játékosokra, meccsekre...">
+                    <div class="top-bar-search-field">
+                        <input id="playerSearchInput" type="text" placeholder="Keresés játékosokra...">
+                        <button id="playerSearchButton" type="button" class="top-bar-search-btn" aria-label="Keresés játékosokra">
+                            <i data-lucide="search" style="width: 16px; height: 16px;"></i>
+                        </button>
+                    </div>
+                    <div id="playerSearchFeedback" class="top-bar-search-feedback" aria-live="polite"></div>
                 </div>
             </div>
 
@@ -101,7 +113,7 @@
             <div class="top-bar-right">
                 <div class="d-none d-md-flex align-items-center gap-2">
                     <button class="top-bar-btn" id="openMessagesModal" type="button" data-tooltip="Üzenetek"
-                        data-bs-toggle="modal" data-bs-target="#messagesModal">
+                        data-open-chat="inbox" aria-label="Chat megnyitása">
                         <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
                     </button>
                 </div>
@@ -201,7 +213,7 @@
                             <i data-lucide="minus-circle"></i>
                         </div>
                         <div class="stat-value" style="color: var(--accent-blue)">34</div>
-                        <div class="stat-label">Draws</div>
+                        <div class="stat-label" style="color: var(--accent-blue)">Draws</div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
@@ -210,7 +222,7 @@
                             <i data-lucide="percent"></i>
                         </div>
                         <div class="stat-value" style="color: var(--accent-gold)">68%</div>
-                        <div class="stat-label">Win Rate</div>
+                        <div class="stat-label" style="color: var(--accent-gold)">Win Rate</div>
                     </div>
                 </div>
             </div>
@@ -222,7 +234,9 @@
                     <div class="card mb-4 section-block">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <span><i data-lucide="activity" class="me-2"></i>Rating History</span>
-                            <select class="form-select form-select-sm w-auto bg-transparent border-secondary text-light"
+                            <label for="ratingHistorySelect" class="visually-hidden">Rating History típus</label>
+                            <select id="ratingHistorySelect" name="ratingHistorySelect"
+                                class="form-select form-select-sm w-auto bg-transparent border-secondary text-light"
                                 style="width: 120px !important;">
                                 <option>Klasszikus</option>
                                 <option>MattMester</option>
@@ -324,89 +338,32 @@
 
                 <div class="col-lg-4">
                     <div class="card mb-4 section-block" id="friends">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span class="d-flex align-items-center"><i data-lucide="users"
-                                    class="me-2"></i>Friends</span>
-                            <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
-                                data-bs-target="#addFriendModal">
-                                <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
-                            </button>
-                        </div>
-                        <div class="card-body p-0">
-                            <div class="friend-list">
-                                <div class="friend-item d-flex align-items-center gap-2 p-3">
-                                    <div class="position-relative flex-shrink-0">
-                                        <img src="https://ui-avatars.com/api/?name=ChessMaster_Pro&background=0f172a&color=d4af37&size=40"
-                                            alt="Friend" class="friend-avatar rounded-circle"
-                                            style="width: 40px; height: 40px; object-fit: cover;">
-                                        <span class="friend-status online"></span>
-                                    </div>
+                        <div class="card-header friends-header">
+                            <div class="friends-header-main">
+                                <span class="d-flex align-items-center"><i data-lucide="users" class="me-2"></i>Barátok</span>
+                            </div>
 
-                                    <div class="flex-grow-1 min-width-0">
-                                        <h6 class="mb-0 text-white text-truncate" style="font-size: 0.9rem;">
-                                            ChessMaster_Pro</h6>
-                                        <small class="text-success d-block text-truncate">In Game</small>
-                                    </div>
+                            <div class="friends-header-controls" role="group" aria-label="Barátok lista szűrése">
+                                <button class="btn btn-sm btn-outline-gold is-active" type="button" data-friends-filter="all">Összes</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="pending">Függő</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="friend">Már barát</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="blocked">Blokkolt</button>
+                            </div>
 
-                                    <div class="flex-shrink-0">
-                                        <button class="btn btn-sm btn-outline-gold py-1 px-2 open-message-modal"
-                                            type="button" data-friend="ChessMaster_Pro" data-bs-toggle="modal"
-                                            data-bs-target="#messagesModal">
-                                            <i data-lucide="message-square" style="width: 16px; height: 16px;"></i>
-                                        </button>
-                                    </div>
-                                </div>
-
+                            <div class="friends-header-actions">
+                                <button class="btn btn-sm btn-outline-gold" type="button" id="refreshFriendsButton" aria-label="Barát lista frissítése" title="Barát lista frissítése">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
+                                    data-bs-target="#searchResultsModal" aria-label="Játékos keresése és barát hozzáadása">
+                                    <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
+                                </button>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="card mb-4 section-block" id="security-overview">
-                        <div class="card-header">
-                            <i data-lucide="shield-check" class="me-2"></i>Recent Logins
-                        </div>
+                        <div id="friendsFeedback" class="friends-feedback d-none" aria-live="polite"></div>
                         <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table table-sm">
-                                    <tbody>
-                                        <tr>
-                                            <td>
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <i data-lucide="monitor"
-                                                        style="width: 16px; color: var(--accent-gold);"></i>
-                                                    <span>Chrome - Windows</span>
-                                                </div>
-                                            </td>
-                                            <td class="text-end">
-                                                <small class="text-secondary">Now</small>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <i data-lucide="smartphone"
-                                                        style="width: 16px; color: var(--accent-gold);"></i>
-                                                    <span>iPhone App</span>
-                                                </div>
-                                            </td>
-                                            <td class="text-end">
-                                                <small class="text-secondary">2h ago</small>
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <i data-lucide="tablet"
-                                                        style="width: 16px; color: var(--accent-gold);"></i>
-                                                    <span>iPad Safari</span>
-                                                </div>
-                                            </td>
-                                            <td class="text-end">
-                                                <small class="text-secondary">1d ago</small>
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+                            <div class="friend-list" id="friendsList" role="list" aria-live="polite">
+                                <div class="friend-list-empty">Barátok betöltése...</div>
                             </div>
                         </div>
                     </div>
@@ -580,36 +537,60 @@
         <div class="footer-copy">&copy; 2026 MattMester</div>
     </footer>
 
-    <button class="fab-chat" type="button" data-bs-toggle="modal" data-bs-target="#messagesModal">
+    <button class="fab-chat" id="fabOpenChatButton" type="button" data-open-chat="inbox" aria-label="Chat megnyitása">
         <span class="fab-tooltip">Messenger</span>
         <i data-lucide="message-circle" style="width: 26px; height: 26px;"></i>
     </button>
+
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content modal-surface notifications-modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="notificationsModalLabel">
+                        <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
+                        Értesítések
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="notificationsList" class="notifications-list" role="list"></div>
+                    <div id="notificationsEmpty" class="notifications-empty text-secondary d-none">
+                        Nincs új értesítés.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <button class="fab-quick-play" type="button" data-bs-toggle="modal" data-bs-target="#quickPlayModal">
         <span class="fab-tooltip">Quick Play</span>
         <i data-lucide="swords" style="width: 26px; height: 26px;"></i>
     </button>
 
-    <div class="modal fade" id="messagesModal" tabindex="-1" aria-labelledby="messagesModalLabel" aria-hidden="true">
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content modal-surface">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="messagesModalLabel">Messenger</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                        aria-label="Bezárás"></button>
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="logoutModalLabel">
+                        <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                        Kijelentkezés megerősítése
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="mb-2">Ez egy egyszerű chat modal.</p>
-                    <p class="modal-note mb-3">Itt később jöhetnek az üzenetek és valós idejű chat funkciók.</p>
-                    <textarea class="form-control" rows="3" placeholder="Írj egy üzenetet..."></textarea>
+                    <p class="mb-0">Biztosan ki szeretnél jelentkezni?</p>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Mégse</button>
-                    <button type="button" class="btn btn-gold">Küldés</button>
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmLogoutButton">Kijelentkezés</button>
                 </div>
             </div>
         </div>
     </div>
+
     <div class="modal fade" id="addFriendModal" tabindex="-1" aria-labelledby="addFriendModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content modal-surface">
@@ -632,6 +613,147 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="searchResultsModal" tabindex="-1" aria-labelledby="searchResultsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <div class="search-results-header-content w-100">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                            <h5 class="modal-title d-flex align-items-center gap-2 mb-0" id="searchResultsModalLabel">
+                                <i data-lucide="search" style="width: 18px; height: 18px;"></i>
+                                <span id="searchResultsModalTitleText">Keresési találatok</span>
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                        </div>
+                        <div class="top-bar-search search-results-header-search">
+                            <div class="top-bar-search-field">
+                                <input id="modalPlayerSearchInput" type="text" placeholder="Keresés játékosokra...">
+                                <button id="modalPlayerSearchButton" type="button" class="top-bar-search-btn" aria-label="Keresés a találatok között">
+                                    <i data-lucide="search" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                            <div id="modalPlayerSearchFeedback" class="top-bar-search-feedback" aria-live="polite"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <p id="searchResultsSummary" class="text-secondary mb-3">Találatok betöltése...</p>
+                    <div id="searchResultsList" class="search-results-list" role="list"></div>
+                    <div id="searchResultsEmpty" class="search-results-empty d-none">
+                        <i data-lucide="user-x" style="width: 18px; height: 18px;"></i>
+                        <span>Nincs találat a megadott keresésre.</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="playerProfileModal" tabindex="-1" aria-labelledby="playerProfileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down">
+            <div class="modal-content modal-surface player-profile-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2 mb-0" id="playerProfileModalLabel">
+                        <i data-lucide="user-round" style="width: 18px; height: 18px;"></i>
+                        <span id="playerProfileModalTitleText">Játékos profil</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="playerProfileModalFeedback" class="friends-feedback d-none mb-3" aria-live="polite"></div>
+
+                    <section class="player-profile-section" data-section="identity">
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-3">
+                            <img id="playerProfileAvatar" class="profile-avatar player-profile-avatar" src="/profile_pictures/default.png" alt="Játékos profilkép">
+                            <div class="text-center text-md-start min-width-0">
+                                <h4 id="playerProfileUsername" class="mb-1 text-white text-truncate">-</h4>
+                                <span id="playerProfileRole" class="role-badge">Player</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="meta">
+                        <div class="row g-2">
+                            <div class="col-12 col-md-6">
+                                <div class="player-meta-box">
+                                    <small class="text-secondary d-block">Csatlakozott</small>
+                                    <strong id="playerProfileJoinedAt" class="text-white">-</strong>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <div class="player-meta-box">
+                                    <small class="text-secondary d-block">Utoljára aktív</small>
+                                    <strong id="playerProfileLastActiveAt" class="text-white">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="ratings">
+                        <div class="row g-3" id="playerProfileEloGrid">
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center player-profile-elo-card">
+                                    <div id="playerProfileEloClassic" class="elo-number">0</div>
+                                    <div class="elo-label">Klasszikus</div>
+                                    <div id="playerProfileEloClassicRank" class="elo-rank rank-beginner">Beginner</div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center highlighted player-profile-elo-card">
+                                    <div id="playerProfileEloMM" class="elo-number">0</div>
+                                    <div class="elo-label">MattMester</div>
+                                    <div id="playerProfileEloMMRank" class="elo-rank rank-beginner">Beginner</div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center player-profile-elo-card">
+                                    <div id="playerProfileEloBullet" class="elo-number">0</div>
+                                    <div class="elo-label">Bullet</div>
+                                    <div id="playerProfileEloBulletRank" class="elo-rank rank-beginner">Beginner</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="stats">
+                        <div class="row g-3" id="playerProfileStatsGrid">
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value text-success" id="playerProfileWins">0</div>
+                                    <div class="stat-label badge-custom badge-win">Wins</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value text-danger" id="playerProfileLosses">0</div>
+                                    <div class="stat-label badge-custom badge-loss">Losses</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value" style="color: var(--accent-blue)" id="playerProfileDraws">0</div>
+                                    <div class="stat-label badge-custom badge-draw">Draws</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value" style="color: var(--accent-gold)" id="playerProfileWinRate">0%</div>
+                                    <div class="stat-label badge-custom badge-ongoing">Win Rate</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="deleteProfileModal" tabindex="-1" aria-labelledby="deleteProfileModalLabel"
         aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
@@ -730,6 +852,7 @@
                     <div id="profileImageEditorMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
                 </div>
                 <div class="modal-footer">
+                    <p class="text-secondary mb-3">A kép feleljen meg a társadalmi normáknak. (tilos: NSFW, Tiltott szimbólumok) a szabályzat abuzálása tilos és kitiltást vonhat maga után...</p>
                     <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-gold" id="saveProfileImageButton">Mentés</button>
                 </div>

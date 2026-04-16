@@ -7,6 +7,7 @@ const fs = require('fs');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
 const { services, leaderboardService } = require('./services.js');
+const { createSocketHub } = require('./sockets.js');
 const sql = require('./sql/sql_funtions');
 
 //!Beállítások
@@ -32,8 +33,64 @@ const sessionMiddleware = session({
 //!Session beállítása:
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware); //?Socket.io session kezelés
+
+//?CORS beállítása production-hez
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+    .split(',')
+    .map(origin => origin.trim());
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        // Check if origin is in allowed list, or normalize localhost <-> 127.0.0.1
+        const normalizeOrigin = (value) => {
+            try {
+                const parsed = new URL(String(value || '').trim());
+                const hostname = parsed.hostname === '127.0.0.1' ? 'localhost' : parsed.hostname;
+                const port = parsed.port ? `:${parsed.port}` : '';
+                return `${parsed.protocol}//${hostname}${port}`;
+            } catch (_error) {
+                return String(value || '').trim();
+            }
+        };
+
+        let isAllowed = false;
+        if (!origin || ALLOWED_ORIGINS.includes(origin) || ALLOWED_ORIGINS.includes('*')) {
+            isAllowed = true;
+        } else {
+            // Handle localhost <-> 127.0.0.1 equivalence
+            const normalizedOrigin = normalizeOrigin(origin);
+            isAllowed = ALLOWED_ORIGINS.some(allowed => {
+                return normalizeOrigin(allowed) === normalizedOrigin;
+            });
+        }
+        
+        if (isAllowed) {
+            callback(null, true);
+        } else {
+            console.warn(`[CORS] Rejected origin: ${origin}`);
+            callback(new Error(`CORS policy: origin ${origin} not allowed`));
+        }
+    },
+    credentials: true,
+    optionsSuccessStatus: 200,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    maxAge: 86400 // 1 nap
+};
+
+try {
+    const cors = require('cors');
+    app.use(cors(corsOptions));
+    console.log('[Server] CORS middleware loaded');
+} catch (corsError) {
+    console.warn('[Server] CORS module not available, skipping CORS middleware');
+}
+
 app.use(express.json()); //?Middleware JSON
 app.set('trust proxy', 1); //?Middleware Proxy
+
+const socketHub = createSocketHub(io);
+app.locals.socketHub = socketHub;
 
 // Belepett felhasznalo ellenorzese vedett oldalakhoz
 function requireAuth(req, res, next) {
@@ -66,22 +123,18 @@ app.use('/profile_pictures', express.static(path.join(__dirname, 'profile_pictur
 //!Routing
 //?Főoldal:
 const endpoints = require('./api/api.js');
+
+// ?Chat Rate Limiter cleanup inicializálása
+if (typeof endpoints.initChatRateLimiterCleanup === 'function') {
+    endpoints.initChatRateLimiterCleanup();
+    console.log('[Server] Chat Rate Limiter cleanup initialized');
+}
+
 app.use('/api', endpoints);
 const chessEndpoints = require('./api/chess_api.js');
 app.use('/api/chess', chessEndpoints);
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/html/index.html'));
-});
-
-//Socket.io események
-io.on('connection', (socket) => {
-    services.handleConnection(socket, io);
-    socket.on('heartbeat', () => {
-        // services.refreshStats(io); //?Statisztikák frissítése minden kliensnek a heartbeat eseményre
-    });
-
-    socket.on('disconnect', () => {
-    });
 });
 
 function resolveProfileImageFilePath(storedFilename) {
@@ -96,6 +149,60 @@ function resolveProfileImageFilePath(storedFilename) {
     }
 
     return path.join(__dirname, 'profile_pictures', normalized);
+}
+
+function normalizeProfileImageReference(storedFilename) {
+    const normalized = String(storedFilename || '').replace(/\\/g, '/').trim();
+    if (!normalized) {
+        return null;
+    }
+
+    if (normalized.startsWith('/profile_pictures/')) {
+        return normalized.toLowerCase();
+    }
+
+    return `/profile_pictures/${normalized.replace(/^\/+/, '')}`.toLowerCase();
+}
+
+async function cleanupOrphanProfileImageFiles() {
+    const profilePicturesDir = path.join(__dirname, 'profile_pictures');
+    const dbReferences = await sql.getAllProfileImageReferences();
+    const normalizedReferences = new Set(
+        (dbReferences || [])
+            .map((filename) => normalizeProfileImageReference(filename))
+            .filter(Boolean)
+    );
+
+    normalizedReferences.add('/profile_pictures/default.png');
+
+    let deletedCount = 0;
+    const entries = await fs.promises.readdir(profilePicturesDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+        if (!entry.isFile()) {
+            continue;
+        }
+
+        const normalizedEntryPath = normalizeProfileImageReference(`/profile_pictures/${entry.name}`);
+        if (!normalizedEntryPath || normalizedReferences.has(normalizedEntryPath)) {
+            continue;
+        }
+
+        try {
+            await fs.promises.unlink(path.join(profilePicturesDir, entry.name));
+            deletedCount += 1;
+            console.log(`[Cleanup] Árva fájl törölve: ${entry.name}`);
+        } catch (error) {
+            if (error && error.code === 'ENOENT') {
+                continue;
+            }
+            console.error(`[Cleanup] Árva fájl törlési hiba: ${entry.name}`, error.message);
+        }
+    }
+
+    if (deletedCount > 0) {
+        console.log(`[Cleanup] Árva profilkép fájlok törölve: ${deletedCount}`);
+    }
 }
 
 //!Cleanup service: Discarded és elutasított profilképek törlése periodikusan
@@ -145,6 +252,13 @@ async function cleanupDiscardedProfileImages() {
             }
             console.log(`Cleanup service: ${discardedRecords.length} kép feldolgozva (discarded + rejected)`);
         }
+
+        const deletedOrphanUploadRows = await sql.deleteOrphanProfileImageUploadRecords();
+        if (deletedOrphanUploadRows > 0) {
+            console.log(`[Cleanup] Árva profile_image_uploads rekordok törölve: ${deletedOrphanUploadRows}`);
+        }
+
+        await cleanupOrphanProfileImageFiles();
     } catch (err) {
         console.error('Cleanup service hiba:', err.message);
     }
@@ -152,7 +266,8 @@ async function cleanupDiscardedProfileImages() {
 
 // Adatbázis inicializálása, majd szerver indítása
 initDatabase()
-    .then(() => {
+    .then(async () => {
+        await services.refreshStats(io);
         services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
         leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
         
@@ -160,6 +275,17 @@ initDatabase()
         setInterval(cleanupDiscardedProfileImages, 60000); // 60 másodpercenként futtatás
         console.log('Cleanup service elindítva (percenkénti futás)');
         
+        server.on('error', (error) => {
+            if (error && error.code === 'EADDRINUSE') {
+                console.error(`A ${ip}:${port} port már használatban van. Zárd be a régi backend folyamatot, vagy használd az \"npm run dev\" scriptet, ami indulás előtt felszabadítja a portot.`);
+                process.exit(1);
+                return;
+            }
+
+            console.error('Szerver indítási hiba:', error);
+            process.exit(1);
+        });
+
         server.listen(port, ip, () => {
             console.log(`Szerver és Socket elérhetősége: http://${ip}:${port}`);
         });
