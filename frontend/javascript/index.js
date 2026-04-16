@@ -81,7 +81,6 @@ async function fetchSessionInfo() {
         const response = await fetch('/api/sessionInfo', {
             signal: requestController.withAbortSignal('sessionInfo')
         });
-        const data = await parseJson(response);
         if (response.ok) {
             data = await parseJson(response);
         }
