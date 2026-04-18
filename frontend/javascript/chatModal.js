@@ -556,13 +556,13 @@
                         <div id="chatLayout" class="chat-layout">
                             <aside class="chat-left">
                                 <div class="chat-sidebar-header">
-                                    <h2 class="chat-sidebar-title">Csevegesek</h2>
+                                    <h2 class="chat-sidebar-title">Csevegések</h2>
                                     <button type="button" class="chat-icon-button chat-sidebar-close-button" data-bs-dismiss="modal" aria-label="Bezaras">&times;</button>
                                 </div>
                                 <div class="chat-search-wrap">
                                     <div class="chat-search-group">
                                         <span class="chat-search-icon" aria-hidden="true">&#128269;</span>
-                                        <input id="chatConversationSearch" class="chat-search-input" type="text" placeholder="Kereses beszelgetesben..." />
+                                        <input id="chatConversationSearch" class="chat-search-input" type="text" placeholder="Keresés a partnerek között..." />
                                     </div>
                                 </div>
                                 <div id="chatConversationLoading" class="chat-placeholder d-none">Beszelgetesek betoltese...</div>
