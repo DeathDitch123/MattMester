@@ -23,7 +23,7 @@
 
 | # | Teendő | Hely | Státusz |
 |---|--------|------|:------:|
-| 8 | **`api.js` (1381 sor) szétbontása** feature szerint: `routes/auth.js`, `routes/profile.js`, `routes/friends.js`, `routes/security.js`, `routes/admin.js` + aggregátor. | [backend/api/api.js](backend/api/api.js) | ☐ |
+| 8 | **`api.js` (1381 sor) szétbontása** feature szerint: `routes/auth.js`, `routes/profile.js`, `routes/friends.js`, `routes/security.js`, `routes/players.js`, `routes/chat.js`, `routes/admin.js` + közös `_shared.js` + aggregátor. | [backend/api/api.js](backend/api/api.js) | ☑ |
 | 9 | **`sql_funtions.js` (2415 sor) szétbontása** repo-mintára: `repos/userRepo.js`, `repos/friendRepo.js`, `repos/logRepo.js`, `repos/chessRepo.js`. | [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ☐ |
 | 10 | **`profile.js` (3600 sor) modulokra bontása** – `profile/security.js`, `profile/friends.js`, `profile/settings.js`, `profile/stats.js`. | [frontend/javascript/profile.js](frontend/javascript/profile.js) | ☐ |
 | 11 | **`profile.css` (2456 sor) komponensekre** + közös design tokenek (`tokens.css`). | [frontend/css/profile.css](frontend/css/profile.css) | ☐ |
