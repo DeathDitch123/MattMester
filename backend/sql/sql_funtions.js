@@ -430,7 +430,11 @@ async function updateUserProfileSettings(userId, updates) {
 
 async function insertUserLog(userId, logData) {
     const pool = getPool();
-    const metadataValue = logData.metadata == null ? null : JSON.stringify(logData.metadata);
+    const metadata = logData.metadata || null;
+    const ipAddress = logData.ipAddress || (metadata && metadata.ipAddress) || null;
+    const userAgent = logData.userAgent || (metadata && metadata.userAgent) || null;
+    const metadataValue = metadata == null ? null : JSON.stringify(metadata);
+    let result = { insertId: null };
 
     const query = `
         INSERT INTO user_logs (
@@ -443,10 +447,12 @@ async function insertUserLog(userId, logData) {
             metric_key,
             metric_value,
             metric_delta,
-            details,
+            message,
+            ip_address,
+            user_agent,
             metadata,
             occurred_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -460,15 +466,62 @@ async function insertUserLog(userId, logData) {
         typeof logData.metricValue === 'number' ? logData.metricValue : null,
         typeof logData.metricDelta === 'number' ? logData.metricDelta : null,
         logData.message || null,
+        ipAddress,
+        userAgent,
         metadataValue,
         logData.occurredAt || new Date()
     ];
 
     try {
-        await pool.execute(query, params);
+        const [insertResult] = await pool.execute(query, params);
+        result = { insertId: insertResult.insertId };
     } catch (error) {
         throw new Error('Hiba a felhasznaloi log mentese soran.');
     }
+    return result;
+}
+
+async function getUserSecurityActivity(userId, limit = 100) {
+    const pool = getPool();
+    const maxRows = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const query = `
+        SELECT id, event_type, event_category, severity, success, message,
+               ip_address, user_agent, metadata, occurred_at
+        FROM user_logs
+        WHERE user_id = ? AND event_category IN ('auth', 'security', 'profile')
+        ORDER BY occurred_at DESC
+        LIMIT ?
+    `;
+    let result = [];
+
+    try {
+        const [rows] = await pool.query(query, [userId, maxRows]);
+        result = (rows || []).map((row) => {
+            let metadata = null;
+            if (row.metadata != null) {
+                try {
+                    metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
+                } catch (_error) {
+                    metadata = null;
+                }
+            }
+            return {
+                id: `log-${row.id}`,
+                occurredAt: row.occurred_at,
+                eventType: row.event_type,
+                eventCategory: row.event_category,
+                severity: row.severity,
+                success: row.success === null ? null : Boolean(row.success),
+                message: row.message,
+                ipAddress: row.ip_address || (metadata && metadata.ipAddress) || null,
+                userAgent: row.user_agent || (metadata && metadata.userAgent) || null,
+                metadata
+            };
+        });
+    } catch (error) {
+        throw new Error('Hiba a biztonsági napló lekérdezése során.');
+    }
+    return result;
 }
 
 async function getTotalUsers() {
@@ -522,7 +575,7 @@ async function getAllUsers() {
             COALESCE(s.draws, 0) AS draws,
             COALESCE(s.abilities_used, 0) AS total_abilities,
             IFNULL(ROUND((s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 1), 0) AS win_rate_percent,
-            (SELECT ip_address FROM login_history WHERE user_id = u.id ORDER BY login_time DESC LIMIT 1) AS last_ip
+            (SELECT ip_address FROM user_logs WHERE user_id = u.id AND event_type = 'login' ORDER BY occurred_at DESC LIMIT 1) AS last_ip
         FROM 
             users u
         LEFT JOIN 
@@ -574,48 +627,47 @@ async function getAllRooms() {
         throw new Error('Hiba a szobák lekérdezése során.');
     }
 }
-//később ip csaláshoz esetleges szűréshez, vagy csak simán statisztikához, hogy melyik ip címről hány account van stb... bár ez utóbbi lehet, hogy nem annyira fontos, de majd meglátjuk
-async function logLoginAttempt(userId, ipAddress, userAgent) {
-    const pool = getPool();
-    const query = 'INSERT INTO login_history (user_id, ip_address, user_agent) VALUES (?, ?, ?)';
-    try {
-        await pool.execute(query, [userId, ipAddress, userAgent]);
-    } catch (error) {
-        console.error('Hiba a login kísérlet naplózása során:', error);
-    }
-}
+// IP-utkozes ellenorzes: ugyanarrol az IP-rol indultak-e tobbszoros login kiserletek.
 async function ipCollisionCheck(ipAddress) {
     const pool = getPool();
-    const query = `SELECT user_id, COUNT(*) AS attempts FROM login_history WHERE ip_address = ? AND login_time > (NOW() - INTERVAL 1 HOUR) GROUP BY user_id HAVING attempts > 5`;
+    const query = `
+        SELECT user_id, COUNT(*) AS attempts
+        FROM user_logs
+        WHERE ip_address = ?
+          AND event_type = 'login'
+          AND occurred_at > (NOW() - INTERVAL 1 HOUR)
+        GROUP BY user_id
+        HAVING attempts > 5
+    `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query, [ipAddress]);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba az IP cím ütközés ellenőrzése során.');
     }
+    return result;
 }
-async function ipCollisions(){
+async function ipCollisions() {
     const pool = getPool();
     const query = `
-        SELECT 
-            ip_address, 
-            COUNT(DISTINCT user_id) AS user_count, 
-            GROUP_CONCAT(DISTINCT u.username SEPARATOR ', ') AS shared_accounts
-        FROM 
-            login_history lh
-        JOIN 
-            users u ON lh.user_id = u.id
-        GROUP BY 
-            ip_address
-        HAVING 
-            user_count > 1;
-        `;
+        SELECT ul.ip_address,
+               COUNT(DISTINCT ul.user_id) AS user_count,
+               GROUP_CONCAT(DISTINCT u.username SEPARATOR ', ') AS shared_accounts
+        FROM user_logs ul
+        JOIN users u ON ul.user_id = u.id
+        WHERE ul.event_type = 'login' AND ul.ip_address IS NOT NULL
+        GROUP BY ul.ip_address
+        HAVING user_count > 1
+    `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba az IP cím ütközések lekérdezése során.');
     }
+    return result;
 }
 
 async function uploadProfileImage(userId, filename) {
@@ -976,7 +1028,6 @@ async function deleteUserProfileWithTransaction(userId) {
         // A kapcsolt adatok explicit torlese nem bukik el akkor sem, ha 0 talalat van.
         // Ez akkor is ved, ha egy regi adatbazisban hianyosak az FK-k.
         await connection.execute('DELETE FROM user_logs WHERE user_id = ?', [userId]);
-        await connection.execute('DELETE FROM login_history WHERE user_id = ?', [userId]);
         await connection.execute('DELETE FROM profile_image_uploads WHERE user_id = ?', [userId]);
         await connection.execute(
             'DELETE FROM friends WHERE user1_id = ? OR user2_id = ? OR action_user_id = ?',
@@ -2327,12 +2378,12 @@ module.exports = {
     getUserAuthById,
     updateUserProfileSettings,
     insertUserLog,
+    getUserSecurityActivity,
     getTotalUsers,
     getTotalGames,
     getOnlineGamesCount,
     getAllUsers,
     getAllRooms,
-    logLoginAttempt,
     ipCollisionCheck,
     ipCollisions,
     uploadProfileImage,

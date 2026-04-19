@@ -62,16 +62,6 @@ CREATE TABLE IF NOT EXISTS profile_image_uploads (
     SET NULL,
     INDEX idx_profile_image_uploads_user_status (user_id, status)
 );
--- 2. Bejelentkezési előzmények
-CREATE TABLE IF NOT EXISTS login_history (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    user_id INT NOT NULL,
-    ip_address VARCHAR(45) NOT NULL,
-    user_agent VARCHAR(255),
-    login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    INDEX idx_login_history_ip_time (ip_address, login_time)
-);
 -- 3. Statisztikák tábla
 CREATE TABLE IF NOT EXISTS statistics (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -222,6 +212,10 @@ CREATE TABLE IF NOT EXISTS user_logs (
     metric_delta DECIMAL(14, 4) NULL,
     -- valtozas az elozo allapothoz kepest
     message VARCHAR(255) NULL,
+    ip_address VARCHAR(45) NULL,
+    -- login/IP-utkozes ellenorzeshez indexelt IP mezo
+    user_agent VARCHAR(255) NULL,
+    -- eszkoz azonositashoz (bejelentkezes, kijelentkezes)
     metadata JSON NULL,
     -- rugalmas extra adat (game_id, endpoint, elo_before, elo_after, stb.)
     occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -229,7 +223,8 @@ CREATE TABLE IF NOT EXISTS user_logs (
     INDEX idx_user_logs_user_time (user_id, occurred_at),
     INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
     INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
-    INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
+    INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at),
+    INDEX idx_user_logs_ip_time (ip_address, occurred_at)
 );
 CREATE TABLE IF NOT EXISTS chat_conversations (
     id INT AUTO_INCREMENT PRIMARY KEY,

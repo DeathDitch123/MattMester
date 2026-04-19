@@ -413,25 +413,43 @@
             <!-- Dashboard row 4 -->
             <div class="row mb-4" id="security">
                 <div class="col-12">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span><i data-lucide="shield" class="me-2"></i>Security & Login History</span>
-                            <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal"
-                                data-bs-target="#logoutAllDevicesModal">Log Out All Devices</button>
+                    <div class="card security-card">
+                        <div class="card-header security-header">
+                            <div class="security-header-main">
+                                <span class="d-flex align-items-center"><i data-lucide="shield" class="me-2"></i>Security & Activity History</span>
+                            </div>
+                            <div class="security-header-controls" role="group" aria-label="Biztonsági napló szűrése">
+                                <button class="btn btn-sm btn-outline-gold is-active" type="button" data-security-filter="all">Összes</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="auth">Bejelentkezés</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="security">Biztonság</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="profile">Profil</button>
+                            </div>
+                            <div class="security-header-actions">
+                                <button class="btn btn-sm btn-outline-gold" type="button" id="refreshSecurityActivityButton"
+                                    aria-label="Biztonsági napló frissítése" title="Frissítés">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal"
+                                    data-bs-target="#logoutAllDevicesModal">Log Out All Devices</button>
+                            </div>
                         </div>
+                        <div id="securityActivityFeedback" class="security-feedback d-none" aria-live="polite"></div>
                         <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table">
+                            <div class="security-table-scroll">
+                                <table class="table security-table">
                                     <thead>
                                         <tr>
-                                            <th>Date & Time</th>
-                                            <th>IP Address</th>
-                                            <th>Device / Browser</th>
-                                            <th>Status</th>
+                                            <th>Időpont</th>
+                                            <th>Esemény</th>
+                                            <th>IP cím</th>
+                                            <th>Eszköz / Böngésző</th>
+                                            <th>Státusz</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        <!-- Sample login history rows -->
+                                    <tbody id="securityHistoryTableBody" aria-live="polite">
+                                        <tr class="security-empty-row">
+                                            <td colspan="5" class="text-center text-secondary py-4">Biztonsági napló betöltése...</td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -586,6 +604,29 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-danger" id="confirmLogoutButton">Kijelentkezés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="logoutAllDevicesModal" tabindex="-1" aria-labelledby="logoutAllDevicesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="logoutAllDevicesModalLabel">
+                        <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                        Kijelentkezés minden eszközről
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">Biztosan ki szeretnél jelentkezni minden eszközről?</p>
+                    <p class="text-secondary small mb-0">Az összes aktív munkameneted megszűnik, és ezen az eszközön is újra be kell jelentkezned.</p>
+                    <div id="logoutAllDevicesMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmLogoutAllDevicesButton">Kijelentkezés minden eszközről</button>
                 </div>
             </div>
         </div>

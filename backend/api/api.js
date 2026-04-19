@@ -119,8 +119,23 @@ router.post('/login', async (request, response) => {
         console.log(`Bejelentkezés: ${user.username} - IP: ${ipAddress}`);
         console.log(`User Agent: ${userAgent}`);
 
-        await sql.logLoginAttempt(user.id, ipAddress, userAgent);
         await saveSessionAsync(request, 'Hiba a munkamenet mentésekor.');
+
+        try {
+            await sql.insertUserLog(user.id, {
+                eventType: 'login',
+                eventCategory: 'auth',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Sikeres bejelentkezés.',
+                ipAddress,
+                userAgent,
+                metadata: { ipAddress, userAgent, remember: Boolean(remember) }
+            });
+        } catch (logError) {
+            console.warn('Login log hiba:', logError.message);
+        }
 
         payload = {
             success: true,
@@ -148,10 +163,30 @@ const logoutHandler = async (request, response) => {
     let payload = { success: true, message: 'Nincs aktív session.' };
     try {
         if (request.session?.userId) {
+            const logoutUserId = request.session.userId;
+            const ipAddress = getRequestIpAddress(request);
+            const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+
             await destroySessionAsync(request, 'Sikertelen kijelentkezés.');
             response.clearCookie('connect.sid');
             console.log('Session sikeresen megsemmisítve.');
             payload.message = 'Sikeres kijelentkezés.';
+
+            try {
+                await sql.insertUserLog(logoutUserId, {
+                    eventType: 'logout',
+                    eventCategory: 'auth',
+                    severity: 'info',
+                    source: 'backend',
+                    success: true,
+                    message: 'Sikeres kijelentkezés.',
+                    ipAddress,
+                    userAgent,
+                    metadata: { ipAddress, userAgent }
+                });
+            } catch (logError) {
+                console.warn('Logout log hiba:', logError.message);
+            }
         }
     } catch (error) {
         console.error('Logout hiba:', error);
@@ -234,7 +269,22 @@ router.post('/register', async (request, response) => {
         statusCode = 201;
         await saveSessionAsync(request, 'Sikertelen regisztráció.');
         console.log('Session sikeresen mentve a regisztráció után.');
-        await sql.logLoginAttempt(result.insertId, ipAddress, userAgent);
+
+        try {
+            await sql.insertUserLog(result.insertId, {
+                eventType: 'register',
+                eventCategory: 'auth',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Sikeres regisztráció.',
+                ipAddress,
+                userAgent,
+                metadata: { ipAddress, userAgent }
+            });
+        } catch (logError) {
+            console.warn('Register log hiba:', logError.message);
+        }
 
         payload = {
             success: true,
@@ -574,6 +624,20 @@ router.post('/profile/upload-image', isAuthenticated, (request, response) => {
             request.session.profile_image_status = uploadResult.status;
             await saveSessionAsync(request, 'Hiba a profilkép feltöltése utáni session mentésekor.');
 
+            try {
+                await sql.insertUserLog(request.session.userId, {
+                    eventType: 'profile_image_upload',
+                    eventCategory: 'profile',
+                    severity: 'info',
+                    source: 'backend',
+                    success: true,
+                    message: 'Új profilkép feltöltve, elbírálásra vár.',
+                    metadata: { filename: uploadedPath, status: uploadResult.status }
+                });
+            } catch (logError) {
+                console.warn('Profile image upload log hiba:', logError.message);
+            }
+
             payload = {
                 success: true,
                 message: 'A profilkép sikeresen feltöltve, elbírálásra vár.',
@@ -604,6 +668,20 @@ router.post('/profile/remove-image', isAuthenticated, async (request, response) 
         request.session.profile_image = removeResult.profileImage;
         request.session.profile_image_status = removeResult.profileImageStatus;
         await saveSessionAsync(request, 'Hiba a profilkép eltávolítása utáni session mentésekor.');
+
+        try {
+            await sql.insertUserLog(request.session.userId, {
+                eventType: 'profile_image_remove',
+                eventCategory: 'profile',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Profilkép visszaállítva az alapértelmezett képre.'
+            });
+        } catch (logError) {
+            console.warn('Profile image remove log hiba:', logError.message);
+        }
+
         payload = {
             success: true,
             message: 'A profilkép visszaállítva az alapértelmezett képre.',
@@ -614,6 +692,95 @@ router.post('/profile/remove-image', isAuthenticated, async (request, response) 
         if (statusCode === 200) statusCode = 500;
         if (error.message === 'A felhasználó nem található.') statusCode = 404;
         payload = { success: false, message: error.message || 'Szerverhiba a profilkép eltávolítása közben.' };
+    }
+    response.status(statusCode).json(payload);
+});
+
+router.get('/security/activity', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, data: [], message: '' };
+    try {
+        const userId = Number(request.session?.userId) || 0;
+        const rawLimit = Number(request.query?.limit) || 100;
+        const limit = Math.min(Math.max(rawLimit, 1), 200);
+        const data = await sql.getUserSecurityActivity(userId, limit);
+        payload = {
+            success: true,
+            data,
+            message: data.length ? `${data.length} esemény betöltve.` : 'Nincs megjeleníthető biztonsági esemény.'
+        };
+    } catch (error) {
+        console.error('Security activity hiba:', error);
+        statusCode = 500;
+        payload = { success: false, data: [], message: error.message || 'Szerverhiba a biztonsági napló lekérése során.' };
+    }
+    response.status(statusCode).json(payload);
+});
+
+router.post('/security/logout-all-devices', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: '' };
+    try {
+        const userId = request.session.userId;
+        const ipAddress = getRequestIpAddress(request);
+        const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+        const store = request.sessionStore;
+
+        if (!store || typeof store.all !== 'function' || typeof store.destroy !== 'function') {
+            statusCode = 500;
+            throw new Error('A munkamenet tároló nem támogatja az összes eszközről való kijelentkezést.');
+        }
+
+        const allSessions = await new Promise((resolve, reject) => {
+            store.all((err, sessions) => {
+                if (err) return reject(err);
+                resolve(sessions || {});
+            });
+        });
+
+        const entries = Array.isArray(allSessions)
+            ? allSessions.map((sess) => [sess && sess.id, sess])
+            : Object.entries(allSessions);
+
+        let destroyedCount = 0;
+        for (const [sid, sess] of entries) {
+            if (!sid || !sess) continue;
+            const sessUserId = sess.userId || sess.session?.userId;
+            if (sessUserId === userId) {
+                await new Promise((resolve) => {
+                    store.destroy(sid, () => resolve());
+                });
+                destroyedCount += 1;
+            }
+        }
+
+        try {
+            await sql.insertUserLog(userId, {
+                eventType: 'logout_all_devices',
+                eventCategory: 'security',
+                severity: 'warning',
+                source: 'backend',
+                success: true,
+                message: `Kijelentkezés minden eszközről (${destroyedCount} munkamenet).`,
+                ipAddress,
+                userAgent,
+                metadata: { ipAddress, userAgent, destroyedSessions: destroyedCount }
+            });
+        } catch (logError) {
+            console.warn('Logout all devices log hiba:', logError.message);
+        }
+
+        response.clearCookie('connect.sid');
+
+        payload = {
+            success: true,
+            destroyedSessions: destroyedCount,
+            message: `Minden eszközről sikeresen kijelentkeztünk (${destroyedCount} munkamenet).`
+        };
+    } catch (error) {
+        console.error('Logout all devices hiba:', error);
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba az összes eszközről való kijelentkezés során.' };
     }
     response.status(statusCode).json(payload);
 });
