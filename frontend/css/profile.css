@@ -1295,12 +1295,16 @@ h6 {
     align-items: center;
     justify-content: space-between;
     gap: 10px;
+    row-gap: 8px;
     flex-wrap: wrap;
+    padding: 12px 16px;
 }
 
 .friends-header-main {
     display: flex;
     align-items: center;
+    min-width: 0;
+    flex-shrink: 0;
 }
 
 .friends-header-controls {
@@ -1308,6 +1312,8 @@ h6 {
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
+    flex: 1 1 auto;
+    justify-content: flex-start;
 }
 
 .friends-header-controls .btn {
@@ -1327,15 +1333,29 @@ h6 {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
+}
+
+#friends .card-body {
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
 }
 
 .friend-list {
     max-height: 350px;
     overflow-y: auto;
+    overflow-x: hidden;
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+}
+
+.friend-item:last-child {
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
 }
 
 .friends-feedback {
-    margin: 10px 16px 0;
+    margin: 12px 16px;
     padding: 10px 12px;
     border: 1px solid rgba(51, 65, 85, 0.65);
     border-radius: 10px;
@@ -1373,7 +1393,7 @@ h6 {
     gap: 12px;
     padding: 14px 16px;
     border-radius: 0;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease;
     border-bottom: 1px solid rgba(51, 65, 85, 0.5);
     cursor: pointer;
 }
@@ -1384,7 +1404,6 @@ h6 {
 
 .friend-item:hover {
     background-color: rgba(212, 175, 55, 0.05);
-    padding-left: 20px;
 }
 
 .friend-item[data-list-status="pending"] {
@@ -1397,13 +1416,14 @@ h6 {
 
 .friend-list-empty {
     color: var(--text-secondary);
-    padding: 14px 16px;
-    border-bottom: 1px dashed rgba(51, 65, 85, 0.65);
+    padding: 18px 16px;
+    text-align: center;
     font-size: 0.9rem;
 }
 
 .friend-actions {
     margin-left: auto;
+    flex-shrink: 0;
 }
 
 .friend-actions-menu {
