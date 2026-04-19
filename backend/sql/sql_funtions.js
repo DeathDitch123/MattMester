@@ -488,7 +488,7 @@ async function getUserSecurityActivity(userId, limit = 100) {
         SELECT id, event_type, event_category, severity, success, message,
                ip_address, user_agent, metadata, occurred_at
         FROM user_logs
-        WHERE user_id = ? AND event_category IN ('auth', 'security', 'profile')
+        WHERE user_id = ? AND event_category IN ('auth', 'security', 'profile', 'social')
         ORDER BY occurred_at DESC
         LIMIT ?
     `;

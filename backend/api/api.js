@@ -23,6 +23,22 @@ function getRequestIpAddress(request) {
     return request.headers['x-forwarded-for'] || request.socket.remoteAddress || 'ismeretlen';
 }
 
+async function logAuthenticatedAction(request, userId, logFields) {
+    try {
+        const ipAddress = getRequestIpAddress(request);
+        const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+        const baseMetadata = logFields.metadata && typeof logFields.metadata === 'object' ? logFields.metadata : {};
+        await sql.insertUserLog(userId, {
+            ...logFields,
+            ipAddress,
+            userAgent,
+            metadata: { ...baseMetadata, ipAddress, userAgent }
+        });
+    } catch (logError) {
+        console.warn(`User log hiba (${logFields.eventType || 'ismeretlen'}):`, logError.message);
+    }
+}
+
 function saveSessionAsync(request, errorMessage) {
     return new Promise((resolve, reject) => {
         request.session.save((err) => {
@@ -101,6 +117,14 @@ router.post('/login', async (request, response) => {
         const isMatch = await bcrypt.compare(password, user.password_hash);
         if (!isMatch) {
             statusCode = 401;
+            await logAuthenticatedAction(request, user.id, {
+                eventType: 'login_failed',
+                eventCategory: 'security',
+                severity: 'warning',
+                source: 'backend',
+                success: false,
+                message: 'Sikertelen bejelentkezési kísérlet (hibás jelszó).'
+            });
             throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
         }
 
@@ -121,21 +145,15 @@ router.post('/login', async (request, response) => {
 
         await saveSessionAsync(request, 'Hiba a munkamenet mentésekor.');
 
-        try {
-            await sql.insertUserLog(user.id, {
-                eventType: 'login',
-                eventCategory: 'auth',
-                severity: 'info',
-                source: 'backend',
-                success: true,
-                message: 'Sikeres bejelentkezés.',
-                ipAddress,
-                userAgent,
-                metadata: { ipAddress, userAgent, remember: Boolean(remember) }
-            });
-        } catch (logError) {
-            console.warn('Login log hiba:', logError.message);
-        }
+        await logAuthenticatedAction(request, user.id, {
+            eventType: 'login',
+            eventCategory: 'auth',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Sikeres bejelentkezés.',
+            metadata: { remember: Boolean(remember) }
+        });
 
         payload = {
             success: true,
@@ -164,29 +182,20 @@ const logoutHandler = async (request, response) => {
     try {
         if (request.session?.userId) {
             const logoutUserId = request.session.userId;
-            const ipAddress = getRequestIpAddress(request);
-            const userAgent = request.headers['user-agent'] || 'Ismeretlen';
+
+            await logAuthenticatedAction(request, logoutUserId, {
+                eventType: 'logout',
+                eventCategory: 'auth',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Sikeres kijelentkezés.'
+            });
 
             await destroySessionAsync(request, 'Sikertelen kijelentkezés.');
             response.clearCookie('connect.sid');
             console.log('Session sikeresen megsemmisítve.');
             payload.message = 'Sikeres kijelentkezés.';
-
-            try {
-                await sql.insertUserLog(logoutUserId, {
-                    eventType: 'logout',
-                    eventCategory: 'auth',
-                    severity: 'info',
-                    source: 'backend',
-                    success: true,
-                    message: 'Sikeres kijelentkezés.',
-                    ipAddress,
-                    userAgent,
-                    metadata: { ipAddress, userAgent }
-                });
-            } catch (logError) {
-                console.warn('Logout log hiba:', logError.message);
-            }
         }
     } catch (error) {
         console.error('Logout hiba:', error);
@@ -270,21 +279,14 @@ router.post('/register', async (request, response) => {
         await saveSessionAsync(request, 'Sikertelen regisztráció.');
         console.log('Session sikeresen mentve a regisztráció után.');
 
-        try {
-            await sql.insertUserLog(result.insertId, {
-                eventType: 'register',
-                eventCategory: 'auth',
-                severity: 'info',
-                source: 'backend',
-                success: true,
-                message: 'Sikeres regisztráció.',
-                ipAddress,
-                userAgent,
-                metadata: { ipAddress, userAgent }
-            });
-        } catch (logError) {
-            console.warn('Register log hiba:', logError.message);
-        }
+        await logAuthenticatedAction(request, result.insertId, {
+            eventType: 'register',
+            eventCategory: 'auth',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Sikeres regisztráció.'
+        });
 
         payload = {
             success: true,
@@ -390,6 +392,15 @@ router.post('/profile/verify-current-password', isAuthenticated, async (request,
                 const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
                 if (isMatch) {
                     result = { success: true, valid: true, message: 'A jelenlegi jelszó helyes.' };
+                } else {
+                    await logAuthenticatedAction(request, request.session.userId, {
+                        eventType: 'current_password_verify_failed',
+                        eventCategory: 'security',
+                        severity: 'warning',
+                        source: 'backend',
+                        success: false,
+                        message: 'Sikertelen jelenlegi jelszó ellenőrzés.'
+                    });
                 }
             }
         }
@@ -508,20 +519,25 @@ router.post('/profile/settings', isAuthenticated, async (request, response) => {
             changedFields.push('password');
         }
 
-        try {
-            await sql.insertUserLog(request.session.userId, {
-                eventType: 'profile_settings_update',
-                eventCategory: 'profile',
-                severity: 'info',
+        await logAuthenticatedAction(request, request.session.userId, {
+            eventType: 'profile_settings_update',
+            eventCategory: 'profile',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Profil beállítások frissítve.',
+            metadata: { changedFields }
+        });
+
+        if (updateResult.passwordChanged) {
+            await logAuthenticatedAction(request, request.session.userId, {
+                eventType: 'password_change',
+                eventCategory: 'security',
+                severity: 'warning',
                 source: 'backend',
                 success: true,
-                message: 'Profil beállítások frissítve.',
-                metadata: {
-                    changedFields
-                }
+                message: 'Jelszó sikeresen megváltoztatva.'
             });
-        } catch (logError) {
-            console.warn('Profile settings log hiba:', logError.message);
         }
 
         payload = {
@@ -576,6 +592,15 @@ router.post('/profile/delete', isAuthenticated, async (request, response) => {
             throw new Error('A jelenlegi jelszó hibás.');
         }
 
+        await logAuthenticatedAction(request, request.session.userId, {
+            eventType: 'profile_delete',
+            eventCategory: 'security',
+            severity: 'critical',
+            source: 'backend',
+            success: true,
+            message: 'Profil törlése.'
+        });
+
         const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
         await destroySessionAsync(request, 'Session törlési hiba profil törlés után.');
         response.clearCookie('connect.sid');
@@ -624,19 +649,15 @@ router.post('/profile/upload-image', isAuthenticated, (request, response) => {
             request.session.profile_image_status = uploadResult.status;
             await saveSessionAsync(request, 'Hiba a profilkép feltöltése utáni session mentésekor.');
 
-            try {
-                await sql.insertUserLog(request.session.userId, {
-                    eventType: 'profile_image_upload',
-                    eventCategory: 'profile',
-                    severity: 'info',
-                    source: 'backend',
-                    success: true,
-                    message: 'Új profilkép feltöltve, elbírálásra vár.',
-                    metadata: { filename: uploadedPath, status: uploadResult.status }
-                });
-            } catch (logError) {
-                console.warn('Profile image upload log hiba:', logError.message);
-            }
+            await logAuthenticatedAction(request, request.session.userId, {
+                eventType: 'profile_image_upload',
+                eventCategory: 'profile',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Új profilkép feltöltve, elbírálásra vár.',
+                metadata: { filename: uploadedPath, status: uploadResult.status }
+            });
 
             payload = {
                 success: true,
@@ -669,18 +690,14 @@ router.post('/profile/remove-image', isAuthenticated, async (request, response) 
         request.session.profile_image_status = removeResult.profileImageStatus;
         await saveSessionAsync(request, 'Hiba a profilkép eltávolítása utáni session mentésekor.');
 
-        try {
-            await sql.insertUserLog(request.session.userId, {
-                eventType: 'profile_image_remove',
-                eventCategory: 'profile',
-                severity: 'info',
-                source: 'backend',
-                success: true,
-                message: 'Profilkép visszaállítva az alapértelmezett képre.'
-            });
-        } catch (logError) {
-            console.warn('Profile image remove log hiba:', logError.message);
-        }
+        await logAuthenticatedAction(request, request.session.userId, {
+            eventType: 'profile_image_remove',
+            eventCategory: 'profile',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Profilkép visszaállítva az alapértelmezett képre.'
+        });
 
         payload = {
             success: true,
@@ -722,8 +739,6 @@ router.post('/security/logout-all-devices', isAuthenticated, async (request, res
     let payload = { success: false, message: '' };
     try {
         const userId = request.session.userId;
-        const ipAddress = getRequestIpAddress(request);
-        const userAgent = request.headers['user-agent'] || 'Ismeretlen';
         const store = request.sessionStore;
 
         if (!store || typeof store.all !== 'function' || typeof store.destroy !== 'function') {
@@ -754,21 +769,15 @@ router.post('/security/logout-all-devices', isAuthenticated, async (request, res
             }
         }
 
-        try {
-            await sql.insertUserLog(userId, {
-                eventType: 'logout_all_devices',
-                eventCategory: 'security',
-                severity: 'warning',
-                source: 'backend',
-                success: true,
-                message: `Kijelentkezés minden eszközről (${destroyedCount} munkamenet).`,
-                ipAddress,
-                userAgent,
-                metadata: { ipAddress, userAgent, destroyedSessions: destroyedCount }
-            });
-        } catch (logError) {
-            console.warn('Logout all devices log hiba:', logError.message);
-        }
+        await logAuthenticatedAction(request, userId, {
+            eventType: 'logout_all_devices',
+            eventCategory: 'security',
+            severity: 'warning',
+            source: 'backend',
+            success: true,
+            message: `Kijelentkezés minden eszközről (${destroyedCount} munkamenet).`,
+            metadata: { destroyedSessions: destroyedCount }
+        });
 
         response.clearCookie('connect.sid');
 
@@ -877,6 +886,15 @@ router.post('/friends/add', isAuthenticated, async (request, response) => {
         if (currentUserId === targetUserId) { statusCode = 400; throw new Error('Nem adhatsz hozzá magadat barátnak.'); }
 
         const result = await sql.addFriendRequest(currentUserId, targetUserId);
+        await logAuthenticatedAction(request, currentUserId, {
+            eventType: 'friend_request_sent',
+            eventCategory: 'social',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Barát kérelem küldve.',
+            metadata: { targetUserId }
+        });
         payload = { success: true, message: result.message };
     } catch (error) {
         if (statusCode === 200) statusCode = 500;
@@ -921,6 +939,15 @@ router.post('/friends/accept', isAuthenticated, async (request, response) => {
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.acceptFriendRequest(currentUserId, targetUserId);
+        await logAuthenticatedAction(request, currentUserId, {
+            eventType: 'friend_request_accepted',
+            eventCategory: 'social',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Barát kérelem elfogadva.',
+            metadata: { targetUserId }
+        });
         payload = { success: true, message: result.message };
     } catch (error) {
         if (statusCode === 200) statusCode = 500;
@@ -940,6 +967,15 @@ router.post('/friends/reject', isAuthenticated, async (request, response) => {
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.rejectFriendRequest(currentUserId, targetUserId);
+        await logAuthenticatedAction(request, currentUserId, {
+            eventType: 'friend_request_rejected',
+            eventCategory: 'social',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Barát kérelem elutasítva.',
+            metadata: { targetUserId }
+        });
         payload = { success: true, message: result.message };
     } catch (error) {
         if (statusCode === 200) statusCode = 500;
@@ -960,6 +996,15 @@ router.post('/friends/block', isAuthenticated, async (request, response) => {
         if (currentUserId === targetUserId) { statusCode = 400; throw new Error('Nem tilthatod le saját magadat.'); }
 
         const result = await sql.blockUserDirectional(currentUserId, targetUserId);
+        await logAuthenticatedAction(request, currentUserId, {
+            eventType: 'friend_blocked',
+            eventCategory: 'social',
+            severity: 'warning',
+            source: 'backend',
+            success: true,
+            message: 'Felhasználó letiltva.',
+            metadata: { targetUserId }
+        });
         payload = { success: true, message: result.message };
     } catch (error) {
         if (statusCode === 200) statusCode = 500;
@@ -979,6 +1024,15 @@ router.delete('/friends/unblock/:targetUserId', isAuthenticated, async (request,
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.unblockUserDirectional(currentUserId, targetUserId);
+        await logAuthenticatedAction(request, currentUserId, {
+            eventType: 'friend_unblocked',
+            eventCategory: 'social',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Letiltás feloldva.',
+            metadata: { targetUserId }
+        });
         payload = { success: true, message: result.message };
     } catch (error) {
         if (statusCode === 200) statusCode = 500;
@@ -998,6 +1052,15 @@ router.delete('/friends/:targetUserId', isAuthenticated, async (request, respons
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.deleteFriendConnection(currentUserId, targetUserId);
+        await logAuthenticatedAction(request, currentUserId, {
+            eventType: 'friend_removed',
+            eventCategory: 'social',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Barát kapcsolat törölve.',
+            metadata: { targetUserId }
+        });
         payload = { success: true, message: result.message };
     } catch (error) {
         if (statusCode === 200) statusCode = 500;

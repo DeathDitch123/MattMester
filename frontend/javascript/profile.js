@@ -66,7 +66,7 @@ const logoutState = {
     submitting: false
 };
 const SECURITY_FILTER_DEFAULT = 'all';
-const SECURITY_FILTER_VALUES = new Set(['all', 'auth', 'security', 'profile']);
+const SECURITY_FILTER_VALUES = new Set(['all', 'auth', 'security', 'profile', 'social']);
 const securityActivityState = {
     bound: false,
     loading: false,
@@ -1670,7 +1670,16 @@ const SECURITY_EVENT_LABELS = {
     profile_settings_update: { label: 'Profil beállítások módosítva', icon: 'user-cog', category: 'profile' },
     password_change: { label: 'Jelszó módosítva', icon: 'key-round', category: 'security' },
     profile_image_upload: { label: 'Profilkép feltöltve', icon: 'image-up', category: 'profile' },
-    profile_image_remove: { label: 'Profilkép eltávolítva', icon: 'image-minus', category: 'profile' }
+    profile_image_remove: { label: 'Profilkép eltávolítva', icon: 'image-minus', category: 'profile' },
+    profile_delete: { label: 'Profil törölve', icon: 'user-x', category: 'security' },
+    login_failed: { label: 'Sikertelen bejelentkezés', icon: 'shield-alert', category: 'security' },
+    current_password_verify_failed: { label: 'Hibás jelszó ellenőrzés', icon: 'shield-alert', category: 'security' },
+    friend_request_sent: { label: 'Barát kérelem küldve', icon: 'user-plus', category: 'social' },
+    friend_request_accepted: { label: 'Barát kérelem elfogadva', icon: 'user-check', category: 'social' },
+    friend_request_rejected: { label: 'Barát kérelem elutasítva', icon: 'user-minus', category: 'social' },
+    friend_blocked: { label: 'Felhasználó letiltva', icon: 'user-x', category: 'social' },
+    friend_unblocked: { label: 'Letiltás feloldva', icon: 'user-check', category: 'social' },
+    friend_removed: { label: 'Barát eltávolítva', icon: 'user-minus', category: 'social' }
 };
 
 function getSecurityEventDescriptor(item) {
