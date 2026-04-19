@@ -6,6 +6,7 @@ const fs = require('fs/promises');
 const sql = require('../../sql/sql_funtions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
 const { isAuthenticated } = require('../funtions.js');
+const { verifyPasswordLimiter } = require('../middleware/rateLimiter.js');
 const {
     logAuthenticatedAction,
     saveSessionAsync,
@@ -43,7 +44,7 @@ const profileImageUpload = multer({
     }
 });
 
-router.post('/profile/verify-current-password', isAuthenticated, async (request, response) => {
+router.post('/profile/verify-current-password', verifyPasswordLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let result = { success: true, valid: false, message: 'A jelenlegi jelszó hibás.' };
     try {

@@ -15,7 +15,10 @@
     "license": "ISC",
     "jest": {
         "testEnvironment": "node",
-        "testMatch": ["**/__tests__/**/*.test.js", "**/*.test.js"],
+        "testMatch": [
+            "**/__tests__/**/*.test.js",
+            "**/*.test.js"
+        ],
         "collectCoverageFrom": [
             "api/**/*.js",
             "sockets.js",
@@ -32,18 +35,19 @@
         }
     },
     "devDependencies": {
+        "jest": "^29.7.0",
         "kill-port": "^2.0.1",
         "nodemon": "^3.1.10",
-        "jest": "^29.7.0",
         "supertest": "^6.3.3"
     },
     "dependencies": {
         "bcrypt": "^6.0.0",
+        "cors": "^2.8.5",
         "express": "^5.1.0",
+        "express-rate-limit": "^8.3.2",
         "express-session": "^1.18.2",
         "multer": "^2.0.2",
         "mysql2": "^3.15.2",
-        "socket.io": "^4.8.3",
-        "cors": "^2.8.5"
+        "socket.io": "^4.8.3"
     }
 }

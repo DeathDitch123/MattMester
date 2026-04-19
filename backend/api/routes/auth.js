@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const sql = require('../../sql/sql_funtions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
+const { authLoginLimiter, authRegisterLimiter } = require('../middleware/rateLimiter.js');
 const {
     getRequestIpAddress,
     logAuthenticatedAction,
@@ -12,7 +13,7 @@ const {
 const router = express.Router();
 
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
-router.post('/login', async (request, response) => {
+router.post('/login', authLoginLimiter, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -124,7 +125,7 @@ router.get('/logout', logoutHandler);
 router.post('/logout', logoutHandler);
 
 // ?POST /api/register - új felhasználó regisztrációja
-router.post('/register', async (request, response) => {
+router.post('/register', authRegisterLimiter, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {

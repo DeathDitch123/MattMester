@@ -90,6 +90,7 @@ Nyisd meg a böngésződben a **http://localhost:3000** címet.
 `multer` - File upload handling<br>
 `socket.io` - Real-time communication<br>
 `cors` - Cross-Origin Resource Sharing<br>
+`express-rate-limit` - Brute-force védelem az auth endpointokon<br>
 
 ### Development Dependencies:<br>
 `nodemon` - Auto-restart on file changes<br>
@@ -191,6 +192,32 @@ const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000; // 10 másodperces ablak
 ```
 
 **Rate Limiter Cleanup:** Automatikusan fut 5 percenként, feldolgozza a memóriát és megtisztítja a régi adatokat.<br>
+
+### Auth Rate Limiter (brute-force védelem):
+
+Az auth-végpontokat (`/login`, `/register`, `/profile/verify-current-password`) a [backend/api/middleware/rateLimiter.js](backend/api/middleware/rateLimiter.js) középső réteg védi. A modul egy univerzális factory-t (`createRateLimiter`) és három előre konfigurált limitert exportál:
+
+| Limiter | Ablak | Max kérés | Megjegyzés |
+|---------|------|-----------|------------|
+| `authLoginLimiter` | 15 perc | 10 | Csak sikertelen loginokat számol (`skipSuccessfulRequests`) |
+| `authRegisterLimiter` | 60 perc | 5 | Regisztráció / bot spam védelem |
+| `verifyPasswordLimiter` | 15 perc | 10 | Settings modal aktuális jelszó ellenőrzés, csak sikertelen kísérlet számít |
+
+Új endpointra saját limiter így köthető be:
+
+```javascript
+const { createRateLimiter } = require('./api/middleware/rateLimiter.js');
+
+const myLimiter = createRateLimiter({
+    windowMs: 10 * 60 * 1000,
+    max: 20,
+    message: 'Túl sok kérés, próbáld újra később.'
+});
+
+router.post('/my-endpoint', myLimiter, handler);
+```
+
+Limit átlépésnél a válasz `429 Too Many Requests` státuszú JSON: `{ success: false, message }`.<br>
 
 ### Jest Testing<br>
 
