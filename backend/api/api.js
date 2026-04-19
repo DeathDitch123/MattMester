@@ -9,7 +9,7 @@ const friendsRoutes = require('./routes/friends.js');
 const chatRoutes = require('./routes/chat.js');
 const adminRoutes = require('./routes/admin.js');
 
-router.use(adminRoutes);
+router.use('/admin', adminRoutes);
 router.use(authRoutes);
 router.use(profileRoutes);
 router.use(securityRoutes);

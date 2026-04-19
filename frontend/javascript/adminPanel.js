@@ -82,7 +82,7 @@ function exportUsers() {
     runSafelyAsync('exportUsers', async () => {
         requestController.schedule('exportUsers', async () => {
             try {
-                const response = await fetch('/admin/export-users', {
+                const response = await fetch('/api/admin/export-users', {
                     signal: requestController.withAbortSignal('exportUsers')
                 });
 

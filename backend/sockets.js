@@ -240,6 +240,30 @@ function createSocketHub(io) {
         }
     }
 
+    function isAdminSocket(socket) {
+        const context = socketsById.get(socket.id) || socket.data?.socketContext;
+        return Boolean(context && context.role === 'admin');
+    }
+
+    function emitAdminAuthError(socket, eventName) {
+        socket.emit('admin:error', {
+            success: false,
+            message: 'Admin jogosultság szükséges ehhez a művelethez.',
+            event: eventName || null,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    function requireAdminSocket(socket, handler) {
+        return async (...args) => {
+            if (!isAdminSocket(socket)) {
+                emitAdminAuthError(socket);
+                return;
+            }
+            await handler(...args);
+        };
+    }
+
     function refreshSocketContextFromSession(socket) {
         try {
             const existingContext = getCurrentSocketContext(socket);
@@ -349,6 +373,21 @@ function createSocketHub(io) {
         if (context.role === 'admin') {
             socket.join(SOCKET_ROOMS.admin);
         }
+
+        // Automatikus védelem: az 'admin:' előtagú eventeket csak admin role fogadja el.
+        socket.use((packet, next) => {
+            const eventName = Array.isArray(packet) ? packet[0] : null;
+            if (typeof eventName !== 'string' || !eventName.startsWith('admin:')) {
+                return next();
+            }
+            if (isAdminSocket(socket)) {
+                return next();
+            }
+            emitAdminAuthError(socket, eventName);
+            const err = new Error('Admin jogosultság szükséges.');
+            err.data = { event: eventName };
+            return next(err);
+        });
 
         const currentStats = services.getCurrentStats();
         socket.emit('connected', {
@@ -662,6 +701,8 @@ function createSocketHub(io) {
         getSocketSnapshot,
         syncPresence,
         syncSocketState,
+        isAdminSocket,
+        requireAdminSocket,
         updateRoomState(roomId, state, updatedBy = 'system') {
             const normalizedRoomId = safeString(roomId, 'general-room');
             roomStateById.set(normalizedRoomId, {
