@@ -4,6 +4,7 @@ const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 
 const socket = window.MattMesterSocket?.socket || io();
 const requestController = window.createRequestController(300);
+let pendingModalId = '';
 
 function rethrowIfAborted(error) {
     if (error?.name === 'AbortError') throw error;
@@ -49,6 +50,7 @@ document.addEventListener('DOMContentLoaded', () => {
     runSafely('indexDOMContentLoadedBindings', () => {
         installModalFocusGuards();
         bindLoginForm();
+        bindForgotPasswordFlow();
         bindRegisterForm();
         bindLogoutButtonUser();
         bindLogoutButtonAdmin();
@@ -529,6 +531,16 @@ function showFormMessage(messageElement, type, message) {
     messageElement.textContent = message;
 }
 
+function showModalById(modalId) {
+    const modalElement = document.getElementById(modalId);
+    if (!modalElement || !window.bootstrap || !window.bootstrap.Modal) {
+        return;
+    }
+
+    const modalInstance = window.bootstrap.Modal.getOrCreateInstance(modalElement);
+    modalInstance.show();
+}
+
 function hideModalById(modalId) {
     const modalElement = document.getElementById(modalId);
     if (!modalElement || !window.bootstrap || !window.bootstrap.Modal) {
@@ -541,6 +553,186 @@ function hideModalById(modalId) {
 
     const modalInstance = window.bootstrap.Modal.getOrCreateInstance(modalElement);
     modalInstance.hide();
+}
+
+function setForgotPasswordEmailFeedback(inputElement, feedbackElement, state, message) {
+    if (!inputElement || !feedbackElement) {
+        return;
+    }
+
+    inputElement.classList.remove('is-valid', 'is-invalid');
+    feedbackElement.classList.remove('text-secondary', 'text-success', 'text-danger');
+    feedbackElement.textContent = message;
+
+    if (state === 'error') {
+        inputElement.classList.add('is-invalid');
+        feedbackElement.classList.add('text-danger');
+    } else if (state === 'success') {
+        inputElement.classList.add('is-valid');
+        feedbackElement.classList.add('text-success');
+    } else {
+        feedbackElement.classList.add('text-secondary');
+    }
+}
+
+function validateForgotPasswordEmail() {
+    const emailInput = document.getElementById('forgotPasswordEmail');
+    const feedbackElement = document.getElementById('forgotPasswordEmailFeedback');
+    const submitButton = document.getElementById('forgotPasswordSubmitButton');
+    const emailValue = emailInput ? emailInput.value.trim() : '';
+    let isValid = false;
+    let state = 'neutral';
+    let message = 'Add meg az email címed.';
+
+    if (!emailValue) {
+        state = 'error';
+        message = 'Az email cím megadása kötelező.';
+    } else if (!EMAIL_REGEX.test(emailValue)) {
+        state = 'error';
+        message = 'Érvénytelen email cím formátum.';
+    } else {
+        state = 'success';
+        message = 'Az email cím formátuma megfelelő.';
+        isValid = true;
+    }
+
+    setForgotPasswordEmailFeedback(emailInput, feedbackElement, state, message);
+
+    if (submitButton) {
+        submitButton.disabled = !isValid;
+    }
+
+    return isValid;
+}
+
+function bindForgotPasswordFlow() {
+    const loginModal = document.getElementById('loginModal');
+    const forgotModal = document.getElementById('forgotPasswordModal');
+    const openForgotButton = document.getElementById('openForgotPasswordModal');
+    const backButton = document.getElementById('forgotPasswordBackButton');
+    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+
+    if (loginModal) {
+        loginModal.addEventListener('hidden.bs.modal', () => {
+            if (pendingModalId) {
+                const nextModalId = pendingModalId;
+                pendingModalId = '';
+                showModalById(nextModalId);
+            }
+        });
+    }
+
+    if (forgotModal) {
+        forgotModal.addEventListener('show.bs.modal', () => {
+            const messageElement = document.getElementById('forgotPasswordMessage');
+            const emailInput = document.getElementById('forgotPasswordEmail');
+            const feedbackElement = document.getElementById('forgotPasswordEmailFeedback');
+            if (messageElement) {
+                clearFormMessage(messageElement);
+            }
+            if (emailInput) {
+                emailInput.value = emailInput.value || '';
+            }
+            setForgotPasswordEmailFeedback(emailInput, feedbackElement, 'neutral', 'Add meg az email címed.');
+        });
+
+        forgotModal.addEventListener('hidden.bs.modal', () => {
+            const messageElement = document.getElementById('forgotPasswordMessage');
+            const emailInput = document.getElementById('forgotPasswordEmail');
+            const feedbackElement = document.getElementById('forgotPasswordEmailFeedback');
+            if (messageElement) {
+                clearFormMessage(messageElement);
+            }
+            if (emailInput) {
+                emailInput.value = '';
+                emailInput.classList.remove('is-valid', 'is-invalid');
+            }
+            if (feedbackElement) {
+                feedbackElement.classList.remove('text-secondary', 'text-success', 'text-danger');
+                feedbackElement.textContent = '';
+            }
+        });
+    }
+
+    if (openForgotButton) {
+        openForgotButton.addEventListener('click', () => {
+            pendingModalId = 'forgotPasswordModal';
+            hideModalById('loginModal');
+        });
+    }
+
+    if (backButton) {
+        backButton.addEventListener('click', () => {
+            pendingModalId = 'loginModal';
+            hideModalById('forgotPasswordModal');
+        });
+    }
+
+    if (forgotPasswordForm) {
+        const emailInput = document.getElementById('forgotPasswordEmail');
+        if (emailInput) {
+            emailInput.addEventListener('input', () => {
+                validateForgotPasswordEmail();
+            });
+            emailInput.addEventListener('blur', () => {
+                validateForgotPasswordEmail();
+            });
+        }
+
+        forgotPasswordForm.addEventListener('submit', async (event) => {
+            await runSafelyAsync('forgotPasswordSubmitHandler', async () => {
+                event.preventDefault();
+
+                const messageElement = document.getElementById('forgotPasswordMessage');
+                const currentEmailInput = document.getElementById('forgotPasswordEmail');
+                const submitButton = document.getElementById('forgotPasswordSubmitButton');
+                const email = currentEmailInput ? currentEmailInput.value.trim() : '';
+
+                clearFormMessage(messageElement);
+
+                if (!validateForgotPasswordEmail()) {
+                    showFormMessage(messageElement, 'danger', 'Ellenőrizd az email címet.');
+                } else {
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.textContent = 'Küldés folyamatban...';
+                    }
+
+                    requestController.schedule('forgotPasswordSubmit', async () => {
+                        try {
+                            const response = await fetch('/api/auth/forgot-password', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email }),
+                                signal: requestController.withAbortSignal('forgotPassword')
+                            });
+                            const result = await parseJson(response);
+
+                            if (!response.ok) {
+                                throw new Error(result.message || 'Sikertelen jelszó-visszaállítási kérés.');
+                            }
+
+                            showFormMessage(messageElement, 'success', result.message || 'Ha létezik ilyen email cím, elküldtük a visszaállító levelet.');
+                            if (currentEmailInput) {
+                                currentEmailInput.classList.remove('is-invalid');
+                                currentEmailInput.classList.add('is-valid');
+                            }
+                        } catch (error) {
+                            rethrowIfAborted(error);
+                            showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                            console.error('Hiba a jelszó-visszaállítási email kérés során:', error);
+                        } finally {
+                            requestController.clearSignal('forgotPassword');
+                            if (submitButton) {
+                                submitButton.disabled = !validateForgotPasswordEmail();
+                                submitButton.textContent = 'Email küldése';
+                            }
+                        }
+                    });
+                }
+            });
+        });
+    }
 }
 
 function installModalFocusGuards() {

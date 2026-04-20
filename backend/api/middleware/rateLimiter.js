@@ -180,6 +180,20 @@ const emailVerifyConsumeLimiter = createRateLimiter({
     message: 'Túl sok verifikációs kísérlet. Próbáld újra később.'
 });
 
+// Jelszó-visszaállító email kérés: 1 órás ablakban max 3 kérés IP-nként.
+const passwordResetRequestLimiter = createRateLimiter({
+    windowMs: 60 * 60 * 1000,
+    max: 3,
+    message: 'Túl sok jelszó-visszaállítási kérés. Próbáld újra egy óra múlva.'
+});
+
+// Jelszó-visszaállító token ellenőrzés és jelszócsere.
+const passwordResetTokenLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    message: 'Túl sok jelszó-visszaállítási kísérlet. Próbáld újra később.'
+});
+
 module.exports = {
     createRateLimiter,
     userOrIpKeyGenerator,
@@ -196,5 +210,7 @@ module.exports = {
     chatDirectOpenLimiter,
     logoutAllDevicesLimiter,
     emailVerifyResendLimiter,
-    emailVerifyConsumeLimiter
+    emailVerifyConsumeLimiter,
+    passwordResetRequestLimiter,
+    passwordResetTokenLimiter
 };

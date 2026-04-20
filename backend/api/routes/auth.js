@@ -6,13 +6,17 @@ const {
     authLoginLimiter,
     authRegisterLimiter,
     emailVerifyResendLimiter,
-    emailVerifyConsumeLimiter
+    emailVerifyConsumeLimiter,
+    passwordResetRequestLimiter,
+    passwordResetTokenLimiter
 } = require('../middleware/rateLimiter.js');
 const { isAuthenticated } = require('../funtions.js');
 const {
     generateVerificationToken,
+    generatePasswordResetToken,
     hashToken,
     sendVerificationEmail,
+    sendPasswordResetEmail,
     isExpired
 } = require('../emailVerification.js');
 const {
@@ -528,6 +532,217 @@ router.post('/auth/resend-verification', emailVerifyResendLimiter, isAuthenticat
             success: false,
             code: responseCode,
             message: error.message || 'Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.'
+        };
+    }
+    return response.status(statusCode).json(payload);
+});
+
+// ?POST /api/auth/forgot-password - jelszó-visszaállító email kérése
+router.post('/auth/forgot-password', passwordResetRequestLimiter, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: '', code: '' };
+    try {
+        const email = typeof request.body?.email === 'string' ? request.body.email.trim() : '';
+        if (!email) {
+            statusCode = 400;
+            throw new Error('Az email cím megadása kötelező.');
+        }
+
+        if (!emailRegex.test(email)) {
+            statusCode = 400;
+            throw new Error('Érvénytelen email cím formátum!');
+        }
+
+        const user = await sql.getUserByEmail(email);
+        if (user && user.email) {
+            const { rawToken, tokenHash, expiresAt } = generatePasswordResetToken();
+            await sql.savePasswordResetToken(user.id, tokenHash, expiresAt);
+            const sendInfo = await sendPasswordResetEmail(user.email, user.username, rawToken, { flow: 'forgot-password' });
+
+            await logAuthenticatedAction(request, user.id, {
+                eventType: 'password_reset_requested',
+                eventCategory: 'security',
+                severity: 'warning',
+                source: 'backend',
+                success: true,
+                message: 'Jelszó-visszaállítási email elküldve.',
+                metadata: {
+                    email: user.email,
+                    expiresAt,
+                    transport: sendInfo.transport || null,
+                    messageId: sendInfo.messageId || null,
+                    providerResponse: sendInfo.providerResponse || null
+                }
+            });
+        }
+
+        payload = {
+            success: true,
+            code: 'PASSWORD_RESET_REQUEST_ACCEPTED',
+            message: 'Ha létezik ilyen email cím, elküldtük a jelszó-visszaállító levelet.'
+        };
+    } catch (error) {
+        console.error('Forgot password hiba:', error.message);
+        if (statusCode === 200) {
+            statusCode = error?.code === 'EMAIL_SEND_FAILED' ? 503 : 500;
+        }
+        payload = {
+            success: false,
+            code: error?.code || 'PASSWORD_RESET_REQUEST_FAILED',
+            message: error.message || 'Jelszó-visszaállítási email küldése sikertelen.'
+        };
+    }
+    return response.status(statusCode).json(payload);
+});
+
+// ?GET /api/auth/reset-password/verify - token ellenőrzés a visszaállító oldalon
+router.get('/auth/reset-password/verify', passwordResetTokenLimiter, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: '', code: '' };
+    try {
+        const token = typeof request.query?.token === 'string' ? request.query.token.trim() : '';
+        if (!token) {
+            statusCode = 400;
+            payload.code = 'MISSING_TOKEN';
+            throw new Error('Hiányzó jelszó-visszaállító token.');
+        }
+
+        const tokenHash = hashToken(token);
+        const user = await sql.findUserByPasswordResetTokenHash(tokenHash);
+
+        if (!user) {
+            statusCode = 400;
+            payload.code = 'INVALID_TOKEN';
+            throw new Error('Érvénytelen vagy már felhasznált jelszó-visszaállító token.');
+        }
+
+        if (isExpired(user.reset_token_expires)) {
+            statusCode = 400;
+            await sql.clearPasswordResetToken(user.id).catch(() => { });
+            await logAuthenticatedAction(request, user.id, {
+                eventType: 'password_reset_token_failed',
+                eventCategory: 'security',
+                severity: 'warning',
+                source: 'backend',
+                success: false,
+                message: 'Lejárt jelszó-visszaállító token.',
+                metadata: { reason: 'expired' }
+            });
+            payload.code = 'TOKEN_EXPIRED';
+            throw new Error('A jelszó-visszaállító link lejárt. Kérj új emailt a bejelentkezési oldalon.');
+        }
+
+        payload = {
+            success: true,
+            code: 'PASSWORD_RESET_TOKEN_VALID',
+            message: 'A jelszó-visszaállító token érvényes.'
+        };
+    } catch (error) {
+        console.error('Password reset verify hiba:', error.message);
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+        payload = {
+            success: false,
+            code: payload.code || 'PASSWORD_RESET_VERIFY_FAILED',
+            message: error.message || 'Szerverhiba a jelszó-visszaállítási token ellenőrzése során.'
+        };
+    }
+    return response.status(statusCode).json(payload);
+});
+
+// ?POST /api/auth/reset-password - új jelszó mentése token alapján
+router.post('/auth/reset-password', passwordResetTokenLimiter, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: '', code: '' };
+    try {
+        const token = typeof request.body?.token === 'string' ? request.body.token.trim() : '';
+        const newPassword = typeof request.body?.password === 'string' ? request.body.password : '';
+        const confirmPassword = typeof request.body?.confirmPassword === 'string' ? request.body.confirmPassword : '';
+
+        if (!token) {
+            statusCode = 400;
+            payload.code = 'MISSING_TOKEN';
+            throw new Error('Hiányzó jelszó-visszaállító token.');
+        }
+
+        if (!newPassword) {
+            statusCode = 400;
+            throw new Error('Az új jelszó megadása kötelező.');
+        }
+
+        if (confirmPassword && confirmPassword !== newPassword) {
+            statusCode = 400;
+            throw new Error('A két jelszó nem egyezik.');
+        }
+
+        if (newPassword.includes('\\')) {
+            statusCode = 400;
+            throw new Error('A jelszó nem megengedett karaktert tartalmaz!');
+        }
+
+        if (newPassword.length < 8) {
+            statusCode = 400;
+            throw new Error('A jelszónak legalább 8 karakter hosszúnak kell lennie!');
+        }
+
+        if (!passwordRegex.test(newPassword)) {
+            statusCode = 400;
+            throw new Error('A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot!');
+        }
+
+        const tokenHash = hashToken(token);
+        const user = await sql.findUserByPasswordResetTokenHash(tokenHash);
+
+        if (!user) {
+            statusCode = 400;
+            payload.code = 'INVALID_TOKEN';
+            throw new Error('Érvénytelen vagy már felhasznált jelszó-visszaállító token.');
+        }
+
+        if (isExpired(user.reset_token_expires)) {
+            statusCode = 400;
+            await sql.clearPasswordResetToken(user.id).catch(() => { });
+            await logAuthenticatedAction(request, user.id, {
+                eventType: 'password_reset_token_failed',
+                eventCategory: 'security',
+                severity: 'warning',
+                source: 'backend',
+                success: false,
+                message: 'Lejárt jelszó-visszaállító token.',
+                metadata: { reason: 'expired' }
+            });
+            payload.code = 'TOKEN_EXPIRED';
+            throw new Error('A jelszó-visszaállító link lejárt. Kérj új emailt a bejelentkezési oldalon.');
+        }
+
+        const passwordHash = await bcrypt.hash(newPassword, 10);
+        await sql.updateUserPasswordAndClearResetToken(user.id, passwordHash);
+
+        await logAuthenticatedAction(request, user.id, {
+            eventType: 'password_reset_completed',
+            eventCategory: 'security',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Jelszó sikeresen visszaállítva.',
+            metadata: { email: user.email }
+        });
+
+        payload = {
+            success: true,
+            code: 'PASSWORD_RESET_SUCCESS',
+            message: 'A jelszavad sikeresen frissítve lett. Most már bejelentkezhetsz az új jelszóval.'
+        };
+    } catch (error) {
+        console.error('Password reset submit hiba:', error.message);
+        if (statusCode === 200) {
+            statusCode = 500;
+        }
+        payload = {
+            success: false,
+            code: payload.code || 'PASSWORD_RESET_FAILED',
+            message: error.message || 'Szerverhiba a jelszó visszaállítása során.'
         };
     }
     return response.status(statusCode).json(payload);

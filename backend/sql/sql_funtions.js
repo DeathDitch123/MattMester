@@ -102,6 +102,81 @@ async function getUserByEmail(mailAdress) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
 }
+
+async function savePasswordResetToken(userId, tokenHash, expiresAt) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET reset_password_token = ?,
+                reset_token_expires = ?
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [tokenHash, expiresAt, userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba a jelszó-visszaállítási token mentése során.');
+    }
+    return result;
+}
+
+async function findUserByPasswordResetTokenHash(tokenHash) {
+    const pool = getPool();
+    let foundUser = null;
+    try {
+        const query = `
+            SELECT id, username, email, reset_password_token, reset_token_expires
+            FROM users
+            WHERE reset_password_token = ?
+            LIMIT 1
+        `;
+        const [rows] = await pool.execute(query, [tokenHash]);
+        if (rows.length > 0) {
+            foundUser = rows[0];
+        }
+    } catch (error) {
+        throw new Error('Hiba a jelszó-visszaállítási token lekérdezése során.');
+    }
+    return foundUser;
+}
+
+async function clearPasswordResetToken(userId) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET reset_password_token = NULL,
+                reset_token_expires = NULL
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba a jelszó-visszaállítási token törlése során.');
+    }
+    return result;
+}
+
+async function updateUserPasswordAndClearResetToken(userId, passwordHash) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET password_hash = ?,
+                reset_password_token = NULL,
+                reset_token_expires = NULL
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [passwordHash, userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba a jelszó frissítése során.');
+    }
+    return result;
+}
 async function getLeaderBoardByElo() {
     const pool = getPool();
     const query = `SELECT id, username, elo, profile_image, last_active, created_at
@@ -2482,6 +2557,10 @@ module.exports = {
     getLeaderBoardByMM,
     getLeaderBoardByBullet,
     getLeaderBoardByWinRate,
+    savePasswordResetToken,
+    findUserByPasswordResetTokenHash,
+    clearPasswordResetToken,
+    updateUserPasswordAndClearResetToken,
     getSessionUserById,
     getPublicPlayerProfileById,
     getUserAuthById,

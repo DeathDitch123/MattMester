@@ -6,6 +6,7 @@ let cachedTransportVerified = false;
 
 const TOKEN_BYTE_LENGTH = 32;
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 function maskEmailAddress(emailInput) {
     const email = String(emailInput || '').trim();
@@ -72,6 +73,13 @@ function generateVerificationToken() {
     return { rawToken, tokenHash, expiresAt };
 }
 
+function generatePasswordResetToken() {
+    const rawToken = crypto.randomBytes(TOKEN_BYTE_LENGTH).toString('hex');
+    const tokenHash = hashToken(rawToken);
+    const expiresAt = new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS);
+    return { rawToken, tokenHash, expiresAt };
+}
+
 function buildPublicBaseUrl() {
     let baseUrl = process.env.PUBLIC_BASE_URL;
     if (!baseUrl || typeof baseUrl !== 'string') {
@@ -84,6 +92,46 @@ function buildVerificationLink(rawToken) {
     const base = buildPublicBaseUrl();
     const encoded = encodeURIComponent(String(rawToken || ''));
     return `${base}/api/auth/verify-email?token=${encoded}`;
+}
+
+function buildPasswordResetLink(rawToken) {
+    const base = buildPublicBaseUrl();
+    const encoded = encodeURIComponent(String(rawToken || ''));
+    return `${base}/html/restorePassword.html?token=${encoded}`;
+}
+
+function buildPasswordResetEmailPayload(toAddress, username, resetLink) {
+    const fromAddress = process.env.SMTP_FROM || 'MattMester <no-reply@mattmester.local>';
+    const safeUsername = String(username || 'játékos');
+    const textBody = [
+        `Szia ${safeUsername}!`,
+        '',
+        'Jelszó-visszaállítási kérelmet kaptunk a MattMester fiókodhoz.',
+        'A jelszavadat az alábbi linken tudod megadni:',
+        '',
+        resetLink,
+        '',
+        'A link 1 óráig érvényes. Ha nem te kezdeményezted, hagyd figyelmen kívül ezt a levelet.',
+        '',
+        'MattMester csapata'
+    ].join('\n');
+
+    const htmlBody = `
+        <p>Szia <strong>${safeUsername}</strong>!</p>
+        <p>Jelszó-visszaállítási kérelmet kaptunk a MattMester fiókodhoz.</p>
+        <p>A jelszavadat az alábbi linken tudod megadni:</p>
+        <p><a href="${resetLink}">${resetLink}</a></p>
+        <p>A link 1 óráig érvényes. Ha nem te kezdeményezted, hagyd figyelmen kívül ezt a levelet.</p>
+        <p>MattMester csapata</p>
+    `;
+
+    return {
+        from: fromAddress,
+        to: toAddress,
+        subject: 'MattMester — jelszó-visszaállítás',
+        text: textBody,
+        html: htmlBody
+    };
 }
 
 async function resolveTransporter() {
@@ -228,6 +276,50 @@ async function sendVerificationEmail(toAddress, username, rawToken, options = {}
     return sendResult;
 }
 
+async function sendPasswordResetEmail(toAddress, username, rawToken, options = {}) {
+    let sendResult = {
+        delivered: false,
+        transport: cachedTransporterKind,
+        resetLink: null,
+        messageId: null,
+        providerResponse: null
+    };
+    try {
+        const flow = String(options.flow || 'unknown').trim() || 'unknown';
+        const maskedToAddress = maskEmailAddress(toAddress);
+        const resetLink = buildPasswordResetLink(rawToken);
+        const transporter = await resolveTransporter();
+        const mail = buildPasswordResetEmailPayload(toAddress, username, resetLink);
+        console.log(`[EmailVerification] Jelszó-visszaállító küldés indult: flow=${flow} to=${maskedToAddress} transport=${cachedTransporterKind || 'n/a'}`);
+        const info = await transporter.sendMail(mail);
+        const messageId = String(info?.messageId || '').trim() || null;
+        const providerResponse = String(info?.response || '').trim() || null;
+
+        console.log(`[EmailVerification] Jelszó-visszaállító küldés sikeres: flow=${flow} to=${maskedToAddress} messageId=${messageId || 'n/a'} response=${providerResponse || 'n/a'}`);
+
+        if (cachedTransporterKind === 'json-dev') {
+            console.log('[EmailVerification][DEV] Kimenő jelszó-visszaállító email (nincs valódi SMTP):');
+            console.log(info.message || JSON.stringify(info, null, 2));
+        }
+
+        sendResult = {
+            delivered: true,
+            transport: cachedTransporterKind,
+            resetLink,
+            messageId,
+            providerResponse
+        };
+    } catch (error) {
+        const reason = classifyEmailSendError(error);
+        console.error(`[EmailVerification] Jelszó-visszaállító email küldési hiba: reason=${reason} code=${error.code || 'n/a'} message=${error.message || 'ismeretlen'}`);
+        const typedError = new Error('Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.');
+        typedError.code = 'EMAIL_SEND_FAILED';
+        typedError.smtpReason = reason;
+        throw typedError;
+    }
+    return sendResult;
+}
+
 function isExpired(expiresAt) {
     let expired = true;
     try {
@@ -243,9 +335,13 @@ function isExpired(expiresAt) {
 
 module.exports = {
     generateVerificationToken,
+    generatePasswordResetToken,
     hashToken,
     sendVerificationEmail,
+    sendPasswordResetEmail,
     buildVerificationLink,
+    buildPasswordResetLink,
     isExpired,
-    TOKEN_TTL_MS
+    TOKEN_TTL_MS,
+    PASSWORD_RESET_TOKEN_TTL_MS
 };
