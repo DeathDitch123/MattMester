@@ -1,6 +1,7 @@
 const express = require('express');
 const sql = require('../../sql/sql_funtions.js');
 const { isAuthenticated } = require('../funtions.js');
+const { logoutAllDevicesLimiter } = require('../middleware/rateLimiter.js');
 const { logAuthenticatedAction } = require('./_shared.js');
 
 const router = express.Router();
@@ -26,7 +27,7 @@ router.get('/security/activity', isAuthenticated, async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.post('/security/logout-all-devices', isAuthenticated, async (request, response) => {
+router.post('/security/logout-all-devices', logoutAllDevicesLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {

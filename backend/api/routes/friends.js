@@ -1,12 +1,13 @@
 const express = require('express');
 const sql = require('../../sql/sql_funtions.js');
 const { isAuthenticated } = require('../funtions.js');
+const { friendActionLimiter } = require('../middleware/rateLimiter.js');
 const { logAuthenticatedAction, parsePositiveInteger } = require('./_shared.js');
 
 const router = express.Router();
 
 // ?POST /api/friends/add - barát kérelem küldése
-router.post('/friends/add', isAuthenticated, async (request, response) => {
+router.post('/friends/add', friendActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -60,7 +61,7 @@ router.get('/friends/list', isAuthenticated, async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.post('/friends/accept', isAuthenticated, async (request, response) => {
+router.post('/friends/accept', friendActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -88,7 +89,7 @@ router.post('/friends/accept', isAuthenticated, async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.post('/friends/reject', isAuthenticated, async (request, response) => {
+router.post('/friends/reject', friendActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -116,7 +117,7 @@ router.post('/friends/reject', isAuthenticated, async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.post('/friends/block', isAuthenticated, async (request, response) => {
+router.post('/friends/block', friendActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -145,7 +146,7 @@ router.post('/friends/block', isAuthenticated, async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.delete('/friends/unblock/:targetUserId', isAuthenticated, async (request, response) => {
+router.delete('/friends/unblock/:targetUserId', friendActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -173,7 +174,7 @@ router.delete('/friends/unblock/:targetUserId', isAuthenticated, async (request,
     return response.status(statusCode).json(payload);
 });
 
-router.delete('/friends/:targetUserId', isAuthenticated, async (request, response) => {
+router.delete('/friends/:targetUserId', friendActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {

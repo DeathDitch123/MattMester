@@ -6,7 +6,13 @@ const fs = require('fs/promises');
 const sql = require('../../sql/sql_funtions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
 const { isAuthenticated } = require('../funtions.js');
-const { verifyPasswordLimiter } = require('../middleware/rateLimiter.js');
+const {
+    verifyPasswordLimiter,
+    profileUpdateLimiter,
+    profileImageUploadLimiter,
+    profileImageRemoveLimiter,
+    profileDeleteLimiter
+} = require('../middleware/rateLimiter.js');
 const {
     logAuthenticatedAction,
     saveSessionAsync,
@@ -81,7 +87,7 @@ router.post('/profile/verify-current-password', verifyPasswordLimiter, isAuthent
     return response.status(statusCode).json(result);
 });
 
-router.post('/profile/settings', isAuthenticated, async (request, response) => {
+router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -222,7 +228,7 @@ router.post('/profile/settings', isAuthenticated, async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.post('/profile/delete', isAuthenticated, async (request, response) => {
+router.post('/profile/delete', profileDeleteLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
@@ -290,7 +296,7 @@ router.post('/profile/delete', isAuthenticated, async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.post('/profile/upload-image', isAuthenticated, (request, response) => {
+router.post('/profile/upload-image', profileImageUploadLimiter, isAuthenticated, (request, response) => {
     profileImageUpload.single('image')(request, response, async (uploadError) => {
         let statusCode = 200;
         let payload = { success: false, message: '' };
@@ -349,7 +355,7 @@ router.post('/profile/upload-image', isAuthenticated, (request, response) => {
     });
 });
 
-router.post('/profile/remove-image', isAuthenticated, async (request, response) => {
+router.post('/profile/remove-image', profileImageRemoveLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {

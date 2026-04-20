@@ -3,6 +3,9 @@
 > Projekt-szintű review alapján összegyűjtött javaslatok.
 > Prioritás: 🔴 kritikus · 🟠 strukturális · 🟡 kód-szintű · 🟢 funkcionális
 
+> Cél: localhoston futó, érettségi szint feletti, de még jól karbantartható verzió.
+> Emiatt a lista a valóban hasznos, arányos lépésekre fókuszál; az erősen "enterprise" jellegű bónuszok csak akkor maradnak, ha tényleg beleférnek.
+
 ---
 
 ## 🔴 Kritikus / Biztonsági
@@ -63,7 +66,7 @@
 
 ---
 
-## 🟢 Funkcionális Fejlesztések
+## 🟢 Bónusz, ha marad idő
 
 | # | Teendő | Státusz |
 |---|--------|:------:|
@@ -88,10 +91,9 @@
 
 ## 🎯 Javasolt Sorrend
 
-1. **Security csomag** → #1 – #4 (gyors, nagy hatás)
-2. **`ipCollisionCheck` + helmet + CSRF** → #5 – #7
-3. **Holt kód kitakarítása** → #40 – #44 (gyors nyereség)
-4. **Duplikációk feloldása** → #36 – #39
-5. **Migráció-runner** → #21 (schema változtatás előtt)
-6. **Enum konstansok + validáció** → #17, #19
-7. **Funkcionális: 2FA / email verifikáció** → #29, #30
+1. **Session és cookie hardening** → #1 – #3
+2. **Auth/session rendbetétele** → #36, #38, #39
+3. **Holt kód és fölös endpointok takarítása** → #40 – #45
+4. **Egyetlen értelmes schema-takarítás** → #9, #12, #15
+5. **Teszt és minőségjavítás** → #24, #27, #28
+6. **Bónusz funkciók csak ha marad idő** → #29 – #35

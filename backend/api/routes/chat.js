@@ -1,6 +1,7 @@
 const express = require('express');
 const sql = require('../../sql/sql_funtions.js');
 const { isAuthenticated } = require('../funtions.js');
+const { chatMessageLimiter, chatDirectOpenLimiter } = require('../middleware/rateLimiter.js');
 const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('../chatUtils.js');
 const { parsePositiveInteger, getAuthenticatedUserIdOrThrow } = require('./_shared.js');
 
@@ -178,7 +179,7 @@ router.get('/chat/conversations/:conversationId/messages', isAuthenticated, asyn
     return response.status(statusCode).json(payload);
 });
 
-router.post('/chat/conversations/:conversationId/messages', isAuthenticated, async (request, response) => {
+router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = {
         success: false,
@@ -257,7 +258,7 @@ router.post('/chat/conversations/:conversationId/messages', isAuthenticated, asy
     return response.status(statusCode).json(payload);
 });
 
-router.post('/chat/conversations/direct', isAuthenticated, async (request, response) => {
+router.post('/chat/conversations/direct', chatDirectOpenLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = {
         success: false,

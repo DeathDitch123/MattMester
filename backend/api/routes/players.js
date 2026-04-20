@@ -3,6 +3,7 @@ const sql = require('../../sql/sql_funtions.js');
 const { leaderboardService } = require('../../services.js');
 const { usernameRegex } = require('../validation.js');
 const { isAuthenticated } = require('../funtions.js');
+const { playerSearchLimiter } = require('../middleware/rateLimiter.js');
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/leaderboard', async (request, response) => {
     return response.status(statusCode).json(payload);
 });
 
-router.get('/searchPlayer', isAuthenticated, async (request, response) => {
+router.get('/searchPlayer', playerSearchLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
