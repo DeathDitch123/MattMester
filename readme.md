@@ -52,6 +52,55 @@
    `npm run test:watch` - Tesztek figyelési módban<br>
    `npm run test:coverage` - Code coverage report<br>
 
+## Email verifikáció beállítása (SMTP):<br>
+
+Az email verifikáció működéséhez valós SMTP adatok szükségesek. Ha ez nincs beállítva, a rendszer fejlesztői `json-dev` fallback módba vált, és a levél csak logba kerül.<br>
+
+1. Lépj be a backend mappába:<br>
+   `cd backend`<br>
+
+2. Készíts `.env` fájlt a backend mappában (például a `.env.example` alapján).<br>
+
+3. Töltsd ki legalább ezeket a mezőket:<br>
+
+```
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=<kuldo-email-cim>
+SMTP_PASS=<smtp-jelszo-vagy-app-password>
+SMTP_SECURE=false
+SMTP_FROM=MattMester <kuldo-email-cim>
+PUBLIC_BASE_URL=http://127.0.0.1:3000
+```
+
+4. Indítsd újra a backendet:<br>
+   `npm run dev`<br>
+
+5. Profil oldalon, az Account Status szekcióban kérj új verifikációs emailt.<br>
+
+### Gmail gyors beállítás (teszthez):<br>
+
+1. Kapcsold be a kétlépcsős azonosítást a Google fiókban.<br>
+2. Készíts App Password-öt.<br>
+3. Az App Password értékét használd `SMTP_PASS` mezőként.<br>
+
+### Diagnosztika: miért nem érkezik meg az email?<br>
+
+Gyakori okok:<br>
+- Rossz SMTP host vagy port<br>
+- Hibás SMTP user/pass (auth hiba)<br>
+- Hibás `SMTP_FROM` vagy a provider tiltja<br>
+- Provider sandbox mód<br>
+- Spam/Promóciók mappa<br>
+- Lokális tűzfal / hálózati tiltás<br>
+
+Backend logban ezeket nézd:<br>
+- `Transporter init sikeres: kind=smtp`<br>
+- `SMTP kapcsolat ellenőrzés rendben (verify).`<br>
+- `Küldés sikeres` + `messageId`<br>
+
+Ha ezt látod, hogy `SMTP fallback aktiv: kind=json-dev`, akkor nincs érvényes SMTP beállítás betöltve a környezetből.<br>
+
 ## NPM hiba esetén<br>
 
 Amennyiben a npm run start nem működik a következő hiba miatt:<br>
@@ -91,6 +140,7 @@ Nyisd meg a böngésződben a **http://localhost:3000** címet.
 `socket.io` - Real-time communication<br>
 `cors` - Cross-Origin Resource Sharing<br>
 `express-rate-limit` - Brute-force védelem az auth endpointokon<br>
+`dotenv` - Környezeti változók betöltése `.env` fájlból<br>
 
 ### Development Dependencies:<br>
 `nodemon` - Auto-restart on file changes<br>
@@ -218,6 +268,8 @@ router.post('/my-endpoint', myLimiter, handler);
 ```
 
 Limit átlépésnél a válasz `429 Too Many Requests` státuszú JSON: `{ success: false, message }`.<br>
+
+Egyes limitek opcionális `code` mezőt is visszaadhatnak (példa: `EMAIL_RESEND_RATE_LIMIT`), ezért kliens oldalon érdemes `code` és `message` mezőt is kezelni.<br>
 
 ### Jest Testing<br>
 
