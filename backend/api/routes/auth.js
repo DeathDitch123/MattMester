@@ -24,6 +24,23 @@ const {
 
 const router = express.Router();
 
+function buildMailVerifiedRedirectPath(payloadInput = {}) {
+    const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
+    const params = new URLSearchParams();
+    params.set('success', payload.success ? 'true' : 'false');
+    params.set('alreadyVerified', payload.alreadyVerified ? 'true' : 'false');
+
+    if (payload.code) {
+        params.set('code', String(payload.code));
+    }
+
+    if (payload.message) {
+        params.set('message', String(payload.message));
+    }
+
+    return `/html/mailVerified.html?${params.toString()}`;
+}
+
 // ?POST /api/login - felhasználó azonosítása és session-be mentése
 router.post('/login', authLoginLimiter, async (request, response) => {
     let statusCode = 200;
@@ -354,11 +371,13 @@ router.get('/sessionInfo', async (request, response) => {
 // ?GET /api/auth/verify-email - token alapú email megerősítés (egyszer használatos, lejáró)
 router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, response) => {
     let statusCode = 200;
-    let payload = { success: false, message: '' };
+    let payload = { success: false, message: '', code: '' };
+    let responseResult = null;
     try {
         const token = typeof request.query?.token === 'string' ? request.query.token.trim() : '';
         if (!token) {
             statusCode = 400;
+            payload.code = 'MISSING_TOKEN';
             throw new Error('Hiányzó verifikációs token.');
         }
 
@@ -376,12 +395,14 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
                 message: 'Érvénytelen vagy ismeretlen verifikációs token.',
                 metadata: { reason: 'not_found' }
             }).catch(() => { });
+            payload.code = 'INVALID_TOKEN';
             throw new Error('Érvénytelen vagy már felhasznált verifikációs token.');
         }
 
         if (user.is_email_verified) {
             payload = {
                 success: true,
+                code: 'EMAIL_ALREADY_VERIFIED',
                 alreadyVerified: true,
                 message: 'Az email cím már meg van erősítve.'
             };
@@ -396,6 +417,7 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
                 message: 'Lejárt verifikációs token.',
                 metadata: { reason: 'expired' }
             });
+            payload.code = 'TOKEN_EXPIRED';
             throw new Error('A verifikációs link lejárt. Kérj új linket a /api/auth/resend-verification végponton.');
         } else {
             await sql.markEmailVerified(user.id);
@@ -410,6 +432,7 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
             });
             payload = {
                 success: true,
+                code: 'EMAIL_VERIFIED',
                 alreadyVerified: false,
                 message: 'Email cím sikeresen megerősítve. Most már minden funkciót használhatsz.'
             };
@@ -417,9 +440,25 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
     } catch (error) {
         console.error('Email verify hiba:', error.message);
         if (statusCode === 200) statusCode = 500;
-        payload = { success: false, message: error.message || 'Szerverhiba az email verifikáció során.' };
+        payload = {
+            success: false,
+            code: payload.code || 'EMAIL_VERIFY_FAILED',
+            message: error.message || 'Szerverhiba az email verifikáció során.'
+        };
     }
-    return response.status(statusCode).json(payload);
+
+    const formatQuery = typeof request.query?.format === 'string' ? request.query.format.trim().toLowerCase() : '';
+    const acceptedType = request.accepts(['html', 'json']);
+    const prefersJson = formatQuery === 'json' || acceptedType === 'json';
+
+    if (prefersJson) {
+        responseResult = response.status(statusCode).json(payload);
+    } else {
+        const redirectTarget = buildMailVerifiedRedirectPath(payload);
+        responseResult = response.redirect(302, redirectTarget);
+    }
+
+    return responseResult;
 });
 
 // ?POST /api/auth/resend-verification - új verifikációs email kérése (csak bejelentkezett, még nem verifikált usernek)
