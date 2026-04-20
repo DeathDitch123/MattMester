@@ -56,13 +56,18 @@ async function createTables() {
             banned_until TIMESTAMP NULL,
             last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             is_email_verified BOOLEAN DEFAULT FALSE,
+            email_verification_token_hash VARCHAR(128) NULL,
+            email_verification_token_expires TIMESTAMP NULL,
+            email_verification_sent_at TIMESTAMP NULL,
+            email_verified_at TIMESTAMP NULL,
             reset_password_token VARCHAR(255),
             reset_token_expires TIMESTAMP NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP);
         `,
 
         `ALTER TABLE users

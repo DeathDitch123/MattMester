@@ -2,7 +2,19 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const sql = require('../../sql/sql_funtions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
-const { authLoginLimiter, authRegisterLimiter } = require('../middleware/rateLimiter.js');
+const {
+    authLoginLimiter,
+    authRegisterLimiter,
+    emailVerifyResendLimiter,
+    emailVerifyConsumeLimiter
+} = require('../middleware/rateLimiter.js');
+const { isAuthenticated } = require('../funtions.js');
+const {
+    generateVerificationToken,
+    hashToken,
+    sendVerificationEmail,
+    isExpired
+} = require('../emailVerification.js');
 const {
     getRequestIpAddress,
     logAuthenticatedAction,
@@ -206,9 +218,43 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
             message: 'Sikeres regisztráció.'
         });
 
+        let verificationEmailSent = false;
+        try {
+            const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
+            await sql.saveEmailVerificationToken(result.insertId, tokenHash, expiresAt);
+            await sendVerificationEmail(email, username, rawToken);
+            verificationEmailSent = true;
+            await logAuthenticatedAction(request, result.insertId, {
+                eventType: 'email_verification_sent',
+                eventCategory: 'security',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Verifikációs email elküldve regisztráció után.',
+                metadata: { email, expiresAt }
+            });
+        } catch (verificationError) {
+            console.error('Verifikációs email hiba regisztráció után:', verificationError.message);
+            await logAuthenticatedAction(request, result.insertId, {
+                eventType: 'email_verification_sent',
+                eventCategory: 'security',
+                severity: 'error',
+                source: 'backend',
+                success: false,
+                message: 'Verifikációs email küldése sikertelen regisztráció után.',
+                metadata: { email, error: verificationError.message }
+            });
+        }
+
         payload = {
             success: true,
-            message: 'Sikeres regisztráció',
+            message: verificationEmailSent
+                ? 'Sikeres regisztráció. Küldtünk egy megerősítő emailt, kérjük aktiváld a fiókodat.'
+                : 'Sikeres regisztráció, de a verifikációs email küldése sikertelen — kérj újat a /resend-verification végponton.',
+            emailVerification: {
+                required: true,
+                sent: verificationEmailSent
+            },
             user: {
                 id: result.insertId,
                 username,
@@ -216,7 +262,8 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
                 role: 'player',
                 elo: 800,
                 elo_MM: 800,
-                elo_bullet: 800
+                elo_bullet: 800,
+                is_email_verified: false
             }
         };
     } catch (error) {
@@ -292,6 +339,132 @@ router.get('/sessionInfo', async (request, response) => {
         };
     }
     return response.status(statusCode).json(result);
+});
+
+// ?GET /api/auth/verify-email - token alapú email megerősítés (egyszer használatos, lejáró)
+router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: '' };
+    try {
+        const token = typeof request.query?.token === 'string' ? request.query.token.trim() : '';
+        if (!token) {
+            statusCode = 400;
+            throw new Error('Hiányzó verifikációs token.');
+        }
+
+        const tokenHash = hashToken(token);
+        const user = await sql.findUserByVerificationTokenHash(tokenHash);
+
+        if (!user) {
+            statusCode = 400;
+            await logAuthenticatedAction(request, 0, {
+                eventType: 'email_verification_failed',
+                eventCategory: 'security',
+                severity: 'warning',
+                source: 'backend',
+                success: false,
+                message: 'Érvénytelen vagy ismeretlen verifikációs token.',
+                metadata: { reason: 'not_found' }
+            }).catch(() => { });
+            throw new Error('Érvénytelen vagy már felhasznált verifikációs token.');
+        }
+
+        if (user.is_email_verified) {
+            payload = {
+                success: true,
+                alreadyVerified: true,
+                message: 'Az email cím már meg van erősítve.'
+            };
+        } else if (isExpired(user.email_verification_token_expires)) {
+            statusCode = 400;
+            await logAuthenticatedAction(request, user.id, {
+                eventType: 'email_verification_failed',
+                eventCategory: 'security',
+                severity: 'warning',
+                source: 'backend',
+                success: false,
+                message: 'Lejárt verifikációs token.',
+                metadata: { reason: 'expired' }
+            });
+            throw new Error('A verifikációs link lejárt. Kérj új linket a /api/auth/resend-verification végponton.');
+        } else {
+            await sql.markEmailVerified(user.id);
+            await logAuthenticatedAction(request, user.id, {
+                eventType: 'email_verification_success',
+                eventCategory: 'security',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Email cím sikeresen megerősítve.',
+                metadata: { email: user.email }
+            });
+            payload = {
+                success: true,
+                alreadyVerified: false,
+                message: 'Email cím sikeresen megerősítve. Most már minden funkciót használhatsz.'
+            };
+        }
+    } catch (error) {
+        console.error('Email verify hiba:', error.message);
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba az email verifikáció során.' };
+    }
+    return response.status(statusCode).json(payload);
+});
+
+// ?POST /api/auth/resend-verification - új verifikációs email kérése (csak bejelentkezett, még nem verifikált usernek)
+router.post('/auth/resend-verification', emailVerifyResendLimiter, isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: '' };
+    try {
+        const userId = Number(request.session?.userId) || 0;
+        if (!userId) {
+            statusCode = 401;
+            throw new Error('Bejelentkezés szükséges.');
+        }
+
+        const user = await sql.getUserVerificationStatusById(userId);
+        if (!user) {
+            statusCode = 404;
+            throw new Error('A felhasználó nem található.');
+        }
+
+        if (user.is_email_verified) {
+            payload = {
+                success: true,
+                alreadyVerified: true,
+                message: 'Az email cím már meg van erősítve, nincs szükség újraküldésre.'
+            };
+        } else if (!user.email) {
+            statusCode = 400;
+            throw new Error('Nincs email cím a profilhoz, előbb állíts be egyet.');
+        } else {
+            const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
+            await sql.saveEmailVerificationToken(userId, tokenHash, expiresAt);
+            await sendVerificationEmail(user.email, user.username, rawToken);
+
+            await logAuthenticatedAction(request, userId, {
+                eventType: 'email_verification_resend',
+                eventCategory: 'security',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Verifikációs email újraküldve.',
+                metadata: { email: user.email, expiresAt }
+            });
+
+            payload = {
+                success: true,
+                alreadyVerified: false,
+                message: 'Új verifikációs email elküldve. Ellenőrizd a postaládád.'
+            };
+        }
+    } catch (error) {
+        console.error('Resend verification hiba:', error.message);
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || 'Szerverhiba a verifikációs email újraküldése során.' };
+    }
+    return response.status(statusCode).json(payload);
 });
 
 module.exports = router;

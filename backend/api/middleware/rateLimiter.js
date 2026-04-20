@@ -157,6 +157,23 @@ const chatDirectOpenLimiter = createRateLimiter({
     message: 'Túl sok beszélgetés-megnyitási kérés. Próbáld újra később.'
 });
 
+// Email verifikáció újraküldés: 15 perces ablakban max 5 kérés felhasználónként / IP-nként.
+// Védelem email-spam és bcrypt-free bulk abuse ellen.
+const emailVerifyResendLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 5,
+    keyGenerator: userOrIpKeyGenerator,
+    message: 'Túl sok verifikációs email újraküldés. Próbáld újra 15 perc múlva.'
+});
+
+// Email verifikáció link megnyitás (GET verify): 15 perces ablakban max 30 próbálkozás IP-nként.
+// Védelem token-enumeráció ellen.
+const emailVerifyConsumeLimiter = createRateLimiter({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: 'Túl sok verifikációs kísérlet. Próbáld újra később.'
+});
+
 module.exports = {
     createRateLimiter,
     userOrIpKeyGenerator,
@@ -171,5 +188,7 @@ module.exports = {
     playerSearchLimiter,
     chatMessageLimiter,
     chatDirectOpenLimiter,
-    logoutAllDevicesLimiter
+    logoutAllDevicesLimiter,
+    emailVerifyResendLimiter,
+    emailVerifyConsumeLimiter
 };

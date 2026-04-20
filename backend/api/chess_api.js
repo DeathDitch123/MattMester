@@ -14,6 +14,7 @@ const { idoLeall } = require('../chess/timer.js');
 const chessSql = require('../chess/chess_sql_functions.js');
 const { botLepesValaszt, nehezsegiSzintInfo, osszesNehezsegiSzint } = require('../chess/bot.js');
 const { eloSzamit, KEZDO_ELO } = require('../chess/elo.js');
+const { requireVerifiedEmail } = require('./funtions.js');
 
 function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -60,7 +61,7 @@ router.get('/user-elo', async (req, res) => {
 // ────────────────────────────────────────────
 // POST /api/chess/new — Új játék indítása (PvP / lokális)
 // ────────────────────────────────────────────
-router.post('/new', async (req, res) => {
+router.post('/new', requireVerifiedEmail, async (req, res) => {
     try {
         const { gameId, jatek } = jatekLetrehoz();
 
@@ -97,7 +98,7 @@ router.post('/new', async (req, res) => {
 // ────────────────────────────────────────────
 // POST /api/chess/new-bot — Új játék robot ellen
 // ────────────────────────────────────────────
-router.post('/new-bot', async (req, res) => {
+router.post('/new-bot', requireVerifiedEmail, async (req, res) => {
     let statusCode = 200;
     let responseBody = null;
     try {

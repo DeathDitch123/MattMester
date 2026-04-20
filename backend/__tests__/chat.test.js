@@ -63,7 +63,10 @@ jest.mock('../sql/sql_funtions', () => ({
     assertConversationParticipant: jest.fn(() => Promise.resolve(true)),
     containsBlockedWord: jest.fn(() => false),
     normalizeTextForModeration: jest.fn((msg) => msg),
-    insertUserLog: jest.fn(() => Promise.resolve())
+    insertUserLog: jest.fn(() => Promise.resolve()),
+    getUserVerificationStatusById: jest.fn(() =>
+        Promise.resolve({ id: 1, username: 'testuser', email: 'testuser@example.com', is_email_verified: 1 })
+    )
 }));
 
 // Create test app

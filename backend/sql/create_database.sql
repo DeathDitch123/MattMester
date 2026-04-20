@@ -14,9 +14,14 @@ CREATE TABLE IF NOT EXISTS users (
     banned_until TIMESTAMP NULL,
     last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     is_email_verified BOOLEAN DEFAULT FALSE,
+    email_verification_token_hash VARCHAR(128) NULL,
+    email_verification_token_expires TIMESTAMP NULL,
+    email_verification_sent_at TIMESTAMP NULL,
+    email_verified_at TIMESTAMP NULL,
     reset_password_token VARCHAR(255),
     reset_token_expires TIMESTAMP NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
 );
 -- Admin felhasználó beszúrása (ha még nem létezik) - a jelszó "chu+)2_23iIa6sou&>#o79247r9Xbsibv%" (bcrypt hash: $2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq)
 INSERT INTO users (
@@ -26,7 +31,9 @@ INSERT INTO users (
         elo,
         elo_MM,
         elo_bullet,
-        role
+        role,
+        is_email_verified,
+        email_verified_at
     )
 VALUES (
         'admin',
@@ -35,7 +42,9 @@ VALUES (
         1500,
         1500,
         1500,
-        'admin'
+        'admin',
+        TRUE,
+        CURRENT_TIMESTAMP
     ) ON DUPLICATE KEY
 UPDATE id = id;
 UPDATE users
@@ -262,124 +271,164 @@ CREATE TABLE IF NOT EXISTS chat_messages (
     INDEX idx_chat_messages_sender (sender_id)
 );
 -- 20 teszt felhasznalo (jelszo: 123456Ab)
-INSERT IGNORE INTO users (username, password_hash, email, role)
+INSERT IGNORE INTO users (username, password_hash, email, role, is_email_verified, email_verified_at)
 VALUES (
         'testuser01',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser01@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser02',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser02@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser03',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser03@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser04',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser04@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser05',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser05@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser06',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser06@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser07',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser07@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser08',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser08@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser09',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser09@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser10',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser10@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser11',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser11@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser12',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser12@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser13',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser13@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser14',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser14@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser15',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser15@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser16',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser16@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser17',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser17@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser18',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser18@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser19',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser19@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     ),
     (
         'testuser20',
         '$2b$10$6iknUs/vjxhRFRPc20jIb.zDs/YJbPPwHNd8m6YkLi6sAuNl28dbi',
         'testuser20@mattmester.local',
-        'player'
+        'player',
+        TRUE,
+        CURRENT_TIMESTAMP
     );

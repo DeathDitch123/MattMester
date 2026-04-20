@@ -1,13 +1,13 @@
 const express = require('express');
 const sql = require('../../sql/sql_funtions.js');
-const { isAuthenticated } = require('../funtions.js');
+const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
 const { friendActionLimiter } = require('../middleware/rateLimiter.js');
 const { logAuthenticatedAction, parsePositiveInteger } = require('./_shared.js');
 
 const router = express.Router();
 
 // ?POST /api/friends/add - barát kérelem küldése
-router.post('/friends/add', friendActionLimiter, isAuthenticated, async (request, response) => {
+router.post('/friends/add', friendActionLimiter, isAuthenticated, requireVerifiedEmail, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {

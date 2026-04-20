@@ -5,7 +5,11 @@ const path = require('path');
 const fs = require('fs/promises');
 const sql = require('../../sql/sql_funtions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
-const { isAuthenticated } = require('../funtions.js');
+const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
+const {
+    generateVerificationToken,
+    sendVerificationEmail
+} = require('../emailVerification.js');
 const {
     verifyPasswordLimiter,
     profileUpdateLimiter,
@@ -214,10 +218,45 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
             });
         }
 
+        let newVerificationEmailSent = false;
+        if (updateResult.emailChanged) {
+            try {
+                const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
+                await sql.saveEmailVerificationToken(request.session.userId, tokenHash, expiresAt);
+                await sendVerificationEmail(email, username, rawToken);
+                newVerificationEmailSent = true;
+                await logAuthenticatedAction(request, request.session.userId, {
+                    eventType: 'email_verification_sent',
+                    eventCategory: 'security',
+                    severity: 'info',
+                    source: 'backend',
+                    success: true,
+                    message: 'Új verifikációs email elküldve email változtatás után.',
+                    metadata: { email, reason: 'email_changed', expiresAt }
+                });
+            } catch (verificationError) {
+                console.error('Email változtatás utáni verifikációs email hiba:', verificationError.message);
+                await logAuthenticatedAction(request, request.session.userId, {
+                    eventType: 'email_verification_sent',
+                    eventCategory: 'security',
+                    severity: 'error',
+                    source: 'backend',
+                    success: false,
+                    message: 'Verifikációs email küldése sikertelen email változtatás után.',
+                    metadata: { email, reason: 'email_changed', error: verificationError.message }
+                });
+            }
+        }
+
         payload = {
             success: true,
-            message: 'A profil beállítások sikeresen frissültek.',
-            changedFields
+            message: updateResult.emailChanged
+                ? 'A profil beállítások sikeresen frissültek. Az új email címet meg kell erősítened — küldtünk egy linket.'
+                : 'A profil beállítások sikeresen frissültek.',
+            changedFields,
+            emailVerification: updateResult.emailChanged
+                ? { required: true, sent: newVerificationEmailSent }
+                : undefined
         };
     } catch (error) {
         console.error('Profile settings hiba:', error);
@@ -296,7 +335,7 @@ router.post('/profile/delete', profileDeleteLimiter, isAuthenticated, async (req
     return response.status(statusCode).json(payload);
 });
 
-router.post('/profile/upload-image', profileImageUploadLimiter, isAuthenticated, (request, response) => {
+router.post('/profile/upload-image', profileImageUploadLimiter, isAuthenticated, requireVerifiedEmail, (request, response) => {
     profileImageUpload.single('image')(request, response, async (uploadError) => {
         let statusCode = 200;
         let payload = { success: false, message: '' };
