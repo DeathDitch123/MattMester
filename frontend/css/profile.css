@@ -947,6 +947,28 @@ h6 {
     box-shadow: 0 4px 12px rgba(212, 175, 55, 0.25);
 }
 
+.account-status-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.account-status-resend-highlight {
+    animation: accountStatusPulse 0.45s ease-in-out 0s 3 alternate;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2), 0 0 24px rgba(212, 175, 55, 0.35);
+}
+
+@keyframes accountStatusPulse {
+    from {
+        transform: translateY(0);
+    }
+
+    to {
+        transform: translateY(-2px);
+    }
+}
+
 .danger-zone {
     margin-top: 28px;
     padding: 18px;

@@ -2,9 +2,64 @@ const crypto = require('crypto');
 
 let cachedTransporter = null;
 let cachedTransporterKind = null;
+let cachedTransportVerified = false;
 
 const TOKEN_BYTE_LENGTH = 32;
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
+function maskEmailAddress(emailInput) {
+    const email = String(emailInput || '').trim();
+    const parts = email.split('@');
+    let masked = 'ismeretlen';
+    if (parts.length === 2 && parts[0] && parts[1]) {
+        const localPart = parts[0];
+        const domainPart = parts[1];
+        const first = localPart.charAt(0) || '*';
+        const last = localPart.length > 1 ? localPart.charAt(localPart.length - 1) : '*';
+        masked = `${first}***${last}@${domainPart}`;
+    }
+    return masked;
+}
+
+function classifyEmailSendError(errorInput) {
+    const error = errorInput || {};
+    const text = String(error.message || '').toLowerCase();
+    const code = String(error.code || '').toUpperCase();
+    let reason = 'UNKNOWN';
+
+    if (code === 'EAUTH' || text.includes('auth')) {
+        reason = 'AUTH';
+    } else if (code === 'ESOCKET' && text.includes('tls')) {
+        reason = 'TLS';
+    } else if (code === 'ETIMEDOUT' || code === 'ESOCKET' || text.includes('timeout')) {
+        reason = 'TIMEOUT';
+    } else if (code === 'ENOTFOUND' || code === 'EAI_AGAIN' || text.includes('dns') || text.includes('getaddrinfo')) {
+        reason = 'DNS';
+    } else if (String(error.responseCode || '').startsWith('5') || text.includes('rejected') || text.includes('invalid recipients')) {
+        reason = 'REJECT';
+    }
+
+    return reason;
+}
+
+function buildSmtpDiagnosticsSummary() {
+    const host = String(process.env.SMTP_HOST || '').trim();
+    const port = Number(process.env.SMTP_PORT) || 587;
+    const user = String(process.env.SMTP_USER || '').trim();
+    const pass = String(process.env.SMTP_PASS || '').trim();
+    const from = String(process.env.SMTP_FROM || '').trim();
+    const secure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
+
+    return {
+        host,
+        port,
+        user,
+        pass,
+        from,
+        secure,
+        smtpConfigured: Boolean(host && user && pass)
+    };
+}
 
 function hashToken(plainToken) {
     return crypto.createHash('sha256').update(String(plainToken || '')).digest('hex');
@@ -34,37 +89,63 @@ function buildVerificationLink(rawToken) {
 async function resolveTransporter() {
     let transporter = cachedTransporter;
     try {
+        const diagnostics = buildSmtpDiagnosticsSummary();
         if (transporter) {
+            if (!cachedTransportVerified && cachedTransporterKind === 'smtp') {
+                try {
+                    await transporter.verify();
+                    cachedTransportVerified = true;
+                    console.log(`[EmailVerification] SMTP transporter verify sikeres: host=${diagnostics.host || 'n/a'} port=${diagnostics.port} secure=${diagnostics.secure}`);
+                } catch (verifyError) {
+                    const reason = classifyEmailSendError(verifyError);
+                    console.error(`[EmailVerification] SMTP transporter verify hiba: reason=${reason} code=${verifyError.code || 'n/a'} message=${verifyError.message || 'ismeretlen'}`);
+                    throw verifyError;
+                }
+            }
             return transporter;
         }
 
         const nodemailer = require('nodemailer');
-        const host = process.env.SMTP_HOST;
-        const port = Number(process.env.SMTP_PORT) || 587;
-        const user = process.env.SMTP_USER;
-        const pass = process.env.SMTP_PASS;
-        const secure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
-
-        if (host && user && pass) {
+        if (diagnostics.smtpConfigured) {
             transporter = nodemailer.createTransport({
-                host,
-                port,
-                secure,
-                auth: { user, pass }
+                host: diagnostics.host,
+                port: diagnostics.port,
+                secure: diagnostics.secure,
+                auth: { user: diagnostics.user, pass: diagnostics.pass },
+                connectionTimeout: 10000,
+                greetingTimeout: 10000,
+                socketTimeout: 20000
             });
             cachedTransporterKind = 'smtp';
+            console.log(`[EmailVerification] Transporter init sikeres: kind=smtp host=${diagnostics.host} port=${diagnostics.port} secure=${diagnostics.secure} userSet=${Boolean(diagnostics.user)} fromSet=${Boolean(diagnostics.from)}`);
+
+            try {
+                await transporter.verify();
+                cachedTransportVerified = true;
+                console.log('[EmailVerification] SMTP kapcsolat ellenőrzés rendben (verify).');
+            } catch (verifyError) {
+                const reason = classifyEmailSendError(verifyError);
+                console.error(`[EmailVerification] SMTP verify sikertelen: reason=${reason} code=${verifyError.code || 'n/a'} message=${verifyError.message || 'ismeretlen'}`);
+                throw verifyError;
+            }
         } else {
             transporter = nodemailer.createTransport({
                 jsonTransport: true
             });
             cachedTransporterKind = 'json-dev';
+            cachedTransportVerified = true;
+            console.warn(`[EmailVerification] SMTP fallback aktiv: kind=json-dev hostSet=${Boolean(diagnostics.host)} userSet=${Boolean(diagnostics.user)} passSet=${Boolean(diagnostics.pass)} fromSet=${Boolean(diagnostics.from)}`);
             console.warn('[EmailVerification] SMTP_HOST/USER/PASS nincs beállítva — dev JSON transport aktív (a levél csak logba kerül).');
         }
 
         cachedTransporter = transporter;
     } catch (error) {
-        console.error('[EmailVerification] Transporter inicializálási hiba:', error.message);
-        throw new Error('Email küldő szolgáltatás nem elérhető.');
+        const reason = classifyEmailSendError(error);
+        console.error(`[EmailVerification] Transporter inicializálási hiba: reason=${reason} code=${error.code || 'n/a'} message=${error.message || 'ismeretlen'}`);
+        const typedError = new Error('Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.');
+        typedError.code = 'EMAIL_SEND_FAILED';
+        typedError.smtpReason = reason;
+        throw typedError;
     }
     return transporter;
 }
@@ -103,13 +184,26 @@ function buildEmailPayload(toAddress, username, verificationLink) {
     };
 }
 
-async function sendVerificationEmail(toAddress, username, rawToken) {
-    let sendResult = { delivered: false, transport: cachedTransporterKind, verificationLink: null };
+async function sendVerificationEmail(toAddress, username, rawToken, options = {}) {
+    let sendResult = {
+        delivered: false,
+        transport: cachedTransporterKind,
+        verificationLink: null,
+        messageId: null,
+        providerResponse: null
+    };
     try {
+        const flow = String(options.flow || 'unknown').trim() || 'unknown';
+        const maskedToAddress = maskEmailAddress(toAddress);
         const verificationLink = buildVerificationLink(rawToken);
         const transporter = await resolveTransporter();
         const mail = buildEmailPayload(toAddress, username, verificationLink);
+        console.log(`[EmailVerification] Küldés indult: flow=${flow} to=${maskedToAddress} transport=${cachedTransporterKind || 'n/a'}`);
         const info = await transporter.sendMail(mail);
+        const messageId = String(info?.messageId || '').trim() || null;
+        const providerResponse = String(info?.response || '').trim() || null;
+
+        console.log(`[EmailVerification] Küldés sikeres: flow=${flow} to=${maskedToAddress} messageId=${messageId || 'n/a'} response=${providerResponse || 'n/a'}`);
 
         if (cachedTransporterKind === 'json-dev') {
             console.log('[EmailVerification][DEV] Kimenő verifikációs email (nincs valódi SMTP):');
@@ -119,11 +213,17 @@ async function sendVerificationEmail(toAddress, username, rawToken) {
         sendResult = {
             delivered: true,
             transport: cachedTransporterKind,
-            verificationLink
+            verificationLink,
+            messageId,
+            providerResponse
         };
     } catch (error) {
-        console.error('[EmailVerification] Email küldési hiba:', error.message);
-        throw new Error('Nem sikerült elküldeni a verifikációs emailt.');
+        const reason = classifyEmailSendError(error);
+        console.error(`[EmailVerification] Email küldési hiba: reason=${reason} code=${error.code || 'n/a'} message=${error.message || 'ismeretlen'}`);
+        const typedError = new Error('Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.');
+        typedError.code = 'EMAIL_SEND_FAILED';
+        typedError.smtpReason = reason;
+        throw typedError;
     }
     return sendResult;
 }

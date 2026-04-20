@@ -10,7 +10,8 @@ function createRateLimiter(options = {}) {
         max = 30,
         message = 'Túl sok kérés. Próbáld újra később.',
         skipSuccessfulRequests = false,
-        keyGenerator
+        keyGenerator,
+        code = ''
     } = options;
 
     const limiterConfig = {
@@ -20,7 +21,11 @@ function createRateLimiter(options = {}) {
         legacyHeaders: false,
         skipSuccessfulRequests,
         handler: (request, response) => {
-            return response.status(429).json({ success: false, message });
+            let payload = { success: false, message };
+            if (code) {
+                payload.code = code;
+            }
+            return response.status(429).json(payload);
         }
     };
 
@@ -163,7 +168,8 @@ const emailVerifyResendLimiter = createRateLimiter({
     windowMs: 15 * 60 * 1000,
     max: 5,
     keyGenerator: userOrIpKeyGenerator,
-    message: 'Túl sok verifikációs email újraküldés. Próbáld újra 15 perc múlva.'
+    message: 'Túl sok verifikációs email újraküldés. Próbáld újra 15 perc múlva.',
+    code: 'EMAIL_RESEND_RATE_LIMIT'
 });
 
 // Email verifikáció link megnyitás (GET verify): 15 perces ablakban max 30 próbálkozás IP-nként.

@@ -4,11 +4,23 @@ const session = require('express-session'); //?npm install express-session
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const dotenv = require('dotenv');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
 const { services, leaderboardService } = require('./services.js');
 const { createSocketHub } = require('./sockets.js');
 const sql = require('./sql/sql_funtions');
+
+const envPaths = [
+    path.resolve(__dirname, '.env'),
+    path.resolve(__dirname, '../.env')
+];
+
+envPaths.forEach((envPath) => {
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath, override: false });
+    }
+});
 
 //!Beállítások
 const app = express();

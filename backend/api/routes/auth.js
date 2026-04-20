@@ -222,7 +222,7 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
         try {
             const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
             await sql.saveEmailVerificationToken(result.insertId, tokenHash, expiresAt);
-            await sendVerificationEmail(email, username, rawToken);
+            const sendInfo = await sendVerificationEmail(email, username, rawToken, { flow: 'register' });
             verificationEmailSent = true;
             await logAuthenticatedAction(request, result.insertId, {
                 eventType: 'email_verification_sent',
@@ -231,7 +231,13 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
                 source: 'backend',
                 success: true,
                 message: 'Verifikációs email elküldve regisztráció után.',
-                metadata: { email, expiresAt }
+                metadata: {
+                    email,
+                    expiresAt,
+                    transport: sendInfo.transport || null,
+                    messageId: sendInfo.messageId || null,
+                    providerResponse: sendInfo.providerResponse || null
+                }
             });
         } catch (verificationError) {
             console.error('Verifikációs email hiba regisztráció után:', verificationError.message);
@@ -242,7 +248,11 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
                 source: 'backend',
                 success: false,
                 message: 'Verifikációs email küldése sikertelen regisztráció után.',
-                metadata: { email, error: verificationError.message }
+                metadata: {
+                    email,
+                    error: verificationError.message,
+                    smtpReason: verificationError.smtpReason || null
+                }
             });
         }
 
@@ -415,7 +425,7 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
 // ?POST /api/auth/resend-verification - új verifikációs email kérése (csak bejelentkezett, még nem verifikált usernek)
 router.post('/auth/resend-verification', emailVerifyResendLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
-    let payload = { success: false, message: '' };
+    let payload = { success: false, message: '', code: '' };
     try {
         const userId = Number(request.session?.userId) || 0;
         if (!userId) {
@@ -432,6 +442,7 @@ router.post('/auth/resend-verification', emailVerifyResendLimiter, isAuthenticat
         if (user.is_email_verified) {
             payload = {
                 success: true,
+                code: 'EMAIL_ALREADY_VERIFIED',
                 alreadyVerified: true,
                 message: 'Az email cím már meg van erősítve, nincs szükség újraküldésre.'
             };
@@ -441,7 +452,7 @@ router.post('/auth/resend-verification', emailVerifyResendLimiter, isAuthenticat
         } else {
             const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
             await sql.saveEmailVerificationToken(userId, tokenHash, expiresAt);
-            await sendVerificationEmail(user.email, user.username, rawToken);
+            const sendInfo = await sendVerificationEmail(user.email, user.username, rawToken, { flow: 'resend' });
 
             await logAuthenticatedAction(request, userId, {
                 eventType: 'email_verification_resend',
@@ -450,19 +461,35 @@ router.post('/auth/resend-verification', emailVerifyResendLimiter, isAuthenticat
                 source: 'backend',
                 success: true,
                 message: 'Verifikációs email újraküldve.',
-                metadata: { email: user.email, expiresAt }
+                metadata: {
+                    email: user.email,
+                    expiresAt,
+                    transport: sendInfo.transport || null,
+                    messageId: sendInfo.messageId || null,
+                    providerResponse: sendInfo.providerResponse || null
+                }
             });
 
             payload = {
                 success: true,
+                code: 'EMAIL_VERIFICATION_RESEND_SENT',
                 alreadyVerified: false,
                 message: 'Új verifikációs email elküldve. Ellenőrizd a postaládád.'
             };
         }
     } catch (error) {
         console.error('Resend verification hiba:', error.message);
+        let responseCode = 'EMAIL_RESEND_FAILED';
         if (statusCode === 200) statusCode = 500;
-        payload = { success: false, message: error.message || 'Szerverhiba a verifikációs email újraküldése során.' };
+        if (error?.code === 'EMAIL_SEND_FAILED') {
+            statusCode = 503;
+            responseCode = 'EMAIL_SEND_FAILED';
+        }
+        payload = {
+            success: false,
+            code: responseCode,
+            message: error.message || 'Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.'
+        };
     }
     return response.status(statusCode).json(payload);
 });

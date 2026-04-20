@@ -223,7 +223,7 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
             try {
                 const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
                 await sql.saveEmailVerificationToken(request.session.userId, tokenHash, expiresAt);
-                await sendVerificationEmail(email, username, rawToken);
+                const sendInfo = await sendVerificationEmail(email, username, rawToken, { flow: 'email_changed' });
                 newVerificationEmailSent = true;
                 await logAuthenticatedAction(request, request.session.userId, {
                     eventType: 'email_verification_sent',
@@ -232,7 +232,14 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
                     source: 'backend',
                     success: true,
                     message: 'Új verifikációs email elküldve email változtatás után.',
-                    metadata: { email, reason: 'email_changed', expiresAt }
+                    metadata: {
+                        email,
+                        reason: 'email_changed',
+                        expiresAt,
+                        transport: sendInfo.transport || null,
+                        messageId: sendInfo.messageId || null,
+                        providerResponse: sendInfo.providerResponse || null
+                    }
                 });
             } catch (verificationError) {
                 console.error('Email változtatás utáni verifikációs email hiba:', verificationError.message);
@@ -243,7 +250,12 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
                     source: 'backend',
                     success: false,
                     message: 'Verifikációs email küldése sikertelen email változtatás után.',
-                    metadata: { email, reason: 'email_changed', error: verificationError.message }
+                    metadata: {
+                        email,
+                        reason: 'email_changed',
+                        error: verificationError.message,
+                        smtpReason: verificationError.smtpReason || null
+                    }
                 });
             }
         }

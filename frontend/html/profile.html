@@ -368,34 +368,43 @@
                         </div>
                     </div>
 
-                    <div class="card mb-4 section-block">
+                    <div class="card mb-4 section-block" id="accountStatus">
                         <div class="card-header">
                             <i data-lucide="user-check" class="me-2"></i>Account Status
                         </div>
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="text-secondary">Email Verification</span>
-                                <span class="badge bg-success">Verified</span>
+                                <span id="accountStatusEmailBadge" class="badge bg-secondary">Ellenőrzés alatt</span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="text-secondary">Account Type</span>
-                                <span class="badge badge-admin">Administrator</span>
+                                <span id="accountStatusRoleBadge" class="badge badge-player">Player</span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="text-secondary">Status</span>
-                                <span class="badge bg-success">Active</span>
+                                <span id="accountStatusActiveBadge" class="badge bg-success">Active</span>
                             </div>
                             <hr style="border-color: var(--border-color);">
                             <div class="d-flex align-items-center gap-3 mb-3">
                                 <div class="ability-icon"
-                                    style="color: var(--accent-green); background-color: rgba(16, 185, 129, 0.1);">
-                                    <i data-lucide="mail-check"></i>
+                                    id="accountStatusEmailIconWrap"
+                                    style="color: var(--accent-red); background-color: rgba(233, 69, 96, 0.12);">
+                                    <i id="accountStatusEmailIcon" data-lucide="mail-warning"></i>
                                 </div>
                                 <div>
-                                    <h6 class="mb-0 text-white">Email Verified</h6>
-                                    <small class="text-secondary">Your account is fully secured</small>
+                                    <h6 id="accountStatusEmailTitle" class="mb-0 text-white">Email megerősítés szükséges</h6>
+                                    <small id="accountStatusEmailHint" class="text-secondary">Kattints az újraküldésre, ha nem kaptad meg a levelet.</small>
                                 </div>
                             </div>
+                            <div class="account-status-actions mb-3">
+                                <button id="resendVerificationButton" type="button" class="btn btn-outline-gold w-100">
+                                    <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+                                    Verifikációs email újraküldése
+                                </button>
+                                <small id="resendVerificationHint" class="text-secondary d-block mt-2">Ha nem érkezik email, ellenőrizd a spam/promóciók mappát is.</small>
+                            </div>
+                            <div id="accountStatusFeedback" class="alert d-none mb-3" role="status" aria-live="polite"></div>
                             <div class="d-flex align-items-center gap-3">
                                 <div class="ability-icon"
                                     style="color: var(--text-secondary); background-color: rgba(148, 163, 184, 0.1);">
@@ -403,7 +412,7 @@
                                 </div>
                                 <div>
                                     <h6 class="mb-0 text-white">Member Since</h6>
-                                    <small class="text-secondary">October 12, 2023</small>
+                                    <small id="accountStatusMemberSince" class="text-secondary">-</small>
                                 </div>
                             </div>
                         </div>
