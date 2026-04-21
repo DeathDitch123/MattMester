@@ -1730,6 +1730,219 @@ async function deleteFriendConnection(currentUserId, targetUserId) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat életciklus és jogosultság: központi canUsersChat + cleanup logika
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Az email-módosítás miatti ideiglenes verifikáció-vesztés NEM szünteti meg
+// a beszélgetést, ezért itt szándékosan NEM ellenőrizzük az is_email_verified
+// mezőt. A profil akkor számít "törölt"-nek, ha a users rekord nem létezik
+// (FOREIGN KEY ON DELETE CASCADE törli a kapcsolódó sorokat is).
+async function canUsersChat(userAId, userBId, executor = null) {
+    const db = executor || getPool();
+    const normalizedA = normalizePositiveInt(userAId, 0);
+    const normalizedB = normalizePositiveInt(userBId, 0);
+
+    const defaultReason = (reason) => ({ canChat: false, reason });
+
+    if (!normalizedA || !normalizedB || normalizedA === normalizedB) {
+        return defaultReason('invalid_users');
+    }
+
+    try {
+        await ensureFriendBlocksTable(db);
+
+        const [userRows] = await db.execute(
+            `
+                SELECT id, is_banned
+                FROM users
+                WHERE id IN (?, ?)
+            `,
+            [normalizedA, normalizedB]
+        );
+
+        if (userRows.length < 2) {
+            return defaultReason('user_deleted');
+        }
+
+        const anyBanned = userRows.some((row) => Boolean(Number(row.is_banned || 0)));
+        if (anyBanned) {
+            return defaultReason('user_banned');
+        }
+
+        const [user1Id, user2Id] = normalizeFriendPair(normalizedA, normalizedB);
+        const [friendRows] = await db.execute(
+            `
+                SELECT status
+                FROM friends
+                WHERE user1_id = ?
+                  AND user2_id = ?
+                LIMIT 1
+            `,
+            [user1Id, user2Id]
+        );
+
+        if (!friendRows.length || friendRows[0].status !== 'accepted') {
+            return defaultReason('not_friends');
+        }
+
+        const [blockRows] = await db.execute(
+            `
+                SELECT id
+                FROM friend_blocks
+                WHERE active = TRUE
+                  AND (
+                    (blocker_user_id = ? AND blocked_user_id = ?)
+                    OR
+                    (blocker_user_id = ? AND blocked_user_id = ?)
+                  )
+                LIMIT 1
+            `,
+            [normalizedA, normalizedB, normalizedB, normalizedA]
+        );
+
+        if (blockRows.length) {
+            return defaultReason('blocked');
+        }
+
+        return { canChat: true, reason: null };
+    } catch (error) {
+        throw new Error('Hiba a canUsersChat ellenorzese soran.');
+    }
+}
+
+// Lekéri egy privát beszélgetés két résztvevőjét.
+async function getPrivateConversationParticipantIds(conversationId, executor = null) {
+    const db = executor || getPool();
+    const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+    if (!normalizedConversationId) {
+        return [];
+    }
+
+    const [rows] = await db.execute(
+        `
+            SELECT cp.user_id
+            FROM chat_participants cp
+            JOIN chat_conversations c ON c.id = cp.conversation_id
+            WHERE cp.conversation_id = ?
+              AND c.type = 'private'
+        `,
+        [normalizedConversationId]
+    );
+
+    return rows.map((row) => Number(row.user_id)).filter((id) => id > 0);
+}
+
+// Törli a két felhasználó közötti privát beszélgetést, ha létezik.
+// Egyszerű törlés (nem archiválás). A cascade a résztvevőket és üzeneteket is törli.
+async function cleanupDirectConversationBetween(userAId, userBId) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const normalizedA = normalizePositiveInt(userAId, 0);
+    const normalizedB = normalizePositiveInt(userBId, 0);
+
+    if (!normalizedA || !normalizedB || normalizedA === normalizedB) {
+        connection.release();
+        return { deletedConversationIds: [], participantUserIds: [] };
+    }
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatTables(connection);
+
+        const [rows] = await connection.execute(
+            `
+                SELECT c.id AS conversation_id
+                FROM chat_conversations c
+                JOIN chat_participants cp ON cp.conversation_id = c.id
+                WHERE c.type = 'private'
+                  AND cp.user_id IN (?, ?)
+                GROUP BY c.id
+                HAVING COUNT(DISTINCT cp.user_id) = 2
+                   AND (
+                       SELECT COUNT(*) FROM chat_participants cp2
+                       WHERE cp2.conversation_id = c.id
+                   ) = 2
+            `,
+            [normalizedA, normalizedB]
+        );
+
+        const conversationIds = rows.map((row) => Number(row.conversation_id)).filter(Boolean);
+
+        if (conversationIds.length) {
+            const placeholders = conversationIds.map(() => '?').join(',');
+            await connection.execute(
+                `DELETE FROM chat_conversations WHERE id IN (${placeholders})`,
+                conversationIds
+            );
+        }
+
+        await connection.commit();
+
+        return {
+            deletedConversationIds: conversationIds,
+            participantUserIds: [normalizedA, normalizedB]
+        };
+    } catch (error) {
+        await connection.rollback();
+        throw new Error('Hiba a privat beszelgetes takaritasa soran.');
+    } finally {
+        connection.release();
+    }
+}
+
+// Teljes sepret a user összes privát beszélgetésén: amelyikre canChat=false,
+// azt törli. Hatékonyan listázza a törlendőket, majd atomi DELETE-tel töröl.
+async function cleanupUnusableConversationsForUser(userId) {
+    const pool = getPool();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const result = { deletedConversationIds: [], affectedPairs: [] };
+
+    if (!normalizedUserId) {
+        return result;
+    }
+
+    await ensureChatTables(pool);
+    await ensureFriendBlocksTable(pool);
+
+    const [rows] = await pool.execute(
+        `
+            SELECT c.id AS conversation_id, other_cp.user_id AS other_user_id
+            FROM chat_conversations c
+            JOIN chat_participants self_cp
+                ON self_cp.conversation_id = c.id AND self_cp.user_id = ?
+            JOIN chat_participants other_cp
+                ON other_cp.conversation_id = c.id AND other_cp.user_id <> ?
+            WHERE c.type = 'private'
+        `,
+        [normalizedUserId, normalizedUserId]
+    );
+
+    const idsToDelete = [];
+    for (const row of rows) {
+        const otherUserId = Number(row.other_user_id);
+        if (!otherUserId) continue;
+        // Külön ellenőrzés minden párra – kis volumenű, egy user chat-listája rövid.
+        // Nagy méretekhez érdemes lenne JOIN-alapú bulk lekérdezésre cserélni.
+        const { canChat } = await canUsersChat(normalizedUserId, otherUserId);
+        if (!canChat) {
+            idsToDelete.push(Number(row.conversation_id));
+            result.affectedPairs.push([normalizedUserId, otherUserId]);
+        }
+    }
+
+    if (idsToDelete.length) {
+        const placeholders = idsToDelete.map(() => '?').join(',');
+        await pool.execute(
+            `DELETE FROM chat_conversations WHERE id IN (${placeholders})`,
+            idsToDelete
+        );
+        result.deletedConversationIds = idsToDelete;
+    }
+
+    return result;
+}
+
 const CHAT_MAX_MESSAGE_LENGTH = 1000;
 const CHAT_BLOCKED_WORDS = [
     // English profanity
@@ -2043,6 +2256,56 @@ async function assertConversationParticipant(userId, conversationId) {
     return true;
 }
 
+// Privát chatre kibővített védelem: részvétel + canChat ellenőrzés.
+// Ha a kapcsolat már nem él, a beszélgetést törli és hibát dob.
+// Visszaadja a konverzáció típusát, hogy a hívó eldönthesse, emit-elni kell-e.
+async function assertConversationUsable(userId, conversationId) {
+    const pool = getPool();
+    await assertConversationParticipant(userId, conversationId);
+
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+
+    const [conversationRows] = await pool.execute(
+        `SELECT type FROM chat_conversations WHERE id = ? LIMIT 1`,
+        [normalizedConversationId]
+    );
+
+    if (!conversationRows.length) {
+        throw new Error('A beszélgetés már nem található.');
+    }
+
+    if (conversationRows[0].type !== 'private') {
+        return { type: conversationRows[0].type };
+    }
+
+    const participantIds = await getPrivateConversationParticipantIds(normalizedConversationId, pool);
+    const otherUserId = participantIds.find((id) => id !== normalizedUserId);
+
+    if (!otherUserId) {
+        // Magányos résztvevő – a másik fél törlődött. Takarítsunk és dobjunk hibát.
+        await pool.execute(`DELETE FROM chat_conversations WHERE id = ?`, [normalizedConversationId]);
+        const err = new Error('A beszélgetés már nem elérhető.');
+        err.conversationId = normalizedConversationId;
+        err.affectedUserIds = [normalizedUserId];
+        err.code = 'CONVERSATION_UNAVAILABLE';
+        throw err;
+    }
+
+    const permission = await canUsersChat(normalizedUserId, otherUserId);
+    if (!permission.canChat) {
+        await pool.execute(`DELETE FROM chat_conversations WHERE id = ?`, [normalizedConversationId]);
+        const err = new Error('A beszélgetés már nem elérhető.');
+        err.conversationId = normalizedConversationId;
+        err.affectedUserIds = [normalizedUserId, otherUserId];
+        err.code = 'CONVERSATION_UNAVAILABLE';
+        err.reason = permission.reason;
+        throw err;
+    }
+
+    return { type: 'private', otherUserId };
+}
+
 async function getUserConversations(userId, limit = 20, cursor = null) {
     const pool = getPool();
     const normalizedUserId = normalizePositiveInt(userId, 0);
@@ -2052,6 +2315,16 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
 
     try {
         await ensureChatTables(pool);
+
+        // Dinamikus szűrés: a listázás előtt lefuttatjuk a cleanupot, hogy
+        // csak aktív kommunikációs kapcsolattal rendelkező beszélgetések
+        // maradjanak. A cleanup hibája nem blokkolhatja a listázást.
+        try {
+            await cleanupUnusableConversationsForUser(normalizedUserId);
+        } catch (cleanupError) {
+            console.warn('[chat] Listázás előtti cleanup hiba:', cleanupError.message);
+        }
+
         const normalizedLimit = normalizeListLimit(limit, 20, 50);
         const normalizedCursor = normalizePositiveInt(cursor, 0);
 
@@ -2277,25 +2550,16 @@ async function createOrGetDirectConversation(currentUserId, targetUserId) {
         await ensureChatTables(connection);
         await ensureFriendBlocksTable(connection);
 
-        if (await isEitherUserBlocked(normalizedCurrentUserId, normalizedTargetUserId, connection)) {
-            throw new Error('A privát beszélgetés nem nyitható meg tiltás miatt.');
-        }
-
-        const [user1Id, user2Id] = normalizeFriendPair(normalizedCurrentUserId, normalizedTargetUserId);
-        const [friendRows] = await connection.execute(
-            `
-                SELECT id
-                FROM friends
-                WHERE user1_id = ?
-                  AND user2_id = ?
-                  AND status = 'accepted'
-                LIMIT 1
-            `,
-            [user1Id, user2Id]
-        );
-
-        if (!friendRows.length) {
-            throw new Error('A privát beszélgetés csak elfogadott barátok között nyitható meg.');
+        const permission = await canUsersChat(normalizedCurrentUserId, normalizedTargetUserId, connection);
+        if (!permission.canChat) {
+            const reasonMessage = {
+                blocked: 'A privát beszélgetés nem nyitható meg tiltás miatt.',
+                not_friends: 'A privát beszélgetés csak elfogadott barátok között nyitható meg.',
+                user_banned: 'A privát beszélgetés nem nyitható meg: egyik fél letiltott.',
+                user_deleted: 'A privát beszélgetés nem nyitható meg: a másik fél már nem elérhető.',
+                invalid_users: 'Érvénytelen felhasználó azonosító.'
+            };
+            throw new Error(reasonMessage[permission.reason] || 'A privát beszélgetés jelenleg nem elérhető.');
         }
 
         const [existingRows] = await connection.execute(
@@ -2635,6 +2899,11 @@ module.exports = {
     createOrGetDirectConversation,
     insertMessageInConversation,
     assertConversationParticipant,
+    assertConversationUsable,
+    canUsersChat,
+    getPrivateConversationParticipantIds,
+    cleanupDirectConversationBetween,
+    cleanupUnusableConversationsForUser,
     containsBlockedWord,
     normalizeTextForModeration,
     saveEmailVerificationToken,

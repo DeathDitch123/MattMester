@@ -140,6 +140,42 @@ function createSocketHub(io) {
     const roomStateById = new Map();
     const chatRateLimitByUserId = new Map();
 
+    function notifyConversationDeleted(conversationId, affectedUserIds = [], reason = 'unavailable') {
+        const normalizedConversationId = parsePositiveInteger(conversationId, null);
+        if (!normalizedConversationId) {
+            return;
+        }
+
+        const payload = {
+            conversationId: normalizedConversationId,
+            reason: String(reason || 'unavailable'),
+            deletedAt: new Date().toISOString()
+        };
+
+        io.to(getConversationRoomName(normalizedConversationId)).emit('chat:conversation:deleted', payload);
+
+        const uniqueIds = [...new Set((affectedUserIds || []).map((id) => parsePositiveInteger(id, null)).filter(Boolean))];
+        uniqueIds.forEach((userId) => {
+            io.to(`user-room:${userId}`).emit('chat:conversation:deleted', payload);
+            io.to(`user-room:${userId}`).emit('chat:list:refresh', {
+                reason: payload.reason,
+                conversationId: normalizedConversationId,
+                at: payload.deletedAt
+            });
+        });
+
+        const roomName = getConversationRoomName(normalizedConversationId);
+        const room = io.sockets.adapter.rooms.get(roomName);
+        if (room) {
+            for (const socketId of room) {
+                const targetSocket = io.sockets.sockets.get(socketId);
+                if (targetSocket) {
+                    targetSocket.leave(roomName);
+                }
+            }
+        }
+    }
+
     function createChatErrorPayload(conversationId, error, fallbackMessage) {
         return {
             conversationId,
@@ -449,7 +485,18 @@ function createSocketHub(io) {
                     throw new Error('Érvénytelen conversation azonosító.');
                 }
 
-                await sql.assertConversationParticipant(currentContext.userId, conversationId);
+                try {
+                    await sql.assertConversationUsable(currentContext.userId, conversationId);
+                } catch (usabilityError) {
+                    if (usabilityError?.code === 'CONVERSATION_UNAVAILABLE') {
+                        notifyConversationDeleted(
+                            usabilityError.conversationId,
+                            usabilityError.affectedUserIds || [],
+                            usabilityError.reason || 'unavailable'
+                        );
+                    }
+                    throw usabilityError;
+                }
                 socket.join(getConversationRoomName(conversationId));
 
                 socket.emit('chat:join', {
@@ -508,7 +555,18 @@ function createSocketHub(io) {
                     throw new Error(`Az üzenet legfeljebb ${CHAT_MAX_MESSAGE_LENGTH} karakter lehet.`);
                 }
 
-                await sql.assertConversationParticipant(currentContext.userId, conversationId);
+                try {
+                    await sql.assertConversationUsable(currentContext.userId, conversationId);
+                } catch (usabilityError) {
+                    if (usabilityError?.code === 'CONVERSATION_UNAVAILABLE') {
+                        notifyConversationDeleted(
+                            usabilityError.conversationId,
+                            usabilityError.affectedUserIds || [],
+                            usabilityError.reason || 'unavailable'
+                        );
+                    }
+                    throw usabilityError;
+                }
                 validateRateLimit(chatRateLimitByUserId, currentContext.userId, CHAT_RATE_LIMIT_MAX_MESSAGES, CHAT_RATE_LIMIT_WINDOW_MS);
 
                 const containsBlockedWord = sql.containsBlockedWord(message);
@@ -738,7 +796,11 @@ function createSocketHub(io) {
             if (conversationId) {
                 io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
             }
-        }
+        },
+        // Kapcsolat megszűnésekor / cleanup után valós idejű értesítés küldése
+        // az érintett felhasználóknak. A frontend erre frissíti a chat listát
+        // és eltünteti az aktív beszélgetést.
+        notifyConversationDeleted
     };
 }
 

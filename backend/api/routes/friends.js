@@ -6,6 +6,24 @@ const { logAuthenticatedAction, parsePositiveInteger } = require('./_shared.js')
 
 const router = express.Router();
 
+// Kapcsolat megszűnés után: cleanup a chat-en + real-time értesítés.
+// Hibát nem dob, a hívó flow már sikeres (friend action megtörtént).
+async function performChatCleanupAfterRelationChange(request, currentUserId, targetUserId, reason) {
+    try {
+        const result = await sql.cleanupDirectConversationBetween(currentUserId, targetUserId);
+        const socketHub = request.app?.locals?.socketHub;
+        if (socketHub?.notifyConversationDeleted && result.deletedConversationIds.length) {
+            result.deletedConversationIds.forEach((conversationId) => {
+                socketHub.notifyConversationDeleted(conversationId, result.participantUserIds, reason);
+            });
+        }
+        return result;
+    } catch (cleanupError) {
+        console.warn(`[friends] chat cleanup hiba (${reason}):`, cleanupError.message);
+        return { deletedConversationIds: [], participantUserIds: [] };
+    }
+}
+
 // ?POST /api/friends/add - barát kérelem küldése
 router.post('/friends/add', friendActionLimiter, isAuthenticated, requireVerifiedEmail, async (request, response) => {
     let statusCode = 200;
@@ -129,6 +147,7 @@ router.post('/friends/block', friendActionLimiter, isAuthenticated, async (reque
         if (currentUserId === targetUserId) { statusCode = 400; throw new Error('Nem tilthatod le saját magadat.'); }
 
         const result = await sql.blockUserDirectional(currentUserId, targetUserId);
+        await performChatCleanupAfterRelationChange(request, currentUserId, targetUserId, 'blocked');
         await logAuthenticatedAction(request, currentUserId, {
             eventType: 'friend_blocked',
             eventCategory: 'social',
@@ -185,6 +204,7 @@ router.delete('/friends/:targetUserId', friendActionLimiter, isAuthenticated, as
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.deleteFriendConnection(currentUserId, targetUserId);
+        await performChatCleanupAfterRelationChange(request, currentUserId, targetUserId, 'unfriended');
         await logAuthenticatedAction(request, currentUserId, {
             eventType: 'friend_removed',
             eventCategory: 'social',

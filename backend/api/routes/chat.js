@@ -95,6 +95,8 @@ function resolveStatusCodeByError(error, defaultStatusCode = 500) {
         statusCode = 400;
     } else if (message.includes('nem résztvevője') || message.includes('nem nyitható meg tiltás miatt')) {
         statusCode = 403;
+    } else if (message.includes('már nem elérhető')) {
+        statusCode = 410;
     } else if (message.includes('nem található')) {
         statusCode = 404;
     }
@@ -204,7 +206,21 @@ router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, 
             throw new Error('Az üzenet legfeljebb 1000 karakter lehet.');
         }
 
-        await sql.assertConversationParticipant(currentUserId, conversationId);
+        try {
+            await sql.assertConversationUsable(currentUserId, conversationId);
+        } catch (usabilityError) {
+            if (usabilityError?.code === 'CONVERSATION_UNAVAILABLE') {
+                const socketHub = request.app?.locals?.socketHub;
+                if (socketHub?.notifyConversationDeleted) {
+                    socketHub.notifyConversationDeleted(
+                        usabilityError.conversationId,
+                        usabilityError.affectedUserIds || [],
+                        usabilityError.reason || 'unavailable'
+                    );
+                }
+            }
+            throw usabilityError;
+        }
         validateRateLimit(chatRateLimitByUserId, currentUserId, CHAT_RATE_LIMIT_MAX_MESSAGES, CHAT_RATE_LIMIT_WINDOW_MS);
 
         const policyResult = buildChatModerationPolicyResult(message);

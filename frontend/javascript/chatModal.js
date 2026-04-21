@@ -1029,12 +1029,63 @@
             if (state.boundSocket) {
                 state.boundSocket.off('chat:message:new', onSocketMessageNew);
                 state.boundSocket.off('chat:error', onSocketError);
+                state.boundSocket.off('chat:conversation:deleted', onSocketConversationDeleted);
+                state.boundSocket.off('chat:list:refresh', onSocketChatListRefresh);
             }
 
             state.boundSocket = socket;
             socket.on('chat:message:new', onSocketMessageNew);
             socket.on('chat:error', onSocketError);
+            socket.on('chat:conversation:deleted', onSocketConversationDeleted);
+            socket.on('chat:list:refresh', onSocketChatListRefresh);
         }
+    }
+
+    function removeConversationFromState(conversationId) {
+        const normalizedId = Number(conversationId) || 0;
+        if (!normalizedId) return;
+        state.conversationList = state.conversationList.filter((item) => Number(item.conversationId) !== normalizedId);
+        state.messagesByConversation.delete(normalizedId);
+        state.paginationCursorByConversation.delete(normalizedId);
+        state.hasMoreByConversation.delete(normalizedId);
+        state.isLoadingByConversation.delete(normalizedId);
+    }
+
+    function resolveConversationUnavailableMessage(reason) {
+        const normalized = String(reason || '').toLowerCase();
+        const mapping = {
+            blocked: 'A beszélgetés megszűnt: a másik fél tiltásba került.',
+            unfriended: 'A beszélgetés megszűnt: a barát kapcsolat törölve.',
+            not_friends: 'A beszélgetés megszűnt: már nem vagytok barátok.',
+            user_banned: 'A beszélgetés megszűnt: a másik fél letiltott.',
+            user_deleted: 'A beszélgetés megszűnt: a másik fél profilja törölve.'
+        };
+        return mapping[normalized] || 'A beszélgetés már nem elérhető.';
+    }
+
+    function onSocketConversationDeleted(payload = {}) {
+        const conversationId = Number(payload?.conversationId) || 0;
+        if (!conversationId) return;
+
+        const wasActive = Number(state.activeConversationId) === conversationId;
+        removeConversationFromState(conversationId);
+        renderConversationList();
+
+        if (wasActive) {
+            state.activeConversationId = null;
+            setHasActiveConversation(false);
+            setMessageEmptyState(true, resolveConversationUnavailableMessage(payload?.reason));
+            setFeedback(resolveConversationUnavailableMessage(payload?.reason), true);
+            setMobileView('list');
+        }
+    }
+
+    function onSocketChatListRefresh() {
+        // Kapcsolat-változás után szerver felől érkező jelzés: frissítjük
+        // a lista-állapotot a legutóbbi canChat-szűrt adatokkal.
+        loadConversations().catch((error) => {
+            console.warn('[chatModal] chat:list:refresh hiba:', error?.message);
+        });
     }
 
     function onSocketMessageNew(messagePayload) {
@@ -1065,6 +1116,18 @@
     function onSocketError(errorPayload) {
         const activeId = Number(state.activeConversationId) || 0;
         const payloadId = Number(errorPayload?.conversationId) || 0;
+        const messageText = String(errorPayload?.message || '').toLowerCase();
+        const isUnavailable = messageText.includes('már nem elérhető');
+
+        if (isUnavailable) {
+            // A szerver külön chat:conversation:deleted-et is küld, de biztonsági
+            // hálóként itt is eltávolítjuk az érintett beszélgetést.
+            if (payloadId) {
+                onSocketConversationDeleted({ conversationId: payloadId, reason: 'unavailable' });
+            }
+            return;
+        }
+
         if (!activeId || payloadId === 0 || activeId === payloadId) {
             setFeedback(errorPayload?.message || 'Chat hiba tortent.', true);
         }
