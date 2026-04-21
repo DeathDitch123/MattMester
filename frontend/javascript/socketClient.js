@@ -81,7 +81,7 @@
             rooms: [],
             sessionBound: false,
             user: null,
-            profile_image: '/profile_pictures/default.png',
+            profile_image: globalScope.MattMesterProfileImage?.DEFAULT_PROFILE_IMAGE_SRC || '/profile_pictures/default.png',
             profile_image_status: 'default',
             features: [...DEFAULT_FEATURES],
             presence: {
@@ -260,11 +260,14 @@
             const userId = Number(input.userId || input.id) || null;
             const username = typeof input.username === 'string' ? input.username.trim() : '';
             const role = typeof input.role === 'string' ? input.role.trim() : '';
-            const profile_image = typeof input.profile_image === 'string' && input.profile_image.trim()
-                ? input.profile_image.trim()
-                : '/profile_pictures/default.png';
+            const profileImageApi = globalScope.MattMesterProfileImage;
+            const profile_image = profileImageApi
+                ? profileImageApi.normalizeProfileImageSource(input.profile_image)
+                : (typeof input.profile_image === 'string' && input.profile_image.trim()
+                    ? input.profile_image.trim()
+                    : '/profile_pictures/default.png');
             const profile_image_status = typeof input.profile_image_status === 'string' && input.profile_image_status.trim()
-                ? input.profile_image_status.trim()
+                ? input.profile_image_status.trim().toLowerCase()
                 : 'default';
             return {
                 userId,
@@ -617,7 +620,9 @@
                 socketState.page = payload.page || socketState.page;
                 socketState.sessionBound = Boolean(payload.sessionBound);
                 socketState.user = payload.user || null;
-                socketState.profile_image = payload.profile_image || payload.user?.profile_image || socketState.profile_image || '/profile_pictures/default.png';
+                const profileImageApi = globalScope.MattMesterProfileImage;
+                const defaultProfileImage = profileImageApi?.DEFAULT_PROFILE_IMAGE_SRC || '/profile_pictures/default.png';
+                socketState.profile_image = payload.profile_image || payload.user?.profile_image || socketState.profile_image || defaultProfileImage;
                 socketState.profile_image_status = payload.profile_image_status || payload.user?.profile_image_status || socketState.profile_image_status || 'default';
                 socketState.roomCount = payload.roomCount || 0;
                 socketState.rooms = Array.isArray(payload.rooms) ? payload.rooms : [];

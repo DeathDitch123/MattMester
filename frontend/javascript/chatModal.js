@@ -200,9 +200,6 @@
                 flex-shrink: 0;
                 background: #0f172a;
             }
-            #chatModal .chat-profile-image.is-pending {
-                filter: blur(3px) saturate(0.75);
-            }
             #chatModal .chat-conversation-body {
                 flex: 1;
                 min-width: 0;
@@ -304,9 +301,6 @@
             #chatModal .chat-header-avatar.is-visible {
                 display: block;
             }
-            #chatModal .chat-header-avatar.is-pending {
-                filter: blur(3px) saturate(0.75);
-            }
             #chatModal .chat-header-info {
                 min-width: 0;
                 flex: 1;
@@ -376,9 +370,6 @@
                 object-position: center;
                 flex-shrink: 0;
                 background: #0f172a;
-            }
-            #chatModal .chat-message-profile-image.is-pending {
-                filter: blur(3px) saturate(0.75);
             }
             #chatModal .chat-message-sender {
                 color: #cbd5e1;
@@ -704,17 +695,12 @@
             || `Beszelgetes #${conversation?.conversationId || '?'}`;
     }
 
-    function resolveProfileImageSrc(imagePath) {
-        const value = String(imagePath || '').trim();
-        if (!value) {
-            return '/profile_pictures/default.png';
+    function getProfileImageApi() {
+        const api = globalScope.MattMesterProfileImage;
+        if (!api) {
+            throw new Error('MattMesterProfileImage modul nincs betöltve (profileImageUtils.js).');
         }
-
-        return value;
-    }
-
-    function isPendingProfileImageStatus(statusValue) {
-        return String(statusValue || '').trim().toLowerCase() === 'pending';
+        return api;
     }
 
     function findConversation(conversationId) {
@@ -758,12 +744,10 @@
 
                 const profileImage = globalScope.document.createElement('img');
                 profileImage.className = 'chat-profile-image';
-                profileImage.src = resolveProfileImageSrc(conversation?.otherUser?.profileImage);
-                profileImage.alt = `${getConversationTitle(conversation)} profile image`;
-
-                if (isPendingProfileImageStatus(conversation?.otherUser?.profileImageStatus)) {
-                    profileImage.classList.add('is-pending');
-                }
+                getProfileImageApi().applyProfileImagePresentation(profileImage, {
+                    source: conversation?.otherUser,
+                    alt: `${getConversationTitle(conversation)} profile image`
+                });
 
                 const body = globalScope.document.createElement('div');
                 body.className = 'chat-conversation-body';
@@ -883,11 +867,14 @@
 
                 const messageProfileImage = globalScope.document.createElement('img');
                 messageProfileImage.className = 'chat-message-profile-image';
-                messageProfileImage.src = resolveProfileImageSrc(message.senderProfileImage);
-                messageProfileImage.alt = `${message.senderUsername || 'Jatekos'} profile image`;
-                if (isPendingProfileImageStatus(message.senderProfileImageStatus)) {
-                    messageProfileImage.classList.add('is-pending');
-                }
+                getProfileImageApi().applyProfileImagePresentation(messageProfileImage, {
+                    source: {
+                        profile_image: message.senderProfileImage,
+                        profile_image_status: message.senderProfileImageStatus,
+                        username: message.senderUsername
+                    },
+                    alt: `${message.senderUsername || 'Jatekos'} profile image`
+                });
 
                 const sender = globalScope.document.createElement('span');
                 sender.className = 'chat-message-sender';
@@ -937,10 +924,11 @@
                 dom.headerSubtitle.textContent = preview || 'Beszelgetes';
             }
             if (dom.headerAvatar) {
-                dom.headerAvatar.src = resolveProfileImageSrc(conversation?.otherUser?.profileImage);
-                dom.headerAvatar.alt = `${getConversationTitle(conversation)} profile image`;
+                getProfileImageApi().applyProfileImagePresentation(dom.headerAvatar, {
+                    source: conversation?.otherUser,
+                    alt: `${getConversationTitle(conversation)} profile image`
+                });
                 dom.headerAvatar.classList.add('is-visible');
-                dom.headerAvatar.classList.toggle('is-pending', isPendingProfileImageStatus(conversation?.otherUser?.profileImageStatus));
             }
         } else {
             if (dom.headerTitle) {

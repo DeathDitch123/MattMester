@@ -896,17 +896,15 @@ function fillPlayerProfileModal(player) {
         throw new Error('A játékos profil modal elemei nem találhatók a DOM-ban.');
     }
 
-    const profileImageStatus = String(player.profileImageStatus || '').trim().toLowerCase();
-    const isPendingProfileImage = profileImageStatus === 'pending';
-
     if (elements.titleText) {
         elements.titleText.textContent = `${player.username || 'Játékos'} profilja`;
     }
 
     if (elements.avatar) {
-        elements.avatar.src = player.profileImage || '/profile_pictures/default.png';
-        elements.avatar.alt = `${player.username || 'Játékos'} profilképe`;
-        elements.avatar.classList.toggle('search-result-avatar-pending', isPendingProfileImage);
+        window.MattMesterProfileImage.applyProfileImagePresentation(elements.avatar, {
+            source: player,
+            alt: `${player.username || 'Játékos'} profilképe`
+        });
     }
 
     if (elements.username) {
@@ -1032,14 +1030,11 @@ function createSearchResultListItem(player) {
 
     const avatar = document.createElement('img');
     avatar.className = 'friend-avatar rounded-circle';
-    if ((player.profileImageStatus || '').toLowerCase() === 'pending') {
-        avatar.classList.add('search-result-avatar-pending');
-    }
-    avatar.style.width = '40px';
-    avatar.style.height = '40px';
-    avatar.style.objectFit = 'cover';
-    avatar.alt = `${player.username || 'Jatekos'} profilkepe`;
-    avatar.src = player.profileImage || '/profile_pictures/default.png';
+    window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
+        source: player,
+        alt: `${player.username || 'Jatekos'} profilkepe`,
+        size: 40
+    });
     avatarWrap.appendChild(avatar);
 
     const info = document.createElement('div');
@@ -1465,14 +1460,11 @@ function createFriendListItem(friend) {
 
     const avatar = document.createElement('img');
     avatar.className = 'friend-avatar rounded-circle';
-    if ((friend.profileImageStatus || '').toLowerCase() === 'pending') {
-        avatar.classList.add('search-result-avatar-pending');
-    }
-    avatar.alt = `${friend.username || 'Jatekos'} profilkepe`;
-    avatar.style.width = '40px';
-    avatar.style.height = '40px';
-    avatar.style.objectFit = 'cover';
-    avatar.src = friend.profileImage || '/profile_pictures/default.png';
+    window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
+        source: friend,
+        alt: `${friend.username || 'Jatekos'} profilkepe`,
+        size: 40
+    });
 
     const statusDot = document.createElement('span');
     statusDot.className = 'friend-status offline';
@@ -2316,23 +2308,28 @@ function getProfileImageStatusMeta(statusInput) {
 }
 
 function applyProfileImagePresentation(user) {
-    const profileImagePath = (user?.profile_image || '').trim() || '/profile_pictures/default.png';
     const username = user?.username || 'Felhasznalo';
     const statusMeta = getProfileImageStatusMeta(user?.profile_image_status);
-    const normalizedImagePath = profileImagePath.toLowerCase();
-    const isPending = statusMeta.normalizedStatus === 'pending' && normalizedImagePath !== '/profile_pictures/default.png';
-    const isDefault = normalizedImagePath === '/profile_pictures/default.png';
 
     const avatars = [
         document.getElementById('profileAvatarDashboard'),
         document.getElementById('profileAvatarSettings')
     ].filter(Boolean);
 
+    let viewModel = null;
     avatars.forEach((avatarElement) => {
-        avatarElement.src = profileImagePath;
-        avatarElement.alt = `${username} profilkepe`;
-        avatarElement.classList.toggle('profile-image-pending', isPending);
+        const applied = window.MattMesterProfileImage.applyProfileImagePresentation(avatarElement, {
+            source: user,
+            alt: `${username} profilkepe`
+        });
+        if (applied) {
+            viewModel = applied;
+        }
     });
+
+    if (!viewModel) {
+        viewModel = window.MattMesterProfileImage.buildProfileImageViewModel(user);
+    }
 
     const statusElements = [
         document.getElementById('profileImageHeaderStatus'),
@@ -2345,11 +2342,10 @@ function applyProfileImagePresentation(user) {
         statusElement.textContent = `Profilkép státusz: ${statusMeta.label}`;
     });
 
-    // Remove gomb letiltása, ha a kép az alapértelmezett
     const removeButton = document.getElementById('removeAvatarButton');
     if (removeButton) {
-        removeButton.disabled = isDefault;
-        removeButton.title = isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet' : 'Profilkép eltávolítása';
+        removeButton.disabled = viewModel.isDefault;
+        removeButton.title = viewModel.isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet' : 'Profilkép eltávolítása';
     }
 }
 

@@ -627,9 +627,8 @@ h6 {
     transform: scale(1.05);
 }
 
-.profile-image-pending {
-    filter: blur(2px) saturate(0.82);
-    opacity: 0.88;
+.profile-image-pending-blur {
+    filter: blur(3px) saturate(0.75);
 }
 
 .profile-status {
@@ -1507,10 +1506,6 @@ h6 {
     height: min(420px, calc(100vh - 320px));
     min-height: 180px;
     background: rgba(2, 6, 23, 0.35);
-}
-
-.search-result-avatar-pending {
-    filter: blur(3px) saturate(0.85);
 }
 
 .search-results-header-content {

@@ -2095,7 +2095,19 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
                     other_user.id AS other_user_id,
                     other_user.username AS other_user_username,
                     other_user.profile_image AS other_user_profile_image,
-                    'default' AS other_user_profile_image_status
+                    CASE
+                        WHEN other_user.profile_image = '/profile_pictures/default.png' THEN 'default'
+                        ELSE COALESCE(
+                            (
+                                SELECT piu.status
+                                FROM profile_image_uploads piu
+                                WHERE piu.user_id = other_user.id
+                                ORDER BY piu.upload_time DESC, piu.id DESC
+                                LIMIT 1
+                            ),
+                            'approved'
+                        )
+                    END AS other_user_profile_image_status
                 FROM chat_participants current_participant
                 JOIN chat_conversations c ON c.id = current_participant.conversation_id
                 LEFT JOIN chat_messages last_message ON last_message.id = (
@@ -2195,7 +2207,19 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
                     m.sent_at,
                     u.username AS sender_username,
                     u.profile_image AS sender_profile_image,
-                    'default' AS sender_profile_image_status
+                    CASE
+                        WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                        ELSE COALESCE(
+                            (
+                                SELECT piu.status
+                                FROM profile_image_uploads piu
+                                WHERE piu.user_id = u.id
+                                ORDER BY piu.upload_time DESC, piu.id DESC
+                                LIMIT 1
+                            ),
+                            'approved'
+                        )
+                    END AS sender_profile_image_status
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
                 WHERE m.conversation_id = ?
@@ -2409,7 +2433,19 @@ async function insertMessageInConversation(userId, conversationId, message, poli
                     m.sent_at,
                     u.username AS sender_username,
                     u.profile_image AS sender_profile_image,
-                    'default' AS sender_profile_image_status
+                    CASE
+                        WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                        ELSE COALESCE(
+                            (
+                                SELECT piu.status
+                                FROM profile_image_uploads piu
+                                WHERE piu.user_id = u.id
+                                ORDER BY piu.upload_time DESC, piu.id DESC
+                                LIMIT 1
+                            ),
+                            'approved'
+                        )
+                    END AS sender_profile_image_status
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
                 WHERE m.id = ?
