@@ -97,3 +97,7 @@
 4. **Egyetlen értelmes schema-takarítás** → #9, #12, #15
 5. **Teszt és minőségjavítás** → #24, #27, #28
 6. **Bónusz funkciók csak ha marad idő** → #29 – #35
+
+
+---------------------------------
+Legujabb, ha törlődik az adatbázis amikor a 127.0.0.1:3000 port nyitva és meg van nyitva a böngészőben az oldal akkor bedob az admin felasználóba, potencionális javítások: adatbázis ujrarakása törlődés esetén vagy csak szimplán szunjön meg a kapcsolat db törlés esetén
