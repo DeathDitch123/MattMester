@@ -8,6 +8,7 @@ const playersRoutes = require('./routes/players.js');
 const friendsRoutes = require('./routes/friends.js');
 const chatRoutes = require('./routes/chat.js');
 const adminRoutes = require('./routes/admin.js');
+const notificationsRoutes = require('./routes/notifications.js');
 
 router.use('/admin', adminRoutes);
 router.use(authRoutes);
@@ -16,6 +17,7 @@ router.use(securityRoutes);
 router.use(playersRoutes);
 router.use(friendsRoutes);
 router.use(chatRoutes);
+router.use(notificationsRoutes);
 
 module.exports = router;
 module.exports.initChatRateLimiterCleanup = chatRoutes.initChatRateLimiterCleanup;

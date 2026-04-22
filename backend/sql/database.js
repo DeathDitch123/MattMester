@@ -66,8 +66,9 @@ async function createTables() {
             INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_email_verified, email_verified_at)
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP);
+        `INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE id = id;
         `,
 
         `ALTER TABLE users
@@ -112,7 +113,8 @@ async function createTables() {
             status ENUM('ongoing', 'finished', 'abandoned', 'draw') DEFAULT 'ongoing',
             FOREIGN KEY (white_player_id) REFERENCES users(id),
             FOREIGN KEY (black_player_id) REFERENCES users(id),
-            FOREIGN KEY (winner_id) REFERENCES users(id)
+            FOREIGN KEY (winner_id) REFERENCES users(id),
+            INDEX idx_games_status (status)
         )`,
 
         `CREATE TABLE IF NOT EXISTS game_chats (
@@ -141,7 +143,8 @@ async function createTables() {
             promotion_piece VARCHAR(10),
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
-            FOREIGN KEY (player_id) REFERENCES users(id)
+            FOREIGN KEY (player_id) REFERENCES users(id),
+            INDEX idx_moves_game (game_id)
         )`,
 
         `CREATE TABLE IF NOT EXISTS ability_log (
@@ -154,7 +157,8 @@ async function createTables() {
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
             FOREIGN KEY (move_id) REFERENCES moves(id) ON DELETE CASCADE,
             FOREIGN KEY (player_id) REFERENCES users(id),
-            FOREIGN KEY (ability_id) REFERENCES abilities(id)
+            FOREIGN KEY (ability_id) REFERENCES abilities(id),
+            INDEX idx_ability_log_game (game_id)
         )`,
 
         `CREATE TABLE IF NOT EXISTS friends (
@@ -194,7 +198,8 @@ async function createTables() {
             reviewed_by INT,
             review_time TIMESTAMP NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+            FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_profile_image_uploads_user_status (user_id, status)
         )`,
 
         `CREATE TABLE IF NOT EXISTS chat_conversations (
@@ -214,7 +219,7 @@ async function createTables() {
             user_id INT NOT NULL,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_read_message_id INT NULL,
-            UNIQUE KEY unique_chat_participant (conversation_id, user_id),
+            UNIQUE KEY unique_participant (conversation_id, user_id),
             INDEX idx_chat_participants_user (user_id),
             INDEX idx_chat_participants_conversation (conversation_id),
             FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
@@ -233,6 +238,36 @@ async function createTables() {
             FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_chat_messages_conversation_sent_at (conversation_id, sent_at),
             INDEX idx_chat_messages_sender (sender_id)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS notifications (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            type VARCHAR(64) NOT NULL,
+            audience ENUM('user', 'multi', 'global', 'role', 'system') NOT NULL DEFAULT 'user',
+            target_user_id INT NULL,
+            target_role ENUM('player', 'admin') NULL,
+            sender_user_id INT NULL,
+            title VARCHAR(160) NOT NULL,
+            message VARCHAR(500) NOT NULL,
+            payload JSON NULL,
+            severity ENUM('info', 'success', 'warning', 'error') DEFAULT 'info',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_notifications_target_user_created (target_user_id, created_at),
+            INDEX idx_notifications_audience_created (audience, created_at),
+            INDEX idx_notifications_role_created (target_role, created_at),
+            INDEX idx_notifications_type (type)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS notification_reads (
+            notification_id BIGINT NOT NULL,
+            user_id INT NOT NULL,
+            read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (notification_id, user_id),
+            FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_notification_reads_user (user_id)
         )`,
 
         `CREATE TABLE IF NOT EXISTS user_logs (

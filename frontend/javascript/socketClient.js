@@ -704,6 +704,30 @@
             });
         });
 
+        socket.on('notification:badge:update', (payload = {}) => {
+            // Authoritative badge frissítés a szerverről (DB alapú olvasatlan szám).
+            try {
+                const unreadCount = Number(payload?.unreadCount) || 0;
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:badge', {
+                    detail: { unreadCount, at: payload?.at || new Date().toISOString() }
+                }));
+            } catch (badgeError) {
+                console.warn('[socketClient] notification:badge:update hiba:', badgeError.message);
+            }
+        });
+
+        socket.on('chat:unread:update', (payload = {}) => {
+            // Authoritative chat unread összesen frissítés (pl. mark-read után).
+            try {
+                const totalUnread = Number(payload?.totalUnread) || 0;
+                globalScope.dispatchEvent(new CustomEvent('mattmester:chat:unread-total', {
+                    detail: { totalUnread, at: payload?.at || new Date().toISOString() }
+                }));
+            } catch (chatBadgeError) {
+                console.warn('[socketClient] chat:unread:update hiba:', chatBadgeError.message);
+            }
+        });
+
         globalScope.addEventListener(NOTIFICATION_CLICK_EVENT_NAME, (event) => {
             const detail = event?.detail || {};
             dispatchChatOpenFromNotification(detail, 'notification-click-event');

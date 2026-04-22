@@ -88,10 +88,17 @@ const friendsState = {
 };
 const notificationCenterState = {
     bound: false,
+    initialized: false,
     items: [],
     unreadCount: 0,
-    maxItems: 40
+    maxItems: 50
 };
+const chatBadgeState = {
+    bound: false,
+    initialized: false,
+    totalUnread: 0
+};
+const NOTIFICATION_BADGE_CAP = 99;
 const accountStatusState = {
     bound: false,
     sending: false,
@@ -166,16 +173,60 @@ function getNotificationCenterElements() {
         modal: document.getElementById('notificationsModal'),
         list: document.getElementById('notificationsList'),
         empty: document.getElementById('notificationsEmpty'),
-        dot: document.querySelector('.notification-dot')
+        counter: document.getElementById('notificationsUnreadCounter'),
+        markAllBtn: document.getElementById('markAllNotificationsReadBtn')
     };
 }
 
-function setNotificationDotState() {
-    const { dot } = getNotificationCenterElements();
-    if (dot) {
-        const hasUnread = notificationCenterState.unreadCount > 0;
-        dot.classList.toggle('d-none', !hasUnread);
+function getBadgeElements(target) {
+    return Array.from(document.querySelectorAll(`[data-badge-target="${target}"]`));
+}
+
+function formatBadgeCount(count) {
+    const safe = Math.max(0, Number.isFinite(count) ? Math.trunc(count) : 0);
+    let text = '0';
+    if (safe > NOTIFICATION_BADGE_CAP) {
+        text = `${NOTIFICATION_BADGE_CAP}+`;
+    } else {
+        text = String(safe);
     }
+    return { count: safe, text };
+}
+
+function applyBadgeState(target, count) {
+    const { count: safeCount, text } = formatBadgeCount(count);
+    const elements = getBadgeElements(target);
+    elements.forEach((element) => {
+        element.textContent = text;
+        if (safeCount > 0) {
+            element.removeAttribute('hidden');
+            element.classList.add('is-pulse');
+            setTimeout(() => element.classList.remove('is-pulse'), 600);
+        } else {
+            element.setAttribute('hidden', 'hidden');
+            element.classList.remove('is-pulse');
+        }
+    });
+}
+
+function setNotificationBadge(count) {
+    notificationCenterState.unreadCount = Math.max(0, Number(count) || 0);
+    applyBadgeState('notifications', notificationCenterState.unreadCount);
+    const { counter } = getNotificationCenterElements();
+    if (counter) {
+        const { count: safeCount, text } = formatBadgeCount(notificationCenterState.unreadCount);
+        counter.textContent = text;
+        if (safeCount > 0) {
+            counter.removeAttribute('hidden');
+        } else {
+            counter.setAttribute('hidden', 'hidden');
+        }
+    }
+}
+
+function setChatBadge(totalUnread) {
+    chatBadgeState.totalUnread = Math.max(0, Number(totalUnread) || 0);
+    applyBadgeState('chat', chatBadgeState.totalUnread);
 }
 
 function formatNotificationTime(value) {
@@ -183,24 +234,66 @@ function formatNotificationTime(value) {
     return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('hu-HU');
 }
 
+function escapeHtml(value) {
+    const text = String(value == null ? '' : value);
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function normalizeNotificationItem(payloadInput = {}) {
     const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
     const type = String(payload.type || '').trim().toLowerCase();
-    const conversationId = Number(payload.conversationId) || 0;
-    const fromUserId = Number(payload.fromUserId || payload.targetUserId || payload.senderUserId || payload.userId) || 0;
-    const title = String(payload.title || '').trim() || (type === 'chat_message' ? 'Új chat üzenet' : 'Értesítés');
+    const id = Number(payload.id) || 0;
+    const conversationId = Number(payload.conversationId || payload.payload?.conversationId) || 0;
+    const innerPayload = payload.payload && typeof payload.payload === 'object' ? payload.payload : {};
+    const fromUserId = Number(
+        payload.senderUserId
+        || innerPayload.senderUserId
+        || payload.fromUserId
+        || innerPayload.fromUserId
+        || payload.userId
+    ) || 0;
+    const fromUsername = String(payload.senderUsername || innerPayload.senderUsername || '').trim();
+    const title = String(payload.title || '').trim() || 'Értesítés';
     const message = String(payload.message || payload.text || '').trim() || 'Új esemény érkezett.';
-    const receivedAt = payload.receivedAt || new Date().toISOString();
+    const receivedAt = payload.createdAt || payload.receivedAt || payload.sentAt || new Date().toISOString();
+    const severity = ['info', 'success', 'warning', 'error'].includes(payload.severity) ? payload.severity : 'info';
+    const isRead = Boolean(payload.isRead);
 
     return {
         ...payload,
+        id,
         type,
         conversationId,
         fromUserId,
+        fromUsername,
         title,
         message,
-        receivedAt
+        receivedAt,
+        severity,
+        isRead,
+        payload: innerPayload
     };
+}
+
+// Extensible action renderer: notification type -> array of action descriptors
+function getNotificationActionsForItem(item) {
+    const actions = [];
+    if (item.type === 'friend_request' && item.fromUserId) {
+        actions.push({ key: 'profile', label: 'Profil', icon: 'user', variant: 'btn-outline-light' });
+        actions.push({ key: 'accept', label: 'Elfogad', icon: 'check', variant: 'btn-success' });
+        actions.push({ key: 'reject', label: 'Elutasít', icon: 'x', variant: 'btn-outline-danger' });
+        actions.push({ key: 'block', label: 'Letilt', icon: 'shield-off', variant: 'btn-danger' });
+    }
+    if (item.type === 'chat_message' && (item.conversationId || item.fromUserId)) {
+        actions.push({ key: 'open_chat', label: 'Megnyitás', icon: 'message-circle', variant: 'btn-outline-primary' });
+    }
+    actions.push({ key: 'remove', label: 'Bezár', icon: 'trash-2', variant: 'btn-outline-secondary' });
+    return actions;
 }
 
 function renderNotificationCenterList() {
@@ -212,27 +305,40 @@ function renderNotificationCenterList() {
 
         if (hasItems) {
             notificationCenterState.items.forEach((item) => {
-                const isChatMessage = item.type === 'chat_message';
-                const canOpenChat = isChatMessage && (item.conversationId > 0 || item.fromUserId > 0);
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = `notification-item btn w-100 text-start ${canOpenChat ? 'notification-item-clickable' : ''}`.trim();
-                button.setAttribute('role', 'listitem');
-                button.dataset.notificationType = item.type;
-                button.dataset.conversationId = String(item.conversationId || '');
-                button.dataset.fromUserId = String(item.fromUserId || '');
-                button.dataset.notificationPayload = JSON.stringify(item);
-                button.dataset.notificationClick = canOpenChat ? 'true' : 'false';
-                button.innerHTML = `
-                    <div class="notification-item-head d-flex justify-content-between align-items-start gap-2">
-                        <strong class="text-light">${item.title}</strong>
-                        <small class="text-secondary">${formatNotificationTime(item.receivedAt)}</small>
+                const wrapper = document.createElement('div');
+                wrapper.className = `notification-item p-2 mb-2 rounded ${item.isRead ? 'is-read' : 'is-unread'}`;
+                wrapper.setAttribute('role', 'listitem');
+                wrapper.dataset.notificationId = String(item.id || '');
+                wrapper.dataset.notificationType = item.type;
+                wrapper.dataset.conversationId = String(item.conversationId || '');
+                wrapper.dataset.fromUserId = String(item.fromUserId || '');
+
+                const actions = getNotificationActionsForItem(item);
+                const actionsHtml = actions.map((action) => `
+                    <button type="button" class="btn btn-sm ${action.variant} d-inline-flex align-items-center gap-1"
+                        data-notification-action="${action.key}" aria-label="${escapeHtml(action.label)}">
+                        <i data-lucide="${action.icon}" style="width: 14px; height: 14px;"></i>
+                        <span class="d-none d-sm-inline">${escapeHtml(action.label)}</span>
+                    </button>
+                `).join('');
+
+                wrapper.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="flex-grow-1">
+                            <strong class="text-light d-block">${escapeHtml(item.title)}</strong>
+                            <div class="small text-secondary mt-1">${escapeHtml(item.message)}</div>
+                        </div>
+                        <small class="text-secondary text-nowrap">${escapeHtml(formatNotificationTime(item.receivedAt))}</small>
                     </div>
-                    <div class="small text-secondary mt-1">${item.message}</div>
+                    <div class="notification-actions d-flex flex-wrap gap-2 mt-2">${actionsHtml}</div>
                 `;
 
-                list.appendChild(button);
+                list.appendChild(wrapper);
             });
+
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
+            }
         }
     }
 }
@@ -241,7 +347,6 @@ async function openChatInboxFromLauncher() {
     if (!window.MattMesterChatModal) {
         throw new Error('A chat modal API nem érhető el.');
     }
-
     await window.MattMesterChatModal.openInbox();
 }
 
@@ -256,81 +361,274 @@ function bindGlobalChatLaunchers() {
     });
 }
 
+async function fetchNotificationsFromServer() {
+    let success = false;
+    try {
+        const response = await fetch('/api/notifications?limit=50', { credentials: 'same-origin' });
+        if (response.ok) {
+            const json = await response.json();
+            if (json?.success) {
+                notificationCenterState.items = (json.data || []).map(normalizeNotificationItem);
+                setNotificationBadge(Number(json.unreadCount) || 0);
+                renderNotificationCenterList();
+                success = true;
+            }
+        }
+    } catch (error) {
+        console.warn('[notifications] initial fetch hiba:', error.message);
+    }
+    return success;
+}
+
+async function fetchChatUnreadTotal() {
+    let total = 0;
+    try {
+        const response = await fetch('/api/chat/unread-total', { credentials: 'same-origin' });
+        if (response.ok) {
+            const json = await response.json();
+            if (json?.success) {
+                total = Number(json.totalUnread) || 0;
+            }
+        }
+    } catch (error) {
+        console.warn('[chat] unread-total fetch hiba:', error.message);
+    }
+    setChatBadge(total);
+    return total;
+}
+
+async function markNotificationReadOnServer(notificationId) {
+    let success = false;
+    try {
+        const normalizedNotificationId = Number(notificationId);
+        if (!Number.isInteger(normalizedNotificationId) || normalizedNotificationId <= 0) {
+            console.error('[notifications] mark read kihagyva: ervenytelen notificationId:', notificationId);
+            return false;
+        }
+
+        const response = await fetch(`/api/notifications/${normalizedNotificationId}/read`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        const json = await response.json().catch(() => ({}));
+        success = response.ok && Boolean(json?.success);
+
+        if (!success) {
+            console.error('[notifications] mark read sikertelen:', {
+                notificationId: normalizedNotificationId,
+                status: response.status,
+                message: String(json?.message || 'ismeretlen hiba')
+            });
+        }
+    } catch (error) {
+        console.error('[notifications] mark read hiba:', error.message);
+    }
+    return success;
+}
+
+async function markAllNotificationsReadOnServer() {
+    let success = false;
+    try {
+        const response = await fetch('/api/notifications/read-all', {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        const json = await response.json().catch(() => ({}));
+        success = response.ok && Boolean(json?.success);
+        if (!success) {
+            console.error('[notifications] mark-all-read sikertelen:', {
+                status: response.status,
+                message: String(json?.message || 'ismeretlen hiba')
+            });
+        }
+    } catch (error) {
+        console.error('[notifications] mark-all-read hiba:', error.message);
+    }
+    return success;
+}
+
+async function performFriendActionFromNotification(action, fromUserId) {
+    let outcome = { success: false, message: '' };
+    try {
+        let url = null;
+        let method = 'POST';
+        let body = null;
+        if (action === 'accept') {
+            url = '/api/friends/accept';
+            body = JSON.stringify({ targetUserId: fromUserId });
+        } else if (action === 'reject') {
+            url = '/api/friends/reject';
+            body = JSON.stringify({ targetUserId: fromUserId });
+        } else if (action === 'block') {
+            url = '/api/friends/block';
+            body = JSON.stringify({ targetUserId: fromUserId });
+        }
+        if (url) {
+            const response = await fetch(url, {
+                method,
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body
+            });
+            const json = await response.json().catch(() => ({}));
+            outcome = {
+                success: Boolean(json?.success),
+                message: String(json?.message || (response.ok ? 'OK' : 'Hiba a művelet során.'))
+            };
+        }
+    } catch (error) {
+        outcome = { success: false, message: error.message || 'Hiba a friend művelet során.' };
+    }
+    return outcome;
+}
+
 function bindNotificationCenterEvents() {
     if (!notificationCenterState.bound) {
-        const { list, modal } = getNotificationCenterElements();
+        const { list, modal, markAllBtn } = getNotificationCenterElements();
 
         window.addEventListener('mattmester:notification:push', (event) => {
             runSafely('notificationPushCollect', () => {
                 const notification = normalizeNotificationItem(event?.detail || {});
+                const existingIndex = notification.id
+                    ? notificationCenterState.items.findIndex((entry) => entry.id === notification.id)
+                    : -1;
+                if (existingIndex >= 0) {
+                    notificationCenterState.items.splice(existingIndex, 1);
+                }
                 notificationCenterState.items.unshift(notification);
                 if (notificationCenterState.items.length > notificationCenterState.maxItems) {
                     notificationCenterState.items.length = notificationCenterState.maxItems;
                 }
-
-                notificationCenterState.unreadCount += 1;
-                setNotificationDotState();
+                if (!notification.isRead) {
+                    setNotificationBadge(notificationCenterState.unreadCount + 1);
+                }
                 renderNotificationCenterList();
+            });
+        });
+
+        window.addEventListener('mattmester:notification:badge', (event) => {
+            runSafely('notificationBadgeUpdate', () => {
+                const count = Number(event?.detail?.unreadCount) || 0;
+                setNotificationBadge(count);
+            });
+        });
+
+        window.addEventListener('mattmester:chat:unread-total', (event) => {
+            runSafely('chatUnreadTotalUpdate', () => {
+                const total = Number(event?.detail?.totalUnread) || 0;
+                setChatBadge(total);
             });
         });
 
         if (list) {
             list.addEventListener('click', (event) => {
-                runSafely('notificationListClick', () => {
-                    const item = event.target.closest('[data-notification-click="true"]');
-                    if (item && window.MattMesterSocket?.handleNotificationClick) {
+                runSafelyAsync('notificationListAction', async () => {
+                    const button = event.target.closest('[data-notification-action]');
+                    if (button) {
                         event.preventDefault();
                         event.stopPropagation();
-                        const payloadText = String(item.dataset.notificationPayload || '').trim();
-                        let payload = {};
-                        if (payloadText) {
-                            try {
-                                payload = JSON.parse(payloadText);
-                            } catch (error) {
-                                payload = {
-                                    type: item.dataset.notificationType,
-                                    conversationId: item.dataset.conversationId,
-                                    fromUserId: item.dataset.fromUserId
-                                };
+                        const wrapper = button.closest('[data-notification-id]');
+                        const notificationId = Number(wrapper?.dataset.notificationId) || 0;
+                        const fromUserId = Number(wrapper?.dataset.fromUserId) || 0;
+                        const conversationId = Number(wrapper?.dataset.conversationId) || 0;
+                        const action = button.dataset.notificationAction;
+
+                        if (action === 'profile' && fromUserId) {
+                            await openPlayerProfileModalByUserId(fromUserId);
+                        } else if ((action === 'accept' || action === 'reject' || action === 'block') && fromUserId) {
+                            const result = await performFriendActionFromNotification(action, fromUserId);
+                            if (result.success) {
+                                const isReadSaved = await markNotificationReadOnServer(notificationId);
+                                if (!isReadSaved) {
+                                    if (typeof setFriendsFeedback === 'function') {
+                                        setFriendsFeedback('A muvelet sikerult, de az ertesites olvasottnak jelolese nem sikerult. Frissitsd az oldalt.', 'warning');
+                                    }
+                                    return;
+                                }
+                                const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
+                                if (idx >= 0) {
+                                    notificationCenterState.items.splice(idx, 1);
+                                }
+                                renderNotificationCenterList();
+                                if (typeof setFriendsFeedback === 'function') {
+                                    setFriendsFeedback(result.message, 'success');
+                                }
+                                if (typeof refreshFriendsList === 'function') {
+                                    await refreshFriendsList(friendsState?.activeFilter || 'friend');
+                                }
+                            } else if (typeof setFriendsFeedback === 'function') {
+                                setFriendsFeedback(result.message, 'error');
                             }
-                        }
-
-                        const triggerChatOpen = () => {
-                            window.MattMesterSocket.handleNotificationClick(payload);
-                            notificationCenterState.unreadCount = Math.max(0, notificationCenterState.unreadCount - 1);
-                            setNotificationDotState();
-                        };
-
-                        if (modal) {
-                            modal.addEventListener('hidden.bs.modal', () => {
-                                runSafely('notificationModalHiddenChatOpen', () => {
-                                    triggerChatOpen();
-                                });
-                            }, { once: true });
-
-                            const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-                            modalInstance.hide();
-                        } else {
-                            triggerChatOpen();
+                        } else if (action === 'open_chat' && (conversationId || fromUserId)) {
+                            const isReadSaved = await markNotificationReadOnServer(notificationId);
+                            if (!isReadSaved) {
+                                console.error('[notifications] chat megnyitas mellett read mentes sikertelen:', notificationId);
+                            }
+                            window.dispatchEvent(new CustomEvent('mattmester:chat:open-conversation', {
+                                detail: { conversationId, targetUserId: fromUserId }
+                            }));
+                            if (modal) {
+                                bootstrap.Modal.getOrCreateInstance(modal).hide();
+                            }
+                        } else if (action === 'remove') {
+                            const isReadSaved = await markNotificationReadOnServer(notificationId);
+                            if (!isReadSaved) {
+                                if (typeof setFriendsFeedback === 'function') {
+                                    setFriendsFeedback('Az ertesites olvasottnak jelolese nem sikerult, ezert nem lett eltavolitva.', 'warning');
+                                }
+                                return;
+                            }
+                            const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
+                            if (idx >= 0) {
+                                notificationCenterState.items.splice(idx, 1);
+                            }
+                            renderNotificationCenterList();
                         }
                     }
                 });
             });
         }
 
-        if (modal) {
-            modal.addEventListener('shown.bs.modal', () => {
-                runSafely('notificationModalShown', () => {
-                    notificationCenterState.unreadCount = 0;
-                    setNotificationDotState();
+        if (markAllBtn) {
+            markAllBtn.addEventListener('click', () => {
+                runSafelyAsync('markAllNotificationsRead', async () => {
+                    const success = await markAllNotificationsReadOnServer();
+                    if (!success) {
+                        if (typeof setFriendsFeedback === 'function') {
+                            setFriendsFeedback('A tobbes ertesites-olvasas mentese nem sikerult.', 'warning');
+                        }
+                        return;
+                    }
+                    notificationCenterState.items.forEach((entry) => { entry.isRead = true; });
+                    setNotificationBadge(0);
                     renderNotificationCenterList();
                 });
             });
         }
 
+        if (modal) {
+            modal.addEventListener('shown.bs.modal', () => {
+                runSafelyAsync('notificationModalShown', async () => {
+                    await fetchNotificationsFromServer();
+                });
+            });
+        }
+
         notificationCenterState.bound = true;
-        setNotificationDotState();
-        renderNotificationCenterList();
+    }
+
+    if (!notificationCenterState.initialized) {
+        runSafelyAsync('notificationsInitialFetch', async () => {
+            await fetchNotificationsFromServer();
+        });
+        notificationCenterState.initialized = true;
+    }
+
+    if (!chatBadgeState.initialized) {
+        runSafelyAsync('chatUnreadInitialFetch', async () => {
+            await fetchChatUnreadTotal();
+        });
+        chatBadgeState.initialized = true;
     }
 }
 //sessionInfo
@@ -2381,16 +2679,6 @@ function showStats(sessionInfo) {
         const rankClasses = ['rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster'];
         const roleBadgeClasses = ['admin', 'badge-custom', 'badge-admin', 'badge-player'];
         const statBadgeClasses = ['badge-custom', 'badge-win', 'badge-loss', 'badge-draw', 'badge-ongoing'];
-
-        document.querySelectorAll('.top-bar-user-name').forEach((element) => {
-            element.textContent = username;
-        });
-
-        document.querySelectorAll('.top-bar-user-role').forEach((element) => {
-            element.textContent = roleText;
-            element.classList.remove(...roleBadgeClasses);
-            element.classList.add('badge-custom', role === 'admin' ? 'badge-admin' : 'badge-player');
-        });
 
         const profileName = document.querySelector('.profile-header h1.h3');
         if (profileName) {

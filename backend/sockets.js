@@ -791,6 +791,58 @@ function createSocketHub(io) {
 
             return payload;
         },
+        pushNotificationToUsers(targetUserIds, notification) {
+            const payload = {
+                ...notification,
+                sentAt: new Date().toISOString()
+            };
+            const uniqueIds = [...new Set((targetUserIds || []).map((id) => parsePositiveInteger(id, null)).filter(Boolean))];
+            uniqueIds.forEach((userId) => {
+                io.to(`notification-user:${userId}`).emit('notification:push', { ...payload, targetUserId: userId });
+            });
+            return { payload, deliveredTo: uniqueIds };
+        },
+        pushNotificationGlobal(notification) {
+            const payload = {
+                ...notification,
+                sentAt: new Date().toISOString(),
+                targetUserId: null,
+                audience: notification?.audience || 'global'
+            };
+            io.to(SOCKET_ROOMS.notifications).emit('notification:push', payload);
+            return payload;
+        },
+        emitNotificationBadgeUpdate(userId, unreadCount) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            const normalizedCount = Math.max(0, parsePositiveInteger(unreadCount, 0));
+            if (normalizedUserId) {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:badge:update', {
+                    unreadCount: normalizedCount,
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        emitChatUnreadUpdate(userId, totalUnread) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            const normalizedTotal = Math.max(0, parsePositiveInteger(totalUnread, 0));
+            if (normalizedUserId) {
+                io.to(`user-room:${normalizedUserId}`).emit('chat:unread:update', {
+                    totalUnread: normalizedTotal,
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        emitChatUnreadUpdateForUsers(userIds, totals) {
+            const totalsMap = totals && typeof totals === 'object' ? totals : {};
+            const uniqueIds = [...new Set((userIds || []).map((id) => parsePositiveInteger(id, null)).filter(Boolean))];
+            uniqueIds.forEach((userId) => {
+                const totalUnread = Math.max(0, parsePositiveInteger(totalsMap[userId], 0));
+                io.to(`user-room:${userId}`).emit('chat:unread:update', {
+                    totalUnread,
+                    at: new Date().toISOString()
+                });
+            });
+        },
         broadcastChat(roomId, messagePayload) {
             const conversationId = parsePositiveInteger(roomId, null);
             if (conversationId) {

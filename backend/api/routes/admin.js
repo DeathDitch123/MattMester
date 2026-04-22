@@ -1,6 +1,7 @@
 const express = require('express');
 const sql = require('../../sql/sql_funtions.js');
 const { isAdmin } = require('../funtions.js');
+const { notificationService } = require('../../services.js');
 
 const router = express.Router();
 
@@ -85,6 +86,120 @@ router.get('/export-users', async (request, response) => {
         result = response.status(statusCode).send(csvBody);
     }
     return result;
+});
+
+// POST /api/admin/notifications/send
+// Body: { audience: 'user'|'multi'|'global'|'role',
+//         targetUserId?: number, targetUsername?: string,
+//         targetUserIds?: number[], targetUsernames?: string[],
+//         targetRole?: 'player'|'admin',
+//         type: string, title: string, message: string,
+//         severity?: 'info'|'success'|'warning'|'error',
+//         payload?: object }
+router.post('/notifications/send', express.json(), async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: 'Szerverhiba az értesítés küldése során.', data: null };
+    try {
+        const adminUserId = Number(request.session?.userId) || 0;
+        const body = request.body || {};
+        const audienceRaw = String(body.audience || '').trim().toLowerCase();
+        const allowedAudiences = new Set(['user', 'multi', 'global', 'role']);
+        if (!allowedAudiences.has(audienceRaw)) {
+            statusCode = 400;
+            throw new Error('Érvénytelen audience érték.');
+        }
+
+        const type = String(body.type || '').trim();
+        const title = String(body.title || '').trim();
+        const message = String(body.message || '').trim();
+        if (!type || !title || !message) {
+            statusCode = 400;
+            throw new Error('A type, title és message mezők kötelezőek.');
+        }
+
+        const severity = ['info', 'success', 'warning', 'error'].includes(body.severity) ? body.severity : 'info';
+        const userPayload = body.payload && typeof body.payload === 'object' ? body.payload : null;
+
+        const baseNotification = {
+            type,
+            title,
+            message,
+            severity,
+            payload: userPayload,
+            senderUserId: adminUserId
+        };
+
+        let resolvedNotification = null;
+        if (audienceRaw === 'user') {
+            let resolvedUserId = Number(body.targetUserId) || 0;
+            if (!resolvedUserId && body.targetUsername) {
+                const found = await sql.findUserByUsernameForAdmin(body.targetUsername);
+                resolvedUserId = found?.id || 0;
+                if (!resolvedUserId) {
+                    statusCode = 404;
+                    throw new Error('A megadott felhasználó nem található.');
+                }
+            }
+            if (!resolvedUserId) {
+                statusCode = 400;
+                throw new Error('user audience esetén targetUserId vagy targetUsername kötelező.');
+            }
+            resolvedNotification = { ...baseNotification, audience: 'user', targetUserId: resolvedUserId };
+        } else if (audienceRaw === 'multi') {
+            const ids = new Set();
+            if (Array.isArray(body.targetUserIds)) {
+                body.targetUserIds.forEach((id) => {
+                    const numericId = Number(id) || 0;
+                    if (numericId) {
+                        ids.add(numericId);
+                    }
+                });
+            }
+            if (Array.isArray(body.targetUsernames)) {
+                for (const username of body.targetUsernames) {
+                    const found = await sql.findUserByUsernameForAdmin(username);
+                    if (found?.id) {
+                        ids.add(found.id);
+                    }
+                }
+            }
+            if (!ids.size) {
+                statusCode = 400;
+                throw new Error('multi audience esetén legalább egy érvényes targetUserIds/targetUsernames elem kötelező.');
+            }
+            resolvedNotification = { ...baseNotification, audience: 'multi', targetUserIds: [...ids] };
+        } else if (audienceRaw === 'role') {
+            const role = String(body.targetRole || '').trim();
+            if (!['player', 'admin'].includes(role)) {
+                statusCode = 400;
+                throw new Error('role audience esetén targetRole érték kötelező (player|admin).');
+            }
+            resolvedNotification = { ...baseNotification, audience: 'role', targetRole: role };
+        } else {
+            resolvedNotification = { ...baseNotification, audience: 'global' };
+        }
+
+        const socketHub = request.app?.locals?.socketHub;
+        const sendResult = await notificationService.send(socketHub, resolvedNotification);
+        if (sendResult.errors?.length && !sendResult.deliveredTo.length) {
+            statusCode = 500;
+            throw new Error(sendResult.errors[0].error || 'Az értesítés küldése sikertelen.');
+        }
+
+        payload = {
+            success: true,
+            message: `Értesítés elküldve ${sendResult.deliveredTo.length} felhasználónak.`,
+            data: {
+                deliveredTo: sendResult.deliveredTo.length,
+                errors: sendResult.errors,
+                notification: sendResult.saved
+            }
+        };
+    } catch (error) {
+        if (statusCode === 200) statusCode = 500;
+        payload = { success: false, message: error.message || payload.message, data: null };
+    }
+    return response.status(statusCode).json(payload);
 });
 
 module.exports = router;

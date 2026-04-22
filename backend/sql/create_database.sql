@@ -307,6 +307,49 @@ CREATE TABLE
         INDEX idx_chat_messages_sender (sender_id)
     );
 
+-- Universal notifications table (single source of truth for badge + history)
+-- Targeting:
+--   target_user_id IS NULL   -> broadcast (audience driven by audience field)
+--   target_user_id IS set    -> single user delivery
+-- audience values: 'user', 'multi', 'global', 'role', 'system'
+-- type values are open (e.g. 'friend_request', 'friend_accepted', 'friend_blocked',
+-- 'chat_message', 'admin_message', 'system'). The payload JSON column allows
+-- forward-compatible extension without schema changes.
+CREATE TABLE
+    IF NOT EXISTS notifications (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        type VARCHAR(64) NOT NULL,
+        audience ENUM ('user', 'multi', 'global', 'role', 'system') NOT NULL DEFAULT 'user',
+        target_user_id INT NULL,
+        target_role ENUM ('player', 'admin') NULL,
+        sender_user_id INT NULL,
+        title VARCHAR(160) NOT NULL,
+        message VARCHAR(500) NOT NULL,
+        payload JSON NULL,
+        severity ENUM ('info', 'success', 'warning', 'error') DEFAULT 'info',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (target_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (sender_user_id) REFERENCES users (id) ON DELETE SET NULL,
+        INDEX idx_notifications_target_user_created (target_user_id, created_at),
+        INDEX idx_notifications_audience_created (audience, created_at),
+        INDEX idx_notifications_role_created (target_role, created_at),
+        INDEX idx_notifications_type (type)
+    );
+
+-- Per-user read state. Used for both directed notifications and broadcasts.
+-- For broadcast notifications we lazily insert a row when the user marks the
+-- given notification as read; absence of a row means "unread".
+CREATE TABLE
+    IF NOT EXISTS notification_reads (
+        notification_id BIGINT NOT NULL,
+        user_id INT NOT NULL,
+        read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (notification_id, user_id),
+        FOREIGN KEY (notification_id) REFERENCES notifications (id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_notification_reads_user (user_id)
+    );
+
 -- 20 teszt felhasznalo (jelszo: 123456Ab)
 INSERT IGNORE INTO users (
     username,

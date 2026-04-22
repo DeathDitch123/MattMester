@@ -112,25 +112,18 @@
             </div>
 
             <div class="top-bar-right">
-                <div class="d-none d-md-flex align-items-center gap-2">
-                    <button class="top-bar-btn" id="openMessagesModal" type="button" data-tooltip="Üzenetek"
-                        data-open-chat="inbox" aria-label="Chat megnyitása">
-                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
-                    </button>
-                </div>
-
-                <button class="top-bar-btn" type="button" data-tooltip="Értesítések" data-bs-toggle="modal"
-                    data-bs-target="#notificationsModal">
-                    <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
-                    <span class="notification-dot"></span>
+                <button class="top-bar-btn top-bar-btn-with-badge" id="openMessagesModal" type="button"
+                    data-tooltip="Üzenetek" data-open-chat="inbox" aria-label="Üzenetek megnyitása">
+                    <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                    <span class="top-bar-badge top-bar-badge--chat" data-badge-target="chat" hidden>0</span>
                 </button>
 
-                <div class="top-bar-user">
-                    <div class="top-bar-user-info d-none d-sm-block">
-                        <div class="top-bar-user-name">GrandMaster_99</div>
-                        <div class="top-bar-user-role">Admin</div>
-                    </div>
-                </div>
+                <button class="top-bar-btn top-bar-btn-with-badge" id="openNotificationsModal" type="button"
+                    data-tooltip="Értesítések" data-bs-toggle="modal" data-bs-target="#notificationsModal"
+                    aria-label="Értesítések megnyitása">
+                    <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
+                    <span class="top-bar-badge top-bar-badge--notification" data-badge-target="notifications" hidden>0</span>
+                </button>
             </div>
         </div>
 
@@ -573,11 +566,12 @@
 
     <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
-            <div class="modal-content modal-surface notifications-modal-content">
+            <div class="modal-content modal-surface notifications-modal-content notifications-modal-content--transparent">
                 <div class="modal-header">
                     <h5 class="modal-title d-flex align-items-center gap-2" id="notificationsModalLabel">
                         <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
                         Értesítések
+                        <span id="notificationsUnreadCounter" class="badge bg-danger ms-2" hidden>0</span>
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
@@ -587,7 +581,11 @@
                         Nincs új értesítés.
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer d-flex justify-content-between gap-2">
+                    <button type="button" class="btn btn-outline-gold btn-sm" id="markAllNotificationsReadBtn">
+                        <i data-lucide="check-check" style="width: 14px; height: 14px;"></i>
+                        Mind olvasott
+                    </button>
                     <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
                 </div>
             </div>

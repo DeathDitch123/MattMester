@@ -2849,6 +2849,494 @@ async function getUserVerificationStatusById(userId) {
     return statusRow;
 }
 
+// =====================
+// Notifications (DB-backed unified notification system)
+// =====================
+
+const ALLOWED_NOTIFICATION_AUDIENCES = new Set(['user', 'multi', 'global', 'role', 'system']);
+const ALLOWED_NOTIFICATION_SEVERITIES = new Set(['info', 'success', 'warning', 'error']);
+const ALLOWED_NOTIFICATION_TARGET_ROLES = new Set(['player', 'admin']);
+
+function normalizeNotificationInput(notification) {
+    const input = notification && typeof notification === 'object' ? notification : {};
+    const type = String(input.type || '').trim().slice(0, 64);
+    const audience = ALLOWED_NOTIFICATION_AUDIENCES.has(input.audience) ? input.audience : 'user';
+    const severity = ALLOWED_NOTIFICATION_SEVERITIES.has(input.severity) ? input.severity : 'info';
+    const targetRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(input.targetRole) ? input.targetRole : null;
+    const targetUserId = normalizePositiveInt(input.targetUserId, 0) || null;
+    const senderUserId = normalizePositiveInt(input.senderUserId, 0) || null;
+    const title = String(input.title || '').trim().slice(0, 160);
+    const message = String(input.message || '').trim().slice(0, 500);
+    let payloadJson = null;
+    if (input.payload && typeof input.payload === 'object') {
+        try {
+            payloadJson = JSON.stringify(input.payload);
+        } catch (serializeError) {
+            payloadJson = null;
+        }
+    }
+    return {
+        type,
+        audience,
+        severity,
+        targetRole,
+        targetUserId,
+        senderUserId,
+        title,
+        message,
+        payloadJson
+    };
+}
+
+async function insertNotification(notification) {
+    const pool = getPool();
+    let insertedRow = null;
+    try {
+        const data = normalizeNotificationInput(notification);
+        if (!data.type) {
+            throw new Error('Értesítés típus kötelező.');
+        }
+        if (!data.title) {
+            throw new Error('Értesítés cím kötelező.');
+        }
+        if (!data.message) {
+            throw new Error('Értesítés szöveg kötelező.');
+        }
+        if (data.audience === 'user' && !data.targetUserId) {
+            throw new Error('Egy célzott értesítéshez target_user_id kötelező.');
+        }
+        if (data.audience === 'role' && !data.targetRole) {
+            throw new Error('Szerep alapú értesítéshez target_role kötelező.');
+        }
+
+        const [result] = await pool.execute(
+            `
+                INSERT INTO notifications
+                    (type, audience, target_user_id, target_role, sender_user_id,
+                     title, message, payload, severity)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+                data.type,
+                data.audience,
+                data.targetUserId,
+                data.targetRole,
+                data.senderUserId,
+                data.title,
+                data.message,
+                data.payloadJson,
+                data.severity
+            ]
+        );
+
+        insertedRow = {
+            id: result.insertId,
+            type: data.type,
+            audience: data.audience,
+            targetUserId: data.targetUserId,
+            targetRole: data.targetRole,
+            senderUserId: data.senderUserId,
+            title: data.title,
+            message: data.message,
+            payload: data.payloadJson ? JSON.parse(data.payloadJson) : null,
+            severity: data.severity,
+            createdAt: new Date().toISOString(),
+            isRead: false
+        };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítés mentése során.');
+    }
+    return insertedRow;
+}
+
+async function getNotificationsForUser(userId, userRole, limit = 30, cursor = null) {
+    const pool = getPool();
+    let result = { data: [], nextCursor: null, hasMore: false };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+
+        const normalizedRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(userRole) ? userRole : 'player';
+        const normalizedLimit = normalizeListLimit(limit, 30, 100);
+        const normalizedCursor = normalizePositiveInt(cursor, 0);
+
+        const params = [normalizedUserId, normalizedUserId, normalizedRole];
+        let cursorClause = '';
+        if (normalizedCursor) {
+            cursorClause = 'AND n.id < ?';
+            params.push(normalizedCursor);
+        }
+        params.push(normalizedLimit + 1);
+
+        const [rows] = await pool.execute(
+            `
+                SELECT
+                    n.id,
+                    n.type,
+                    n.audience,
+                    n.target_user_id,
+                    n.target_role,
+                    n.sender_user_id,
+                    sender.username AS sender_username,
+                    n.title,
+                    n.message,
+                    n.payload,
+                    n.severity,
+                    n.created_at,
+                    CASE WHEN nr.notification_id IS NULL THEN 0 ELSE 1 END AS is_read
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                LEFT JOIN users sender ON sender.id = n.sender_user_id
+                WHERE (
+                    n.target_user_id = ?
+                    OR n.audience = 'global'
+                    OR (n.audience = 'role' AND n.target_role = ?)
+                )
+                ${cursorClause}
+                ORDER BY n.id DESC
+                LIMIT ?
+            `,
+            params
+        );
+
+        const hasMore = rows.length > normalizedLimit;
+        const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
+
+        const data = sliced.map((row) => {
+            let payload = null;
+            if (row.payload) {
+                try {
+                    payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+                } catch (parseError) {
+                    payload = null;
+                }
+            }
+            return {
+                id: Number(row.id),
+                type: row.type,
+                audience: row.audience,
+                targetUserId: row.target_user_id ? Number(row.target_user_id) : null,
+                targetRole: row.target_role || null,
+                senderUserId: row.sender_user_id ? Number(row.sender_user_id) : null,
+                senderUsername: row.sender_username || null,
+                title: row.title,
+                message: row.message,
+                payload,
+                severity: row.severity,
+                createdAt: row.created_at,
+                isRead: Boolean(row.is_read)
+            };
+        });
+
+        result = {
+            data,
+            nextCursor: hasMore && data.length ? data[data.length - 1].id : null,
+            hasMore
+        };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítések lekérése során.');
+    }
+    return result;
+}
+
+async function markNotificationRead(userId, notificationId) {
+    const pool = getPool();
+    let outcome = { changed: false };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedNotificationId = normalizePositiveInt(notificationId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedNotificationId) {
+            throw new Error('Érvénytelen értesítés azonosító.');
+        }
+
+        const [accessRows] = await pool.execute(
+            `
+                SELECT n.id
+                FROM notifications n
+                LEFT JOIN users u ON u.id = ?
+                WHERE n.id = ?
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = u.role)
+                  )
+                LIMIT 1
+            `,
+            [normalizedUserId, normalizedNotificationId, normalizedUserId]
+        );
+
+        if (accessRows.length) {
+            const [insertResult] = await pool.execute(
+                `
+                    INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at)
+                    VALUES (?, ?, NOW())
+                `,
+                [normalizedNotificationId, normalizedUserId]
+            );
+            outcome = { changed: insertResult.affectedRows > 0 };
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítés olvasottá jelölése során.');
+    }
+    return outcome;
+}
+
+async function markFriendRequestNotificationsReadForUser(userId, senderUserId) {
+    const pool = getPool();
+    let outcome = { changed: 0 };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedSenderUserId = normalizePositiveInt(senderUserId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedSenderUserId) {
+            throw new Error('Érvénytelen kuldo felhasznalo azonosito.');
+        }
+
+        const [insertResult] = await pool.execute(
+            `
+                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at)
+                SELECT n.id, ?, NOW()
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE nr.notification_id IS NULL
+                  AND n.type = 'friend_request'
+                  AND n.target_user_id = ?
+                  AND n.sender_user_id = ?
+            `,
+            [normalizedUserId, normalizedUserId, normalizedUserId, normalizedSenderUserId]
+        );
+
+        outcome = { changed: Number(insertResult.affectedRows || 0) };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a friend request ertesites olvasott statusz mentesekor.');
+    }
+    return outcome;
+}
+
+async function markAllNotificationsReadForUser(userId, userRole) {
+    const pool = getPool();
+    let outcome = { changed: 0 };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        const normalizedRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(userRole) ? userRole : 'player';
+
+        const [insertResult] = await pool.execute(
+            `
+                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at)
+                SELECT n.id, ?, NOW()
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE nr.notification_id IS NULL
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = ?)
+                  )
+            `,
+            [normalizedUserId, normalizedUserId, normalizedUserId, normalizedRole]
+        );
+
+        outcome = { changed: Number(insertResult.affectedRows || 0) };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítések tömeges olvasottá jelölése során.');
+    }
+    return outcome;
+}
+
+async function getUnreadNotificationCount(userId, userRole) {
+    const pool = getPool();
+    let count = 0;
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        const normalizedRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(userRole) ? userRole : 'player';
+
+        const [rows] = await pool.execute(
+            `
+                SELECT COUNT(*) AS unread_count
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE nr.notification_id IS NULL
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = ?)
+                  )
+            `,
+            [normalizedUserId, normalizedUserId, normalizedRole]
+        );
+
+        count = Number(rows[0]?.unread_count || 0);
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az olvasatlan értesítések számolása során.');
+    }
+    return count;
+}
+
+async function getUnreadChatMessageTotal(userId) {
+    const pool = getPool();
+    let total = 0;
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+
+        const [rows] = await pool.execute(
+            `
+                SELECT COALESCE(SUM(unread_per_conv.unread_count), 0) AS total_unread
+                FROM (
+                    SELECT (
+                        SELECT COUNT(*)
+                        FROM chat_messages msg
+                        WHERE msg.conversation_id = current_participant.conversation_id
+                          AND msg.id > COALESCE(current_participant.last_read_message_id, 0)
+                          AND msg.sender_id <> current_participant.user_id
+                    ) AS unread_count
+                    FROM chat_participants current_participant
+                    WHERE current_participant.user_id = ?
+                ) AS unread_per_conv
+            `,
+            [normalizedUserId]
+        );
+
+        total = Number(rows[0]?.total_unread || 0);
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az olvasatlan üzenetek számolása során.');
+    }
+    return total;
+}
+
+async function markConversationReadForUser(userId, conversationId) {
+    const pool = getPool();
+    let outcome = { changed: false, lastMessageId: 0 };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedConversationId) {
+            throw new Error('Érvénytelen beszélgetés azonosító.');
+        }
+
+        const [maxRows] = await pool.execute(
+            `
+                SELECT COALESCE(MAX(id), 0) AS max_message_id
+                FROM chat_messages
+                WHERE conversation_id = ?
+            `,
+            [normalizedConversationId]
+        );
+        const maxMessageId = Number(maxRows[0]?.max_message_id || 0);
+
+        if (maxMessageId > 0) {
+            const [updateResult] = await pool.execute(
+                `
+                    UPDATE chat_participants
+                    SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ?)
+                    WHERE conversation_id = ?
+                      AND user_id = ?
+                `,
+                [maxMessageId, normalizedConversationId, normalizedUserId]
+            );
+            outcome = { changed: updateResult.affectedRows > 0, lastMessageId: maxMessageId };
+        } else {
+            outcome = { changed: false, lastMessageId: 0 };
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a beszélgetés olvasottá jelölése során.');
+    }
+    return outcome;
+}
+
+async function getUserBasicById(userId) {
+    const pool = getPool();
+    let user = null;
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (normalizedUserId) {
+            const [rows] = await pool.execute(
+                `SELECT id, username, role FROM users WHERE id = ? LIMIT 1`,
+                [normalizedUserId]
+            );
+            if (rows.length) {
+                user = { id: rows[0].id, username: rows[0].username, role: rows[0].role };
+            }
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a felhasználó alap adatok lekérése során.');
+    }
+    return user;
+}
+
+async function findUserByUsernameForAdmin(username) {
+    const pool = getPool();
+    let user = null;
+    try {
+        const normalizedUsername = String(username || '').trim();
+        if (normalizedUsername) {
+            const [rows] = await pool.execute(
+                `SELECT id, username, role FROM users WHERE username = ? LIMIT 1`,
+                [normalizedUsername]
+            );
+            if (rows.length) {
+                user = { id: rows[0].id, username: rows[0].username, role: rows[0].role };
+            }
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a felhasználó keresése során.');
+    }
+    return user;
+}
+
+async function getUserIdsByRole(role) {
+    const pool = getPool();
+    let ids = [];
+    try {
+        if (ALLOWED_NOTIFICATION_TARGET_ROLES.has(role)) {
+            const [rows] = await pool.execute(
+                `SELECT id FROM users WHERE role = ? AND is_banned = FALSE`,
+                [role]
+            );
+            ids = rows.map((row) => Number(row.id));
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a szerep alapú felhasználó lekérés során.');
+    }
+    return ids;
+}
+
+async function getAllActiveUserIds() {
+    const pool = getPool();
+    let ids = [];
+    try {
+        const [rows] = await pool.execute(
+            `SELECT id FROM users WHERE is_banned = FALSE`
+        );
+        ids = rows.map((row) => Number(row.id));
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az aktív felhasználók lekérése során.');
+    }
+    return ids;
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
@@ -2910,5 +3398,17 @@ module.exports = {
     findUserByVerificationTokenHash,
     markEmailVerified,
     clearEmailVerificationState,
-    getUserVerificationStatusById
+    getUserVerificationStatusById,
+    insertNotification,
+    getNotificationsForUser,
+    markNotificationRead,
+    markFriendRequestNotificationsReadForUser,
+    markAllNotificationsReadForUser,
+    getUnreadNotificationCount,
+    getUnreadChatMessageTotal,
+    markConversationReadForUser,
+    getUserBasicById,
+    findUserByUsernameForAdmin,
+    getUserIdsByRole,
+    getAllActiveUserIds
 };
