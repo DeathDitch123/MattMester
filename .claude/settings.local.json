@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -c backend/chess/pvp.js)",
+      "Bash(node -c frontend/chess_barold/javascript/main.js)"
+    ]
+  }
+}
