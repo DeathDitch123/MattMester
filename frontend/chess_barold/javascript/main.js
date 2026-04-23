@@ -413,8 +413,9 @@ function randomQueueMegse() {
 // ────────────────────────────────────────────
 
 function pvpSocketKeres() {
-    if (pvpSocket) return pvpSocket;
-    if (window.MattMesterSocket && window.MattMesterSocket.socket) {
+    // Mindig friss socket lekérdezés (reconnect után új socket lehet)
+    const elerheto = window.MattMesterSocket && window.MattMesterSocket.socket;
+    if (elerheto) {
         pvpSocket = window.MattMesterSocket.socket;
     }
     return pvpSocket;
@@ -437,6 +438,7 @@ function pvpSocketInit() {
 
     // Állapot frissítés (lépés után broadcast)
     socket.on('chess:state:update', (data) => {
+        console.log('[PvP] state:update', { koronLevo: data.allapot?.koronLevo, lepesszam: data.allapot?.lepesszam });
         if (!pvpAktiv) return;
         pvpAllapotFrissit(data.allapot);
     });
@@ -449,6 +451,7 @@ function pvpSocketInit() {
 
     // Legális lépések válasz
     socket.on('chess:moves:response', (data) => {
+        console.log('[PvP] moves:response', { lepesek: data.lepesek?.length || 0, x: data.x, y: data.y });
         // Találjuk meg és teljesítsük a várakozó promise-t
         if (varakozoLepesPromisek.length > 0) {
             const w = varakozoLepesPromisek.shift();
@@ -460,6 +463,8 @@ function pvpSocketInit() {
     // Hiba
     socket.on('chess:error', (data) => {
         console.warn('[PvP hiba]', data.uzenet);
+        // Vizuális popup, hogy a tesztelő észrevegye
+        try { alert('PvP hiba: ' + (data.uzenet || 'ismeretlen')); } catch (_) {}
         const statusElem = document.getElementById('status');
         if (statusElem) {
             statusElem.textContent = data.uzenet || 'Hiba';
@@ -593,6 +598,7 @@ function pvpSocketInit() {
 let pvpGameId = null;
 
 function pvpJatekKezdet(data) {
+    console.log('[PvP] game:start', { sajatSzin: data.sajatSzin, sajatNev: data.sajatNev, ellenfelNev: data.ellenfelNev, gameId: data.gameId });
     // Modal elrejtés + játék állapot beállítás
     const modal = document.getElementById('mode-modal');
     const waiting = document.getElementById('pvp-waiting');
@@ -697,12 +703,14 @@ function pvpJatekVege(data) {
 
 function pvpLegalisLepesKeres(x, y) {
     const socket = pvpSocketKeres();
+    console.log('[PvP] moves:request küldés', { x, y, gameId: pvpGameId, socketConnected: socket?.connected });
     if (!socket) return Promise.resolve([]);
     return new Promise((resolve) => {
         const w = { resolve, timer: null };
         w.timer = setTimeout(() => {
             const idx = varakozoLepesPromisek.indexOf(w);
             if (idx !== -1) varakozoLepesPromisek.splice(idx, 1);
+            console.warn('[PvP] moves:request timeout (5s) — szerver nem válaszolt');
             resolve([]);
         }, 5000);
         varakozoLepesPromisek.push(w);
@@ -712,6 +720,7 @@ function pvpLegalisLepesKeres(x, y) {
 
 function pvpLepesKuld(fromX, fromY, toX, toY, promotion) {
     const socket = pvpSocketKeres();
+    console.log('[PvP] move küldés', { fromX, fromY, toX, toY, promotion, gameId: pvpGameId, socketConnected: socket?.connected });
     if (!socket) return;
     socket.emit('chess:move', { gameId: pvpGameId, fromX, fromY, toX, toY, promotion });
 }
@@ -1476,6 +1485,7 @@ async function init() {
 function huzasHozzaadMinden(allapot) {
     // PvP turn enforcement: ha nem a saját szín van soron, egyik bábu sem húzható
     if (pvpAktiv && allapot.koronLevo !== sajatSzin) {
+        console.log('[PvP] turn enforce blokk', { koronLevo: allapot.koronLevo, sajatSzin });
         // Click-to-move se működjön (kivalasztott nulláz)
         kivalasztott = null;
         return;

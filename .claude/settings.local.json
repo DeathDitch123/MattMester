@@ -10,7 +10,9 @@
       "Bash(node -e \"const s = require\\('fs'\\).readFileSync\\('api.js','utf8'\\); const m = s.match\\(/eventCategory:\\\\s*'friends'/g\\); console.log\\(m && m.length\\);\")",
       "Bash(node -e \"const r = require\\('./backend/api/api.js'\\); console.log\\('router loaded:', typeof r, 'cleanup fn:', typeof r.initChatRateLimiterCleanup\\);\")",
       "Bash(node -c sockets.js)",
-      "Bash(node -c api/routes/admin.js)"
+      "Bash(node -c api/routes/admin.js)",
+      "Bash(node -c backend/chess/pvp.js)",
+      "Bash(node -c frontend/chess_barold/javascript/main.js)"
     ]
   }
 }
