@@ -61,9 +61,16 @@ jest.mock('../sql/sql_funtions', () => ({
         })
     ),
     assertConversationParticipant: jest.fn(() => Promise.resolve(true)),
+    assertConversationUsable: jest.fn(() => Promise.resolve({ type: 'private', otherUserId: 2 })),
+    canUsersChat: jest.fn(() => Promise.resolve({ canChat: true, reason: null })),
+    cleanupDirectConversationBetween: jest.fn(() => Promise.resolve({ deletedConversationIds: [], participantUserIds: [] })),
+    cleanupUnusableConversationsForUser: jest.fn(() => Promise.resolve({ deletedConversationIds: [], affectedPairs: [] })),
     containsBlockedWord: jest.fn(() => false),
     normalizeTextForModeration: jest.fn((msg) => msg),
-    insertUserLog: jest.fn(() => Promise.resolve())
+    insertUserLog: jest.fn(() => Promise.resolve()),
+    getUserVerificationStatusById: jest.fn(() =>
+        Promise.resolve({ id: 1, username: 'testuser', email: 'testuser@example.com', is_email_verified: 1 })
+    )
 }));
 
 // Create test app

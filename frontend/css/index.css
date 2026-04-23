@@ -371,6 +371,23 @@ h6 {
     color: var(--text-primary);
 }
 
+.forgot-password-link {
+    color: #93c5fd;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.forgot-password-link:hover {
+    color: var(--accent-gold);
+    text-decoration: underline;
+}
+
+.forgot-password-note {
+    max-width: 26rem;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .footer {
     border-top: 1px solid var(--border-color);
     color: var(--text-secondary);

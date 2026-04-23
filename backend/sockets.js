@@ -1,6 +1,7 @@
 const { services } = require('./services.js');
 const sql = require('./sql/sql_funtions.js');
 const { registerPvpHandlers, handlePvpDisconnect } = require('./chess/pvp.js');
+const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
 
 const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
 const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
@@ -64,11 +65,17 @@ function getConversationRoomName(conversationId) {
     return `chat-conversation-${conversationId}`;
 }
 
+function getSessionProfileImage(session) {
+    return safeString(session.profile_image, '/profile_pictures/default.png') || '/profile_pictures/default.png';
+}
+
+function getSessionProfileImageStatus(session) {
+    return safeString(session.profile_image_status, 'default') || 'default';
+}
+
 function createContextFromSocket(socket) {
     const session = socket.request?.session || {};
     const auth = socket.handshake?.auth || {};
-    const profileImage = safeString(session.profile_image, '/profile_pictures/default.png') || '/profile_pictures/default.png';
-    const profileImageStatus = safeString(session.profile_image_status, 'default') || 'default';
 
     return {
         socketId: socket.id,
@@ -79,8 +86,8 @@ function createContextFromSocket(socket) {
         userId: session.userId || null,
         username: session.username || 'Vendég',
         role: session.role || 'guest',
-        profile_image: profileImage,
-        profile_image_status: profileImageStatus,
+        profile_image: getSessionProfileImage(session),
+        profile_image_status: getSessionProfileImageStatus(session),
         connectedAt: new Date().toISOString(),
         lastSeenAt: new Date().toISOString()
     };
@@ -133,24 +140,40 @@ function createSocketHub(io) {
     const roomStateById = new Map();
     const chatRateLimitByUserId = new Map();
 
-    function validateChatRateLimitOrThrow(userId) {
-        const now = Date.now();
-        const normalizedUserId = parsePositiveInteger(userId, 0);
-        if (!normalizedUserId) {
-            throw new Error('Érvénytelen felhasználó azonosító a chat rate limithez.');
+    function notifyConversationDeleted(conversationId, affectedUserIds = [], reason = 'unavailable') {
+        const normalizedConversationId = parsePositiveInteger(conversationId, null);
+        if (!normalizedConversationId) {
+            return;
         }
 
-        const existing = chatRateLimitByUserId.get(normalizedUserId) || [];
-        const threshold = now - CHAT_RATE_LIMIT_WINDOW_MS;
-        const fresh = existing.filter((timestamp) => Number(timestamp) > threshold);
+        const payload = {
+            conversationId: normalizedConversationId,
+            reason: String(reason || 'unavailable'),
+            deletedAt: new Date().toISOString()
+        };
 
-        if (fresh.length >= CHAT_RATE_LIMIT_MAX_MESSAGES) {
-            chatRateLimitByUserId.set(normalizedUserId, fresh);
-            throw new Error('Túl sok üzenet rövid időn belül. Próbáld újra pár másodperc múlva.');
+        io.to(getConversationRoomName(normalizedConversationId)).emit('chat:conversation:deleted', payload);
+
+        const uniqueIds = [...new Set((affectedUserIds || []).map((id) => parsePositiveInteger(id, null)).filter(Boolean))];
+        uniqueIds.forEach((userId) => {
+            io.to(`user-room:${userId}`).emit('chat:conversation:deleted', payload);
+            io.to(`user-room:${userId}`).emit('chat:list:refresh', {
+                reason: payload.reason,
+                conversationId: normalizedConversationId,
+                at: payload.deletedAt
+            });
+        });
+
+        const roomName = getConversationRoomName(normalizedConversationId);
+        const room = io.sockets.adapter.rooms.get(roomName);
+        if (room) {
+            for (const socketId of room) {
+                const targetSocket = io.sockets.sockets.get(socketId);
+                if (targetSocket) {
+                    targetSocket.leave(roomName);
+                }
+            }
         }
-
-        fresh.push(now);
-        chatRateLimitByUserId.set(normalizedUserId, fresh);
     }
 
     function createChatErrorPayload(conversationId, error, fallbackMessage) {
@@ -159,36 +182,6 @@ function createSocketHub(io) {
             message: error?.message || fallbackMessage || 'Chat hiba történt.',
             timestamp: new Date().toISOString()
         };
-    }
-
-    async function writeChatSecurityAudit(userId, eventType, conversationId, {
-        success = false,
-        severity = 'warning',
-        message = '',
-        metadata = {}
-    } = {}) {
-        try {
-            const normalizedUserId = parsePositiveInteger(userId, 0);
-            if (!normalizedUserId) {
-                return;
-            }
-
-            await sql.insertUserLog(normalizedUserId, {
-                eventType,
-                eventCategory: 'security',
-                severity,
-                source: 'socket',
-                success,
-                message: message || null,
-                metadata: {
-                    conversationId,
-                    ...metadata
-                },
-                occurredAt: new Date()
-            });
-        } catch (logError) {
-            console.warn(`Socket chat audit log hiba (${eventType}):`, logError.message);
-        }
     }
 
     function getPresenceSnapshot() {
@@ -281,6 +274,30 @@ function createSocketHub(io) {
         } catch (error) {
             throw new Error(`Socket context lekérdezési hiba: ${error.message}`);
         }
+    }
+
+    function isAdminSocket(socket) {
+        const context = socketsById.get(socket.id) || socket.data?.socketContext;
+        return Boolean(context && context.role === 'admin');
+    }
+
+    function emitAdminAuthError(socket, eventName) {
+        socket.emit('admin:error', {
+            success: false,
+            message: 'Admin jogosultság szükséges ehhez a művelethez.',
+            event: eventName || null,
+            timestamp: new Date().toISOString()
+        });
+    }
+
+    function requireAdminSocket(socket, handler) {
+        return async (...args) => {
+            if (!isAdminSocket(socket)) {
+                emitAdminAuthError(socket);
+                return;
+            }
+            await handler(...args);
+        };
     }
 
     function refreshSocketContextFromSession(socket) {
@@ -393,6 +410,21 @@ function createSocketHub(io) {
             socket.join(SOCKET_ROOMS.admin);
         }
 
+        // Automatikus védelem: az 'admin:' előtagú eventeket csak admin role fogadja el.
+        socket.use((packet, next) => {
+            const eventName = Array.isArray(packet) ? packet[0] : null;
+            if (typeof eventName !== 'string' || !eventName.startsWith('admin:')) {
+                return next();
+            }
+            if (isAdminSocket(socket)) {
+                return next();
+            }
+            emitAdminAuthError(socket, eventName);
+            const err = new Error('Admin jogosultság szükséges.');
+            err.data = { event: eventName };
+            return next(err);
+        });
+
         const currentStats = services.getCurrentStats();
         socket.emit('connected', {
             success: true,
@@ -453,7 +485,18 @@ function createSocketHub(io) {
                     throw new Error('Érvénytelen conversation azonosító.');
                 }
 
-                await sql.assertConversationParticipant(currentContext.userId, conversationId);
+                try {
+                    await sql.assertConversationUsable(currentContext.userId, conversationId);
+                } catch (usabilityError) {
+                    if (usabilityError?.code === 'CONVERSATION_UNAVAILABLE') {
+                        notifyConversationDeleted(
+                            usabilityError.conversationId,
+                            usabilityError.affectedUserIds || [],
+                            usabilityError.reason || 'unavailable'
+                        );
+                    }
+                    throw usabilityError;
+                }
                 socket.join(getConversationRoomName(conversationId));
 
                 socket.emit('chat:join', {
@@ -512,8 +555,19 @@ function createSocketHub(io) {
                     throw new Error(`Az üzenet legfeljebb ${CHAT_MAX_MESSAGE_LENGTH} karakter lehet.`);
                 }
 
-                await sql.assertConversationParticipant(currentContext.userId, conversationId);
-                validateChatRateLimitOrThrow(currentContext.userId);
+                try {
+                    await sql.assertConversationUsable(currentContext.userId, conversationId);
+                } catch (usabilityError) {
+                    if (usabilityError?.code === 'CONVERSATION_UNAVAILABLE') {
+                        notifyConversationDeleted(
+                            usabilityError.conversationId,
+                            usabilityError.affectedUserIds || [],
+                            usabilityError.reason || 'unavailable'
+                        );
+                    }
+                    throw usabilityError;
+                }
+                validateRateLimit(chatRateLimitByUserId, currentContext.userId, CHAT_RATE_LIMIT_MAX_MESSAGES, CHAT_RATE_LIMIT_WINDOW_MS);
 
                 const containsBlockedWord = sql.containsBlockedWord(message);
                 const policyResult = {
@@ -540,7 +594,8 @@ function createSocketHub(io) {
                             policy: CHAT_BLACKLIST_POLICY,
                             masked: policyResult.isMasked,
                             blocked: policyResult.blocked
-                        }
+                        },
+                        source: 'socket'
                     });
                 }
 
@@ -566,8 +621,7 @@ function createSocketHub(io) {
 
                 io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
             } catch (error) {
-                const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet')
-                    || String(error?.message || '').toLowerCase().includes('tul sok uzenet');
+                const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet');
 
                 if (isRateLimited) {
                     const currentContext = socketsById.get(socket.id);
@@ -578,7 +632,8 @@ function createSocketHub(io) {
                         metadata: {
                             limit: CHAT_RATE_LIMIT_MAX_MESSAGES,
                             windowMs: CHAT_RATE_LIMIT_WINDOW_MS
-                        }
+                        },
+                        source: 'socket'
                     });
                 }
 
@@ -617,8 +672,8 @@ function createSocketHub(io) {
                 });
             } catch (error) {
                 console.error('room:state:update hiba:', error);
-                socket.emit('room:state:error', {
-                    roomId: safeString(payload.roomId, 'general-room'),
+                socket.emit('room:error', {
+                    success: false,
                     message: error.message || 'Szobaállapot frissítési hiba történt.'
                 });
             }
@@ -704,6 +759,8 @@ function createSocketHub(io) {
         getSocketSnapshot,
         syncPresence,
         syncSocketState,
+        isAdminSocket,
+        requireAdminSocket,
         updateRoomState(roomId, state, updatedBy = 'system') {
             const normalizedRoomId = safeString(roomId, 'general-room');
             roomStateById.set(normalizedRoomId, {
@@ -739,7 +796,11 @@ function createSocketHub(io) {
             if (conversationId) {
                 io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
             }
-        }
+        },
+        // Kapcsolat megszűnésekor / cleanup után valós idejű értesítés küldése
+        // az érintett felhasználóknak. A frontend erre frissíti a chat listát
+        // és eltünteti az aktív beszélgetést.
+        notifyConversationDeleted
     };
 }
 

@@ -1,0 +1,211 @@
+:root {
+    --bg-dark: #0f172a;
+    --bg-card: #1e293b;
+    --bg-sidebar: #020617;
+    --accent-gold: #d4af37;
+    --accent-gold-hover: #b8941f;
+    --accent-red: #e94560;
+    --accent-green: #10b981;
+    --accent-blue: #3b82f6;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border-color: #334155;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+    color: var(--text-primary);
+    background:
+        radial-gradient(circle at 82% 12%, rgba(212, 175, 55, 0.16), transparent 38%),
+        radial-gradient(circle at 8% 78%, rgba(59, 130, 246, 0.14), transparent 36%),
+        var(--bg-dark);
+}
+
+.page-wrap {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.verification-card {
+    width: 100%;
+    max-width: 700px;
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.96), rgba(15, 23, 42, 0.9));
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 28px;
+    box-shadow: 0 24px 60px rgba(2, 6, 23, 0.45);
+}
+
+.brand-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-family: 'Playfair Display', serif;
+    color: var(--accent-gold);
+    letter-spacing: 0.5px;
+    text-decoration: none;
+    margin-bottom: 18px;
+}
+
+.brand-line i {
+    font-size: 1.1rem;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+    text-transform: uppercase;
+    padding: 8px 14px;
+    border: 1px solid transparent;
+}
+
+.status-pill i {
+    font-size: 0.9rem;
+}
+
+.status-pill.success {
+    color: #bbf7d0;
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.35);
+}
+
+.status-pill.info {
+    color: #bfdbfe;
+    background: rgba(59, 130, 246, 0.16);
+    border-color: rgba(59, 130, 246, 0.35);
+}
+
+.status-pill.warning {
+    color: #fef3c7;
+    background: rgba(245, 158, 11, 0.16);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+
+.status-pill.error {
+    color: #fecdd3;
+    background: rgba(233, 69, 96, 0.16);
+    border-color: rgba(233, 69, 96, 0.35);
+}
+
+.title {
+    margin: 12px 0 10px;
+    font-family: 'Playfair Display', serif;
+    font-size: clamp(1.55rem, 2.1vw, 2rem);
+    line-height: 1.2;
+}
+
+.subtitle {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.alert-box {
+    margin-top: 18px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: rgba(2, 6, 23, 0.35);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    line-height: 1.45;
+    white-space: pre-line;
+}
+
+.alert-box.error {
+    border-color: rgba(233, 69, 96, 0.42);
+    background: rgba(233, 69, 96, 0.12);
+}
+
+.alert-box.success {
+    border-color: rgba(16, 185, 129, 0.42);
+    background: rgba(16, 185, 129, 0.1);
+}
+
+.note-list {
+    margin: 16px 0 0;
+    padding-left: 18px;
+    color: var(--text-secondary);
+    font-size: 0.89rem;
+}
+
+.note-list li {
+    margin-bottom: 6px;
+}
+
+.action-row {
+    margin-top: 22px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.btn-gold,
+.btn-outline-gold {
+    border-radius: 10px;
+    font-weight: 600;
+    padding: 10px 16px;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-gold {
+    color: #000;
+    border: none;
+    background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-hover));
+}
+
+.btn-gold:hover {
+    color: #000;
+    transform: translateY(-1px);
+    box-shadow: 0 12px 22px rgba(212, 175, 55, 0.24);
+}
+
+.btn-outline-gold {
+    color: var(--accent-gold);
+    border: 1px solid rgba(212, 175, 55, 0.45);
+    background: transparent;
+}
+
+.btn-outline-gold:hover {
+    color: #000;
+    background: var(--accent-gold);
+}
+
+.helper-line {
+    margin-top: 16px;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+}
+
+@media (max-width: 575.98px) {
+    .verification-card {
+        padding: 20px;
+    }
+
+    .action-row {
+        flex-direction: column;
+    }
+
+    .btn-gold,
+    .btn-outline-gold {
+        justify-content: center;
+        width: 100%;
+    }
+}

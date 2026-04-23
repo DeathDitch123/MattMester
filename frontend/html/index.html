@@ -22,6 +22,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
     <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/profileImageUtils.js" defer></script>
     <script src="../javascript/socketClient.js" defer></script>
     <script src="../javascript/requestControl.js" defer></script>
     <script src="../javascript/index.js" defer></script>
@@ -313,9 +314,52 @@
                                                 <input type="checkbox" class="form-check-input" id="rememberMe">
                                                 <label class="form-check-label" for="rememberMe">Emlékezz rám:</label>
                                             </div>
+                                            <div class="d-flex justify-content-end mb-3">
+                                                <button type="button" class="btn btn-link p-0 forgot-password-link"
+                                                    id="openForgotPasswordModal">Jelszó elfelejtve?</button>
+                                            </div>
                                             <button type="submit" class="btn btn-gold w-100">Bejelentkezés</button>
                                             <div id="loginMessage" class="mt-3 text-center alert d-none"></div>
                                         </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <!--? Jelszó visszaállítása -->
+    <div class="modal fade" id="forgotPasswordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-envelope-paper me-2"></i>Jelszó visszaállítása</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="forgotPasswordForm" novalidate>
+                    <div class="modal-body">
+                        <div class="container-fluid px-0">
+                            <div class="row justify-content-center">
+                                <div class="col-12">
+                                    <div class="card shadow p-4 login-panel">
+                                        <h1 class="text-center mb-3 h4 login-heading">Új jelszó kérése</h1>
+                                        <p class="text-secondary text-center mb-4 forgot-password-note">
+                                            Add meg a fiókod email címét, és küldünk egy visszaállító linket.
+                                        </p>
+                                        <div class="mb-3">
+                                            <label for="forgotPasswordEmail" class="form-label">Email cím</label>
+                                            <input class="form-control" type="email" id="forgotPasswordEmail"
+                                                placeholder="mattmester@gmail.com" autocomplete="email" required>
+                                            <div id="forgotPasswordEmailFeedback" class="form-text mt-2" aria-live="polite"></div>
+                                        </div>
+                                        <button type="submit" class="btn btn-gold w-100" id="forgotPasswordSubmitButton">
+                                            Email küldése
+                                        </button>
+                                        <button type="button" class="btn btn-outline-secondary w-100 mt-2"
+                                            id="forgotPasswordBackButton">Vissza a bejelentkezéshez</button>
+                                        <div id="forgotPasswordMessage" class="mt-3 text-center alert d-none"></div>
                                     </div>
                                 </div>
                             </div>

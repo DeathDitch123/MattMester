@@ -56,13 +56,18 @@ async function createTables() {
             banned_until TIMESTAMP NULL,
             last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             is_email_verified BOOLEAN DEFAULT FALSE,
+            email_verification_token_hash VARCHAR(128) NULL,
+            email_verification_token_expires TIMESTAMP NULL,
+            email_verification_sent_at TIMESTAMP NULL,
+            email_verified_at TIMESTAMP NULL,
             reset_password_token VARCHAR(255),
             reset_token_expires TIMESTAMP NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role) 
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin');
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP);
         `,
 
         `ALTER TABLE users
@@ -71,15 +76,6 @@ async function createTables() {
         `UPDATE users
             SET profile_image = '/profile_pictures/default.png'
             WHERE profile_image IS NULL OR TRIM(profile_image) = ''`,
-
-        `CREATE TABLE IF NOT EXISTS login_history (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            user_id INT NOT NULL,
-            ip_address VARCHAR(45) NOT NULL,
-            user_agent VARCHAR(255),
-            login_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-        )`,
 
         `CREATE TABLE IF NOT EXISTS statistics (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -247,17 +243,20 @@ async function createTables() {
             severity ENUM('info', 'warning', 'error', 'critical') DEFAULT 'info',
             source VARCHAR(50) DEFAULT 'backend',
             success BOOLEAN NULL,
-            metric_key VARCHAR(100) NULL, 
-            metric_value DECIMAL(14, 4) NULL, 
-            metric_delta DECIMAL(14, 4) NULL, 
+            metric_key VARCHAR(100) NULL,
+            metric_value DECIMAL(14, 4) NULL,
+            metric_delta DECIMAL(14, 4) NULL,
             message VARCHAR(255) NULL,
-            metadata JSON NULL, 
+            ip_address VARCHAR(45) NULL,
+            user_agent VARCHAR(255) NULL,
+            metadata JSON NULL,
             occurred_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_user_logs_user_time (user_id, occurred_at),
             INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
             INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
-            INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at)
+            INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at),
+            INDEX idx_user_logs_ip_time (ip_address, occurred_at)
         )`
     ];
 
@@ -303,32 +302,8 @@ async function closeDatabase() {
     }
 }
 
-async function selectAllTest() {
-    const [rows] = await pool.execute('SELECT * FROM testtable');
-    return rows;
-}
-
-async function insertTestUser(username) {
-    const query = 'INSERT INTO testtable (username) VALUES (?)';
-    const [result] = await pool.execute(query, [username]);
-    return result;
-}
-async function insertall(id, username) {
-    const query = 'INSERT INTO testtable (id, username) VALUES (?, ?)';
-    try {
-        const [result] = await pool.execute(query, [id, username]);
-        return result;
-    } catch (error) {
-        console.error('Database error:', error);
-        throw error;
-    }
-
-}
-
 module.exports = {
     initDatabase,
     closeDatabase,
-    getPool: () => pool,
-    selectAllTest,
-    insertTestUser
+    getPool: () => pool
 };

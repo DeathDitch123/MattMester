@@ -102,6 +102,81 @@ async function getUserByEmail(mailAdress) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
 }
+
+async function savePasswordResetToken(userId, tokenHash, expiresAt) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET reset_password_token = ?,
+                reset_token_expires = ?
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [tokenHash, expiresAt, userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba a jelszó-visszaállítási token mentése során.');
+    }
+    return result;
+}
+
+async function findUserByPasswordResetTokenHash(tokenHash) {
+    const pool = getPool();
+    let foundUser = null;
+    try {
+        const query = `
+            SELECT id, username, email, reset_password_token, reset_token_expires
+            FROM users
+            WHERE reset_password_token = ?
+            LIMIT 1
+        `;
+        const [rows] = await pool.execute(query, [tokenHash]);
+        if (rows.length > 0) {
+            foundUser = rows[0];
+        }
+    } catch (error) {
+        throw new Error('Hiba a jelszó-visszaállítási token lekérdezése során.');
+    }
+    return foundUser;
+}
+
+async function clearPasswordResetToken(userId) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET reset_password_token = NULL,
+                reset_token_expires = NULL
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba a jelszó-visszaállítási token törlése során.');
+    }
+    return result;
+}
+
+async function updateUserPasswordAndClearResetToken(userId, passwordHash) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET password_hash = ?,
+                reset_password_token = NULL,
+                reset_token_expires = NULL
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [passwordHash, userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba a jelszó frissítése során.');
+    }
+    return result;
+}
 async function getLeaderBoardByElo() {
     const pool = getPool();
     const query = `SELECT id, username, elo, profile_image, last_active, created_at
@@ -382,6 +457,11 @@ async function updateUserProfileSettings(userId, updates) {
     if (hasEmailUpdate) {
         fields.push('email = ?');
         params.push(updates.email);
+        fields.push('is_email_verified = FALSE');
+        fields.push('email_verified_at = NULL');
+        fields.push('email_verification_token_hash = NULL');
+        fields.push('email_verification_token_expires = NULL');
+        fields.push('email_verification_sent_at = NULL');
     }
 
     if (hasPasswordUpdate) {
@@ -430,7 +510,11 @@ async function updateUserProfileSettings(userId, updates) {
 
 async function insertUserLog(userId, logData) {
     const pool = getPool();
-    const metadataValue = logData.metadata == null ? null : JSON.stringify(logData.metadata);
+    const metadata = logData.metadata || null;
+    const ipAddress = logData.ipAddress || (metadata && metadata.ipAddress) || null;
+    const userAgent = logData.userAgent || (metadata && metadata.userAgent) || null;
+    const metadataValue = metadata == null ? null : JSON.stringify(metadata);
+    let result = { insertId: null };
 
     const query = `
         INSERT INTO user_logs (
@@ -443,10 +527,12 @@ async function insertUserLog(userId, logData) {
             metric_key,
             metric_value,
             metric_delta,
-            details,
+            message,
+            ip_address,
+            user_agent,
             metadata,
             occurred_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -460,15 +546,62 @@ async function insertUserLog(userId, logData) {
         typeof logData.metricValue === 'number' ? logData.metricValue : null,
         typeof logData.metricDelta === 'number' ? logData.metricDelta : null,
         logData.message || null,
+        ipAddress,
+        userAgent,
         metadataValue,
         logData.occurredAt || new Date()
     ];
 
     try {
-        await pool.execute(query, params);
+        const [insertResult] = await pool.execute(query, params);
+        result = { insertId: insertResult.insertId };
     } catch (error) {
         throw new Error('Hiba a felhasznaloi log mentese soran.');
     }
+    return result;
+}
+
+async function getUserSecurityActivity(userId, limit = 100) {
+    const pool = getPool();
+    const maxRows = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const query = `
+        SELECT id, event_type, event_category, severity, success, message,
+               ip_address, user_agent, metadata, occurred_at
+        FROM user_logs
+        WHERE user_id = ? AND event_category IN ('auth', 'security', 'profile', 'social')
+        ORDER BY occurred_at DESC
+        LIMIT ?
+    `;
+    let result = [];
+
+    try {
+        const [rows] = await pool.query(query, [userId, maxRows]);
+        result = (rows || []).map((row) => {
+            let metadata = null;
+            if (row.metadata != null) {
+                try {
+                    metadata = typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata;
+                } catch (_error) {
+                    metadata = null;
+                }
+            }
+            return {
+                id: `log-${row.id}`,
+                occurredAt: row.occurred_at,
+                eventType: row.event_type,
+                eventCategory: row.event_category,
+                severity: row.severity,
+                success: row.success === null ? null : Boolean(row.success),
+                message: row.message,
+                ipAddress: row.ip_address || (metadata && metadata.ipAddress) || null,
+                userAgent: row.user_agent || (metadata && metadata.userAgent) || null,
+                metadata
+            };
+        });
+    } catch (error) {
+        throw new Error('Hiba a biztonsági napló lekérdezése során.');
+    }
+    return result;
 }
 
 async function getTotalUsers() {
@@ -522,7 +655,7 @@ async function getAllUsers() {
             COALESCE(s.draws, 0) AS draws,
             COALESCE(s.abilities_used, 0) AS total_abilities,
             IFNULL(ROUND((s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 1), 0) AS win_rate_percent,
-            (SELECT ip_address FROM login_history WHERE user_id = u.id ORDER BY login_time DESC LIMIT 1) AS last_ip
+            (SELECT ip_address FROM user_logs WHERE user_id = u.id AND event_type = 'login' ORDER BY occurred_at DESC LIMIT 1) AS last_ip
         FROM 
             users u
         LEFT JOIN 
@@ -574,48 +707,47 @@ async function getAllRooms() {
         throw new Error('Hiba a szobák lekérdezése során.');
     }
 }
-//később ip csaláshoz esetleges szűréshez, vagy csak simán statisztikához, hogy melyik ip címről hány account van stb... bár ez utóbbi lehet, hogy nem annyira fontos, de majd meglátjuk
-async function logLoginAttempt(userId, ipAddress, userAgent) {
-    const pool = getPool();
-    const query = 'INSERT INTO login_history (user_id, ip_address, user_agent) VALUES (?, ?, ?)';
-    try {
-        await pool.execute(query, [userId, ipAddress, userAgent]);
-    } catch (error) {
-        console.error('Hiba a login kísérlet naplózása során:', error);
-    }
-}
+// IP-utkozes ellenorzes: ugyanarrol az IP-rol indultak-e tobbszoros login kiserletek.
 async function ipCollisionCheck(ipAddress) {
     const pool = getPool();
-    const query = `SELECT user_id, COUNT(*) AS attempts FROM login_history WHERE ip_address = ? AND login_time > (NOW() - INTERVAL 1 HOUR) GROUP BY user_id HAVING attempts > 5`;
+    const query = `
+        SELECT user_id, COUNT(*) AS attempts
+        FROM user_logs
+        WHERE ip_address = ?
+          AND event_type = 'login'
+          AND occurred_at > (NOW() - INTERVAL 1 HOUR)
+        GROUP BY user_id
+        HAVING attempts > 5
+    `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query, [ipAddress]);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba az IP cím ütközés ellenőrzése során.');
     }
+    return result;
 }
-async function ipCollisions(){
+async function ipCollisions() {
     const pool = getPool();
     const query = `
-        SELECT 
-            ip_address, 
-            COUNT(DISTINCT user_id) AS user_count, 
-            GROUP_CONCAT(DISTINCT u.username SEPARATOR ', ') AS shared_accounts
-        FROM 
-            login_history lh
-        JOIN 
-            users u ON lh.user_id = u.id
-        GROUP BY 
-            ip_address
-        HAVING 
-            user_count > 1;
-        `;
+        SELECT ul.ip_address,
+               COUNT(DISTINCT ul.user_id) AS user_count,
+               GROUP_CONCAT(DISTINCT u.username SEPARATOR ', ') AS shared_accounts
+        FROM user_logs ul
+        JOIN users u ON ul.user_id = u.id
+        WHERE ul.event_type = 'login' AND ul.ip_address IS NOT NULL
+        GROUP BY ul.ip_address
+        HAVING user_count > 1
+    `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba az IP cím ütközések lekérdezése során.');
     }
+    return result;
 }
 
 async function uploadProfileImage(userId, filename) {
@@ -976,7 +1108,6 @@ async function deleteUserProfileWithTransaction(userId) {
         // A kapcsolt adatok explicit torlese nem bukik el akkor sem, ha 0 talalat van.
         // Ez akkor is ved, ha egy regi adatbazisban hianyosak az FK-k.
         await connection.execute('DELETE FROM user_logs WHERE user_id = ?', [userId]);
-        await connection.execute('DELETE FROM login_history WHERE user_id = ?', [userId]);
         await connection.execute('DELETE FROM profile_image_uploads WHERE user_id = ?', [userId]);
         await connection.execute(
             'DELETE FROM friends WHERE user1_id = ? OR user2_id = ? OR action_user_id = ?',
@@ -1599,6 +1730,219 @@ async function deleteFriendConnection(currentUserId, targetUserId) {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Chat életciklus és jogosultság: központi canUsersChat + cleanup logika
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Az email-módosítás miatti ideiglenes verifikáció-vesztés NEM szünteti meg
+// a beszélgetést, ezért itt szándékosan NEM ellenőrizzük az is_email_verified
+// mezőt. A profil akkor számít "törölt"-nek, ha a users rekord nem létezik
+// (FOREIGN KEY ON DELETE CASCADE törli a kapcsolódó sorokat is).
+async function canUsersChat(userAId, userBId, executor = null) {
+    const db = executor || getPool();
+    const normalizedA = normalizePositiveInt(userAId, 0);
+    const normalizedB = normalizePositiveInt(userBId, 0);
+
+    const defaultReason = (reason) => ({ canChat: false, reason });
+
+    if (!normalizedA || !normalizedB || normalizedA === normalizedB) {
+        return defaultReason('invalid_users');
+    }
+
+    try {
+        await ensureFriendBlocksTable(db);
+
+        const [userRows] = await db.execute(
+            `
+                SELECT id, is_banned
+                FROM users
+                WHERE id IN (?, ?)
+            `,
+            [normalizedA, normalizedB]
+        );
+
+        if (userRows.length < 2) {
+            return defaultReason('user_deleted');
+        }
+
+        const anyBanned = userRows.some((row) => Boolean(Number(row.is_banned || 0)));
+        if (anyBanned) {
+            return defaultReason('user_banned');
+        }
+
+        const [user1Id, user2Id] = normalizeFriendPair(normalizedA, normalizedB);
+        const [friendRows] = await db.execute(
+            `
+                SELECT status
+                FROM friends
+                WHERE user1_id = ?
+                  AND user2_id = ?
+                LIMIT 1
+            `,
+            [user1Id, user2Id]
+        );
+
+        if (!friendRows.length || friendRows[0].status !== 'accepted') {
+            return defaultReason('not_friends');
+        }
+
+        const [blockRows] = await db.execute(
+            `
+                SELECT id
+                FROM friend_blocks
+                WHERE active = TRUE
+                  AND (
+                    (blocker_user_id = ? AND blocked_user_id = ?)
+                    OR
+                    (blocker_user_id = ? AND blocked_user_id = ?)
+                  )
+                LIMIT 1
+            `,
+            [normalizedA, normalizedB, normalizedB, normalizedA]
+        );
+
+        if (blockRows.length) {
+            return defaultReason('blocked');
+        }
+
+        return { canChat: true, reason: null };
+    } catch (error) {
+        throw new Error('Hiba a canUsersChat ellenorzese soran.');
+    }
+}
+
+// Lekéri egy privát beszélgetés két résztvevőjét.
+async function getPrivateConversationParticipantIds(conversationId, executor = null) {
+    const db = executor || getPool();
+    const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+    if (!normalizedConversationId) {
+        return [];
+    }
+
+    const [rows] = await db.execute(
+        `
+            SELECT cp.user_id
+            FROM chat_participants cp
+            JOIN chat_conversations c ON c.id = cp.conversation_id
+            WHERE cp.conversation_id = ?
+              AND c.type = 'private'
+        `,
+        [normalizedConversationId]
+    );
+
+    return rows.map((row) => Number(row.user_id)).filter((id) => id > 0);
+}
+
+// Törli a két felhasználó közötti privát beszélgetést, ha létezik.
+// Egyszerű törlés (nem archiválás). A cascade a résztvevőket és üzeneteket is törli.
+async function cleanupDirectConversationBetween(userAId, userBId) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const normalizedA = normalizePositiveInt(userAId, 0);
+    const normalizedB = normalizePositiveInt(userBId, 0);
+
+    if (!normalizedA || !normalizedB || normalizedA === normalizedB) {
+        connection.release();
+        return { deletedConversationIds: [], participantUserIds: [] };
+    }
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatTables(connection);
+
+        const [rows] = await connection.execute(
+            `
+                SELECT c.id AS conversation_id
+                FROM chat_conversations c
+                JOIN chat_participants cp ON cp.conversation_id = c.id
+                WHERE c.type = 'private'
+                  AND cp.user_id IN (?, ?)
+                GROUP BY c.id
+                HAVING COUNT(DISTINCT cp.user_id) = 2
+                   AND (
+                       SELECT COUNT(*) FROM chat_participants cp2
+                       WHERE cp2.conversation_id = c.id
+                   ) = 2
+            `,
+            [normalizedA, normalizedB]
+        );
+
+        const conversationIds = rows.map((row) => Number(row.conversation_id)).filter(Boolean);
+
+        if (conversationIds.length) {
+            const placeholders = conversationIds.map(() => '?').join(',');
+            await connection.execute(
+                `DELETE FROM chat_conversations WHERE id IN (${placeholders})`,
+                conversationIds
+            );
+        }
+
+        await connection.commit();
+
+        return {
+            deletedConversationIds: conversationIds,
+            participantUserIds: [normalizedA, normalizedB]
+        };
+    } catch (error) {
+        await connection.rollback();
+        throw new Error('Hiba a privat beszelgetes takaritasa soran.');
+    } finally {
+        connection.release();
+    }
+}
+
+// Teljes sepret a user összes privát beszélgetésén: amelyikre canChat=false,
+// azt törli. Hatékonyan listázza a törlendőket, majd atomi DELETE-tel töröl.
+async function cleanupUnusableConversationsForUser(userId) {
+    const pool = getPool();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const result = { deletedConversationIds: [], affectedPairs: [] };
+
+    if (!normalizedUserId) {
+        return result;
+    }
+
+    await ensureChatTables(pool);
+    await ensureFriendBlocksTable(pool);
+
+    const [rows] = await pool.execute(
+        `
+            SELECT c.id AS conversation_id, other_cp.user_id AS other_user_id
+            FROM chat_conversations c
+            JOIN chat_participants self_cp
+                ON self_cp.conversation_id = c.id AND self_cp.user_id = ?
+            JOIN chat_participants other_cp
+                ON other_cp.conversation_id = c.id AND other_cp.user_id <> ?
+            WHERE c.type = 'private'
+        `,
+        [normalizedUserId, normalizedUserId]
+    );
+
+    const idsToDelete = [];
+    for (const row of rows) {
+        const otherUserId = Number(row.other_user_id);
+        if (!otherUserId) continue;
+        // Külön ellenőrzés minden párra – kis volumenű, egy user chat-listája rövid.
+        // Nagy méretekhez érdemes lenne JOIN-alapú bulk lekérdezésre cserélni.
+        const { canChat } = await canUsersChat(normalizedUserId, otherUserId);
+        if (!canChat) {
+            idsToDelete.push(Number(row.conversation_id));
+            result.affectedPairs.push([normalizedUserId, otherUserId]);
+        }
+    }
+
+    if (idsToDelete.length) {
+        const placeholders = idsToDelete.map(() => '?').join(',');
+        await pool.execute(
+            `DELETE FROM chat_conversations WHERE id IN (${placeholders})`,
+            idsToDelete
+        );
+        result.deletedConversationIds = idsToDelete;
+    }
+
+    return result;
+}
+
 const CHAT_MAX_MESSAGE_LENGTH = 1000;
 const CHAT_BLOCKED_WORDS = [
     // English profanity
@@ -1912,6 +2256,56 @@ async function assertConversationParticipant(userId, conversationId) {
     return true;
 }
 
+// Privát chatre kibővített védelem: részvétel + canChat ellenőrzés.
+// Ha a kapcsolat már nem él, a beszélgetést törli és hibát dob.
+// Visszaadja a konverzáció típusát, hogy a hívó eldönthesse, emit-elni kell-e.
+async function assertConversationUsable(userId, conversationId) {
+    const pool = getPool();
+    await assertConversationParticipant(userId, conversationId);
+
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+
+    const [conversationRows] = await pool.execute(
+        `SELECT type FROM chat_conversations WHERE id = ? LIMIT 1`,
+        [normalizedConversationId]
+    );
+
+    if (!conversationRows.length) {
+        throw new Error('A beszélgetés már nem található.');
+    }
+
+    if (conversationRows[0].type !== 'private') {
+        return { type: conversationRows[0].type };
+    }
+
+    const participantIds = await getPrivateConversationParticipantIds(normalizedConversationId, pool);
+    const otherUserId = participantIds.find((id) => id !== normalizedUserId);
+
+    if (!otherUserId) {
+        // Magányos résztvevő – a másik fél törlődött. Takarítsunk és dobjunk hibát.
+        await pool.execute(`DELETE FROM chat_conversations WHERE id = ?`, [normalizedConversationId]);
+        const err = new Error('A beszélgetés már nem elérhető.');
+        err.conversationId = normalizedConversationId;
+        err.affectedUserIds = [normalizedUserId];
+        err.code = 'CONVERSATION_UNAVAILABLE';
+        throw err;
+    }
+
+    const permission = await canUsersChat(normalizedUserId, otherUserId);
+    if (!permission.canChat) {
+        await pool.execute(`DELETE FROM chat_conversations WHERE id = ?`, [normalizedConversationId]);
+        const err = new Error('A beszélgetés már nem elérhető.');
+        err.conversationId = normalizedConversationId;
+        err.affectedUserIds = [normalizedUserId, otherUserId];
+        err.code = 'CONVERSATION_UNAVAILABLE';
+        err.reason = permission.reason;
+        throw err;
+    }
+
+    return { type: 'private', otherUserId };
+}
+
 async function getUserConversations(userId, limit = 20, cursor = null) {
     const pool = getPool();
     const normalizedUserId = normalizePositiveInt(userId, 0);
@@ -1921,6 +2315,16 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
 
     try {
         await ensureChatTables(pool);
+
+        // Dinamikus szűrés: a listázás előtt lefuttatjuk a cleanupot, hogy
+        // csak aktív kommunikációs kapcsolattal rendelkező beszélgetések
+        // maradjanak. A cleanup hibája nem blokkolhatja a listázást.
+        try {
+            await cleanupUnusableConversationsForUser(normalizedUserId);
+        } catch (cleanupError) {
+            console.warn('[chat] Listázás előtti cleanup hiba:', cleanupError.message);
+        }
+
         const normalizedLimit = normalizeListLimit(limit, 20, 50);
         const normalizedCursor = normalizePositiveInt(cursor, 0);
 
@@ -1964,7 +2368,19 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
                     other_user.id AS other_user_id,
                     other_user.username AS other_user_username,
                     other_user.profile_image AS other_user_profile_image,
-                    'default' AS other_user_profile_image_status
+                    CASE
+                        WHEN other_user.profile_image = '/profile_pictures/default.png' THEN 'default'
+                        ELSE COALESCE(
+                            (
+                                SELECT piu.status
+                                FROM profile_image_uploads piu
+                                WHERE piu.user_id = other_user.id
+                                ORDER BY piu.upload_time DESC, piu.id DESC
+                                LIMIT 1
+                            ),
+                            'approved'
+                        )
+                    END AS other_user_profile_image_status
                 FROM chat_participants current_participant
                 JOIN chat_conversations c ON c.id = current_participant.conversation_id
                 LEFT JOIN chat_messages last_message ON last_message.id = (
@@ -2064,7 +2480,19 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
                     m.sent_at,
                     u.username AS sender_username,
                     u.profile_image AS sender_profile_image,
-                    'default' AS sender_profile_image_status
+                    CASE
+                        WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                        ELSE COALESCE(
+                            (
+                                SELECT piu.status
+                                FROM profile_image_uploads piu
+                                WHERE piu.user_id = u.id
+                                ORDER BY piu.upload_time DESC, piu.id DESC
+                                LIMIT 1
+                            ),
+                            'approved'
+                        )
+                    END AS sender_profile_image_status
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
                 WHERE m.conversation_id = ?
@@ -2122,25 +2550,16 @@ async function createOrGetDirectConversation(currentUserId, targetUserId) {
         await ensureChatTables(connection);
         await ensureFriendBlocksTable(connection);
 
-        if (await isEitherUserBlocked(normalizedCurrentUserId, normalizedTargetUserId, connection)) {
-            throw new Error('A privát beszélgetés nem nyitható meg tiltás miatt.');
-        }
-
-        const [user1Id, user2Id] = normalizeFriendPair(normalizedCurrentUserId, normalizedTargetUserId);
-        const [friendRows] = await connection.execute(
-            `
-                SELECT id
-                FROM friends
-                WHERE user1_id = ?
-                  AND user2_id = ?
-                  AND status = 'accepted'
-                LIMIT 1
-            `,
-            [user1Id, user2Id]
-        );
-
-        if (!friendRows.length) {
-            throw new Error('A privát beszélgetés csak elfogadott barátok között nyitható meg.');
+        const permission = await canUsersChat(normalizedCurrentUserId, normalizedTargetUserId, connection);
+        if (!permission.canChat) {
+            const reasonMessage = {
+                blocked: 'A privát beszélgetés nem nyitható meg tiltás miatt.',
+                not_friends: 'A privát beszélgetés csak elfogadott barátok között nyitható meg.',
+                user_banned: 'A privát beszélgetés nem nyitható meg: egyik fél letiltott.',
+                user_deleted: 'A privát beszélgetés nem nyitható meg: a másik fél már nem elérhető.',
+                invalid_users: 'Érvénytelen felhasználó azonosító.'
+            };
+            throw new Error(reasonMessage[permission.reason] || 'A privát beszélgetés jelenleg nem elérhető.');
         }
 
         const [existingRows] = await connection.execute(
@@ -2278,7 +2697,19 @@ async function insertMessageInConversation(userId, conversationId, message, poli
                     m.sent_at,
                     u.username AS sender_username,
                     u.profile_image AS sender_profile_image,
-                    'default' AS sender_profile_image_status
+                    CASE
+                        WHEN u.profile_image = '/profile_pictures/default.png' THEN 'default'
+                        ELSE COALESCE(
+                            (
+                                SELECT piu.status
+                                FROM profile_image_uploads piu
+                                WHERE piu.user_id = u.id
+                                ORDER BY piu.upload_time DESC, piu.id DESC
+                                LIMIT 1
+                            ),
+                            'approved'
+                        )
+                    END AS sender_profile_image_status
                 FROM chat_messages m
                 JOIN users u ON u.id = m.sender_id
                 WHERE m.id = ?
@@ -2314,6 +2745,110 @@ async function insertMessageInConversation(userId, conversationId, message, poli
     }
 }
 
+async function saveEmailVerificationToken(userId, tokenHash, expiresAt) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET email_verification_token_hash = ?,
+                email_verification_token_expires = ?,
+                email_verification_sent_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [tokenHash, expiresAt, userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba az email verifikációs token mentése során.');
+    }
+    return result;
+}
+
+async function findUserByVerificationTokenHash(tokenHash) {
+    const pool = getPool();
+    let foundUser = null;
+    try {
+        const query = `
+            SELECT id, username, email, is_email_verified,
+                   email_verification_token_hash,
+                   email_verification_token_expires
+            FROM users
+            WHERE email_verification_token_hash = ?
+            LIMIT 1
+        `;
+        const [rows] = await pool.execute(query, [tokenHash]);
+        if (rows.length > 0) {
+            foundUser = rows[0];
+        }
+    } catch (error) {
+        throw new Error('Hiba a verifikációs token lekérdezése során.');
+    }
+    return foundUser;
+}
+
+async function markEmailVerified(userId) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET is_email_verified = TRUE,
+                email_verified_at = CURRENT_TIMESTAMP,
+                email_verification_token_hash = NULL,
+                email_verification_token_expires = NULL
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba az email verifikált állapot mentése során.');
+    }
+    return result;
+}
+
+async function clearEmailVerificationState(userId) {
+    const pool = getPool();
+    let result = { updated: false };
+    try {
+        const query = `
+            UPDATE users
+            SET is_email_verified = FALSE,
+                email_verified_at = NULL,
+                email_verification_token_hash = NULL,
+                email_verification_token_expires = NULL,
+                email_verification_sent_at = NULL
+            WHERE id = ?
+        `;
+        const [queryResult] = await pool.execute(query, [userId]);
+        result = { updated: queryResult.affectedRows > 0 };
+    } catch (error) {
+        throw new Error('Hiba a verifikációs állapot törlése során.');
+    }
+    return result;
+}
+
+async function getUserVerificationStatusById(userId) {
+    const pool = getPool();
+    let statusRow = null;
+    try {
+        const query = `
+            SELECT id, username, email, is_email_verified,
+                   email_verification_sent_at,
+                   email_verification_token_expires
+            FROM users
+            WHERE id = ?
+            LIMIT 1
+        `;
+        const [rows] = await pool.execute(query, [userId]);
+        if (rows.length > 0) {
+            statusRow = rows[0];
+        }
+    } catch (error) {
+        throw new Error('Hiba a verifikációs állapot lekérdezése során.');
+    }
+    return statusRow;
+}
+
 module.exports = {
     insertUser,
     getUserByUsername,
@@ -2322,17 +2857,21 @@ module.exports = {
     getLeaderBoardByMM,
     getLeaderBoardByBullet,
     getLeaderBoardByWinRate,
+    savePasswordResetToken,
+    findUserByPasswordResetTokenHash,
+    clearPasswordResetToken,
+    updateUserPasswordAndClearResetToken,
     getSessionUserById,
     getPublicPlayerProfileById,
     getUserAuthById,
     updateUserProfileSettings,
     insertUserLog,
+    getUserSecurityActivity,
     getTotalUsers,
     getTotalGames,
     getOnlineGamesCount,
     getAllUsers,
     getAllRooms,
-    logLoginAttempt,
     ipCollisionCheck,
     ipCollisions,
     uploadProfileImage,
@@ -2360,6 +2899,16 @@ module.exports = {
     createOrGetDirectConversation,
     insertMessageInConversation,
     assertConversationParticipant,
+    assertConversationUsable,
+    canUsersChat,
+    getPrivateConversationParticipantIds,
+    cleanupDirectConversationBetween,
+    cleanupUnusableConversationsForUser,
     containsBlockedWord,
-    normalizeTextForModeration
+    normalizeTextForModeration,
+    saveEmailVerificationToken,
+    findUserByVerificationTokenHash,
+    markEmailVerified,
+    clearEmailVerificationState,
+    getUserVerificationStatusById
 };

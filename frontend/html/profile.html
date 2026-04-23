@@ -22,6 +22,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
     <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/profileImageUtils.js" defer></script>
     <script src="../javascript/socketClient.js" defer></script>
     <script src="../javascript/chatModal.js" defer></script>
     <script src="../javascript/profile.js" defer></script>
@@ -46,10 +47,10 @@
                 <i data-lucide="user"></i>
                 Profile
             </a>
-            <a href="#games" class="nav-link">
+            <!-- <a href="#games" class="nav-link">
                 <i data-lucide="gamepad-2"></i>
                 Game History
-            </a>
+            </a> -->
             <a href="#statistics" class="nav-link">
                 <i data-lucide="bar-chart-3"></i>
                 Statistics
@@ -231,7 +232,7 @@
 
                 <div class="col-lg-8">
 
-                    <div class="card mb-4 section-block">
+                    <!-- <div class="card mb-4 section-block">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <span><i data-lucide="activity" class="me-2"></i>Rating History</span>
                             <label for="ratingHistorySelect" class="visually-hidden">Rating History típus</label>
@@ -251,7 +252,7 @@
                                 </span>
                             </div>
                         </div>
-                    </div>
+                    </div> -->
 
                     <div class="card mb-4 section-block" id="games">
                         <div class="card-header d-flex justify-content-between align-items-center">
@@ -368,34 +369,43 @@
                         </div>
                     </div>
 
-                    <div class="card mb-4 section-block">
+                    <div class="card mb-4 section-block" id="accountStatus">
                         <div class="card-header">
                             <i data-lucide="user-check" class="me-2"></i>Account Status
                         </div>
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="text-secondary">Email Verification</span>
-                                <span class="badge bg-success">Verified</span>
+                                <span id="accountStatusEmailBadge" class="badge bg-secondary">Ellenőrzés alatt</span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="text-secondary">Account Type</span>
-                                <span class="badge badge-admin">Administrator</span>
+                                <span id="accountStatusRoleBadge" class="badge badge-player">Player</span>
                             </div>
                             <div class="d-flex justify-content-between align-items-center mb-3">
                                 <span class="text-secondary">Status</span>
-                                <span class="badge bg-success">Active</span>
+                                <span id="accountStatusActiveBadge" class="badge bg-success">Active</span>
                             </div>
                             <hr style="border-color: var(--border-color);">
                             <div class="d-flex align-items-center gap-3 mb-3">
                                 <div class="ability-icon"
-                                    style="color: var(--accent-green); background-color: rgba(16, 185, 129, 0.1);">
-                                    <i data-lucide="mail-check"></i>
+                                    id="accountStatusEmailIconWrap"
+                                    style="color: var(--accent-red); background-color: rgba(233, 69, 96, 0.12);">
+                                    <i id="accountStatusEmailIcon" data-lucide="mail-warning"></i>
                                 </div>
                                 <div>
-                                    <h6 class="mb-0 text-white">Email Verified</h6>
-                                    <small class="text-secondary">Your account is fully secured</small>
+                                    <h6 id="accountStatusEmailTitle" class="mb-0 text-white">Email megerősítés szükséges</h6>
+                                    <small id="accountStatusEmailHint" class="text-secondary">Kattints az újraküldésre, ha nem kaptad meg a levelet.</small>
                                 </div>
                             </div>
+                            <div class="account-status-actions mb-3">
+                                <button id="resendVerificationButton" type="button" class="btn btn-outline-gold w-100">
+                                    <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+                                    Verifikációs email újraküldése
+                                </button>
+                                <small id="resendVerificationHint" class="text-secondary d-block mt-2">Ha nem érkezik email, ellenőrizd a spam/promóciók mappát is.</small>
+                            </div>
+                            <div id="accountStatusFeedback" class="alert d-none mb-3" role="status" aria-live="polite"></div>
                             <div class="d-flex align-items-center gap-3">
                                 <div class="ability-icon"
                                     style="color: var(--text-secondary); background-color: rgba(148, 163, 184, 0.1);">
@@ -403,7 +413,7 @@
                                 </div>
                                 <div>
                                     <h6 class="mb-0 text-white">Member Since</h6>
-                                    <small class="text-secondary">October 12, 2023</small>
+                                    <small id="accountStatusMemberSince" class="text-secondary">-</small>
                                 </div>
                             </div>
                         </div>
@@ -413,25 +423,44 @@
             <!-- Dashboard row 4 -->
             <div class="row mb-4" id="security">
                 <div class="col-12">
-                    <div class="card">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span><i data-lucide="shield" class="me-2"></i>Security & Login History</span>
-                            <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal"
-                                data-bs-target="#logoutAllDevicesModal">Log Out All Devices</button>
+                    <div class="card security-card">
+                        <div class="card-header security-header">
+                            <div class="security-header-main">
+                                <span class="d-flex align-items-center"><i data-lucide="shield" class="me-2"></i>Security & Activity History</span>
+                            </div>
+                            <div class="security-header-controls" role="group" aria-label="Biztonsági napló szűrése">
+                                <button class="btn btn-sm btn-outline-gold is-active" type="button" data-security-filter="all">Összes</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="auth">Munkamenet</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="security">Biztonság</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="profile">Profil</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="social">Szociális</button>
+                            </div>
+                            <div class="security-header-actions">
+                                <button class="btn btn-sm btn-outline-gold" type="button" id="refreshSecurityActivityButton"
+                                    aria-label="Biztonsági napló frissítése" title="Frissítés">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal"
+                                    data-bs-target="#logoutAllDevicesModal">Log Out All Devices</button>
+                            </div>
                         </div>
+                        <div id="securityActivityFeedback" class="security-feedback d-none" aria-live="polite"></div>
                         <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table">
+                            <div class="security-table-scroll">
+                                <table class="table security-table">
                                     <thead>
                                         <tr>
-                                            <th>Date & Time</th>
-                                            <th>IP Address</th>
-                                            <th>Device / Browser</th>
-                                            <th>Status</th>
+                                            <th>Időpont</th>
+                                            <th>Esemény</th>
+                                            <th>IP cím</th>
+                                            <th>Eszköz / Böngésző</th>
+                                            <th>Státusz</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
-                                        <!-- Sample login history rows -->
+                                    <tbody id="securityHistoryTableBody" aria-live="polite">
+                                        <tr class="security-empty-row">
+                                            <td colspan="5" class="text-center text-secondary py-4">Biztonsági napló betöltése...</td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -534,7 +563,7 @@
         <div class="footer-links">
             <a href="/">Home</a>
         </div>
-        <div class="footer-copy">&copy; 2026 MattMester</div>
+        <div class="footer-copy">2026 MattMester</div>
     </footer>
 
     <button class="fab-chat" id="fabOpenChatButton" type="button" data-open-chat="inbox" aria-label="Chat megnyitása">
@@ -586,6 +615,29 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-danger" id="confirmLogoutButton">Kijelentkezés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="logoutAllDevicesModal" tabindex="-1" aria-labelledby="logoutAllDevicesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="logoutAllDevicesModalLabel">
+                        <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                        Kijelentkezés minden eszközről
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2">Biztosan ki szeretnél jelentkezni minden eszközről?</p>
+                    <p class="text-secondary small mb-0">Az összes aktív munkameneted megszűnik, és ezen az eszközön is újra be kell jelentkezned.</p>
+                    <div id="logoutAllDevicesMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmLogoutAllDevicesButton">Kijelentkezés minden eszközről</button>
                 </div>
             </div>
         </div>

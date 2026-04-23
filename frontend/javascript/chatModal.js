@@ -1,5 +1,6 @@
 (function initMattMesterChatModal(globalScope) {
     const CHAT_OPEN_EVENT_NAME = 'mattmester:chat:open-conversation';
+    const MOBILE_BREAKPOINT_QUERY = '(max-width: 767.98px)';
 
     const DEFAULTS = {
         conversationsEndpoint: '/api/chat/conversations',
@@ -36,12 +37,15 @@
         root: null,
         floatingButton: null,
         modal: null,
+        layout: null,
         searchInput: null,
         conversationList: null,
         conversationEmpty: null,
         conversationLoading: null,
         headerTitle: null,
         headerSubtitle: null,
+        headerAvatar: null,
+        backButton: null,
         messageList: null,
         messageEmpty: null,
         messageLoading: null,
@@ -57,7 +61,7 @@
             style.id = 'chatModalStyles';
             style.textContent = `
             #chatModal .chat-modal-dialog {
-                max-width: 1100px;
+                max-width: 1000px;
             }
             #chatModal .chat-modal-content {
                 height: min(86vh, 900px);
@@ -65,13 +69,18 @@
                 overflow: hidden;
                 background: #0f172a;
                 border: 1px solid #1e293b;
+                border-radius: 16px;
                 color: #e2e8f0;
             }
             #chatModal .chat-layout {
                 height: 100%;
                 overflow: hidden;
+                display: flex;
+                min-height: 0;
             }
             #chatModal .chat-left {
+                flex: 0 0 340px;
+                max-width: 340px;
                 border-right: 1px solid #1e293b;
                 background: #111827;
                 display: flex;
@@ -80,149 +89,281 @@
                 min-height: 0;
                 overflow: hidden;
             }
-            #chatModal .chat-search-wrap {
-                padding: 12px;
+            #chatModal .chat-sidebar-header {
+                padding: 14px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
                 border-bottom: 1px solid #1e293b;
+                flex-shrink: 0;
             }
-            #chatModal .chat-search-input {
-                width: 100%;
+            #chatModal .chat-sidebar-title {
+                color: #ffffff;
+                font-weight: 700;
+                font-size: 18px;
+                margin: 0;
+            }
+            #chatModal .chat-icon-button {
+                width: 36px;
+                height: 36px;
+                border-radius: 50%;
+                background: transparent;
+                color: #e2e8f0;
+                border: 0;
+                font-size: 18px;
+                line-height: 1;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+                transition: background 0.15s ease;
+            }
+            #chatModal .chat-icon-button:hover {
+                background: #1e293b;
+            }
+            #chatModal .chat-search-wrap {
+                padding: 10px 12px;
+                border-bottom: 1px solid #1e293b;
+                flex-shrink: 0;
+            }
+            #chatModal .chat-search-group {
+                display: flex;
+                align-items: center;
+                gap: 8px;
                 background: #0b1220;
                 border: 1px solid #334155;
+                border-radius: 999px;
+                padding: 6px 14px;
+                transition: border-color 0.15s ease;
+            }
+            #chatModal .chat-search-group:focus-within {
+                border-color: #d4af37;
+            }
+            #chatModal .chat-search-icon {
+                color: #94a3b8;
+                font-size: 13px;
+                flex-shrink: 0;
+            }
+            #chatModal .chat-search-input {
+                flex: 1;
+                background: transparent;
+                border: 0;
                 color: #e2e8f0;
-                border-radius: 10px;
-                padding: 10px 12px;
+                outline: none;
+                font-size: 14px;
+                padding: 4px 0;
+                min-width: 0;
+            }
+            #chatModal .chat-search-input::placeholder {
+                color: #64748b;
             }
             #chatModal .chat-conversation-list {
                 overflow-y: auto;
-                padding: 10px;
+                padding: 8px;
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
+                gap: 2px;
                 min-height: 0;
                 min-width: 0;
+                flex: 1;
             }
             #chatModal .chat-conversation-item {
-                background: #0b1220;
-                border: 1px solid #233041;
-                border-radius: 10px;
-                padding: 10px 11px;
+                background: transparent;
+                border: 0;
+                padding: 10px;
+                border-radius: 12px;
                 cursor: pointer;
+                display: flex;
+                align-items: center;
+                gap: 12px;
                 width: 100%;
                 min-width: 0;
+                text-align: left;
+                color: inherit;
+                transition: background 0.15s ease;
+            }
+            #chatModal .chat-conversation-item:hover {
+                background: #1e293b;
             }
             #chatModal .chat-conversation-item.is-active {
-                border-color: #d4af37;
-                box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.35) inset;
+                background: #1f2937;
+            }
+            #chatModal .chat-profile-image {
+                width: 48px;
+                height: 48px;
+                border-radius: 50%;
+                border: 1px solid #334155;
+                object-fit: cover;
+                object-position: center;
+                flex-shrink: 0;
+                background: #0f172a;
+            }
+            #chatModal .chat-conversation-body {
+                flex: 1;
+                min-width: 0;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
             }
             #chatModal .chat-row-top {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
                 gap: 8px;
-            }
-            #chatModal .chat-title-wrap {
-                display: flex;
-                align-items: center;
-                gap: 10px;
                 min-width: 0;
-                flex: 1;
-            }
-            #chatModal .chat-profile-image {
-                width: clamp(30px, 2.5vw, 36px);
-                height: clamp(30px, 2.5vw, 36px);
-                border-radius: 50%;
-                border: 1px solid #334155;
-                object-fit: cover;
-                object-position: center;
-                flex-shrink: 0;
-                background: #0f172a;
-            }
-            #chatModal .chat-profile-image.is-pending {
-                filter: blur(3px) saturate(0.75);
             }
             #chatModal .chat-user-name {
                 color: #ffffff;
-                display: block;
+                font-weight: 600;
+                font-size: 14px;
                 overflow: hidden;
                 text-overflow: ellipsis;
                 white-space: nowrap;
-            }
-            #chatModal .chat-conversation-preview {
-                color: #94a3b8;
-                font-size: 12px;
-                margin-top: 6px;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                min-width: 0;
+                flex: 1;
             }
             #chatModal .chat-conversation-date {
                 color: #64748b;
                 font-size: 11px;
-                margin-top: 4px;
+                white-space: nowrap;
+                flex-shrink: 0;
+            }
+            #chatModal .chat-row-bottom {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
+                min-width: 0;
+            }
+            #chatModal .chat-conversation-preview {
+                color: #94a3b8;
+                font-size: 13px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                min-width: 0;
+                flex: 1;
+            }
+            #chatModal .chat-conversation-item.has-unread .chat-conversation-preview,
+            #chatModal .chat-conversation-item.has-unread .chat-user-name {
+                color: #ffffff;
+                font-weight: 700;
             }
             #chatModal .chat-unread-badge {
-                min-width: 18px;
-                height: 18px;
+                min-width: 20px;
+                height: 20px;
                 border-radius: 999px;
                 background: #ef4444;
-                color: #fff;
+                color: #ffffff;
                 font-size: 11px;
+                font-weight: 700;
                 display: inline-flex;
                 align-items: center;
                 justify-content: center;
                 padding: 0 6px;
+                flex-shrink: 0;
             }
             #chatModal .chat-right {
+                flex: 1 1 auto;
                 display: flex;
                 flex-direction: column;
                 min-width: 0;
                 min-height: 0;
                 overflow: hidden;
+                background: #0b1220;
             }
             #chatModal .chat-header {
+                display: flex;
+                align-items: center;
+                gap: 12px;
                 border-bottom: 1px solid #1e293b;
-                padding: 14px 16px;
+                padding: 10px 16px;
                 background: #0f172a;
+                min-height: 62px;
+                flex-shrink: 0;
+            }
+            #chatModal .chat-back-button {
+                display: none;
+            }
+            #chatModal .chat-header-avatar {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                border: 1px solid #334155;
+                object-fit: cover;
+                object-position: center;
+                flex-shrink: 0;
+                background: #0f172a;
+                display: none;
+            }
+            #chatModal .chat-header-avatar.is-visible {
+                display: block;
+            }
+            #chatModal .chat-header-info {
+                min-width: 0;
+                flex: 1;
+            }
+            #chatModal .chat-header-title {
+                color: #ffffff;
+                font-weight: 600;
+                font-size: 15px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            #chatModal .chat-header-subtitle {
+                color: #94a3b8;
+                font-size: 12px;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
             }
             #chatModal .chat-message-list {
                 flex: 1;
                 overflow-y: auto;
-                padding: 14px 16px;
+                padding: 16px;
                 display: flex;
                 flex-direction: column;
-                gap: 10px;
-                background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 45%), #0b1220;
+                gap: 4px;
+                background: radial-gradient(circle at top right, rgba(56, 189, 248, 0.06), transparent 45%), #0b1220;
                 min-height: 0;
                 min-width: 0;
             }
             #chatModal .chat-message {
-                max-width: 80%;
-                padding: 10px 12px;
-                border-radius: 12px;
-                border: 1px solid #2b3d50;
-                background: #0f172a;
+                max-width: min(78%, 520px);
+                padding: 8px 12px;
+                border-radius: 18px;
+                background: #1e293b;
+                color: #e2e8f0;
                 min-width: 0;
                 overflow-wrap: anywhere;
                 word-break: break-word;
                 align-self: flex-start;
+                display: flex;
+                flex-direction: column;
+                gap: 2px;
             }
             #chatModal .chat-message.is-mine {
                 align-self: flex-end;
-                border-color: #d4af37;
-                background: #1f2937;
+                background: linear-gradient(135deg, #d4af37 0%, #b8891f 100%);
+                color: #111827;
+            }
+            #chatModal .chat-message.is-mine .chat-message-sender,
+            #chatModal .chat-message.is-mine .chat-message-date {
+                color: rgba(17, 24, 39, 0.85);
             }
             #chatModal .chat-message-meta {
                 display: flex;
                 align-items: center;
-                gap: 8px;
-                color: #ffffff;
-                font-size: 12px;
-                margin-bottom: 4px;
+                gap: 6px;
+                font-size: 11px;
                 min-width: 0;
             }
             #chatModal .chat-message-profile-image {
-                width: clamp(24px, 2vw, 30px);
-                height: clamp(24px, 2vw, 30px);
+                width: 22px;
+                height: 22px;
                 border-radius: 50%;
                 border: 1px solid #334155;
                 object-fit: cover;
@@ -230,11 +371,8 @@
                 flex-shrink: 0;
                 background: #0f172a;
             }
-            #chatModal .chat-message-profile-image.is-pending {
-                filter: blur(3px) saturate(0.75);
-            }
             #chatModal .chat-message-sender {
-                color: #ffffff;
+                color: #cbd5e1;
                 font-weight: 600;
                 min-width: 0;
                 overflow: hidden;
@@ -243,7 +381,7 @@
             }
             #chatModal .chat-message-date {
                 color: #94a3b8;
-                font-size: 11px;
+                font-size: 10px;
                 white-space: nowrap;
                 margin-left: auto;
             }
@@ -251,45 +389,142 @@
                 white-space: pre-wrap;
                 overflow-wrap: anywhere;
                 word-break: break-word;
+                font-size: 14px;
+                line-height: 1.4;
             }
             #chatModal .chat-composer {
                 border-top: 1px solid #1e293b;
-                padding: 12px;
+                padding: 10px 12px;
                 background: #0f172a;
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
+                gap: 6px;
+                flex-shrink: 0;
+            }
+            #chatModal .chat-feedback {
+                font-size: 12px;
+                color: #ef4444;
+                padding: 2px 6px;
+            }
+            #chatModal .chat-feedback.is-success {
+                color: #22c55e;
             }
             #chatModal .chat-input-row {
                 display: flex;
                 gap: 8px;
                 min-width: 0;
+                align-items: center;
             }
             #chatModal .chat-input {
                 flex: 1;
                 border: 1px solid #334155;
                 background: #0b1220;
                 color: #e2e8f0;
-                border-radius: 10px;
-                padding: 10px 12px;
+                border-radius: 999px;
+                padding: 10px 16px;
                 min-width: 0;
+                font-size: 14px;
+                outline: none;
+                transition: border-color 0.15s ease;
+            }
+            #chatModal .chat-input:focus {
+                border-color: #d4af37;
+            }
+            #chatModal .chat-input::placeholder {
+                color: #64748b;
+            }
+            #chatModal .chat-send-button {
+                flex-shrink: 0;
+                border: 0;
+                background: linear-gradient(135deg, #d4af37 0%, #b8891f 100%);
+                color: #111827;
+                padding: 10px 20px;
+                font-weight: 700;
+                border-radius: 999px;
+                cursor: pointer;
+                font-size: 14px;
+                transition: filter 0.15s ease;
+            }
+            #chatModal .chat-send-button:hover:not(:disabled) {
+                filter: brightness(1.08);
+            }
+            #chatModal .chat-send-button:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
             }
             #chatModal .chat-placeholder {
                 color: #94a3b8;
                 font-size: 13px;
-                padding: 12px;
+                padding: 20px 16px;
                 text-align: center;
             }
-            @media (max-width: 991.98px) {
+            #chatModal .chat-right-empty {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                color: #64748b;
+                text-align: center;
+                padding: 32px 24px;
+                gap: 8px;
+            }
+            #chatModal .chat-right-empty-title {
+                color: #cbd5e1;
+                font-weight: 600;
+                font-size: 16px;
+            }
+            #chatModal .chat-right-empty-body {
+                color: #94a3b8;
+                font-size: 13px;
+                max-width: 280px;
+            }
+            #chatModal .chat-layout:not(.has-active-conversation) .chat-conversation-area {
+                display: none;
+            }
+            #chatModal .chat-layout.has-active-conversation .chat-right-empty {
+                display: none;
+            }
+            #chatModal .chat-conversation-area {
+                display: flex;
+                flex-direction: column;
+                flex: 1;
+                min-height: 0;
+                min-width: 0;
+            }
+            @media (max-width: 767.98px) {
                 #chatModal .chat-modal-content {
                     height: 100vh;
+                    height: 100dvh;
                     max-height: 100vh;
+                    max-height: 100dvh;
                     border-radius: 0;
                 }
                 #chatModal .chat-left {
+                    flex: 1 1 100%;
+                    max-width: 100%;
                     border-right: 0;
-                    border-bottom: 1px solid #1e293b;
-                    max-height: 34vh;
+                }
+                #chatModal .chat-right {
+                    flex: 1 1 100%;
+                    max-width: 100%;
+                }
+                #chatModal .chat-layout.is-conversation-view .chat-left {
+                    display: none;
+                }
+                #chatModal .chat-layout:not(.is-conversation-view) .chat-right {
+                    display: none;
+                }
+                #chatModal .chat-back-button {
+                    display: inline-flex;
+                }
+                #chatModal .chat-sidebar-close-button {
+                    display: inline-flex;
+                }
+            }
+            @media (min-width: 768px) {
+                #chatModal .chat-sidebar-close-button {
+                    display: none;
                 }
             }
             `;
@@ -307,38 +542,50 @@
             wrapper.id = 'chatModalRoot';
             wrapper.innerHTML = `
             <div class="modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-lg-down chat-modal-dialog">
+                <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down chat-modal-dialog">
                     <div class="modal-content chat-modal-content">
-                        <div class="chat-layout container-fluid h-100 p-0">
-                            <div class="row g-0 h-100">
-                            <aside class="chat-left col-12 col-lg-4">
+                        <div id="chatLayout" class="chat-layout">
+                            <aside class="chat-left">
+                                <div class="chat-sidebar-header">
+                                    <h2 class="chat-sidebar-title">Csevegések</h2>
+                                    <button type="button" class="chat-icon-button chat-sidebar-close-button" data-bs-dismiss="modal" aria-label="Bezaras">&times;</button>
+                                </div>
                                 <div class="chat-search-wrap">
-                                    <div class="input-group input-group-sm">
-                                        <span class="input-group-text bg-dark text-secondary border-secondary">🔎</span>
-                                        <input id="chatConversationSearch" class="chat-search-input form-control border-secondary" type="text" placeholder="Kereses beszelgetesben..." />
+                                    <div class="chat-search-group">
+                                        <span class="chat-search-icon" aria-hidden="true">&#128269;</span>
+                                        <input id="chatConversationSearch" class="chat-search-input" type="text" placeholder="Keresés a partnerek között..." />
                                     </div>
                                 </div>
                                 <div id="chatConversationLoading" class="chat-placeholder d-none">Beszelgetesek betoltese...</div>
                                 <div id="chatConversationEmpty" class="chat-placeholder d-none">Nincs beszelgetes.</div>
                                 <div id="chatConversationList" class="chat-conversation-list" role="list"></div>
                             </aside>
-                            <section class="chat-right col-12 col-lg-8">
-                                <header class="chat-header">
-                                    <div id="chatHeaderTitle" class="fw-semibold">Valassz beszelgetest</div>
-                                    <div id="chatHeaderSubtitle" class="small text-secondary">Realtime chat</div>
-                                </header>
-                                <div id="chatMessageLoading" class="chat-placeholder d-none">Uzenetek betoltese...</div>
-                                <div id="chatMessageEmpty" class="chat-placeholder">Nincs megjelenitheto uzenet.</div>
-                                <div id="chatMessageList" class="chat-message-list" role="log" aria-live="polite"></div>
-                                <div class="chat-composer">
-                                    <div id="chatFeedback" class="small text-danger d-none"></div>
-                                    <div class="chat-input-row">
-                                        <input id="chatMessageInput" class="chat-input form-control border-secondary" type="text" maxlength="1000" placeholder="Irj uzenetet..." />
-                                        <button id="chatSendButton" class="btn btn-warning flex-shrink-0" type="button">Kuldes</button>
+                            <section class="chat-right">
+                                <div id="chatRightEmpty" class="chat-right-empty">
+                                    <div class="chat-right-empty-title">Valassz egy beszelgetest</div>
+                                    <div class="chat-right-empty-body">Valassz egy meglevo beszelgetest a bal oldali listabol, vagy keress ra egy jatekosra.</div>
+                                </div>
+                                <div class="chat-conversation-area">
+                                    <header class="chat-header">
+                                        <button type="button" id="chatBackButton" class="chat-icon-button chat-back-button" aria-label="Vissza">&#8592;</button>
+                                        <img id="chatHeaderAvatar" class="chat-header-avatar" alt="" />
+                                        <div class="chat-header-info">
+                                            <div id="chatHeaderTitle" class="chat-header-title">Valassz beszelgetest</div>
+                                            <div id="chatHeaderSubtitle" class="chat-header-subtitle">Realtime chat</div>
+                                        </div>
+                                    </header>
+                                    <div id="chatMessageLoading" class="chat-placeholder d-none">Uzenetek betoltese...</div>
+                                    <div id="chatMessageEmpty" class="chat-placeholder d-none">Nincs megjelenitheto uzenet.</div>
+                                    <div id="chatMessageList" class="chat-message-list" role="log" aria-live="polite"></div>
+                                    <div class="chat-composer">
+                                        <div id="chatFeedback" class="chat-feedback d-none"></div>
+                                        <div class="chat-input-row">
+                                            <input id="chatMessageInput" class="chat-input" type="text" maxlength="1000" placeholder="Irj uzenetet..." />
+                                            <button id="chatSendButton" class="chat-send-button" type="button">Kuldes</button>
+                                        </div>
                                     </div>
                                 </div>
                             </section>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -354,12 +601,15 @@
         dom.root = globalScope.document.getElementById('chatModalRoot');
         dom.floatingButton = globalScope.document.getElementById('chatFloatingButton');
         dom.modal = globalScope.document.getElementById('chatModal');
+        dom.layout = globalScope.document.getElementById('chatLayout');
         dom.searchInput = globalScope.document.getElementById('chatConversationSearch');
         dom.conversationList = globalScope.document.getElementById('chatConversationList');
         dom.conversationEmpty = globalScope.document.getElementById('chatConversationEmpty');
         dom.conversationLoading = globalScope.document.getElementById('chatConversationLoading');
         dom.headerTitle = globalScope.document.getElementById('chatHeaderTitle');
         dom.headerSubtitle = globalScope.document.getElementById('chatHeaderSubtitle');
+        dom.headerAvatar = globalScope.document.getElementById('chatHeaderAvatar');
+        dom.backButton = globalScope.document.getElementById('chatBackButton');
         dom.messageList = globalScope.document.getElementById('chatMessageList');
         dom.messageEmpty = globalScope.document.getElementById('chatMessageEmpty');
         dom.messageLoading = globalScope.document.getElementById('chatMessageLoading');
@@ -375,13 +625,35 @@
         };
     }
 
+    function isMobileViewport() {
+        if (typeof globalScope.matchMedia === 'function') {
+            return globalScope.matchMedia(MOBILE_BREAKPOINT_QUERY).matches;
+        }
+        return false;
+    }
+
+    function setMobileView(view) {
+        if (dom.layout) {
+            if (view === 'conversation') {
+                dom.layout.classList.add('is-conversation-view');
+            } else {
+                dom.layout.classList.remove('is-conversation-view');
+            }
+        }
+    }
+
+    function setHasActiveConversation(hasActive) {
+        if (dom.layout) {
+            dom.layout.classList.toggle('has-active-conversation', Boolean(hasActive));
+        }
+    }
+
     function setFeedback(message, isError) {
         if (dom.feedback) {
             const text = String(message || '').trim();
             dom.feedback.textContent = text;
             dom.feedback.classList.toggle('d-none', !text);
-            dom.feedback.classList.toggle('text-danger', Boolean(isError));
-            dom.feedback.classList.toggle('text-success', text.length > 0 && !isError);
+            dom.feedback.classList.toggle('is-success', text.length > 0 && !isError);
         }
     }
 
@@ -423,17 +695,12 @@
             || `Beszelgetes #${conversation?.conversationId || '?'}`;
     }
 
-    function resolveProfileImageSrc(imagePath) {
-        const value = String(imagePath || '').trim();
-        if (!value) {
-            return '/profile_pictures/default.png';
+    function getProfileImageApi() {
+        const api = globalScope.MattMesterProfileImage;
+        if (!api) {
+            throw new Error('MattMesterProfileImage modul nincs betöltve (profileImageUtils.js).');
         }
-
-        return value;
-    }
-
-    function isPendingProfileImageStatus(statusValue) {
-        return String(statusValue || '').trim().toLowerCase() === 'pending';
+        return api;
     }
 
     function findConversation(conversationId) {
@@ -471,47 +738,54 @@
                 }
 
                 const unreadCount = Number(conversation.unreadCount || 0);
-                const topRow = globalScope.document.createElement('div');
-                topRow.className = 'chat-row-top';
-
-                const titleWrap = globalScope.document.createElement('div');
-                titleWrap.className = 'chat-title-wrap';
+                if (unreadCount > 0) {
+                    element.classList.add('has-unread');
+                }
 
                 const profileImage = globalScope.document.createElement('img');
                 profileImage.className = 'chat-profile-image';
-                profileImage.src = resolveProfileImageSrc(conversation?.otherUser?.profileImage);
-                profileImage.alt = `${getConversationTitle(conversation)} profile image`;
+                getProfileImageApi().applyProfileImagePresentation(profileImage, {
+                    source: conversation?.otherUser,
+                    alt: `${getConversationTitle(conversation)} profile image`
+                });
 
-                if (isPendingProfileImageStatus(conversation?.otherUser?.profileImageStatus)) {
-                    profileImage.classList.add('is-pending');
-                }
+                const body = globalScope.document.createElement('div');
+                body.className = 'chat-conversation-body';
 
-                const title = globalScope.document.createElement('strong');
+                const topRow = globalScope.document.createElement('div');
+                topRow.className = 'chat-row-top';
+
+                const title = globalScope.document.createElement('span');
                 title.className = 'chat-user-name';
                 title.textContent = getConversationTitle(conversation);
 
-                titleWrap.appendChild(profileImage);
-                titleWrap.appendChild(title);
-                topRow.appendChild(titleWrap);
+                const date = globalScope.document.createElement('span');
+                date.className = 'chat-conversation-date';
+                date.textContent = formatDate(conversation.lastMessageAt);
+
+                topRow.appendChild(title);
+                topRow.appendChild(date);
+
+                const bottomRow = globalScope.document.createElement('div');
+                bottomRow.className = 'chat-row-bottom';
+
+                const preview = globalScope.document.createElement('span');
+                preview.className = 'chat-conversation-preview';
+                preview.textContent = String(conversation.lastMessagePreview || 'Nincs uzenet.');
+                bottomRow.appendChild(preview);
 
                 if (unreadCount > 0) {
                     const unreadBadge = globalScope.document.createElement('span');
                     unreadBadge.className = 'chat-unread-badge';
                     unreadBadge.textContent = String(Math.min(unreadCount, 99));
-                    topRow.appendChild(unreadBadge);
+                    bottomRow.appendChild(unreadBadge);
                 }
 
-                const preview = globalScope.document.createElement('div');
-                preview.className = 'chat-conversation-preview';
-                preview.textContent = String(conversation.lastMessagePreview || 'Nincs uzenet.');
+                body.appendChild(topRow);
+                body.appendChild(bottomRow);
 
-                const date = globalScope.document.createElement('div');
-                date.className = 'chat-conversation-date';
-                date.textContent = formatDate(conversation.lastMessageAt);
-
-                element.appendChild(topRow);
-                element.appendChild(preview);
-                element.appendChild(date);
+                element.appendChild(profileImage);
+                element.appendChild(body);
 
                 element.addEventListener('click', () => {
                     openConversation(conversation.conversationId).catch((error) => {
@@ -593,11 +867,14 @@
 
                 const messageProfileImage = globalScope.document.createElement('img');
                 messageProfileImage.className = 'chat-message-profile-image';
-                messageProfileImage.src = resolveProfileImageSrc(message.senderProfileImage);
-                messageProfileImage.alt = `${message.senderUsername || 'Jatekos'} profile image`;
-                if (isPendingProfileImageStatus(message.senderProfileImageStatus)) {
-                    messageProfileImage.classList.add('is-pending');
-                }
+                getProfileImageApi().applyProfileImagePresentation(messageProfileImage, {
+                    source: {
+                        profile_image: message.senderProfileImage,
+                        profile_image_status: message.senderProfileImageStatus,
+                        username: message.senderUsername
+                    },
+                    alt: `${message.senderUsername || 'Jatekos'} profile image`
+                });
 
                 const sender = globalScope.document.createElement('span');
                 sender.className = 'chat-message-sender';
@@ -634,6 +911,36 @@
                 dom.messageList.innerHTML = '';
             }
             setMessageEmptyState(true, 'Nincs megjelenitheto uzenet.');
+        }
+    }
+
+    function updateConversationHeader(conversation) {
+        if (conversation) {
+            if (dom.headerTitle) {
+                dom.headerTitle.textContent = getConversationTitle(conversation);
+            }
+            if (dom.headerSubtitle) {
+                const preview = String(conversation.lastMessagePreview || '').trim();
+                dom.headerSubtitle.textContent = preview || 'Beszelgetes';
+            }
+            if (dom.headerAvatar) {
+                getProfileImageApi().applyProfileImagePresentation(dom.headerAvatar, {
+                    source: conversation?.otherUser,
+                    alt: `${getConversationTitle(conversation)} profile image`
+                });
+                dom.headerAvatar.classList.add('is-visible');
+            }
+        } else {
+            if (dom.headerTitle) {
+                dom.headerTitle.textContent = 'Valassz beszelgetest';
+            }
+            if (dom.headerSubtitle) {
+                dom.headerSubtitle.textContent = 'Realtime chat';
+            }
+            if (dom.headerAvatar) {
+                dom.headerAvatar.classList.remove('is-visible');
+                dom.headerAvatar.removeAttribute('src');
+            }
         }
     }
 
@@ -722,12 +1029,63 @@
             if (state.boundSocket) {
                 state.boundSocket.off('chat:message:new', onSocketMessageNew);
                 state.boundSocket.off('chat:error', onSocketError);
+                state.boundSocket.off('chat:conversation:deleted', onSocketConversationDeleted);
+                state.boundSocket.off('chat:list:refresh', onSocketChatListRefresh);
             }
 
             state.boundSocket = socket;
             socket.on('chat:message:new', onSocketMessageNew);
             socket.on('chat:error', onSocketError);
+            socket.on('chat:conversation:deleted', onSocketConversationDeleted);
+            socket.on('chat:list:refresh', onSocketChatListRefresh);
         }
+    }
+
+    function removeConversationFromState(conversationId) {
+        const normalizedId = Number(conversationId) || 0;
+        if (!normalizedId) return;
+        state.conversationList = state.conversationList.filter((item) => Number(item.conversationId) !== normalizedId);
+        state.messagesByConversation.delete(normalizedId);
+        state.paginationCursorByConversation.delete(normalizedId);
+        state.hasMoreByConversation.delete(normalizedId);
+        state.isLoadingByConversation.delete(normalizedId);
+    }
+
+    function resolveConversationUnavailableMessage(reason) {
+        const normalized = String(reason || '').toLowerCase();
+        const mapping = {
+            blocked: 'A beszélgetés megszűnt: a másik fél tiltásba került.',
+            unfriended: 'A beszélgetés megszűnt: a barát kapcsolat törölve.',
+            not_friends: 'A beszélgetés megszűnt: már nem vagytok barátok.',
+            user_banned: 'A beszélgetés megszűnt: a másik fél letiltott.',
+            user_deleted: 'A beszélgetés megszűnt: a másik fél profilja törölve.'
+        };
+        return mapping[normalized] || 'A beszélgetés már nem elérhető.';
+    }
+
+    function onSocketConversationDeleted(payload = {}) {
+        const conversationId = Number(payload?.conversationId) || 0;
+        if (!conversationId) return;
+
+        const wasActive = Number(state.activeConversationId) === conversationId;
+        removeConversationFromState(conversationId);
+        renderConversationList();
+
+        if (wasActive) {
+            state.activeConversationId = null;
+            setHasActiveConversation(false);
+            setMessageEmptyState(true, resolveConversationUnavailableMessage(payload?.reason));
+            setFeedback(resolveConversationUnavailableMessage(payload?.reason), true);
+            setMobileView('list');
+        }
+    }
+
+    function onSocketChatListRefresh() {
+        // Kapcsolat-változás után szerver felől érkező jelzés: frissítjük
+        // a lista-állapotot a legutóbbi canChat-szűrt adatokkal.
+        loadConversations().catch((error) => {
+            console.warn('[chatModal] chat:list:refresh hiba:', error?.message);
+        });
     }
 
     function onSocketMessageNew(messagePayload) {
@@ -758,6 +1116,18 @@
     function onSocketError(errorPayload) {
         const activeId = Number(state.activeConversationId) || 0;
         const payloadId = Number(errorPayload?.conversationId) || 0;
+        const messageText = String(errorPayload?.message || '').toLowerCase();
+        const isUnavailable = messageText.includes('már nem elérhető');
+
+        if (isUnavailable) {
+            // A szerver külön chat:conversation:deleted-et is küld, de biztonsági
+            // hálóként itt is eltávolítjuk az érintett beszélgetést.
+            if (payloadId) {
+                onSocketConversationDeleted({ conversationId: payloadId, reason: 'unavailable' });
+            }
+            return;
+        }
+
         if (!activeId || payloadId === 0 || activeId === payloadId) {
             setFeedback(errorPayload?.message || 'Chat hiba tortent.', true);
         }
@@ -868,21 +1238,24 @@
         const conversation = findConversation(normalizedId);
         if (conversation) {
             conversation.unreadCount = 0;
-            if (dom.headerTitle) {
-                dom.headerTitle.textContent = getConversationTitle(conversation);
-            }
-            if (dom.headerSubtitle) {
-                dom.headerSubtitle.textContent = conversation.lastMessagePreview || 'Beszelgetes';
-            }
         }
+        updateConversationHeader(conversation);
+        setHasActiveConversation(true);
+        setFeedback('', false);
 
         renderConversationList();
         await leaveConversationRoom(previousConversationId);
         await joinConversationRoom(normalizedId);
         await loadConversationMessages(normalizedId, { older: false });
 
+        setMobileView('conversation');
+
         if (state.modalInstance) {
             state.modalInstance.show();
+        }
+
+        if (dom.messageInput && !isMobileViewport()) {
+            dom.messageInput.focus();
         }
     }
 
@@ -924,7 +1297,7 @@
             } else if (fromUserId) {
                 await openDirectByUserId(fromUserId);
             } else {
-                throw new Error('A chat open esemény payload hiányos.');
+                throw new Error('A chat open esemeny payload hianyos.');
             }
         } catch (error) {
             setFeedback(error.message || 'Nem sikerult megnyitni a chat beszelgetest.', true);
@@ -984,6 +1357,12 @@
             });
         }
 
+        if (dom.backButton) {
+            dom.backButton.addEventListener('click', () => {
+                setMobileView('list');
+            });
+        }
+
         if (dom.messageList) {
             dom.messageList.addEventListener('scroll', () => {
                 const activeId = Number(state.activeConversationId) || 0;
@@ -1007,7 +1386,13 @@
             }
 
             dom.modal.setAttribute('aria-hidden', 'false');
-            if (dom.messageInput) {
+
+            const hasActive = Number(state.activeConversationId) > 0;
+            if (!hasActive) {
+                setMobileView('list');
+            }
+
+            if (dom.messageInput && !isMobileViewport() && hasActive) {
                 dom.messageInput.focus();
             }
         });
@@ -1021,6 +1406,7 @@
 
         dom.modal.addEventListener('hidden.bs.modal', () => {
             dom.modal.setAttribute('aria-hidden', 'true');
+            setMobileView('list');
         });
     }
 
@@ -1041,6 +1427,8 @@
             bindEvents();
             bindSocketEvents();
             bindGlobalEvents();
+            updateConversationHeader(null);
+            setHasActiveConversation(false);
 
             state.initialized = true;
         }
@@ -1053,6 +1441,8 @@
         if (!state.conversationList.length) {
             await loadConversations();
         }
+
+        setMobileView('list');
 
         if (state.modalInstance) {
             state.modalInstance.show();

@@ -4,11 +4,23 @@ const session = require('express-session'); //?npm install express-session
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const dotenv = require('dotenv');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
 const { services, leaderboardService } = require('./services.js');
 const { createSocketHub } = require('./sockets.js');
 const sql = require('./sql/sql_funtions');
+
+const envPaths = [
+    path.resolve(__dirname, '.env'),
+    path.resolve(__dirname, '../.env')
+];
+
+envPaths.forEach((envPath) => {
+    if (fs.existsSync(envPath)) {
+        dotenv.config({ path: envPath, override: false });
+    }
+});
 
 //!Beállítások
 const app = express();
@@ -137,31 +149,19 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/html/index.html'));
 });
 
-function resolveProfileImageFilePath(storedFilename) {
-    const normalized = String(storedFilename || '').replace(/\\/g, '/').trim();
-    if (!normalized) {
-        return null;
-    }
-
-    if (normalized.startsWith('/profile_pictures/')) {
-        const relativePath = normalized.replace(/^\//, '');
-        return path.join(__dirname, relativePath);
-    }
-
-    return path.join(__dirname, 'profile_pictures', normalized);
+function normalizeProfileImagePath(raw) {
+    const s = String(raw || '').replace(/\\/g, '/').trim();
+    if (!s) return null;
+    const ref = s.startsWith('/profile_pictures/')
+        ? s
+        : `/profile_pictures/${s.replace(/^\/+/, '')}`;
+    return ref.toLowerCase();
 }
 
-function normalizeProfileImageReference(storedFilename) {
-    const normalized = String(storedFilename || '').replace(/\\/g, '/').trim();
-    if (!normalized) {
-        return null;
-    }
-
-    if (normalized.startsWith('/profile_pictures/')) {
-        return normalized.toLowerCase();
-    }
-
-    return `/profile_pictures/${normalized.replace(/^\/+/, '')}`.toLowerCase();
+function resolveProfileImageFilePath(raw) {
+    const ref = normalizeProfileImagePath(raw);
+    if (!ref) return null;
+    return path.join(__dirname, ref.replace(/^\//, ''));
 }
 
 async function cleanupOrphanProfileImageFiles() {
@@ -169,7 +169,7 @@ async function cleanupOrphanProfileImageFiles() {
     const dbReferences = await sql.getAllProfileImageReferences();
     const normalizedReferences = new Set(
         (dbReferences || [])
-            .map((filename) => normalizeProfileImageReference(filename))
+            .map((filename) => normalizeProfileImagePath(filename))
             .filter(Boolean)
     );
 
@@ -183,7 +183,7 @@ async function cleanupOrphanProfileImageFiles() {
             continue;
         }
 
-        const normalizedEntryPath = normalizeProfileImageReference(`/profile_pictures/${entry.name}`);
+        const normalizedEntryPath = normalizeProfileImagePath(`/profile_pictures/${entry.name}`);
         if (!normalizedEntryPath || normalizedReferences.has(normalizedEntryPath)) {
             continue;
         }
@@ -213,7 +213,6 @@ async function cleanupDiscardedProfileImages() {
         if (discardedRecords && discardedRecords.length > 0) {
             for (const record of discardedRecords) {
                 const filePath = resolveProfileImageFilePath(record.filename);
-                let shouldDeleteDbRecord = false;
 
                 if (!filePath) {
                     console.warn(`[Cleanup] Fájlnév hiányzik, DB rekord megtartva: id=${record.id}`);
@@ -222,21 +221,14 @@ async function cleanupDiscardedProfileImages() {
 
                 try {
                     await fs.promises.unlink(filePath);
-                    shouldDeleteDbRecord = true;
                     console.log(`[Cleanup] Fájl törölve: ${record.filename}`);
                 } catch (fileErr) {
-                    if (fileErr && fileErr.code === 'ENOENT') {
-                        shouldDeleteDbRecord = true;
-                        console.log(`[Cleanup] Fájl nem létezik (ENOENT): ${record.filename}`);
-                    } else {
-                        shouldDeleteDbRecord = false;
+                    if (!fileErr || fileErr.code !== 'ENOENT') {
                         console.error(`[Cleanup] Fájltörlés hiba (újrapróbálható): ${record.filename}`, fileErr.message);
+                        console.log(`[Cleanup] DB rekord megtartva: ${record.id}`);
+                        continue;
                     }
-                }
-                
-                if (!shouldDeleteDbRecord) {
-                    console.log(`[Cleanup] DB rekord megtartva: ${record.id}`);
-                    continue;
+                    console.log(`[Cleanup] Fájl nem létezik (ENOENT): ${record.filename}`);
                 }
 
                 try {

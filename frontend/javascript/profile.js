@@ -13,6 +13,9 @@ const PLAYER_SEARCH_DEBOUNCE_MS = 300;
 const PROFILE_CROSS_TAB_REFRESH_THROTTLE_MS = 1200;
 const FRIEND_FILTER_DEFAULT = 'all';
 const FRIEND_FILTER_VALUES = new Set(['all', 'pending', 'friend', 'blocked']);
+const EMAIL_VERIFICATION_REQUIRED_CODE = 'EMAIL_NOT_VERIFIED';
+const EMAIL_RESEND_RATE_LIMIT_CODE = 'EMAIL_RESEND_RATE_LIMIT';
+const EMAIL_SEND_FAILED_CODE = 'EMAIL_SEND_FAILED';
 
 const profileSettingsState = {
     bound: false,
@@ -65,6 +68,18 @@ const logoutState = {
     bound: false,
     submitting: false
 };
+const SECURITY_FILTER_DEFAULT = 'all';
+const SECURITY_FILTER_VALUES = new Set(['all', 'auth', 'security', 'profile', 'social']);
+const securityActivityState = {
+    bound: false,
+    loading: false,
+    activeFilter: SECURITY_FILTER_DEFAULT,
+    items: []
+};
+const logoutAllDevicesState = {
+    bound: false,
+    submitting: false
+};
 const friendsState = {
     bound: false,
     loading: false,
@@ -76,6 +91,11 @@ const notificationCenterState = {
     items: [],
     unreadCount: 0,
     maxItems: 40
+};
+const accountStatusState = {
+    bound: false,
+    sending: false,
+    highlightTimer: null
 };
 
 async function syncSocketContextForStartup(reason = 'profile-startup') {
@@ -120,12 +140,16 @@ document.addEventListener('DOMContentLoaded', () => {
         bindProfileImageUploadEvents();
         bindRemoveAvatarEvents();
         bindCrossTabProfileRefreshEvents();
+        bindSecurityActivityEvents();
+        bindLogoutAllDevicesButton();
+        bindAccountStatusEvents();
     });
 
     runSafelyAsync('profileInitialLoadSequence', async () => {
         await syncSocketContextForStartup('profile-initial-load');
         await refreshAuthUi('profile-initial-load');
         await refreshFriendsList(FRIEND_FILTER_DEFAULT);
+        await refreshSecurityActivity();
     });
 });
 // Ez parsol
@@ -357,9 +381,228 @@ async function refreshAuthUi(contextLabel = 'auth-refresh') {
         const sessionInfo = await fetchSessionInfo();
         showStats(sessionInfo);
         handleProfileSettings(sessionInfo);
+        renderAccountStatus(sessionInfo);
         logSessionAndSocketInfo(sessionInfo, contextLabel);
     } catch (error) {
         console.error('refreshAuthUi hiba:', error);
+    }
+}
+
+function getAccountStatusElements() {
+    return {
+        emailBadge: document.getElementById('accountStatusEmailBadge'),
+        roleBadge: document.getElementById('accountStatusRoleBadge'),
+        activeBadge: document.getElementById('accountStatusActiveBadge'),
+        emailIconWrap: document.getElementById('accountStatusEmailIconWrap'),
+        emailIcon: document.getElementById('accountStatusEmailIcon'),
+        emailTitle: document.getElementById('accountStatusEmailTitle'),
+        emailHint: document.getElementById('accountStatusEmailHint'),
+        memberSince: document.getElementById('accountStatusMemberSince'),
+        resendButton: document.getElementById('resendVerificationButton'),
+        resendHint: document.getElementById('resendVerificationHint'),
+        feedback: document.getElementById('accountStatusFeedback'),
+        section: document.getElementById('accountStatus')
+    };
+}
+
+function setAccountStatusFeedback(type, message) {
+    const { feedback } = getAccountStatusElements();
+    if (feedback) {
+        feedback.classList.remove('d-none', 'alert-success', 'alert-danger', 'alert-warning', 'alert-info');
+        if (message) {
+            feedback.textContent = message;
+            feedback.classList.add(`alert-${type || 'info'}`);
+        } else {
+            feedback.textContent = '';
+            feedback.classList.add('d-none');
+        }
+    }
+}
+
+function scrollToAccountStatusAndHighlightResend() {
+    const { section, resendButton } = getAccountStatusElements();
+    if (section) {
+        section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    if (resendButton) {
+        resendButton.classList.add('account-status-resend-highlight');
+        if (accountStatusState.highlightTimer) {
+            clearTimeout(accountStatusState.highlightTimer);
+        }
+
+        accountStatusState.highlightTimer = setTimeout(() => {
+            resendButton.classList.remove('account-status-resend-highlight');
+            accountStatusState.highlightTimer = null;
+        }, 2400);
+    }
+}
+
+function handleEmailNotVerifiedCta(payload) {
+    const code = String(payload?.code || '').trim();
+    let handled = false;
+    if (code === EMAIL_VERIFICATION_REQUIRED_CODE) {
+        handled = true;
+        setAccountStatusFeedback('warning', 'A funkció használatához előbb erősítsd meg az email címed. Nyisd meg az Account Status szekciót és küldd újra a verifikációs emailt.');
+        scrollToAccountStatusAndHighlightResend();
+    }
+    return handled;
+}
+
+function renderAccountStatus(sessionInfo) {
+    try {
+        const elements = getAccountStatusElements();
+        const user = sessionInfo?.user || sessionInfo?.data?.user || null;
+        if (!user) {
+            throw new Error('Nincs felhasználó az account status megjelenítéséhez.');
+        }
+
+        const isVerified = Boolean(user.is_email_verified);
+        const role = String(user.role || 'player').toLowerCase();
+        const roleLabel = role === 'admin' ? 'Administrator' : 'Player';
+        const memberDate = user.created_at ? new Date(user.created_at) : null;
+        const memberSinceText = memberDate && !Number.isNaN(memberDate.getTime())
+            ? memberDate.toLocaleDateString('hu-HU')
+            : 'Ismeretlen';
+
+        if (elements.emailBadge) {
+            elements.emailBadge.className = `badge ${isVerified ? 'bg-success' : 'bg-warning text-dark'}`;
+            elements.emailBadge.textContent = isVerified ? 'Verified' : 'Not Verified';
+        }
+
+        if (elements.roleBadge) {
+            elements.roleBadge.className = `badge ${role === 'admin' ? 'badge-admin' : 'badge-player'}`;
+            elements.roleBadge.textContent = roleLabel;
+        }
+
+        if (elements.activeBadge) {
+            elements.activeBadge.className = `badge ${user.is_banned ? 'bg-danger' : 'bg-success'}`;
+            elements.activeBadge.textContent = user.is_banned ? 'Banned' : 'Active';
+        }
+
+        if (elements.emailIconWrap) {
+            elements.emailIconWrap.style.color = isVerified ? 'var(--accent-green)' : 'var(--accent-red)';
+            elements.emailIconWrap.style.backgroundColor = isVerified ? 'rgba(16, 185, 129, 0.1)' : 'rgba(233, 69, 96, 0.12)';
+        }
+
+        if (elements.emailIcon) {
+            elements.emailIcon.setAttribute('data-lucide', isVerified ? 'mail-check' : 'mail-warning');
+            if (window.lucide?.createIcons) {
+                window.lucide.createIcons();
+            }
+        }
+
+        if (elements.emailTitle) {
+            elements.emailTitle.textContent = isVerified ? 'Email megerősítve' : 'Email megerősítés szükséges';
+        }
+
+        if (elements.emailHint) {
+            elements.emailHint.textContent = isVerified
+                ? 'A fiókod email szempontból védett.'
+                : 'A fiókod még nincs megerősítve. Kérj új verifikációs emailt, ha nem kaptad meg a levelet.';
+        }
+
+        if (elements.resendHint) {
+            elements.resendHint.textContent = isVerified
+                ? 'Az email címed már megerősítve, nincs további teendő.'
+                : 'Ha nem érkezik email, ellenőrizd a spam/promóciók mappát is.';
+        }
+
+        if (elements.resendButton) {
+            elements.resendButton.disabled = isVerified || accountStatusState.sending;
+            elements.resendButton.classList.toggle('opacity-75', isVerified);
+            elements.resendButton.title = isVerified
+                ? 'Az email címed már megerősítve.'
+                : 'Kattints új verifikációs email küldéséhez.';
+
+            if (!accountStatusState.sending) {
+                elements.resendButton.innerHTML = '<i data-lucide="send" style="width: 16px; height: 16px;"></i> Verifikációs email újraküldése';
+            }
+        }
+
+        if (elements.memberSince) {
+            elements.memberSince.textContent = memberSinceText;
+        }
+    } catch (error) {
+        console.error('renderAccountStatus hiba:', error);
+    }
+}
+
+function mapResendVerificationErrorMessage(payload, statusCode) {
+    const responseCode = String(payload?.code || '').trim();
+    let message = 'Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.';
+
+    if (responseCode === EMAIL_RESEND_RATE_LIMIT_CODE || Number(statusCode) === 429) {
+        message = payload?.message || 'Túl sok újraküldési kérés érkezett. Próbáld újra 15 perc múlva.';
+    } else if (responseCode === EMAIL_SEND_FAILED_CODE) {
+        message = payload?.message || 'Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.';
+    } else if (responseCode === EMAIL_VERIFICATION_REQUIRED_CODE) {
+        message = payload?.message || 'A fiókod még nincs megerősítve. Küldj új verifikációs emailt az Account Status részből.';
+    } else if (payload?.message) {
+        message = payload.message;
+    }
+
+    return message;
+}
+
+async function resendVerificationEmailFromAccountStatus() {
+    try {
+        const elements = getAccountStatusElements();
+        if (!elements.resendButton) {
+            throw new Error('Hiányzik a verifikációs újraküldés gomb.');
+        }
+
+        accountStatusState.sending = true;
+        elements.resendButton.disabled = true;
+        elements.resendButton.innerHTML = '<i data-lucide="loader-circle" style="width: 16px; height: 16px;"></i> Küldés folyamatban...';
+        if (window.lucide?.createIcons) {
+            window.lucide.createIcons();
+        }
+
+        const response = await fetch('/api/auth/resend-verification', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        const result = await parseJson(response);
+
+        if (!response.ok || !result.success) {
+            handleEmailNotVerifiedCta(result);
+            throw new Error(mapResendVerificationErrorMessage(result, response.status));
+        }
+
+        setAccountStatusFeedback('success', result.message || 'Új verifikációs email elküldve. Ellenőrizd a postaládád és a spam mappát is.');
+        await refreshAuthUi('profile-account-status-resend-success');
+    } catch (error) {
+        setAccountStatusFeedback('danger', error.message || 'Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.');
+    } finally {
+        accountStatusState.sending = false;
+        try {
+            const sessionInfo = await fetchSessionInfo();
+            renderAccountStatus(sessionInfo);
+        } catch (refreshError) {
+            console.error('Account Status frissítési hiba újraküldés után:', refreshError);
+        }
+    }
+}
+
+function bindAccountStatusEvents() {
+    try {
+        if (!accountStatusState.bound) {
+            const { resendButton } = getAccountStatusElements();
+            if (!resendButton) {
+                throw new Error('Az Account Status újraküldés gomb nem található.');
+            }
+
+            resendButton.addEventListener('click', async () => {
+                await runSafelyAsync('accountStatusResendVerificationClick', async () => {
+                    await resendVerificationEmailFromAccountStatus();
+                });
+            });
+
+            accountStatusState.bound = true;
+        }
+    } catch (error) {
+        console.error('bindAccountStatusEvents hiba:', error);
     }
 }
 
@@ -653,17 +896,15 @@ function fillPlayerProfileModal(player) {
         throw new Error('A játékos profil modal elemei nem találhatók a DOM-ban.');
     }
 
-    const profileImageStatus = String(player.profileImageStatus || '').trim().toLowerCase();
-    const isPendingProfileImage = profileImageStatus === 'pending';
-
     if (elements.titleText) {
         elements.titleText.textContent = `${player.username || 'Játékos'} profilja`;
     }
 
     if (elements.avatar) {
-        elements.avatar.src = player.profileImage || '/profile_pictures/default.png';
-        elements.avatar.alt = `${player.username || 'Játékos'} profilképe`;
-        elements.avatar.classList.toggle('search-result-avatar-pending', isPendingProfileImage);
+        window.MattMesterProfileImage.applyProfileImagePresentation(elements.avatar, {
+            source: player,
+            alt: `${player.username || 'Játékos'} profilképe`
+        });
     }
 
     if (elements.username) {
@@ -789,14 +1030,11 @@ function createSearchResultListItem(player) {
 
     const avatar = document.createElement('img');
     avatar.className = 'friend-avatar rounded-circle';
-    if ((player.profileImageStatus || '').toLowerCase() === 'pending') {
-        avatar.classList.add('search-result-avatar-pending');
-    }
-    avatar.style.width = '40px';
-    avatar.style.height = '40px';
-    avatar.style.objectFit = 'cover';
-    avatar.alt = `${player.username || 'Jatekos'} profilkepe`;
-    avatar.src = player.profileImage || '/profile_pictures/default.png';
+    window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
+        source: player,
+        alt: `${player.username || 'Jatekos'} profilkepe`,
+        size: 40
+    });
     avatarWrap.appendChild(avatar);
 
     const info = document.createElement('div');
@@ -1222,14 +1460,11 @@ function createFriendListItem(friend) {
 
     const avatar = document.createElement('img');
     avatar.className = 'friend-avatar rounded-circle';
-    if ((friend.profileImageStatus || '').toLowerCase() === 'pending') {
-        avatar.classList.add('search-result-avatar-pending');
-    }
-    avatar.alt = `${friend.username || 'Jatekos'} profilkepe`;
-    avatar.style.width = '40px';
-    avatar.style.height = '40px';
-    avatar.style.objectFit = 'cover';
-    avatar.src = friend.profileImage || '/profile_pictures/default.png';
+    window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
+        source: friend,
+        alt: `${friend.username || 'Jatekos'} profilkepe`,
+        size: 40
+    });
 
     const statusDot = document.createElement('span');
     statusDot.className = 'friend-status offline';
@@ -1584,6 +1819,356 @@ function bindLogoutButton() {
     }
 }
 
+function getSecurityActivityElements() {
+    return {
+        tbody: document.getElementById('securityHistoryTableBody'),
+        refreshButton: document.getElementById('refreshSecurityActivityButton'),
+        filterButtons: Array.from(document.querySelectorAll('[data-security-filter]')),
+        feedback: document.getElementById('securityActivityFeedback')
+    };
+}
+
+function getLogoutAllDevicesElements() {
+    return {
+        modal: document.getElementById('logoutAllDevicesModal'),
+        confirmButton: document.getElementById('confirmLogoutAllDevicesButton'),
+        message: document.getElementById('logoutAllDevicesMessage')
+    };
+}
+
+function setSecurityActivityFeedback(text, variant = 'info') {
+    const { feedback } = getSecurityActivityElements();
+    if (feedback) {
+        feedback.classList.remove('d-none', 'is-success', 'is-error', 'is-info');
+        if (text) {
+            feedback.textContent = text;
+            feedback.classList.add(`is-${variant}`);
+        } else {
+            feedback.textContent = '';
+            feedback.classList.add('d-none');
+        }
+    }
+}
+
+function formatSecurityEventDate(value) {
+    const date = new Date(value);
+    let formatted = { relative: '-', absolute: '' };
+    if (!Number.isNaN(date.getTime())) {
+        const diffMs = Date.now() - date.getTime();
+        const diffMinutes = Math.round(diffMs / 60000);
+        const diffHours = Math.round(diffMs / 3600000);
+        const diffDays = Math.round(diffMs / 86400000);
+
+        let relative;
+        if (diffMs < 45 * 1000) {
+            relative = 'Épp most';
+        } else if (diffMinutes < 60) {
+            relative = `${diffMinutes} perce`;
+        } else if (diffHours < 24) {
+            relative = `${diffHours} órája`;
+        } else if (diffDays < 7) {
+            relative = `${diffDays} napja`;
+        } else {
+            relative = date.toLocaleDateString('hu-HU', { year: 'numeric', month: 'short', day: 'numeric' });
+        }
+
+        const absolute = date.toLocaleString('hu-HU', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+        });
+
+        formatted = { relative, absolute };
+    }
+    return formatted;
+}
+
+const SECURITY_EVENT_LABELS = {
+    login: { label: 'Bejelentkezés', icon: 'log-in', category: 'auth' },
+    logout: { label: 'Kijelentkezés', icon: 'log-out', category: 'auth' },
+    register: { label: 'Regisztráció', icon: 'user-plus', category: 'auth' },
+    logout_all_devices: { label: 'Kijelentkezés minden eszközről', icon: 'shield-off', category: 'security' },
+    profile_settings_update: { label: 'Profil beállítások módosítva', icon: 'user-cog', category: 'profile' },
+    password_change: { label: 'Jelszó módosítva', icon: 'key-round', category: 'security' },
+    profile_image_upload: { label: 'Profilkép feltöltve', icon: 'image-up', category: 'profile' },
+    profile_image_remove: { label: 'Profilkép eltávolítva', icon: 'image-minus', category: 'profile' },
+    profile_delete: { label: 'Profil törölve', icon: 'user-x', category: 'security' },
+    login_failed: { label: 'Sikertelen bejelentkezés', icon: 'shield-alert', category: 'security' },
+    current_password_verify_failed: { label: 'Hibás jelszó ellenőrzés', icon: 'shield-alert', category: 'security' },
+    friend_request_sent: { label: 'Barát kérelem küldve', icon: 'user-plus', category: 'social' },
+    friend_request_accepted: { label: 'Barát kérelem elfogadva', icon: 'user-check', category: 'social' },
+    friend_request_rejected: { label: 'Barát kérelem elutasítva', icon: 'user-minus', category: 'social' },
+    friend_blocked: { label: 'Felhasználó letiltva', icon: 'user-x', category: 'social' },
+    friend_unblocked: { label: 'Letiltás feloldva', icon: 'user-check', category: 'social' },
+    friend_removed: { label: 'Barát eltávolítva', icon: 'user-minus', category: 'social' }
+};
+
+function getSecurityEventDescriptor(item) {
+    const descriptor = SECURITY_EVENT_LABELS[item.eventType] || {
+        label: (item.message || item.eventType || 'Ismeretlen esemény'),
+        icon: 'activity',
+        category: item.eventCategory || 'security'
+    };
+    return descriptor;
+}
+
+function getSecurityStatusBadge(item) {
+    const severity = String(item.severity || 'info').toLowerCase();
+    let badge = { text: 'Info', className: 'security-badge security-badge-info' };
+
+    if (item.success === false || severity === 'error' || severity === 'critical') {
+        badge = { text: 'Sikertelen', className: 'security-badge security-badge-error' };
+    } else if (severity === 'warning') {
+        badge = { text: 'Figyelmeztetés', className: 'security-badge security-badge-warning' };
+    } else if (item.eventType === 'login') {
+        badge = { text: 'Sikeres', className: 'security-badge security-badge-success' };
+    }
+    return badge;
+}
+
+function shortenUserAgent(userAgent) {
+    let result = 'Ismeretlen';
+    if (userAgent) {
+        const ua = String(userAgent);
+        const browserMatches = [
+            { regex: /Edg\//i, name: 'Edge' },
+            { regex: /OPR\//i, name: 'Opera' },
+            { regex: /Chrome\//i, name: 'Chrome' },
+            { regex: /Firefox\//i, name: 'Firefox' },
+            { regex: /Safari\//i, name: 'Safari' }
+        ];
+        let browser = 'Böngésző';
+        for (const entry of browserMatches) {
+            if (entry.regex.test(ua)) { browser = entry.name; break; }
+        }
+        let os = 'Ismeretlen OS';
+        if (/Windows/i.test(ua)) os = 'Windows';
+        else if (/Android/i.test(ua)) os = 'Android';
+        else if (/iPhone|iPad|iOS/i.test(ua)) os = 'iOS';
+        else if (/Mac OS X/i.test(ua)) os = 'macOS';
+        else if (/Linux/i.test(ua)) os = 'Linux';
+        result = `${browser} · ${os}`;
+    }
+    return result;
+}
+
+function escapeSecurityHtml(value) {
+    const safe = String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[ch]);
+    return safe;
+}
+
+function renderSecurityActivityTable() {
+    const { tbody } = getSecurityActivityElements();
+    if (tbody) {
+        const filter = securityActivityState.activeFilter;
+        const items = securityActivityState.items.filter((item) => {
+            const descriptor = getSecurityEventDescriptor(item);
+            return filter === 'all' || (item.eventCategory || descriptor.category) === filter;
+        });
+
+        if (!items.length) {
+            tbody.innerHTML = `
+                <tr class="security-empty-row">
+                    <td colspan="5" class="text-center text-secondary py-4">Nincs megjeleníthető esemény a kiválasztott szűrőre.</td>
+                </tr>
+            `;
+        } else {
+            const rows = items.map((item) => {
+                const descriptor = getSecurityEventDescriptor(item);
+                const badge = getSecurityStatusBadge(item);
+                const { relative, absolute } = formatSecurityEventDate(item.occurredAt);
+                const ip = item.ipAddress || '—';
+                const uaShort = shortenUserAgent(item.userAgent);
+                const description = item.message ? escapeSecurityHtml(item.message) : '';
+
+                return `
+                    <tr class="security-row" data-event-type="${escapeSecurityHtml(item.eventType)}" data-category="${escapeSecurityHtml(item.eventCategory || descriptor.category)}">
+                        <td>
+                            <div class="security-date-cell">
+                                <strong class="security-date-relative">${escapeSecurityHtml(relative)}</strong>
+                                <small class="security-date-absolute">${escapeSecurityHtml(absolute)}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="security-event-cell">
+                                <span class="security-event-icon"><i data-lucide="${escapeSecurityHtml(descriptor.icon)}"></i></span>
+                                <div class="security-event-text">
+                                    <strong>${escapeSecurityHtml(descriptor.label)}</strong>
+                                    ${description ? `<small class="text-secondary d-block">${description}</small>` : ''}
+                                </div>
+                            </div>
+                        </td>
+                        <td class="security-ip-cell">${escapeSecurityHtml(ip)}</td>
+                        <td class="security-ua-cell" title="${escapeSecurityHtml(item.userAgent || '')}">${escapeSecurityHtml(uaShort)}</td>
+                        <td><span class="${badge.className}">${escapeSecurityHtml(badge.text)}</span></td>
+                    </tr>
+                `;
+            }).join('');
+
+            tbody.innerHTML = rows;
+            if (window.lucide?.createIcons) {
+                runSafely('securityLucideIcons', () => window.lucide.createIcons());
+            }
+        }
+    }
+}
+
+function setSecurityFilterButtonsState(activeFilter) {
+    const { filterButtons } = getSecurityActivityElements();
+    filterButtons.forEach((btn) => {
+        const filter = btn.dataset.securityFilter;
+        btn.classList.toggle('is-active', filter === activeFilter);
+    });
+}
+
+async function refreshSecurityActivity() {
+    if (!securityActivityState.loading) {
+        securityActivityState.loading = true;
+        const { tbody, refreshButton } = getSecurityActivityElements();
+        if (refreshButton) refreshButton.disabled = true;
+        if (tbody && !securityActivityState.items.length) {
+            tbody.innerHTML = `
+                <tr class="security-empty-row">
+                    <td colspan="5" class="text-center text-secondary py-4">Biztonsági napló betöltése...</td>
+                </tr>
+            `;
+        }
+
+        try {
+            const response = await fetch('/api/security/activity?limit=150', {
+                headers: { 'Accept': 'application/json' }
+            });
+            const result = await parseJson(response);
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Sikertelen biztonsági napló lekérés.');
+            }
+            securityActivityState.items = Array.isArray(result.data) ? result.data : [];
+            renderSecurityActivityTable();
+            setSecurityActivityFeedback('', 'info');
+        } catch (error) {
+            console.error('Security activity betöltési hiba:', error);
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr class="security-empty-row">
+                        <td colspan="5" class="text-center text-danger py-4">${escapeSecurityHtml(error.message || 'Hiba a biztonsági napló betöltésekor.')}</td>
+                    </tr>
+                `;
+            }
+            setSecurityActivityFeedback(error.message || 'Hiba a biztonsági napló betöltésekor.', 'error');
+        } finally {
+            securityActivityState.loading = false;
+            if (refreshButton) refreshButton.disabled = false;
+        }
+    }
+}
+
+function bindSecurityActivityEvents() {
+    if (!securityActivityState.bound) {
+        const { refreshButton, filterButtons } = getSecurityActivityElements();
+
+        if (refreshButton) {
+            refreshButton.addEventListener('click', () => {
+                runSafelyAsync('refreshSecurityActivityClick', async () => {
+                    await refreshSecurityActivity();
+                });
+            });
+        }
+
+        filterButtons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                runSafely('securityFilterClick', () => {
+                    const filter = btn.dataset.securityFilter;
+                    if (SECURITY_FILTER_VALUES.has(filter) && filter !== securityActivityState.activeFilter) {
+                        securityActivityState.activeFilter = filter;
+                        setSecurityFilterButtonsState(filter);
+                        renderSecurityActivityTable();
+                    }
+                });
+            });
+        });
+
+        setSecurityFilterButtonsState(securityActivityState.activeFilter);
+        securityActivityState.bound = true;
+    }
+}
+
+function setLogoutAllDevicesMessage(text, variant = 'danger') {
+    const { message } = getLogoutAllDevicesElements();
+    if (message) {
+        message.classList.remove('d-none', 'alert-danger', 'alert-success', 'alert-warning', 'alert-info');
+        if (text) {
+            message.textContent = text;
+            message.classList.add(`alert-${variant}`);
+        } else {
+            message.textContent = '';
+            message.classList.add('d-none');
+        }
+    }
+}
+
+async function handleLogoutAllDevices() {
+    if (!logoutAllDevicesState.submitting) {
+        const { confirmButton } = getLogoutAllDevicesElements();
+        logoutAllDevicesState.submitting = true;
+        if (confirmButton) {
+            confirmButton.disabled = true;
+            confirmButton.textContent = 'Kijelentkezés...';
+        }
+        setLogoutAllDevicesMessage('', 'info');
+
+        try {
+            const response = await fetch('/api/security/logout-all-devices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            const result = await parseJson(response);
+            if (!response.ok || !result.success) {
+                throw new Error(result.message || 'Nem sikerült kijelentkeztetni minden eszközről.');
+            }
+
+            if (socket) {
+                socket.disconnect();
+            }
+
+            setLogoutAllDevicesMessage(result.message || 'Sikeres kijelentkezés minden eszközről.', 'success');
+            setTimeout(() => {
+                window.location.href = '/';
+            }, 800);
+        } catch (error) {
+            console.error('Logout all devices hiba:', error);
+            setLogoutAllDevicesMessage(error.message || 'Hiba a kijelentkezés során.', 'danger');
+            logoutAllDevicesState.submitting = false;
+            if (confirmButton) {
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés minden eszközről';
+            }
+        }
+    }
+}
+
+function bindLogoutAllDevicesButton() {
+    const { modal, confirmButton } = getLogoutAllDevicesElements();
+    if (!logoutAllDevicesState.bound && modal && confirmButton) {
+        confirmButton.addEventListener('click', () => {
+            runSafelyAsync('logoutAllDevicesConfirmClick', async () => {
+                await handleLogoutAllDevices();
+            });
+        });
+
+        modal.addEventListener('show.bs.modal', () => {
+            runSafely('logoutAllDevicesModalShow', () => {
+                logoutAllDevicesState.submitting = false;
+                confirmButton.disabled = false;
+                confirmButton.textContent = 'Kijelentkezés minden eszközről';
+                setLogoutAllDevicesMessage('', 'info');
+            });
+        });
+
+        logoutAllDevicesState.bound = true;
+    }
+}
+
 function getTopBarPlayerSearchElements() {
     return {
         input: document.getElementById('playerSearchInput'),
@@ -1723,23 +2308,28 @@ function getProfileImageStatusMeta(statusInput) {
 }
 
 function applyProfileImagePresentation(user) {
-    const profileImagePath = (user?.profile_image || '').trim() || '/profile_pictures/default.png';
     const username = user?.username || 'Felhasznalo';
     const statusMeta = getProfileImageStatusMeta(user?.profile_image_status);
-    const normalizedImagePath = profileImagePath.toLowerCase();
-    const isPending = statusMeta.normalizedStatus === 'pending' && normalizedImagePath !== '/profile_pictures/default.png';
-    const isDefault = normalizedImagePath === '/profile_pictures/default.png';
 
     const avatars = [
         document.getElementById('profileAvatarDashboard'),
         document.getElementById('profileAvatarSettings')
     ].filter(Boolean);
 
+    let viewModel = null;
     avatars.forEach((avatarElement) => {
-        avatarElement.src = profileImagePath;
-        avatarElement.alt = `${username} profilkepe`;
-        avatarElement.classList.toggle('profile-image-pending', isPending);
+        const applied = window.MattMesterProfileImage.applyProfileImagePresentation(avatarElement, {
+            source: user,
+            alt: `${username} profilkepe`
+        });
+        if (applied) {
+            viewModel = applied;
+        }
     });
+
+    if (!viewModel) {
+        viewModel = window.MattMesterProfileImage.buildProfileImageViewModel(user);
+    }
 
     const statusElements = [
         document.getElementById('profileImageHeaderStatus'),
@@ -1752,11 +2342,10 @@ function applyProfileImagePresentation(user) {
         statusElement.textContent = `Profilkép státusz: ${statusMeta.label}`;
     });
 
-    // Remove gomb letiltása, ha a kép az alapértelmezett
     const removeButton = document.getElementById('removeAvatarButton');
     if (removeButton) {
-        removeButton.disabled = isDefault;
-        removeButton.title = isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet' : 'Profilkép eltávolítása';
+        removeButton.disabled = viewModel.isDefault;
+        removeButton.title = viewModel.isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet' : 'Profilkép eltávolítása';
     }
 }
 
@@ -2362,10 +2951,19 @@ async function submitProfileSettingsChanges() {
 
             const result = await parseJson(response);
             if (!response.ok || !result.success) {
+                handleEmailNotVerifiedCta(result);
                 throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
             }
 
             setProfileSettingsMessage('success', result.message || 'A profil beállítások sikeresen frissültek.');
+            if (result?.emailVerification?.required) {
+                if (result?.emailVerification?.sent) {
+                    setAccountStatusFeedback('warning', 'Az email címed megváltozott és most újra nem verifikált állapotban van. A megerősítő emailt elküldtük, kérjük erősítsd meg a címet.');
+                } else {
+                    setAccountStatusFeedback('danger', 'Az email címed megváltozott, de a verifikációs email küldése sikertelen volt. Kattints az újraküldés gombra az Account Status szekcióban.');
+                    scrollToAccountStatusAndHighlightResend();
+                }
+            }
             profileSettingsState.pendingPayload = null;
 
             if (elements.newPasswordInput) {
@@ -2965,6 +3563,7 @@ async function submitProfileImageUpload() {
 
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
+            handleEmailNotVerifiedCta(result);
             throw new Error(result.message || 'A képfeltöltés nem sikerült.');
         }
 
