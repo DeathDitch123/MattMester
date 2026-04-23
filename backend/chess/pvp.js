@@ -723,25 +723,33 @@ async function handlePvpDisconnect(userId, io) {
         matchmakingQueue.splice(queueIdx, 1);
     }
 
-    // Pending invite cleanup
-    // Ha ő volt a meghívó
-    for (const [targetId, invite] of pendingInvites) {
-        if (invite.inviterUserId === userId) {
-            clearTimeout(invite.timer);
-            pendingInvites.delete(targetId);
-            jatekTorol(invite.gameId);
-            io.to(`user-room:${targetId}`).emit('chess:invite:cancelled');
-            break;
+    // Pending invite cleanup — grace period, hogy oldalnavigáció (transport close → reconnect)
+    // ne törölje a meghívást. 5mp után újra ellenőrizzük, és csak akkor takarítunk, ha a user
+    // tényleg offline maradt (egy másik tab/socket sincs).
+    const INVITE_DISCONNECT_GRACE_MS = 5_000;
+    setTimeout(async () => {
+        const stillOnline = (await io.in(`user-room:${userId}`).fetchSockets()).length > 0;
+        if (stillOnline) return;
+
+        // Ha ő volt a meghívó
+        for (const [targetId, invite] of pendingInvites) {
+            if (invite.inviterUserId === userId) {
+                clearTimeout(invite.timer);
+                pendingInvites.delete(targetId);
+                jatekTorol(invite.gameId);
+                io.to(`user-room:${targetId}`).emit('chess:invite:cancelled');
+                break;
+            }
         }
-    }
-    // Ha ő volt a meghívott
-    if (pendingInvites.has(userId)) {
-        const invite = pendingInvites.get(userId);
-        clearTimeout(invite.timer);
-        pendingInvites.delete(userId);
-        jatekTorol(invite.gameId);
-        io.to(`user-room:${invite.inviterUserId}`).emit('chess:invite:expired', {});
-    }
+        // Ha ő volt a meghívott
+        if (pendingInvites.has(userId)) {
+            const invite = pendingInvites.get(userId);
+            clearTimeout(invite.timer);
+            pendingInvites.delete(userId);
+            jatekTorol(invite.gameId);
+            io.to(`user-room:${invite.inviterUserId}`).emit('chess:invite:expired', {});
+        }
+    }, INVITE_DISCONNECT_GRACE_MS);
 
     // Aktív PvP játék disconnect kezelése
     const gameId = activeGamesByUser.get(userId);

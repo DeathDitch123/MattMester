@@ -421,6 +421,23 @@ function pvpSocketKeres() {
     return pvpSocket;
 }
 
+// Másik oldalról elfogadott meghívás — chessInviteGlobal.js mentett egy gameId-t a sessionStorage-ba.
+// Ezt a sakk oldal betöltése után küldjük el a szervernek.
+const PENDING_CHESS_INVITE_ACCEPT_KEY = 'mattmester.pendingChessInviteAccept';
+function pendingChessInviteAcceptKuld(socket) {
+    if (!socket) return;
+    let payload = null;
+    try {
+        const raw = window.sessionStorage.getItem(PENDING_CHESS_INVITE_ACCEPT_KEY);
+        if (raw) payload = JSON.parse(raw);
+    } catch (_) {}
+    if (!payload || !payload.gameId) return;
+    try { window.sessionStorage.removeItem(PENDING_CHESS_INVITE_ACCEPT_KEY); } catch (_) {}
+    // 60s lejárat (a backend invite TTL-jéhez igazodva)
+    if (payload.ts && Date.now() - payload.ts > 60000) return;
+    socket.emit('chess:invite:accept', { gameId: payload.gameId });
+}
+
 function pvpSocketInit() {
     const socket = pvpSocketKeres();
     if (!socket) {
@@ -645,10 +662,9 @@ function pvpAllapotFrissit(allapot) {
     oldalVazVisszaallit();
     tablaRajzol(allapot, sajatSzin === 'black');
 
-    // Animáció az ellenfél lépéséhez
-    if (allapot.utolsoLepes && elozoAllapot && allapot.lepesszam !== elozoAllapot.lepesszam) {
-        const lepoSzin = allapot.koronLevo === 'white' ? 'black' : 'white';
-        if (lepoSzin !== sajatSzin) {
+    // Animáció minden új lépéshez (saját + ellenfél egyaránt)
+    if (ujLepesTortent(elozoAllapot, allapot)) {
+        {
             const animKulcs = allapotLepesKulcs(allapot);
             if (animKulcs && animKulcs !== utolsoAnimaltLepesKulcs) {
                 utolsoAnimaltLepesKulcs = animKulcs;
@@ -1039,6 +1055,13 @@ function botLepesAnimacioKell(elozoAllapot, ujAllapot) {
     return !!(ujAllapot.botAktiv && ujAllapot.botSzin === lepoSzin);
 }
 
+// Bármely új lépés (saját vagy ellenfél) történt-e az előző állapot óta.
+function ujLepesTortent(elozoAllapot, ujAllapot) {
+    if (!ujAllapot || !ujAllapot.utolsoLepes) return false;
+    if (!elozoAllapot) return false;
+    return ujAllapot.lepesszam !== elozoAllapot.lepesszam;
+}
+
 function lepesKuldesIndit() {
     lepesKuldesFolyamatban = true;
     if (lepesKuldesFailSafeTimer) clearTimeout(lepesKuldesFailSafeTimer);
@@ -1071,7 +1094,7 @@ function allapotFrissit(allapot, animald = false) {
     try { if (appObserver) appObserver.disconnect(); } catch(e) {}
     oldalVazVisszaallit();
     tablaRajzol(allapot, pvpAktiv && sajatSzin === 'black');
-    const automataAnimacio = botLepesAnimacioKell(elozoAllapot, allapot);
+    const automataAnimacio = ujLepesTortent(elozoAllapot, allapot);
     if ((animald || automataAnimacio) && allapot.utolsoLepes) {
         const animKulcs = allapotLepesKulcs(allapot);
         if (animKulcs && animKulcs !== utolsoAnimaltLepesKulcs) {
@@ -1469,8 +1492,12 @@ async function init() {
         const socket = pvpSocketKeres();
         if (socket && socket.connected) {
             socket.emit('chess:rejoin');
+            pendingChessInviteAcceptKuld(socket);
         } else if (socket) {
-            socket.once('connect', () => socket.emit('chess:rejoin'));
+            socket.once('connect', () => {
+                socket.emit('chess:rejoin');
+                pendingChessInviteAcceptKuld(socket);
+            });
         }
     }, 500);
 
