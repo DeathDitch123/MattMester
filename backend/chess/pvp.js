@@ -208,6 +208,8 @@ async function jatekIndit(io, socket1, socket2, user1Id, user1Name, user2Id, use
 // ── Fő handler regisztráció ──
 
 function registerPvpHandlers(socket, io) {
+    const ctx = socket.data?.socketContext;
+    console.log('[PvP] handler regisztráció', { socketId: socket.id, userId: ctx?.userId, username: ctx?.username });
 
     // ─────────────────────────────────────
     // BARÁT MEGHÍVÁS
@@ -469,6 +471,13 @@ function registerPvpHandlers(socket, io) {
         if (matchmakingQueue.length > 0) {
             const opponent = matchmakingQueue.shift();
 
+            // Self-match védelem (race condition esetén)
+            if (opponent.userId === userId) {
+                matchmakingQueue.push({ userId, username, elo, socketId: socket.id });
+                socket.emit('chess:queue:joined');
+                return;
+            }
+
             // Ellenfél socket megkeresése
             const opponentSockets = await io.in(`user-room:${opponent.userId}`).fetchSockets();
             const opponentSocket = opponentSockets.find(s => s.id === opponent.socketId) || opponentSockets[0];
@@ -506,6 +515,7 @@ function registerPvpHandlers(socket, io) {
 
     socket.on('chess:move', async ({ gameId, fromX, fromY, toX, toY, promotion }) => {
         const context = socket.data.socketContext;
+        console.log('[PvP] chess:move fogadva', { socketId: socket.id, userId: context?.userId, gameId, fromX, fromY, toX, toY });
         if (!context.userId) return;
 
         const jatek = jatekKeres(gameId);
@@ -514,6 +524,7 @@ function registerPvpHandlers(socket, io) {
         }
 
         const szin = getUserColorInGame(jatek, context.userId);
+        console.log('[PvP] chess:move szín check', { userId: context.userId, szin, koronLevo: jatek.koronLevo, whiteId: jatek.jatekosok.white.userId, blackId: jatek.jatekosok.black.userId });
         if (!szin) {
             return socket.emit('chess:error', { uzenet: 'Nem vagy résztvevője ennek a játéknak.' });
         }
