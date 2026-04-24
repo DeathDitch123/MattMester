@@ -86,8 +86,10 @@
         <div class="top-bar">
             <div class="top-bar-left">
                 <button
-                    class="btn btn-outline-gold d-lg-none py-1 px-2 d-flex align-items-center justify-content-center"
-                    onclick="toggleSidebar()" style="height: 40px; width: 40px; border-radius: 12px;">
+                    class="btn btn-outline-gold sidebar-toggle-btn py-1 px-2 d-flex align-items-center justify-content-center"
+                    onclick="toggleSidebar()" type="button" aria-label="Oldalsáv ki/be"
+                    aria-controls="sidebar" aria-expanded="true"
+                    style="height: 40px; width: 40px; border-radius: 12px;">
                     <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
                 </button>
                 <button class="top-bar-btn d-lg-none" type="button" data-tooltip="Keresés" data-bs-toggle="modal"

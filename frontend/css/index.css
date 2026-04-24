@@ -278,19 +278,202 @@ h6 {
     font-size: 0.8rem;
 }
 
+/* ── Leaderboard rich rendering: rank badge + profilkép + ELO pill ── */
+.rank-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 38px;
+    height: 32px;
+    padding: 0 8px;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    border: 1px solid transparent;
+    line-height: 1;
+}
+
+.rank-badge i {
+    font-size: 0.95rem;
+}
+
+.rank-default {
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-secondary);
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
 .rank-gold {
-    background: rgba(212, 175, 55, 0.2);
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.28), rgba(212, 175, 55, 0.12));
     color: var(--accent-gold);
+    border-color: rgba(212, 175, 55, 0.45);
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.18);
 }
 
 .rank-silver {
-    background: rgba(148, 163, 184, 0.2);
-    color: #cbd5e1;
+    background: linear-gradient(135deg, rgba(203, 213, 225, 0.25), rgba(148, 163, 184, 0.12));
+    color: #e2e8f0;
+    border-color: rgba(203, 213, 225, 0.4);
 }
 
 .rank-bronze {
-    background: rgba(251, 146, 60, 0.2);
+    background: linear-gradient(135deg, rgba(251, 146, 60, 0.25), rgba(217, 119, 6, 0.12));
     color: #fb923c;
+    border-color: rgba(251, 146, 60, 0.4);
+}
+
+.leaderboard-row.leaderboard-row--rank-1 {
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.08), transparent 60%);
+}
+
+.leaderboard-row.leaderboard-row--rank-2 {
+    background: linear-gradient(90deg, rgba(203, 213, 225, 0.07), transparent 60%);
+}
+
+.leaderboard-row.leaderboard-row--rank-3 {
+    background: linear-gradient(90deg, rgba(251, 146, 60, 0.07), transparent 60%);
+}
+
+.leaderboard-cell-rank {
+    width: 80px;
+}
+
+.leaderboard-cell-elo {
+    width: 110px;
+}
+
+.leaderboard-cell-date {
+    width: 130px;
+    color: var(--text-secondary);
+}
+
+.leaderboard-player {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+}
+
+.leaderboard-avatar-wrap {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    padding: 2px;
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.55), rgba(212, 175, 55, 0.05));
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.leaderboard-row--rank-1 .leaderboard-avatar-wrap {
+    background: linear-gradient(135deg, #d4af37, #b8891f);
+    box-shadow: 0 0 12px rgba(212, 175, 55, 0.35);
+}
+
+.leaderboard-row--rank-2 .leaderboard-avatar-wrap {
+    background: linear-gradient(135deg, #cbd5e1, #94a3b8);
+}
+
+.leaderboard-row--rank-3 .leaderboard-avatar-wrap {
+    background: linear-gradient(135deg, #fb923c, #d97706);
+}
+
+.leaderboard-avatar {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    object-position: center;
+    background-color: #0f172a;
+    border: 2px solid #0b1220;
+    display: block;
+}
+
+.leaderboard-player-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.leaderboard-elo-pill {
+    display: inline-block;
+    padding: 0.3rem 0.85rem;
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.12);
+    color: #93c5fd;
+    font-weight: 700;
+    font-size: 0.9rem;
+    border: 1px solid rgba(56, 189, 248, 0.25);
+    min-width: 68px;
+    text-align: center;
+}
+
+.leaderboard-row--rank-1 .leaderboard-elo-pill {
+    background: rgba(212, 175, 55, 0.18);
+    color: var(--accent-gold);
+    border-color: rgba(212, 175, 55, 0.45);
+}
+
+.leaderboard-date {
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 767.98px) {
+    .leaderboard-cell-rank {
+        width: 64px;
+    }
+
+    .leaderboard-cell-elo {
+        width: 90px;
+    }
+
+    .leaderboard-avatar-wrap {
+        width: 34px;
+        height: 34px;
+    }
+
+    .leaderboard-player-name {
+        font-size: 0.92rem;
+    }
+
+    .leaderboard-elo-pill {
+        font-size: 0.82rem;
+        padding: 0.25rem 0.6rem;
+        min-width: 56px;
+    }
+
+    .rank-badge {
+        min-width: 34px;
+        height: 28px;
+        font-size: 0.78rem;
+        padding: 0 6px;
+    }
+}
+
+@media (max-width: 480px) {
+    .leaderboard-table thead th,
+    .leaderboard-table tbody td {
+        padding: 0.7rem 0.45rem;
+    }
+
+    .leaderboard-cell-rank {
+        width: 52px;
+    }
+
+    .leaderboard-avatar-wrap {
+        width: 30px;
+        height: 30px;
+    }
+
+    .rank-badge i {
+        display: none;
+    }
 }
 
 .status-pill {

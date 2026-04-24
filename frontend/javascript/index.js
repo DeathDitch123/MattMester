@@ -144,6 +144,88 @@ function bindLeaderBoardControls() {
     });
 }
 
+function escapeHtmlForLeaderboard(value) {
+    const text = String(value == null ? '' : value);
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function getRankBadgeClass(index) {
+    let className = 'rank-default';
+    if (index === 0) {
+        className = 'rank-gold';
+    } else if (index === 1) {
+        className = 'rank-silver';
+    } else if (index === 2) {
+        className = 'rank-bronze';
+    }
+    return className;
+}
+
+function getRankIcon(index) {
+    let icon = '';
+    if (index === 0) {
+        icon = '<i class="bi bi-trophy-fill"></i>';
+    } else if (index === 1) {
+        icon = '<i class="bi bi-award-fill"></i>';
+    } else if (index === 2) {
+        icon = '<i class="bi bi-award"></i>';
+    }
+    return icon;
+}
+
+function formatLeaderboardDate(value) {
+    let formatted = '–';
+    try {
+        const date = new Date(value);
+        if (!Number.isNaN(date.getTime())) {
+            formatted = date.toLocaleDateString('hu-HU', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        }
+    } catch (error) {
+        formatted = '–';
+    }
+    return formatted;
+}
+
+function buildLeaderboardRowHtml(player, index, filter) {
+    const rankClass = getRankBadgeClass(index);
+    const rankIcon = getRankIcon(index);
+    const rawValue = filter === 'winRate' ? `${player.winrate_percent ?? 0}%` : (player[filter] ?? 0);
+    const value = escapeHtmlForLeaderboard(rawValue);
+    const lastActive = formatLeaderboardDate(player.last_active);
+    const joinedAt = formatLeaderboardDate(player.joined_at || player.created_at);
+    const username = escapeHtmlForLeaderboard(player.username || 'Ismeretlen');
+    const profileImageSrc = escapeHtmlForLeaderboard(
+        (window.MattMesterProfileImage?.normalizeProfileImageSource || ((value) => value || '/profile_pictures/default.png'))(player.profile_image)
+    );
+
+    return `
+        <tr class="leaderboard-row leaderboard-row--rank-${index + 1}">
+            <td class="leaderboard-cell-rank">
+                <span class="rank-badge ${rankClass}">
+                    ${rankIcon}
+                    <span class="rank-number-value">${index + 1}</span>
+                </span>
+            </td>
+            <td class="leaderboard-cell-player">
+                <div class="leaderboard-player">
+                    <span class="leaderboard-avatar-wrap">
+                        <img class="leaderboard-avatar" src="${profileImageSrc}" alt="${username} profilkép" loading="lazy" onerror="this.src='/profile_pictures/default.png'">
+                    </span>
+                    <span class="leaderboard-player-name" title="${username}">${username}</span>
+                </div>
+            </td>
+            <td class="leaderboard-cell-elo"><span class="leaderboard-elo-pill">${value}</span></td>
+            <td class="leaderboard-cell-date d-none d-md-table-cell"><span class="leaderboard-date">${lastActive}</span></td>
+            <td class="leaderboard-cell-date d-none d-lg-table-cell"><span class="leaderboard-date">${joinedAt}</span></td>
+        </tr>
+    `;
+}
+
 function renderLeaderBoard() {
     const filterElement = document.getElementById('leaderboardEloFilter');
     const limitElement = document.getElementById('leaderboardLimit');
@@ -159,37 +241,18 @@ function renderLeaderBoard() {
     const limit = Number(limitElement.value);
 
     try {
-        tbody.innerHTML = '';
-
         const sortedData = [...(LeaderboardData[filter] || [])].slice(0, limit);
 
         if (emptyElement) {
             emptyElement.classList.toggle('d-none', sortedData.length > 0);
         }
-        if (lastUpdatedElement) {
-            if (LeaderboardData.lastUpdated) {
-                lastUpdatedElement.textContent = `frissítve: ${new Date(LeaderboardData.lastUpdated).toLocaleString('hu-HU')}`;
-            }
+        if (lastUpdatedElement && LeaderboardData.lastUpdated) {
+            lastUpdatedElement.textContent = `frissítve: ${new Date(LeaderboardData.lastUpdated).toLocaleString('hu-HU')}`;
         }
 
-        tbody.innerHTML = sortedData.map((player, index) => {
-            const val = filter === 'winRate' ? player.winrate_percent + '%' : player[filter];
-            const joinedAt = player.joined_at || player.created_at;
-
-            return `
-                <tr>
-                    <td class="fw-bold ${index < 3 ? 'text-warning' : 'text-secondary'}">#${index + 1}</td>
-                    <td>
-                        <div class="d-flex align-items-center">
-                            <span class="text-white">${player.username}</span>
-                        </div>
-                    </td>
-                    <td class="text-center fw-bold text-info">${val}</td>
-                    <td class="text-center small text-white">${new Date(player.last_active).toLocaleDateString('hu-HU')}</td>
-                    <td class="text-center small text-white">${new Date(joinedAt).toLocaleDateString('hu-HU')}</td>
-                </tr>
-                `;
-        }).join('');
+        tbody.innerHTML = sortedData
+            .map((player, index) => buildLeaderboardRowHtml(player, index, filter))
+            .join('');
     } catch (error) {
         console.error('Hiba a ranglista megjelenítése során:', error);
     }

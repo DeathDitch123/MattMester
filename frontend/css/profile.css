@@ -149,12 +149,25 @@ h6 {
     min-height: 100vh;
     border-right: 1px solid var(--border-color);
     position: fixed;
+    top: 0;
+    left: 0;
     width: 272px;
     z-index: 1000;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     backdrop-filter: blur(20px);
+}
+
+/* Admin-stilusu osszehuzhato sidebar minden viewport-meretben.
+   Desktopon a 'collapsed' allapot eltunteti az oldalsavot es a main-content
+   margojat is nullara csukja az 'expanded' osztaly hatasara. */
+.sidebar.collapsed {
+    transform: translateX(-100%);
+}
+
+.main-content.expanded {
+    margin-left: 0 !important;
 }
 
 .sidebar-brand {
@@ -233,6 +246,23 @@ h6 {
     min-height: 100vh;
     position: relative;
     z-index: 1;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* A toggle gomb minden meretben latszik, kis ikonos kerek formaban.
+   Az aria-expanded allapot vizualisan megfordit egy fokot, hogy ranezesre
+   eldontheto legyen, hogy nyitva van-e a sidebar. */
+.sidebar-toggle-btn {
+    flex-shrink: 0;
+}
+
+.sidebar-toggle-btn[aria-expanded="false"] i {
+    transform: rotate(180deg);
+    transition: transform 0.25s ease;
+}
+
+.sidebar-toggle-btn i {
+    transition: transform 0.25s ease;
 }
 
 .main-content-inner {
