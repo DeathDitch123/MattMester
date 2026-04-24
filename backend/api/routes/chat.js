@@ -246,6 +246,31 @@ router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, 
         }
 
         const data = await sql.insertMessageInConversation(currentUserId, conversationId, message, policyResult);
+
+        // Authoritative real-time broadcast: a resztvevok (kuldovel egyutt) kapjanak
+        // chat:message:new + chat:unread:update + chat:list:refresh eventeket,
+        // hogy a chat ikon badge-e valos idoben frissuljon, meg akkor is, ha a
+        // cimzettnek nincs megnyitva a beszelgetes.
+        const socketHub = request.app?.locals?.socketHub;
+        if (socketHub?.broadcastChat) {
+            try {
+                socketHub.broadcastChat(conversationId, {
+                    ...data,
+                    conversationId,
+                    receivedAt: new Date().toISOString()
+                });
+            } catch (broadcastError) {
+                console.warn('[chat REST] broadcastChat hiba:', broadcastError.message);
+            }
+        }
+        if (socketHub?.broadcastChatMessageSideEffects) {
+            try {
+                await socketHub.broadcastChatMessageSideEffects(conversationId, currentUserId);
+            } catch (sideEffectError) {
+                console.warn('[chat REST] side-effect hiba:', sideEffectError.message);
+            }
+        }
+
         payload = {
             success: true,
             data,

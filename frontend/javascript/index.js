@@ -357,6 +357,19 @@ async function handleLogout() {
         }
 
         showToast(result.message || 'Sikeres kijelentkezés.');
+        // Explicit badge nullázás azonnal, még a reconnect előtt: a UI ne
+        // mutassa villanásnyira sem a régi user olvasatlan számát.
+        try {
+            window.dispatchEvent(new CustomEvent('mattmester:notification:reset', {
+                detail: { reason: 'logout', at: new Date().toISOString() }
+            }));
+            window.dispatchEvent(new CustomEvent('mattmester:chat:unread:reset', {
+                detail: { reason: 'logout', at: new Date().toISOString() }
+            }));
+        } catch (resetError) {
+            console.warn('[index] logout reset dispatch hiba:', resetError.message);
+        }
+
         if (socket) {
             socket.disconnect();
             socket.connect();

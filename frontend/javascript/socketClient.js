@@ -695,6 +695,39 @@
             updateSocketInfoPanel(socketState);
         });
 
+        socket.on('notification:reset', (payload = {}) => {
+            // Session váltás (login / logout / user A -> user B) után érkezik:
+            // a kliens törölje a cache-elt értesítés listát és badge-et.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:reset', {
+                    detail: {
+                        previousUserId: payload?.previousUserId || null,
+                        currentUserId: payload?.currentUserId || null,
+                        reason: payload?.reason || 'session-change',
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (resetError) {
+                console.warn('[socketClient] notification:reset hiba:', resetError.message);
+            }
+        });
+
+        socket.on('chat:unread:reset', (payload = {}) => {
+            // Session váltás után a chat unread totalt is nullázzuk.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:chat:unread:reset', {
+                    detail: {
+                        previousUserId: payload?.previousUserId || null,
+                        currentUserId: payload?.currentUserId || null,
+                        reason: payload?.reason || 'session-change',
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (resetError) {
+                console.warn('[socketClient] chat:unread:reset hiba:', resetError.message);
+            }
+        });
+
         socket.on('notification:push', (payload = {}) => {
             // Notification payload továbbítása globális eseményként a közös moduloknak.
             const normalizedPayload = normalizeNotificationPayload(payload);

@@ -91,12 +91,14 @@ const notificationCenterState = {
     initialized: false,
     items: [],
     unreadCount: 0,
-    maxItems: 50
+    maxItems: 50,
+    lastKnownUserId: 0
 };
 const chatBadgeState = {
     bound: false,
     initialized: false,
-    totalUnread: 0
+    totalUnread: 0,
+    lastKnownUserId: 0
 };
 const NOTIFICATION_BADGE_CAP = 99;
 const accountStatusState = {
@@ -482,6 +484,53 @@ async function performFriendActionFromNotification(action, fromUserId) {
     return outcome;
 }
 
+function resetNotificationCenterState(reason = 'session-change') {
+    // Teljes cache torles: session valtas / logout / user A -> user B eseten
+    // a modalban ne maradjanak a regi user ertesitesei.
+    try {
+        console.log('[notifications] reset:', reason);
+        notificationCenterState.items = [];
+        notificationCenterState.unreadCount = 0;
+        setNotificationBadge(0);
+        renderNotificationCenterList();
+    } catch (error) {
+        console.warn('[notifications] reset hiba:', error.message);
+    }
+}
+
+function resetChatBadgeState(reason = 'session-change') {
+    try {
+        console.log('[chat badge] reset:', reason);
+        chatBadgeState.totalUnread = 0;
+        setChatBadge(0);
+    } catch (error) {
+        console.warn('[chat badge] reset hiba:', error.message);
+    }
+}
+
+async function refreshNotificationAndChatStateForCurrentSession(reason = 'session-refresh') {
+    // Authoritative lekerdezes a szerverrol: a UI pontosan azt mutassa,
+    // amit a DB tarol a belepett userre. Ha nincs user, mindent nullazunk.
+    try {
+        console.log('[notifications+chat] refresh:', reason);
+        const sessionInfo = await fetchSessionInfo();
+        const loggedIn = Boolean(sessionInfo?.user?.id);
+        if (loggedIn) {
+            notificationCenterState.lastKnownUserId = Number(sessionInfo.user.id) || 0;
+            chatBadgeState.lastKnownUserId = Number(sessionInfo.user.id) || 0;
+            await fetchNotificationsFromServer();
+            await fetchChatUnreadTotal();
+        } else {
+            notificationCenterState.lastKnownUserId = 0;
+            chatBadgeState.lastKnownUserId = 0;
+            resetNotificationCenterState(reason);
+            resetChatBadgeState(reason);
+        }
+    } catch (error) {
+        console.warn('[notifications+chat] refresh hiba:', error.message);
+    }
+}
+
 function bindNotificationCenterEvents() {
     if (!notificationCenterState.bound) {
         const { list, modal, markAllBtn } = getNotificationCenterElements();
@@ -517,6 +566,30 @@ function bindNotificationCenterEvents() {
             runSafely('chatUnreadTotalUpdate', () => {
                 const total = Number(event?.detail?.totalUnread) || 0;
                 setChatBadge(total);
+            });
+        });
+
+        window.addEventListener('mattmester:notification:reset', (event) => {
+            runSafely('notificationResetFromServer', () => {
+                const reason = String(event?.detail?.reason || 'session-change');
+                resetNotificationCenterState(reason);
+            });
+        });
+
+        window.addEventListener('mattmester:chat:unread:reset', (event) => {
+            runSafely('chatUnreadResetFromServer', () => {
+                const reason = String(event?.detail?.reason || 'session-change');
+                resetChatBadgeState(reason);
+            });
+        });
+
+        window.addEventListener('mattmester:session-context:changed', (event) => {
+            // Amikor a socket:state / presence:state observer session valtast jelez,
+            // authoritative refresh-t inditunk a backend fele, hogy a frontend
+            // allapot mindig a DB-vel legyen szinkronban.
+            runSafelyAsync('notificationSessionContextRefresh', async () => {
+                const reason = `session-context:${event?.detail?.trigger || 'change'}`;
+                await refreshNotificationAndChatStateForCurrentSession(reason);
             });
         });
 
@@ -926,6 +999,12 @@ function bindCrossTabProfileRefreshEvents() {
             const unsubscribe = window.MattMesterSocket.subscribeSessionContextChanges(async (eventPayload = {}) => {
                 try {
                     await refreshAuthUi();
+                    // Session valtas eseten az ertesites es chat unread allapotot
+                    // is authoritative modon be kell tolteni, kulonben a modalban
+                    // es a chat ikonon a regi user adatai maradnak.
+                    await refreshNotificationAndChatStateForCurrentSession(
+                        `cross-tab:${eventPayload?.trigger || 'change'}`
+                    );
                 } catch (error) {
                     throw new Error(`Cross-tab profil frissítési hiba: ${error.message}`);
                 }

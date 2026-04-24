@@ -20,6 +20,7 @@
     const state = {
         initialized: false,
         globalEventsBound: false,
+        sessionResetBound: false,
         options: { ...DEFAULTS },
         activeConversationId: null,
         conversationList: [],
@@ -1062,6 +1063,33 @@
         return globalScope.MattMesterSocket?.socket || null;
     }
 
+    function resetAllConversationState(reason = 'session-change') {
+        // Teljes cache dobas: session valtas (login / logout / user A -> user B)
+        // utan ne maradjon a regi user beszelgetes-listaja, uzenetei, aktiv
+        // beszelgetese. Kulonben a chat ikon badge es a modal inkonzisztens lenne.
+        try {
+            console.log('[chatModal] reset conversations:', reason);
+            state.conversationList = [];
+            state.messagesByConversation = new Map();
+            state.paginationCursorByConversation = new Map();
+            state.hasMoreByConversation = new Map();
+            state.isLoadingByConversation = new Map();
+            state.activeConversationId = null;
+            state.searchText = '';
+            if (dom.searchInput) {
+                dom.searchInput.value = '';
+            }
+            setHasActiveConversation(false);
+            updateConversationHeader(null);
+            renderConversationList();
+            renderMessageList();
+            setFeedback('', false);
+            dispatchChatUnreadTotalEvent();
+        } catch (resetError) {
+            console.warn('[chatModal] reset hiba:', resetError.message);
+        }
+    }
+
     function bindSocketEvents() {
         const socket = getSocket();
         if (socket && state.boundSocket !== socket) {
@@ -1077,6 +1105,21 @@
             socket.on('chat:error', onSocketError);
             socket.on('chat:conversation:deleted', onSocketConversationDeleted);
             socket.on('chat:list:refresh', onSocketChatListRefresh);
+        }
+    }
+
+    function bindChatSessionResetHandler() {
+        // Session valtas vagy logout eseten a backend kuld egy reset eventet,
+        // illetve a profile.js is dispatchelhet lokalis resetet. Mindket esetben
+        // a cachelt beszelgeteseket eldobjuk.
+        if (!state.sessionResetBound) {
+            globalScope.addEventListener('mattmester:chat:unread:reset', () => {
+                resetAllConversationState('server-chat-unread-reset');
+            });
+            globalScope.addEventListener('mattmester:session-context:changed', () => {
+                resetAllConversationState('session-context-changed');
+            });
+            state.sessionResetBound = true;
         }
     }
 
@@ -1462,6 +1505,7 @@
 
         if (state.initialized) {
             bindSocketEvents();
+            bindChatSessionResetHandler();
         } else {
             ensureStyles();
             ensureMarkup();
@@ -1474,6 +1518,7 @@
             bindEvents();
             bindSocketEvents();
             bindGlobalEvents();
+            bindChatSessionResetHandler();
             updateConversationHeader(null);
             setHasActiveConversation(false);
 
