@@ -12,7 +12,16 @@
       "Bash(node -c sockets.js)",
       "Bash(node -c api/routes/admin.js)",
       "Bash(node -c backend/chess/pvp.js)",
-      "Bash(node -c frontend/chess_barold/javascript/main.js)"
+      "Bash(node -c frontend/chess_barold/javascript/main.js)",
+      "Bash(node -c chess/state.js)",
+      "Bash(node -c chess/abilities.js)",
+      "Bash(node -c chess/engine.js)",
+      "Bash(node -c chess/timer.js)",
+      "Bash(node -c chess/pvp.js)",
+      "Bash(node -c chess/bot.js)",
+      "Bash(node -c api/chess_api.js)",
+      "Bash(node -c chess/chess_sql_functions.js)",
+      "Bash(node -c sql/database.js)"
     ]
   }
 }

@@ -12,10 +12,10 @@ const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens } = require('.
 const { jatekUjraIndit, legalLepesekKliens, lepesKoordinataval } = require('../chess/engine.js');
 const { idoLeall } = require('../chess/timer.js');
 const chessSql = require('../chess/chess_sql_functions.js');
-const { botLepesValaszt, nehezsegiSzintInfo, osszesNehezsegiSzint } = require('../chess/bot.js');
+const { botLepesValaszt, botKepessegValaszt, nehezsegiSzintInfo, osszesNehezsegiSzint } = require('../chess/bot.js');
 const { eloSzamit, KEZDO_ELO } = require('../chess/elo.js');
 const { requireVerifiedEmail } = require('./funtions.js');
-const { abilityAktival, getKliensConfig } = require('../chess/abilities.js');
+const { abilityAktival, getKliensConfig, ABILITY_CONFIG } = require('../chess/abilities.js');
 
 function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -259,6 +259,23 @@ router.post('/:id/move', async (req, res) => {
                 try {
                     // Késleltetés az UI stabil megjelenítéséhez, majd bot számítás.
                     await varakozas(botConfig.varakozasMs);
+
+                    // Bot képesség-választás (Phase 4) — ha aktivál ability-t és az
+                    // turnCost-os, akkor a kör már átvált, lépésre nincs szükség.
+                    if (!jatek.vege) {
+                        const botAbility = botKepessegValaszt(jatek, jatek.nehezseg);
+                        if (botAbility) {
+                            const ar = abilityAktival(jatek, jatek.botSzin, botAbility.key, botAbility.params);
+                            if (ar.success) {
+                                console.log(`[BOT] képesség aktiválva: ${botAbility.key}`);
+                                const c = ABILITY_CONFIG[botAbility.key];
+                                if (c && c.turnCost) {
+                                    // A bot köre most ellenfélé — nincs lépés
+                                    return;
+                                }
+                            }
+                        }
+                    }
 
                     const botValasz = jatek.vege ? null : botLepesValaszt(jatek, jatek.nehezseg);
                     if (botValasz && !jatek.vege) {
