@@ -247,6 +247,22 @@ router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, 
 
         const data = await sql.insertMessageInConversation(currentUserId, conversationId, message, policyResult);
 
+        // Broadcast-szintű maszkolás: a sender saját pending képe nem szivároghat
+        // ki a többi résztvevőhöz. A REST válaszban (alább) a feladó saját nézete
+        // marad meg; a socket payload-ot defaultra cseréljük, ha a feltöltés még
+        // pending. (Az approved kép globálisan látható.)
+        const broadcastSafeData = (() => {
+            const isPending = String(data?.senderProfileImageStatus || '').toLowerCase() === 'pending';
+            if (!isPending) {
+                return data;
+            }
+            return {
+                ...data,
+                senderProfileImage: '/profile_pictures/default.png',
+                senderProfileImageStatus: 'default'
+            };
+        })();
+
         // Authoritative real-time broadcast: a resztvevok (kuldovel egyutt) kapjanak
         // chat:message:new + chat:unread:update + chat:list:refresh eventeket,
         // hogy a chat ikon badge-e valos idoben frissuljon, meg akkor is, ha a
@@ -255,7 +271,7 @@ router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, 
         if (socketHub?.broadcastChat) {
             try {
                 socketHub.broadcastChat(conversationId, {
-                    ...data,
+                    ...broadcastSafeData,
                     conversationId,
                     receivedAt: new Date().toISOString()
                 });

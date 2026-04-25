@@ -631,11 +631,6 @@ h6 {
     transform: scale(1.05);
 }
 
-.profile-image-pending-blur,
-img[data-profile-image-pending="1"] {
-    filter: blur(3px) saturate(0.75) !important;
-}
-
 .profile-status {
     display: inline-flex;
     align-items: center;

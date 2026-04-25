@@ -25,6 +25,26 @@ function isAllowedProfileImagePath(value) {
     return ALLOWED_PROFILE_IMAGE_EXTENSIONS.has(extension);
 }
 
+// Egységes láthatósági szabály: pending képet csak a tulajdonosa lát.
+// Bárki más (vagy publikus/cache-elt nézet, ahol nincs viewer) az alapértelmezett képet kapja.
+// A 'rejected' státusz biztonsági okból szintén default fallback. Az 'approved'/'default' érintetlen.
+function applyProfileImageVisibility(profileImage, profileImageStatus, ownerUserId, viewerUserId) {
+    const normalizedStatus = String(profileImageStatus || 'approved').toLowerCase();
+    const normalizedOwnerId = Number(ownerUserId) || 0;
+    const normalizedViewerId = Number(viewerUserId) || 0;
+    const isOwner = normalizedOwnerId > 0 && normalizedOwnerId === normalizedViewerId;
+    let result = {
+        profileImage: profileImage || DEFAULT_PROFILE_IMAGE_PATH,
+        profileImageStatus: normalizedStatus || 'approved'
+    };
+    if (normalizedStatus === 'pending' && !isOwner) {
+        result = { profileImage: DEFAULT_PROFILE_IMAGE_PATH, profileImageStatus: 'default' };
+    } else if (normalizedStatus === 'rejected') {
+        result = { profileImage: DEFAULT_PROFILE_IMAGE_PATH, profileImageStatus: 'default' };
+    }
+    return result;
+}
+
 async function normalizeUserProfileImage(pool, userId, currentProfileImage, latestUploadStatus) {
     let normalizedProfileImage = currentProfileImage;
 
@@ -177,59 +197,84 @@ async function updateUserPasswordAndClearResetToken(userId, passwordHash) {
     }
     return result;
 }
+// Publikus, cache-elt ranglistákon a pending képet mindig default-ra cseréljük
+// (a leaderboard-ot mindenki látja, így a pending nem szivároghat ki).
+const LEADERBOARD_PROFILE_IMAGE_EXPRESSION = `
+    CASE
+        WHEN u.profile_image = '/profile_pictures/default.png' THEN '/profile_pictures/default.png'
+        WHEN COALESCE(
+            (
+                SELECT piu.status
+                FROM profile_image_uploads piu
+                WHERE piu.user_id = u.id
+                ORDER BY piu.upload_time DESC, piu.id DESC
+                LIMIT 1
+            ),
+            'approved'
+        ) IN ('pending', 'rejected') THEN '/profile_pictures/default.png'
+        ELSE u.profile_image
+    END AS profile_image
+`;
+
 async function getLeaderBoardByElo() {
     const pool = getPool();
-    const query = `SELECT id, username, elo, profile_image, last_active, created_at
-                   FROM users
-                   WHERE is_banned = FALSE
-                   ORDER BY elo DESC
+    const query = `SELECT u.id, u.username, u.elo, ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION}, u.last_active, u.created_at
+                   FROM users u
+                   WHERE u.is_banned = FALSE
+                   ORDER BY u.elo DESC
                    LIMIT 100`;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getLeaderBoardByMM() {
     const pool = getPool();
-    const query = `SELECT id, username, elo_MM, profile_image, last_active, created_at
-                   FROM users
-                   WHERE is_banned = FALSE
-                   ORDER BY elo_MM DESC
+    const query = `SELECT u.id, u.username, u.elo_MM, ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION}, u.last_active, u.created_at
+                   FROM users u
+                   WHERE u.is_banned = FALSE
+                   ORDER BY u.elo_MM DESC
                    LIMIT 100`;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getLeaderBoardByBullet() {
     const pool = getPool();
-    const query = `SELECT id, username, elo_bullet, profile_image, last_active, created_at
-                   FROM users
-                   WHERE is_banned = FALSE
-                   ORDER BY elo_bullet DESC
+    const query = `SELECT u.id, u.username, u.elo_bullet, ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION}, u.last_active, u.created_at
+                   FROM users u
+                   WHERE u.is_banned = FALSE
+                   ORDER BY u.elo_bullet DESC
                    LIMIT 100`;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getLeaderBoardByWinRate() {
     const pool = getPool();
     const query = `
-        SELECT 
+        SELECT
             u.id,
             u.username,
             u.elo,
-            u.profile_image,
+            ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION},
             ROUND(
                 IFNULL(
                     (s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 
@@ -247,17 +292,19 @@ async function getLeaderBoardByWinRate() {
             statistics s ON u.id = s.user_id
         WHERE 
             u.is_banned = FALSE
-        ORDER BY 
+        ORDER BY
             u.elo DESC,
             winrate_percent DESC
         LIMIT 100;
         `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getSessionUserById(userId) {
@@ -366,7 +413,7 @@ async function getSessionUserById(userId) {
     }
 }
 
-async function getPublicPlayerProfileById(targetUserId) {
+async function getPublicPlayerProfileById(targetUserId, viewerUserId = 0) {
     const pool = getPool();
     const query = `
         SELECT
@@ -400,17 +447,26 @@ async function getPublicPlayerProfileById(targetUserId) {
         LIMIT 1
     `;
 
+    let result = null;
     try {
         const [rows] = await pool.execute(query, [targetUserId]);
-        if (!rows.length) {
-            return null;
+        if (rows.length) {
+            const row = rows[0];
+            const visibility = applyProfileImageVisibility(
+                row.profile_image,
+                row.profile_image_status,
+                row.id,
+                viewerUserId
+            );
+            row.profile_image = visibility.profileImage;
+            row.profile_image_status = visibility.profileImageStatus;
+            result = row;
         }
-
-        return rows[0];
     } catch (error) {
         console.error('Hiba a publikus játékos profil lekérdezése során:', error);
         throw new Error('Nem sikerült a játékos profil lekérése.');
     }
+    return result;
 }
 
 async function getUserAuthById(userId) {
@@ -1074,13 +1130,27 @@ async function searchUsersByUsernameContains(searchText, currentUserId) {
           AND u.is_banned = FALSE
         ORDER BY u.username ASC
     `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query, [currentUserId, currentUserId, `%${searchText}%`, currentUserId]);
-        return rows;
+        result = rows.map((row) => {
+            const visibility = applyProfileImageVisibility(
+                row.profile_image,
+                row.profile_image_status,
+                row.id,
+                currentUserId
+            );
+            return {
+                ...row,
+                profile_image: visibility.profileImage,
+                profile_image_status: visibility.profileImageStatus
+            };
+        });
     } catch (error) {
         console.error('Hiba a felhasználó keresése során:', error);
-        return [];
+        result = [];
     }
+    return result;
 }
 
 
@@ -1261,17 +1331,24 @@ async function isEitherUserBlocked(currentUserId, targetUserId, executor = null)
     }
 }
 
-function buildFriendListItem(row, relationStatus) {
+function buildFriendListItem(row, relationStatus, viewerUserId = 0) {
     const normalizedStatus = String(relationStatus || 'none');
     const ownBlockActive = Boolean(Number(row.own_block_active || 0));
     const oppositeBlockActive = Boolean(Number(row.opposite_block_active || 0));
     const isBlockedContext = normalizedStatus.startsWith('blocked');
 
+    const visibility = applyProfileImageVisibility(
+        row.profile_image,
+        row.profile_image_status,
+        row.id,
+        viewerUserId
+    );
+
     return {
         userId: row.id,
         username: row.username,
-        profileImage: row.profile_image || '/profile_pictures/default.png',
-        profileImageStatus: row.profile_image_status || 'approved',
+        profileImage: visibility.profileImage,
+        profileImageStatus: visibility.profileImageStatus,
         relationStatus: normalizedStatus,
         canView: normalizedStatus === 'friends' || normalizedStatus === 'incoming_pending' || isBlockedContext,
         canAccept: normalizedStatus === 'incoming_pending',
@@ -1326,7 +1403,7 @@ async function getAcceptedFriendsForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId]);
-        return rows.map((row) => buildFriendListItem(row, 'friends'));
+        return rows.map((row) => buildFriendListItem(row, 'friends', userId));
     } catch (error) {
         throw new Error('Hiba a baratlista lekerdezese soran.');
     }
@@ -1373,7 +1450,7 @@ async function getIncomingPendingFriendsForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId, userId]);
-        return rows.map((row) => buildFriendListItem(row, 'incoming_pending'));
+        return rows.map((row) => buildFriendListItem(row, 'incoming_pending', userId));
     } catch (error) {
         throw new Error('Hiba a bejovo baratkerelmek lekerdezese soran.');
     }
@@ -1411,7 +1488,7 @@ async function getBlockedUsersForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId]);
-        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 1, opposite_block_active: 0 }, 'blocked_by_me'));
+        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 1, opposite_block_active: 0 }, 'blocked_by_me', userId));
     } catch (error) {
         throw new Error('Hiba a tiltott felhasznalok lekerdezese soran.');
     }
@@ -1449,7 +1526,7 @@ async function getBlockedByThemForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId]);
-        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 0, opposite_block_active: 1 }, 'blocked_by_them'));
+        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 0, opposite_block_active: 1 }, 'blocked_by_them', userId));
     } catch (error) {
         throw new Error('Hiba a masik fel altal tiltott lista lekerdezese soran.');
     }
@@ -2424,12 +2501,20 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
             unreadCount: Number(row.unread_count || 0),
             participantCount: Number(row.participant_count || 0),
             otherUser: row.other_user_id
-                ? {
-                    userId: row.other_user_id,
-                    username: row.other_user_username,
-                    profileImage: row.other_user_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
-                    profileImageStatus: row.other_user_profile_image_status || 'default'
-                }
+                ? (() => {
+                    const visibility = applyProfileImageVisibility(
+                        row.other_user_profile_image,
+                        row.other_user_profile_image_status,
+                        row.other_user_id,
+                        normalizedUserId
+                    );
+                    return {
+                        userId: row.other_user_id,
+                        username: row.other_user_username,
+                        profileImage: visibility.profileImage,
+                        profileImageStatus: visibility.profileImageStatus
+                    };
+                })()
                 : null
         }));
 
@@ -2507,18 +2592,26 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
         const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
 
         return {
-            data: sliced.map((row) => ({
-                id: row.id,
-                conversationId: row.conversation_id,
-                senderId: row.sender_id,
-                senderUsername: row.sender_username,
-                senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
-                senderProfileImageStatus: row.sender_profile_image_status || 'default',
-                body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
-                bodyOriginal: row.body,
-                isBodyMasked: Boolean(row.is_body_masked),
-                sentAt: row.sent_at
-            })),
+            data: sliced.map((row) => {
+                const visibility = applyProfileImageVisibility(
+                    row.sender_profile_image,
+                    row.sender_profile_image_status,
+                    row.sender_id,
+                    normalizedUserId
+                );
+                return {
+                    id: row.id,
+                    conversationId: row.conversation_id,
+                    senderId: row.sender_id,
+                    senderUsername: row.sender_username,
+                    senderProfileImage: visibility.profileImage,
+                    senderProfileImageStatus: visibility.profileImageStatus,
+                    body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
+                    bodyOriginal: row.body,
+                    isBodyMasked: Boolean(row.is_body_masked),
+                    sentAt: row.sent_at
+                };
+            }),
             hasMore,
             nextCursor: hasMore && sliced.length ? sliced[sliced.length - 1].id : null
         };
@@ -3338,6 +3431,7 @@ async function getAllActiveUserIds() {
 }
 
 module.exports = {
+    applyProfileImageVisibility,
     insertUser,
     getUserByUsername,
     getUserByEmail,

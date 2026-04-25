@@ -2652,36 +2652,37 @@ function bindModalPlayerSearchValidation() {
 
 function getProfileImageStatusMeta(statusInput) {
     const normalizedStatus = String(statusInput || '').trim().toLowerCase() || 'approved';
-
-    if (normalizedStatus === 'pending') {
-        return {
-            normalizedStatus,
-            textClass: 'text-warning',
-            label: 'Függő (elbírálásra vár)'
-        };
-    }
-
-    if (normalizedStatus === 'rejected') {
-        return {
-            normalizedStatus,
-            textClass: 'text-danger',
-            label: 'Elutasított'
-        };
-    }
-
-    if (normalizedStatus === 'default') {
-        return {
-            normalizedStatus,
-            textClass: 'text-info',
-            label: 'Alapértelmezett'
-        };
-    }
-
-    return {
+    let meta = {
         normalizedStatus: 'approved',
         textClass: 'text-success',
-        label: 'Jóváhagyott'
+        label: 'Jóváhagyott',
+        helpText: ''
     };
+
+    if (normalizedStatus === 'pending') {
+        meta = {
+            normalizedStatus,
+            textClass: 'text-warning',
+            label: 'Függő (elbírálásra vár)',
+            helpText: 'Csak te látod ezt a képet. Mások az alapértelmezett képet látják jóváhagyásig.'
+        };
+    } else if (normalizedStatus === 'rejected') {
+        meta = {
+            normalizedStatus,
+            textClass: 'text-danger',
+            label: 'Elutasított',
+            helpText: 'A kép elutasításra került, a publikus profilkép visszaállt az alapértelmezettre.'
+        };
+    } else if (normalizedStatus === 'default') {
+        meta = {
+            normalizedStatus,
+            textClass: 'text-info',
+            label: 'Alapértelmezett',
+            helpText: ''
+        };
+    }
+
+    return meta;
 }
 
 function applyProfileImagePresentation(user) {
@@ -2716,7 +2717,10 @@ function applyProfileImagePresentation(user) {
     statusElements.forEach((statusElement) => {
         statusElement.classList.remove('text-secondary', 'text-success', 'text-warning', 'text-danger', 'text-info');
         statusElement.classList.add(statusMeta.textClass);
-        statusElement.textContent = `Profilkép státusz: ${statusMeta.label}`;
+        const baseText = `Profilkép státusz: ${statusMeta.label}`;
+        statusElement.textContent = statusMeta.helpText
+            ? `${baseText} — ${statusMeta.helpText}`
+            : baseText;
     });
 
     const removeButton = document.getElementById('removeAvatarButton');

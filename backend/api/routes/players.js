@@ -58,7 +58,8 @@ router.get('/players/:targetUserId/profile', isAuthenticated, async (request, re
         const targetUserId = Number(request.params?.targetUserId) || 0;
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen játékos azonosító.'); }
 
-        const profile = await sql.getPublicPlayerProfileById(targetUserId);
+        const viewerUserId = Number(request.session?.userId) || 0;
+        const profile = await sql.getPublicPlayerProfileById(targetUserId, viewerUserId);
         if (!profile) { statusCode = 404; throw new Error('A játékos nem található.'); }
 
         payload = {

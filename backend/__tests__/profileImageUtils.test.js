@@ -1,10 +1,10 @@
 /**
  * MattMesterProfileImage frontend modul unit tesztjei.
  *
- * Cel: a pending profilkep megjelenitesi logikat (blur osztaly + data
- * attribute + viewmodel) izoláltan vizsgálni, jsdom nelkül. Egy kis fake DOM
- * elemet hasznalunk, ami csak a relevans API-t (classList, dataset, addEventListener)
- * implementalja.
+ * Cel: a profilkep megjelenitesi viewmodel + DOM presentation viselkedeset
+ * izolaltan vizsgalni jsdom nelkul. A pending blur class teljesen kikerult,
+ * mert a backend gondoskodik arrol, hogy non-owner ne kapja meg a pending
+ * kepet — igy nincs vizualis maszkolas, a UI csak a status szoveget mutatja.
  */
 
 function createFakeImgElement() {
@@ -45,8 +45,6 @@ function createFakeImgElement() {
 }
 
 function loadProfileImageApi() {
-    // A modul IIFE-je window-ra teszi az API-t. Jest sajat module resolver-t hasznal,
-    // ezert jest.isolateModules-szel kenyszeritjuk az ujratoltest minden hivasnal.
     const fakeWindow = {
         crypto: { randomUUID: () => 'test-uuid' },
         console
@@ -63,8 +61,8 @@ function loadProfileImageApi() {
     return fakeWindow.MattMesterProfileImage;
 }
 
-describe('MattMesterProfileImage – pending blur logika', () => {
-    test('buildProfileImageViewModel pending statuszra isPending=true es szervert kover', () => {
+describe('MattMesterProfileImage – viewmodel + presentation', () => {
+    test('buildProfileImageViewModel pending statuszra isPending=true', () => {
         const api = loadProfileImageApi();
         const vm = api.buildProfileImageViewModel({
             username: 'tester',
@@ -83,8 +81,6 @@ describe('MattMesterProfileImage – pending blur logika', () => {
             profile_image: '/profile_pictures/default.png',
             profile_image_status: 'pending'
         });
-        // Default kep eseten nincs ertelme blur-elni: a felhasznalo nem latja a sajat
-        // pending kepet, hanem az alapertelmezettet.
         expect(vm.isPending).toBe(false);
         expect(vm.isDefault).toBe(true);
     });
@@ -99,7 +95,7 @@ describe('MattMesterProfileImage – pending blur logika', () => {
         expect(vm.isPending).toBe(true);
     });
 
-    test('applyProfileImagePresentation hozzaadja a pending blur osztalyt es a data attribuumokat', () => {
+    test('applyProfileImagePresentation NEM ad blur osztalyt pending statuszra', () => {
         const api = loadProfileImageApi();
         const img = createFakeImgElement();
         api.applyProfileImagePresentation(img, {
@@ -109,57 +105,31 @@ describe('MattMesterProfileImage – pending blur logika', () => {
                 profile_image_status: 'pending'
             }
         });
-        expect(img._classes.has('profile-image-pending-blur')).toBe(true);
+        // A blur osztaly teljesen kikerult — a backend gondoskodik a privacyrol.
+        expect(img._classes.has('profile-image-pending-blur')).toBe(false);
         expect(img.dataset.profileImageStatus).toBe('pending');
-        expect(img.dataset.profileImagePending).toBe('1');
         expect(img.dataset.profileImageDefault).toBe('0');
         expect(img.src).toBe('/profile_pictures/abc.png');
     });
 
-    test('applyProfileImagePresentation eltavolitja a blur osztalyt approved statuszra', () => {
+    test('applyProfileImagePresentation approved statusznal sem rak fel blur osztalyt', () => {
         const api = loadProfileImageApi();
         const img = createFakeImgElement();
-        // Elso korben pending
-        api.applyProfileImagePresentation(img, {
-            source: { profile_image: '/profile_pictures/abc.png', profile_image_status: 'pending' }
-        });
-        expect(img._classes.has('profile-image-pending-blur')).toBe(true);
-        // Masodik korben approved -> blur off
         api.applyProfileImagePresentation(img, {
             source: { profile_image: '/profile_pictures/abc.png', profile_image_status: 'approved' }
         });
         expect(img._classes.has('profile-image-pending-blur')).toBe(false);
         expect(img.dataset.profileImageStatus).toBe('approved');
-        expect(img.dataset.profileImagePending).toBe('0');
     });
 
-    test('error fallback megorzi a pending blur-t pending statuszu kepnel akkor is, ha a kep betoltes elakad', () => {
+    test('error fallback default-ra all akkor is, ha a kep betoltese elakad', () => {
         const api = loadProfileImageApi();
         const img = createFakeImgElement();
-        api.applyProfileImagePresentation(img, {
-            source: { profile_image: '/profile_pictures/abc.png', profile_image_status: 'pending' }
-        });
-        // Szimulaljunk image-error eventet (pl. statikus fajl race / 404):
-        img._fireEvent('error');
-        // Az src reset default-ra (fallback), de a blur osztalyt MEGTARTJUK,
-        // mert a szerver-igazsag szerint a kep meg pending.
-        expect(img.src.endsWith('/profile_pictures/default.png')).toBe(true);
-        expect(img._classes.has('profile-image-pending-blur')).toBe(true);
-    });
-
-    test('error fallback eltavolitja a blur-t approved statuszu kepnel ha a betoltes elakad', () => {
-        const api = loadProfileImageApi();
-        const img = createFakeImgElement();
-        // Elso renderelesnel approved volt: nincs blur class.
         api.applyProfileImagePresentation(img, {
             source: { profile_image: '/profile_pictures/abc.png', profile_image_status: 'approved' }
         });
-        // Manualisan adjunk hozza blur-t (regressziovedelem: ha valamiert ott maradt egy
-        // korabbi pending allapot blur-je), es kuldjunk error-t. Approved statusznal a
-        // fallback-nek kell tisztitania.
-        img._classes.add('profile-image-pending-blur');
         img._fireEvent('error');
-        expect(img._classes.has('profile-image-pending-blur')).toBe(false);
+        expect(img.src.endsWith('/profile_pictures/default.png')).toBe(true);
     });
 
     test('applyProfileImagePresentation nem allitja ujra a src-et, ha mar az aktualis erteket tartalmazza', () => {
@@ -170,7 +140,11 @@ describe('MattMesterProfileImage – pending blur logika', () => {
         api.applyProfileImagePresentation(img, {
             source: { profile_image: '/profile_pictures/abc.png', profile_image_status: 'pending' }
         });
-        // Ne valtozzon a src referenciaja, az ujra-fetch elkeruleseert.
         expect(img.src).toBe(initialSrc);
+    });
+
+    test('a publikus API-rol a PENDING_BLUR_CLASS export eltunt', () => {
+        const api = loadProfileImageApi();
+        expect(api.PENDING_BLUR_CLASS).toBeUndefined();
     });
 });

@@ -231,6 +231,164 @@ function initRevealAnimations() {
     });
 }
 
+window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
+    const STATE = { loading: false, bound: false };
+
+    function setMessage(type, message) {
+        const el = document.getElementById('profileImageReviewMessage');
+        if (!el) return;
+        if (!message) {
+            el.className = 'alert d-none';
+            el.textContent = '';
+        } else {
+            el.className = `alert alert-${type}`;
+            el.textContent = message;
+        }
+    }
+
+    function escapeHtml(value) {
+        const div = document.createElement('div');
+        div.textContent = String(value === null || value === undefined ? '' : value);
+        return div.innerHTML;
+    }
+
+    function renderRows(rows) {
+        const tbody = document.getElementById('profileImageReviewTableBody');
+        if (!tbody) return;
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary py-4">Nincs függő profilkép.</td></tr>';
+            return;
+        }
+        const html = rows.map((row) => {
+            const safeUsername = escapeHtml(row.username || '');
+            const safeFilename = escapeHtml(row.filename || '/profile_pictures/default.png');
+            const safeUploadTime = escapeHtml(row.uploadTime || '');
+            const safeUploadId = Number(row.uploadId) || 0;
+            return `
+                <tr data-upload-id="${safeUploadId}">
+                    <td>
+                        <div class="d-flex align-items-center gap-2">
+                            <strong>${safeUsername}</strong>
+                            <span class="text-secondary small">#${escapeHtml(row.userId)}</span>
+                        </div>
+                    </td>
+                    <td>
+                        <a href="${safeFilename}" target="_blank" rel="noopener noreferrer">
+                            <img src="${safeFilename}" alt="Pending profilkép" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);">
+                        </a>
+                    </td>
+                    <td><span class="text-secondary small">${safeUploadTime}</span></td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-success btn-sm me-2" data-action="approve" data-upload-id="${safeUploadId}">
+                            <i class="bi bi-check-circle me-1"></i>Jóváhagy
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" data-action="reject" data-upload-id="${safeUploadId}">
+                            <i class="bi bi-x-circle me-1"></i>Elutasít
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+        tbody.innerHTML = html;
+    }
+
+    async function refresh() {
+        if (STATE.loading) return;
+        STATE.loading = true;
+        setMessage(null, '');
+        try {
+            const response = await fetch('/api/admin/profile-images/pending');
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
+            }
+            renderRows(result.data || []);
+        } catch (error) {
+            console.error('admin profile-images pending fetch hiba:', error);
+            setMessage('danger', error.message || 'Hiba a lekérdezés során.');
+            renderRows([]);
+        } finally {
+            STATE.loading = false;
+        }
+    }
+
+    async function approve(uploadId) {
+        try {
+            const response = await fetch(`/api/admin/profile-images/${encodeURIComponent(uploadId)}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'A jóváhagyás sikertelen.');
+            }
+            setMessage('success', result.message || 'A profilkép jóváhagyva.');
+            await refresh();
+        } catch (error) {
+            console.error('admin profile-image approve hiba:', error);
+            setMessage('danger', error.message || 'A jóváhagyás sikertelen.');
+        }
+    }
+
+    async function reject(uploadId) {
+        const reviewNoteRaw = window.prompt('Add meg az elutasítás indokát (opcionális, max 500 karakter):', '') || '';
+        const reviewNote = reviewNoteRaw.trim().slice(0, 500);
+        try {
+            const response = await fetch(`/api/admin/profile-images/${encodeURIComponent(uploadId)}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reviewNote: reviewNote || null })
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'Az elutasítás sikertelen.');
+            }
+            setMessage('success', result.message || 'A profilkép elutasítva.');
+            await refresh();
+        } catch (error) {
+            console.error('admin profile-image reject hiba:', error);
+            setMessage('danger', error.message || 'Az elutasítás sikertelen.');
+        }
+    }
+
+    function bind() {
+        if (STATE.bound) return;
+        STATE.bound = true;
+
+        const refreshButton = document.getElementById('profileImageReviewRefresh');
+        if (refreshButton) {
+            refreshButton.addEventListener('click', () => { refresh(); });
+        }
+
+        const tbody = document.getElementById('profileImageReviewTableBody');
+        if (tbody) {
+            tbody.addEventListener('click', (event) => {
+                const button = event.target.closest('button[data-action]');
+                if (!button) return;
+                const uploadId = Number(button.dataset.uploadId) || 0;
+                if (!uploadId) return;
+                const action = button.dataset.action;
+                if (action === 'approve') {
+                    approve(uploadId);
+                } else if (action === 'reject') {
+                    reject(uploadId);
+                }
+            });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        try {
+            bind();
+        } catch (error) {
+            console.error('admin profile-image bind hiba:', error);
+        }
+    });
+
+    return { refresh, approve, reject };
+})();
+
 function initResponsiveSidebar() {
     if (window.innerWidth < 992) {
         document.getElementById('sidebar').classList.add('collapsed');

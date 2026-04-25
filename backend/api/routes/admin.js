@@ -202,4 +202,92 @@ router.post('/notifications/send', express.json(), async (request, response) => 
     return response.status(statusCode).json(payload);
 });
 
+router.get('/profile-images/pending', async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, data: [], message: 'Szerverhiba a függő profilképek lekérdezése során.' };
+    try {
+        const pending = await sql.getPendingProfileImages();
+        const data = (pending || []).map((row) => ({
+            uploadId: row.id,
+            userId: row.user_id,
+            username: row.username,
+            filename: row.filename,
+            currentImage: row.current_image,
+            uploadTime: row.upload_time,
+            status: row.status
+        }));
+        payload = {
+            success: true,
+            data,
+            message: data.length ? `${data.length} függő profilkép.` : 'Nincs függő profilkép.'
+        };
+    } catch (error) {
+        console.error('Admin pending profile images hiba:', error);
+        statusCode = 500;
+        payload = { success: false, data: [], message: error.message || payload.message };
+    }
+    return response.status(statusCode).json(payload);
+});
+
+router.post('/profile-images/:uploadId/approve', express.json(), async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: 'Szerverhiba a profilkép jóváhagyása során.' };
+    try {
+        const adminUserId = Number(request.session?.userId) || 0;
+        const uploadId = Number(request.params?.uploadId) || 0;
+        if (!uploadId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen feltöltés azonosító.');
+        }
+
+        await sql.approveProfileImage(uploadId, adminUserId);
+        payload = {
+            success: true,
+            message: 'A profilkép jóváhagyva. A kép globálisan láthatóvá vált.',
+            data: { uploadId, status: 'approved' }
+        };
+    } catch (error) {
+        if (statusCode === 200) statusCode = 500;
+        const messageLower = String(error?.message || '').toLowerCase();
+        if (messageLower.includes('nem talalhato') || messageLower.includes('nem található')) {
+            statusCode = 404;
+        } else if (messageLower.includes('csak fuggo') || messageLower.includes('csak függő')) {
+            statusCode = 409;
+        }
+        payload = { success: false, message: error.message || payload.message };
+    }
+    return response.status(statusCode).json(payload);
+});
+
+router.post('/profile-images/:uploadId/reject', express.json(), async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: 'Szerverhiba a profilkép elutasítása során.' };
+    try {
+        const adminUserId = Number(request.session?.userId) || 0;
+        const uploadId = Number(request.params?.uploadId) || 0;
+        if (!uploadId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen feltöltés azonosító.');
+        }
+
+        const reviewNoteRaw = typeof request.body?.reviewNote === 'string' ? request.body.reviewNote.trim() : '';
+        const reviewNote = reviewNoteRaw ? reviewNoteRaw.slice(0, 500) : null;
+
+        await sql.rejectProfileImage(uploadId, adminUserId, reviewNote);
+        payload = {
+            success: true,
+            message: 'A profilkép elutasítva. A publikus kép visszaállt az alapértelmezettre.',
+            data: { uploadId, status: 'rejected' }
+        };
+    } catch (error) {
+        if (statusCode === 200) statusCode = 500;
+        const messageLower = String(error?.message || '').toLowerCase();
+        if (messageLower.includes('nem található') || messageLower.includes('nem talalhato')) {
+            statusCode = 404;
+        }
+        payload = { success: false, message: error.message || payload.message };
+    }
+    return response.status(statusCode).json(payload);
+});
+
 module.exports = router;

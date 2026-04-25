@@ -740,8 +740,19 @@ function createSocketHub(io) {
                     policyResult
                 );
 
+                // A pending profilkép nem szivároghat ki a többi résztvevőhöz a
+                // socket broadcast-ban: a feladón kívül mindenkinek defaultot küldünk.
+                const senderStatusForBroadcast = String(insertedMessage?.senderProfileImageStatus || '').toLowerCase();
+                const broadcastInsertedMessage = senderStatusForBroadcast === 'pending'
+                    ? {
+                        ...insertedMessage,
+                        senderProfileImage: '/profile_pictures/default.png',
+                        senderProfileImageStatus: 'default'
+                    }
+                    : insertedMessage;
+
                 const messagePayload = {
-                    ...insertedMessage,
+                    ...broadcastInsertedMessage,
                     conversationId,
                     socketId: socket.id,
                     clientId: currentContext.clientId,
