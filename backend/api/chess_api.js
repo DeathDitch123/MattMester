@@ -15,6 +15,7 @@ const chessSql = require('../chess/chess_sql_functions.js');
 const { botLepesValaszt, nehezsegiSzintInfo, osszesNehezsegiSzint } = require('../chess/bot.js');
 const { eloSzamit, KEZDO_ELO } = require('../chess/elo.js');
 const { requireVerifiedEmail } = require('./funtions.js');
+const { abilityAktival, getKliensConfig } = require('../chess/abilities.js');
 
 function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -349,6 +350,61 @@ async function eloFrissitJatekVegen(jatek, uzenet) {
         return null;
     }
 }
+
+// ────────────────────────────────────────────
+// GET /api/chess/abilities — Képesség config (ár, cooldown, max stb.)
+// ────────────────────────────────────────────
+router.get('/abilities', (req, res) => {
+    return res.status(200).json({ config: getKliensConfig() });
+});
+
+// ────────────────────────────────────────────
+// POST /api/chess/:id/ability — Képesség aktiválás (bot meccshez)
+// ────────────────────────────────────────────
+router.post('/:id/ability', requireVerifiedEmail, async (req, res) => {
+    try {
+        const jatek = findGameOrThrow(req.params.id);
+        const { key, params } = req.body || {};
+        if (!key) return res.status(400).json({ error: 'Hiányzó képesség (key).' });
+
+        // Bot meccsen a játékos színe alapból white (a chess_api.js:118 új-bot-játéknál
+        // a fehér oldalra ülteti a usert). Biztonság kedvéért a session-ből nézzük az
+        // userId-t és megkeressük a színt.
+        const userId = req.session?.userId || null;
+        let szin = null;
+        if (jatek.jatekosok.white.userId === userId) szin = 'white';
+        else if (jatek.jatekosok.black.userId === userId) szin = 'black';
+
+        if (!szin) {
+            return res.status(403).json({ error: 'Nem vagy résztvevője ennek a játéknak.' });
+        }
+
+        const eredmeny = abilityAktival(jatek, szin, key, params);
+        if (!eredmeny.success) {
+            return res.status(400).json({ error: eredmeny.error });
+        }
+
+        // ability_log DB-be (best-effort, async)
+        if (jatek.dbGameId && userId) {
+            (async () => {
+                try {
+                    await chessSql.abilityLogMentDb({
+                        gameId: jatek.dbGameId,
+                        playerId: userId,
+                        abilityKey: key
+                    });
+                } catch (dbErr) {
+                    console.error('Ability log mentési hiba:', dbErr);
+                }
+            })();
+        }
+
+        return res.status(200).json({ allapot: jatekAllapotKliens(jatek) });
+    } catch (err) {
+        console.error('Chess ability hiba:', err);
+        return res.status(err.statusCode || 500).json({ error: err.message || 'Szerverhiba képesség aktiválásnál.' });
+    }
+});
 
 // ────────────────────────────────────────────
 // POST /api/chess/:id/reset — Játék újraindítás

@@ -25,6 +25,15 @@ function idoTikk(jatek, szin) {
     if (!jatekos) return;
 
     const most = Date.now();
+
+    // Képesség: time_pause — saját óra szünetel.
+    // Az utolsoTickMs-t előre toljuk, hogy a szünet végén ne legyen "ugrás".
+    const pausedUntil = jatek.abilities && jatek.abilities.effects.pausedUntilMs[szin];
+    if (pausedUntil && most < pausedUntil) {
+        jatekos.utolsoTickMs = most;
+        return;
+    }
+
     if (!jatekos.utolsoTickMs) {
         jatekos.utolsoTickMs = most;
         return;

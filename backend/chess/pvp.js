@@ -15,6 +15,7 @@ const { idoLeall } = require('./timer.js');
 const { eloMeccsEredmeny } = require('./elo.js');
 const chessSql = require('./chess_sql_functions.js');
 const sql = require('../sql/sql_funtions.js');
+const { abilityAktival } = require('./abilities.js');
 
 // ── Adatstruktúrák ──
 
@@ -559,6 +560,50 @@ function registerPvpHandlers(socket, io) {
         }
 
         // Normál lépés — állapot broadcast
+        io.to(`chess-game:${gameId}`).emit('chess:state:update', {
+            allapot: jatekAllapotKliens(jatek)
+        });
+    });
+
+    // ─────────────────────────────────────
+    // KÉPESSÉG AKTIVÁLÁS
+    // ─────────────────────────────────────
+
+    socket.on('chess:ability', async ({ gameId, key, params }) => {
+        const context = socket.data.socketContext;
+        if (!context.userId) return;
+
+        const jatek = jatekKeres(gameId);
+        if (!jatek || !jatek.pvpAktiv || jatek.pvpStatusz !== 'active' || jatek.vege) {
+            return socket.emit('chess:error', { uzenet: 'Érvénytelen játék.' });
+        }
+
+        const szin = getUserColorInGame(jatek, context.userId);
+        if (!szin) {
+            return socket.emit('chess:error', { uzenet: 'Nem vagy résztvevője ennek a játéknak.' });
+        }
+
+        const eredmeny = abilityAktival(jatek, szin, key, params);
+        if (!eredmeny.success) {
+            return socket.emit('chess:error', { uzenet: eredmeny.error });
+        }
+
+        // Async ability log a DB-be
+        if (jatek.dbGameId) {
+            (async () => {
+                try {
+                    await chessSql.abilityLogMentDb({
+                        gameId: jatek.dbGameId,
+                        playerId: context.userId,
+                        abilityKey: key
+                    });
+                } catch (err) {
+                    console.error('[PvP] ability log hiba:', err);
+                }
+            })();
+        }
+
+        // Új állapot broadcast mindkét félnek
         io.to(`chess-game:${gameId}`).emit('chess:state:update', {
             allapot: jatekAllapotKliens(jatek)
         });

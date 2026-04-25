@@ -108,6 +108,12 @@
             <div class="board-wrap">
                 <div id="board" class="board" aria-label="Sakk tábla"></div>
 
+                <!-- TÁBLAKITAKARÁS overlay -->
+                <div id="board-hide-overlay" class="board-hide-overlay hidden">
+                    <span>Tábla eltakarva</span>
+                    <span id="board-hide-countdown">5</span>
+                </div>
+
                 <div id="promotion-modal" class="promotion-modal hidden">
                     <div class="promotion-overlay"></div>
                     <div class="promotion-choices">
@@ -124,6 +130,19 @@
                     Aktív: <strong id="turn-name">fehér</strong>
                 </div>
                 <div id="status" class="status">játékon</div>
+
+                <!-- KÉPESSÉG BAR -->
+                <div id="ability-bar" class="ability-bar hidden">
+                    <div class="ability-points">
+                        <span class="ap-label">Pontok</span>
+                        <span class="ap-mine" id="ap-mine">0</span>
+                        <span class="ap-sep">vs</span>
+                        <span class="ap-opp" id="ap-opp">0</span>
+                    </div>
+                    <div id="ability-buttons" class="ability-buttons"></div>
+                    <div id="ability-hint" class="ability-hint hidden"></div>
+                </div>
+
                 <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
                 <div id="opponent-disconnected" class="opponent-dc hidden">
                     Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp

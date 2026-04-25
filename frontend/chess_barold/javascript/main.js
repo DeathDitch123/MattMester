@@ -12,6 +12,7 @@
 import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt,
          huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres,
          lepesAnimacio } from './UI-megjelenites.js';
+import { abilitiesInit, abilitiesAllapotFrissit, abilitiesReset, isAbilityArmed } from './abilities.js';
 
 // Az aktuális játék ID — a szerver adja
 let gameId = null;
@@ -82,6 +83,12 @@ const OLDAL_VAZ = `
             <div class="board-wrap">
                 <div id="board" class="board" aria-label="Sakk tábla"></div>
 
+                <!-- TÁBLAKITAKARÁS overlay -->
+                <div id="board-hide-overlay" class="board-hide-overlay hidden">
+                    <span>Tábla eltakarva</span>
+                    <span id="board-hide-countdown">5</span>
+                </div>
+
                 <div id="promotion-modal" class="promotion-modal hidden">
                     <div class="promotion-overlay"></div>
                     <div class="promotion-choices">
@@ -98,6 +105,19 @@ const OLDAL_VAZ = `
                     Aktív: <strong id="turn-name">fehér</strong>
                 </div>
                 <div id="status" class="status">játékon</div>
+
+                <!-- KÉPESSÉG BAR -->
+                <div id="ability-bar" class="ability-bar hidden">
+                    <div class="ability-points">
+                        <span class="ap-label">Pontok</span>
+                        <span class="ap-mine" id="ap-mine">0</span>
+                        <span class="ap-sep">vs</span>
+                        <span class="ap-opp" id="ap-opp">0</span>
+                    </div>
+                    <div id="ability-buttons" class="ability-buttons"></div>
+                    <div id="ability-hint" class="ability-hint hidden"></div>
+                </div>
+
                 <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
                 <div id="opponent-disconnected" class="opponent-dc hidden">
                     Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp
@@ -652,6 +672,14 @@ function pvpJatekKezdet(data) {
     // Board render + kliens időzítő indítás
     pvpAllapotFrissit(data.allapot);
     pvpKliensIdoIndit();
+
+    // Képesség UI inicializálás
+    abilitiesInit({
+        getGameId: () => pvpGameId,
+        getSzin:   () => sajatSzin,
+        isPvp:     () => true,
+        getSocket: () => pvpSocketKeres()
+    }).then(() => abilitiesAllapotFrissit(data.allapot));
 }
 
 function pvpAllapotFrissit(allapot) {
@@ -680,6 +708,7 @@ function pvpAllapotFrissit(allapot) {
     esemenyekUjraKot();
     nevekFrissit();
     eloValtozasFrissit(allapot.eloValtozas || null);
+    abilitiesAllapotFrissit(allapot);
 
     // Kliens időzítő újraszinkronizálás
     pvpKliensIdoIndit();
@@ -802,6 +831,7 @@ function pvpAllapotReset() {
         drawBtn.classList.add('hidden');
     }
     varakozoLepesPromisek.length = 0;
+    abilitiesReset();
 }
 
 async function jatekIndit(nehezseg) {
@@ -813,6 +843,16 @@ async function jatekIndit(nehezseg) {
 
         allapotFrissit(allapot);
         idoPollingIndit();
+
+        // Képesség UI inicializálás (bot meccs — REST mód, mindig white)
+        await abilitiesInit({
+            getGameId: () => gameId,
+            getSzin:   () => 'white',  // bot meccsen a játékos mindig white
+            isPvp:     () => false,
+            getSocket: () => null
+        });
+        abilitiesAllapotFrissit(allapot);
+
         console.log(`[INIT] Bot játék indítva — ${botInfo.nev} (ELO: ${botInfo.elo})`);
     } catch (e) {
         console.error('Bot játék indítási hiba:', e);
@@ -1111,6 +1151,7 @@ function allapotFrissit(allapot, animald = false) {
     nevekFrissit();
     eloValtozasFrissit(allapot.eloValtozas || null);
     botGondolkodasFrissit(allapot);
+    abilitiesAllapotFrissit(allapot);
 
     if (allapot.uzenet) {
         jatekVegeUI(allapot.uzenet);
@@ -1545,6 +1586,7 @@ function huzasHozzaadMinden(allapot) {
     const mezok = document.querySelectorAll(".square");
     for (let i = 0; i < mezok.length; i++) {
         mezok[i].addEventListener("mousedown", function (e) {
+            if (isAbilityArmed()) return; // képesség célpont-választás folyamatban
             if (!kivalasztott || lepesKuldesFolyamatban) return;
 
             // Drag folyamat közben ne kezeljünk click-to-move-ot.
@@ -1564,6 +1606,7 @@ function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
     let mozgott = false; // megkülönbözteti a kattintást a húzástól
 
     babuElem.addEventListener("mousedown", async function (e) {
+        if (isAbilityArmed()) return; // képesség célpont-választás folyamatban
         if (allapot.vege || lepesKuldesFolyamatban) return;
 
         e.preventDefault();

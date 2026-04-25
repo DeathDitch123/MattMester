@@ -98,6 +98,16 @@ async function createTables() {
             cooldown_turns INT DEFAULT 0
         )`,
 
+        // Képesség seed (idempotens — INSERT IGNORE a UNIQUE name miatt)
+        `INSERT IGNORE INTO abilities (name, description, cooldown_turns) VALUES
+            ('time_pause', 'Időmegállítás — saját óra rövid szüneteltetése (8mp)', 4),
+            ('freeze',     'Bábu befagyasztás — egy ellenséges bábu 1 körig nem mozdulhat', 4),
+            ('swap',       'Bábucsere — két saját bábu pozíciójának cseréje (a köröd is)', 5),
+            ('board_hide', 'Táblakitakarás — ellenfél 5mp-ig nem tud lépni', 5),
+            ('shield',     'Pajzs — saját bábu 1 körre sebezhetetlenné válik', 4),
+            ('time_steal', 'Időlopás — következő ütésednél 5mp átkerül az ellenfél órájáról', 3)
+        `,
+
         `CREATE TABLE IF NOT EXISTS games (
             id INT AUTO_INCREMENT PRIMARY KEY,
             white_player_id INT NOT NULL,

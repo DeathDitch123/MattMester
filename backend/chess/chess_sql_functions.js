@@ -160,11 +160,64 @@ async function eloLekerdezDb(userId) {
  */
 async function meccsekSzamDb(userId) {
     const pool = getPool();
-    const query = `SELECT COUNT(*) AS db FROM games 
-                   WHERE (white_player_id = ? OR black_player_id = ?) 
+    const query = `SELECT COUNT(*) AS db FROM games
+                   WHERE (white_player_id = ? OR black_player_id = ?)
                    AND status = 'finished'`;
     const [rows] = await pool.execute(query, [userId, userId]);
     return rows[0] ? rows[0].db : 0;
+}
+
+// ────────────────────────────────────────────
+// ABILITIES + ABILITY_LOG táblák
+// ────────────────────────────────────────────
+
+// Cache: ability key (pl. 'time_pause') → abilities.id
+const abilityIdCache = new Map();
+
+/**
+ * Ability DB id lekérdezése key alapján (cache-elve).
+ * Ha nincs ilyen ability a táblában, null-t ad vissza.
+ */
+async function abilityIdByKey(key) {
+    if (abilityIdCache.has(key)) return abilityIdCache.get(key);
+    const pool = getPool();
+    const [rows] = await pool.execute(`SELECT id FROM abilities WHERE name = ?`, [key]);
+    if (rows[0]) {
+        abilityIdCache.set(key, rows[0].id);
+        return rows[0].id;
+    }
+    return null;
+}
+
+/**
+ * Képesség használat naplózása + statistics.abilities_used inkrement.
+ * @param {object} params
+ * @param {number} params.gameId    — games.id (NEM az in-memory gameId)
+ * @param {number} params.playerId  — users.id
+ * @param {string} params.abilityKey — ABILITY_CONFIG kulcsa (pl. 'time_pause')
+ * @param {number|null} [params.moveId] — moves.id ha van
+ */
+async function abilityLogMentDb(params) {
+    const pool = getPool();
+    const abilityId = await abilityIdByKey(params.abilityKey);
+    if (!abilityId) {
+        console.warn(`[ability_log] ismeretlen key, kihagyva: ${params.abilityKey}`);
+        return null;
+    }
+    const [result] = await pool.execute(
+        `INSERT INTO ability_log (game_id, move_id, player_id, ability_id) VALUES (?, ?, ?, ?)`,
+        [params.gameId, params.moveId || null, params.playerId, abilityId]
+    );
+    // statistics.abilities_used inkrement
+    try {
+        await pool.execute(
+            `UPDATE statistics SET abilities_used = abilities_used + 1 WHERE user_id = ?`,
+            [params.playerId]
+        );
+    } catch (err) {
+        console.error('[statistics] abilities_used inkrement hiba:', err);
+    }
+    return result.insertId;
 }
 
 module.exports = {
@@ -178,5 +231,7 @@ module.exports = {
     dontetlenMentDb,
     eloFrissitDb,
     eloLekerdezDb,
-    meccsekSzamDb
+    meccsekSzamDb,
+    abilityIdByKey,
+    abilityLogMentDb
 };
