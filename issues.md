@@ -76,17 +76,45 @@
 
 ---
 
+## 🛡️ Admin panel (külön track) — F1–F9 fázisok
+
+> A teljes architektúra: [ADMIN_PANEL.md](ADMIN_PANEL.md). Ezek a teendők a doksit bontják lépésekre.
+
+| # | Teendő | Hely | Státusz |
+|---|--------|------|:------:|
+| 60 | **F1. Séma + token alapok** – `users.is_super_admin` oszlop, `admin_tokens`, `admin_audit_log`, `admin_alert_log`, `admin_rate_escalations` táblák. `metric_key/metric_value/metric_delta` mezők és `idx_user_logs_user_metric_time` index eltávolítása a `user_logs`-ból (jelenleg holt kód, nincs hívó). Admin seed `is_super_admin=TRUE`-val. **DB üres → nincs migráció, csak séma sablont kell átírni.** | [backend/sql/create_database.sql](backend/sql/create_database.sql), [backend/sql/database.js](backend/sql/database.js), [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ☐ |
+| 61 | **F2. Step-up admin token** – `POST /api/admin/auth/elevate / refresh / revoke / status` endpointok. `parseAdminToken` middleware (Authorization Bearer header + DB hash check). 15 perc sliding TTL. Token hash SHA-256-tal tárolva, plain token sosem DB-ben/logban. Külön `adminElevateLimiter` (5 / 15 perc). | [backend/api/routes/admin.js](backend/api/routes/admin.js), [backend/api/funtions.js](backend/api/funtions.js) | ☐ |
+| 62 | **F3. AuditLogService + middleware lánc** – `requireReasonOnMutate` (10/30 char min), `auditContext` (ULID requestId), `auditFlush` (sikeres + sikertelen ág is naplóz). Redaction allowlist: `password_hash`, `email_verification_token_hash`, `reset_password_token` SOSEM kerülnek be. Diff-only normál, full snapshot critical-nél. | backend/api/admin/* (új mappa) | ☐ |
+| 63 | **F4. Admin socket namespace `/admin`** – `io.of('/admin')` + handshake auth (session + admin token kettős check). `admin:room` szoba. `admin:replay:request/batch` reconnect után, max 200/batch, 24h ablak, max 5 batch/kapcsolat. Eseménynevezéktan: `admin:<domain>:<action>`. | [backend/sockets.js](backend/sockets.js) | ☐ |
+| 64 | **F5. AlertingService + adaptive rate limit** – jogosulatlan próbálkozás → audit + `admin:alert:unauthorized` broadcast + escalation (`multiplier=5`, 15 perc, IP-scope). `admin_rate_escalations` tábla a meglévő `rateLimiter.js`-be bekötve. | [backend/api/middleware/rateLimiter.js](backend/api/middleware/rateLimiter.js) | ☐ |
+| 65 | **F6. Super-admin műveletek** – `POST /api/admin/admins/grant`, `POST /api/admin/admins/revoke`, `GET /api/admin/admins`. Utolsó super-admin lock (saját `is_super_admin` nem vehető le, ha utolsó). Mind `severity='critical'`. | backend/api/routes/admin.js | ☐ |
+| 66 | **F7. Meglévő admin endpointok migrálása** – `notifications/send`, `profile-images/{approve,reject}`, `export-users` átáll az új middleware-láncra. Approve-nál reason **opcionális**, reject-nél **kötelező**. CSV export `info` severity, reason opcionális. | [backend/api/routes/admin.js](backend/api/routes/admin.js) | ☐ |
+| 67 | **F8. Read-only admin API** – `/admin/audit/search` (actor/action/időtartomány/severity/target szűrőkkel), `/admin/audit/export` (CSV), `/admin/alerts/recent`, `/admin/users/list`, `/admin/stats/snapshot`. | backend/api/routes/admin.js | ☐ |
+| 68 | **F9. Audit retention job (18 hónap, hard delete)** – napi 1× `setInterval` az `initDatabase` után. Saját audit entry minden futáshoz (`action='audit.retention.run'`, törölt sorok száma metadata-ban). Iskolai projekthez hard delete elég; JSONL archive opció a `🟢 Bónusz`-ban. | [backend/server.js](backend/server.js) | ☐ |
+| 69 | **F10. Admin frontend** – külön iteráció, akkor indul, ha az API + WS oldalon F1–F9 zöld. | [frontend/javascript/adminPanel.js](frontend/javascript/adminPanel.js) | ☐ |
+| 70 | **`#43` ütközés:** az F2 fázisban a `/admin/test` endpoint az új middleware-láncot kapja meg, és csak `NODE_ENV=development` esetén regisztráljuk. | [backend/api/routes/admin.js](backend/api/routes/admin.js) | ☐ |
+| 71 | **`#33` és `#34` redundancia:** ezeket az új admin track (F3, F9) lefedi, a Bónusz-szekcióban már nem szükséges külön nyilvántartani. | – | ☐ |
+
+---
+
 ## 🟢 Bónusz, ha marad idő
 
 | # | Teendő | Státusz |
 |---|--------|:------:|
-| 29 | **2FA (TOTP)** – jól illeszkedik a security szekcióba. | ☐ |
+| 29 | **2FA (TOTP)** – jól illeszkedik a security szekcióba. Production előtt mindenképp; admin elevate-re érdemes először. | ☐ |
 | 30 | **Email verifikáció + jelszó-visszaállítás** – jelenleg hiányzik. | ☐ |
 | 31 | **Aktív session-ök listája + egyedi visszavonás** – most csak „logout all devices" van. | ☐ |
 | 32 | **Új eszköz / IP értesítés** – a begyűjtött IP+UA adatok értelmes hasznosítása. | ☐ |
-| 33 | **Admin audit log** – `admin` event_category jelenleg üres. | ☐ |
-| 34 | **User log retenció** – régi rekordok archiválása/törlése. | ☐ |
+| 33 | ~~**Admin audit log**~~ → lefedi F3 (#62). | ✅ áthelyezve |
+| 34 | ~~**User log retenció**~~ → admin track lefedi F9 (#68); user_logs-ra külön nem tervezünk retention-t most. | ✅ áthelyezve |
 | 35 | **API verziózás** – `/api/v1/…` későbbi mobil kliens miatt. | ☐ |
+| 80 | **Redis socket adapter (Socket.IO `@socket.io/redis-adapter`)** – jelenleg a backend egyetlen Node.js processben fut localhoston, így a `/admin` namespace fan-outja in-memory megoldja. **Miért kerülne fel később:** ha valaha 2+ process / horizontális skálázás kell (cluster mode, PM2 fork, Docker replica), az `admin:room` üzeneteket csak az a process küldi, amelyikhez a kliens csatlakozott. Redis pub/sub adapterrel az összes process megkapja. | [backend/sockets.js](backend/sockets.js), [backend/server.js](backend/server.js) | ☐ |
+| 81 | **IP allowlist admin elevate-re** – jelenleg bárhonnan elérhető a `/api/admin/auth/elevate` (login után). **Miért kerülne fel később:** production előtt érdemes lehet egy `ADMIN_IP_ALLOWLIST` env változót bevezetni (vesszővel elválasztott CIDR lista), és az elevate endpoint csak onnan engedjen. Iskolai projektben localhost = 127.0.0.1 fix, ezért most felesleges. | [backend/api/routes/admin.js](backend/api/routes/admin.js) | ☐ |
+| 82 | **Async audit queue** – jelenleg az `AuditLogService.record()` szinkron DB-be ír. **Miért kerülne fel később:** ha az admin műveletek száma magasra nő (több admin egyszerre, automatizált batch műveletek), a fő tranzakció DB-re vár. In-memory ring buffer + dedikált async writer worker megoldja. Iskolai projektben még nincs ilyen volumen. | backend/api/admin/auditService.js | ☐ |
+| 83 | **JSONL audit archive 18 hónap után** – a hard delete helyett gz-tömörített `audit_archive/YYYY-MM.jsonl.gz` export majd delete. Production-ben jogi/audit célból hasznos. | backend/server.js (retention job) | ☐ |
+| 84 | **HMAC chain az audit log integritáshoz** – minden új audit sor `prev_hash` mezője a megelőző sor SHA-256-ja. Tampering detektálható. Production és audit-érzékeny környezethez. | backend/api/admin/auditService.js | ☐ |
+| 85 | **Append-only DB user az audit táblákra** – külön MySQL user, akinek csak `INSERT` joga van a `admin_audit_log`-ra, `UPDATE`/`DELETE` nincs. A retention job külön privilegizált user-rel fut. Production hardening. | [backend/sql/database.js](backend/sql/database.js) | ☐ |
+| 86 | **Live nézői mód (spectator)** – futó meccshez read-only WS csatlakozás (nem admin-specifikus, hanem új feature). Külön permission és socket eseménynév-tér. | [backend/sockets.js](backend/sockets.js) | ☐ |
 
 ---
 
@@ -105,8 +133,9 @@
 1. **Session és cookie hardening** → #1 – #3
 2. **DB törlés → admin escalation javítása** → #56 (gyors win, valós bug)
 3. **Auth/session rendbetétele** → #36, #38, #39, #52
-4. **Holt kód és fölös endpointok takarítása** → #40 – #45, #50, #51
-5. **Frontend duplikáció feloldása** → #47, #48
-6. **Egyetlen értelmes schema/file-takarítás** → #9, #12, #15, #49, #53, #54
-7. **Teszt és minőségjavítás** → #24, #27, #28, #55
-8. **Bónusz funkciók csak ha marad idő** → #29 – #35
+4. **Admin panel track (F1 → F9)** → #60 – #69 (ütemezett, lépésenként; séma a [ADMIN_PANEL.md](ADMIN_PANEL.md) alapján)
+5. **Holt kód és fölös endpointok takarítása** → #40 – #45, #50, #51, #70
+6. **Frontend duplikáció feloldása** → #47, #48
+7. **Egyetlen értelmes schema/file-takarítás** → #9, #12, #15, #49, #53, #54
+8. **Teszt és minőségjavítás** → #24, #27, #28, #55
+9. **Bónusz funkciók csak ha marad idő** → #29 – #32, #35, #80 – #86
