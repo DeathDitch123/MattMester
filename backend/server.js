@@ -104,6 +104,20 @@ app.set('trust proxy', 1); //?Middleware Proxy
 const socketHub = createSocketHub(io);
 app.locals.socketHub = socketHub;
 
+// Admin panel - /admin socket namespace + service binderek (ADMIN_PANEL.md F4)
+const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter } = require('./api/admin/socketNamespace.js');
+const adminAuditService = require('./api/admin/auditService.js');
+const adminAlertingService = require('./api/admin/alertingService.js');
+const adminNamespace = createAdminNamespace(io);
+const adminSocketHub = {
+    broadcastAdmin: createAdminBroadcaster(adminNamespace),
+    emitToAdminUser: createAdminUserEmitter(adminNamespace),
+    namespace: adminNamespace
+};
+app.locals.adminSocketHub = adminSocketHub;
+adminAuditService.bindSocketHub(adminSocketHub);
+adminAlertingService.bindSocketHub(adminSocketHub);
+
 // Belepett felhasznalo ellenorzese vedett oldalakhoz
 function requireAuth(req, res, next) {
     if (!req.session || !req.session.userId) {
@@ -266,6 +280,10 @@ initDatabase()
         // Cleanup service: discarded profilképek törlése minden percben
         setInterval(cleanupDiscardedProfileImages, 60000); // 60 másodpercenként futtatás
         console.log('Cleanup service elindítva (percenkénti futás)');
+
+        // Admin audit retention scheduler (ADMIN_PANEL.md F9)
+        const { startRetentionScheduler } = require('./api/admin/retentionJob.js');
+        startRetentionScheduler();
         
         server.on('error', (error) => {
             if (error && error.code === 'EADDRINUSE') {

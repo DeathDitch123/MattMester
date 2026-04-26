@@ -43,7 +43,7 @@ async function createTables() {
     const queries = [
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) BINARY UNIQUE NOT NULL, 
+            username VARCHAR(50) BINARY UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
             profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
@@ -51,6 +51,7 @@ async function createTables() {
             elo_MM INT DEFAULT 800,
             elo_bullet INT DEFAULT 800,
             role ENUM('player', 'admin') DEFAULT 'player',
+            is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
             is_banned BOOLEAN DEFAULT FALSE,
             ban_reason VARCHAR(255),
             banned_until TIMESTAMP NULL,
@@ -66,9 +67,9 @@ async function createTables() {
             INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_email_verified, email_verified_at)
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP)
-            ON DUPLICATE KEY UPDATE id = id;
+        `INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_super_admin, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, TRUE, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE is_super_admin = TRUE;
         `,
 
         `ALTER TABLE users
@@ -280,9 +281,6 @@ async function createTables() {
             severity ENUM('info', 'warning', 'error', 'critical') DEFAULT 'info',
             source VARCHAR(50) DEFAULT 'backend',
             success BOOLEAN NULL,
-            metric_key VARCHAR(100) NULL,
-            metric_value DECIMAL(14, 4) NULL,
-            metric_delta DECIMAL(14, 4) NULL,
             message VARCHAR(255) NULL,
             ip_address VARCHAR(45) NULL,
             user_agent VARCHAR(255) NULL,
@@ -291,9 +289,81 @@ async function createTables() {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_user_logs_user_time (user_id, occurred_at),
             INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
-            INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
             INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at),
             INDEX idx_user_logs_ip_time (ip_address, occurred_at)
+        )`,
+
+        // Admin panel tablak (ADMIN_PANEL.md §6)
+        `CREATE TABLE IF NOT EXISTS admin_tokens (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            token_hash CHAR(64) NOT NULL,
+            issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_used_at TIMESTAMP NULL,
+            expires_at TIMESTAMP NOT NULL,
+            revoked_at TIMESTAMP NULL,
+            issued_ip VARCHAR(45) NOT NULL,
+            issued_user_agent VARCHAR(255) NULL,
+            UNIQUE KEY ux_admin_tokens_hash (token_hash),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_admin_tokens_user_active (user_id, revoked_at, expires_at)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            actor_user_id INT NOT NULL,
+            actor_username VARCHAR(50) NOT NULL,
+            action VARCHAR(64) NOT NULL,
+            severity ENUM('info', 'warning', 'critical') DEFAULT 'info',
+            target_type VARCHAR(32) NULL,
+            target_id BIGINT NULL,
+            target_key VARCHAR(64) NULL,
+            target_label VARCHAR(120) NULL,
+            reason VARCHAR(1000) NOT NULL,
+            before_state JSON NULL,
+            after_state JSON NULL,
+            success BOOLEAN NOT NULL,
+            error_code VARCHAR(64) NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            user_agent VARCHAR(255) NULL,
+            request_id CHAR(26) NOT NULL,
+            occurred_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+            FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+            INDEX idx_aal_occurred (occurred_at),
+            INDEX idx_aal_actor_time (actor_user_id, occurred_at),
+            INDEX idx_aal_action_time (action, occurred_at),
+            INDEX idx_aal_target (target_type, target_id, occurred_at),
+            INDEX idx_aal_target_key (target_type, target_key, occurred_at),
+            INDEX idx_aal_severity_time (severity, occurred_at),
+            INDEX idx_aal_request (request_id)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS admin_alert_log (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            kind ENUM('unauthorized', 'rate_escalated', 'token_invalid', 'suspicious_pattern') NOT NULL,
+            severity ENUM('warning', 'critical') DEFAULT 'warning',
+            user_id INT NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            endpoint VARCHAR(255) NULL,
+            user_agent VARCHAR(255) NULL,
+            detail JSON NULL,
+            occurred_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_aalert_time (occurred_at),
+            INDEX idx_aalert_kind_time (kind, occurred_at),
+            INDEX idx_aalert_ip_time (ip_address, occurred_at)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS admin_rate_escalations (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            scope ENUM('ip', 'user') NOT NULL,
+            scope_value VARCHAR(64) NOT NULL,
+            multiplier DECIMAL(4, 2) NOT NULL DEFAULT 5.00,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL,
+            reason VARCHAR(255) NULL,
+            UNIQUE KEY ux_rate_esc_scope (scope, scope_value),
+            INDEX idx_rate_esc_expires (expires_at)
         )`
     ];
 

@@ -10,6 +10,7 @@ CREATE TABLE
         elo_MM INT DEFAULT 800,
         elo_bullet INT DEFAULT 800,
         role ENUM ('player', 'admin') DEFAULT 'player',
+        is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
         is_banned BOOLEAN DEFAULT FALSE,
         ban_reason VARCHAR(255),
         banned_until TIMESTAMP NULL,
@@ -26,6 +27,7 @@ CREATE TABLE
     );
 
 -- Admin felhasználó beszúrása (ha még nem létezik) - a jelszó "chu+)2_23iIa6sou&>#o79247r9Xbsibv%" (bcrypt hash: $2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq)
+-- Admin user mindig is_super_admin=TRUE jelöléssel jön létre - ő az egyetlen super-admin a seedben.
 INSERT INTO
     users (
         username,
@@ -35,6 +37,7 @@ INSERT INTO
         elo_MM,
         elo_bullet,
         role,
+        is_super_admin,
         is_email_verified,
         email_verified_at
     )
@@ -48,9 +51,10 @@ VALUES
         1500,
         'admin',
         TRUE,
+        TRUE,
         CURRENT_TIMESTAMP
     ) ON DUPLICATE KEY
-UPDATE id = id;
+UPDATE is_super_admin = TRUE;
 
 UPDATE users
 SET
@@ -223,7 +227,9 @@ CREATE TABLE
         FOREIGN KEY (blocked_user_id) REFERENCES users (id) ON DELETE CASCADE
     );
 
--- 10. Altalanos felhasznaloi naplo (audit + activity)
+-- 10. Altalanos felhasznaloi naplo (audit + activity).
+-- Megjegyzes: a korabbi metric_key/metric_value/metric_delta oszlopok eltavolitva,
+-- nem volt egyetlen iro hivo sem. Numerikus metrikat a metadata JSON-be tegyunk.
 CREATE TABLE
     IF NOT EXISTS user_logs (
         id BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -244,12 +250,6 @@ CREATE TABLE
         source VARCHAR(50) DEFAULT 'backend',
         -- pl: backend, frontend, socket, admin
         success BOOLEAN NULL,
-        metric_key VARCHAR(100) NULL,
-        -- pl: elo_mm, win_streak, avg_move_time
-        metric_value DECIMAL(14, 4) NULL,
-        -- aktualis meresi ertek
-        metric_delta DECIMAL(14, 4) NULL,
-        -- valtozas az elozo allapothoz kepest
         message VARCHAR(255) NULL,
         ip_address VARCHAR(45) NULL,
         -- login/IP-utkozes ellenorzeshez indexelt IP mezo
@@ -261,7 +261,6 @@ CREATE TABLE
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
         INDEX idx_user_logs_user_time (user_id, occurred_at),
         INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
-        INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
         INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at),
         INDEX idx_user_logs_ip_time (ip_address, occurred_at)
     );
@@ -354,6 +353,99 @@ CREATE TABLE
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
         INDEX idx_notification_reads_user (user_id),
         INDEX idx_notification_reads_dismissed (user_id, dismissed_at)
+    );
+
+-- =====================================================================
+-- ADMIN PANEL TABLAK (ADMIN_PANEL.md §6)
+-- =====================================================================
+
+-- 11. Admin tokenek (step-up auth) - csak SHA-256 hash van eltarolva.
+-- Plain token kiadaskor egyszer lathato a kliens fele, utana sehol.
+-- TTL: 15 perc sliding (last_used_at-tol szamitva).
+CREATE TABLE
+    IF NOT EXISTS admin_tokens (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        token_hash CHAR(64) NOT NULL,
+        issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_used_at TIMESTAMP NULL,
+        expires_at TIMESTAMP NOT NULL,
+        revoked_at TIMESTAMP NULL,
+        issued_ip VARCHAR(45) NOT NULL,
+        issued_user_agent VARCHAR(255) NULL,
+        UNIQUE KEY ux_admin_tokens_hash (token_hash),
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_admin_tokens_user_active (user_id, revoked_at, expires_at)
+    );
+
+-- 12. Admin audit log - append-only. ON DELETE RESTRICT az actor_user_id-n,
+-- a retention job tisztit (F9). before_state/after_state JSON, redaction allowlist a service-ben.
+CREATE TABLE
+    IF NOT EXISTS admin_audit_log (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        actor_user_id INT NOT NULL,
+        actor_username VARCHAR(50) NOT NULL,
+        action VARCHAR(64) NOT NULL,
+        severity ENUM ('info', 'warning', 'critical') DEFAULT 'info',
+        target_type VARCHAR(32) NULL,
+        target_id BIGINT NULL,
+        target_key VARCHAR(64) NULL,
+        target_label VARCHAR(120) NULL,
+        reason VARCHAR(1000) NOT NULL,
+        before_state JSON NULL,
+        after_state JSON NULL,
+        success BOOLEAN NOT NULL,
+        error_code VARCHAR(64) NULL,
+        ip_address VARCHAR(45) NOT NULL,
+        user_agent VARCHAR(255) NULL,
+        request_id CHAR(26) NOT NULL,
+        occurred_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+        FOREIGN KEY (actor_user_id) REFERENCES users (id) ON DELETE RESTRICT,
+        INDEX idx_aal_occurred (occurred_at),
+        INDEX idx_aal_actor_time (actor_user_id, occurred_at),
+        INDEX idx_aal_action_time (action, occurred_at),
+        INDEX idx_aal_target (target_type, target_id, occurred_at),
+        INDEX idx_aal_target_key (target_type, target_key, occurred_at),
+        INDEX idx_aal_severity_time (severity, occurred_at),
+        INDEX idx_aal_request (request_id)
+    );
+
+-- 13. Admin alert log - jogosulatlan probalkozas, lejart/hibas token, rate eszkalacio.
+CREATE TABLE
+    IF NOT EXISTS admin_alert_log (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        kind ENUM (
+            'unauthorized',
+            'rate_escalated',
+            'token_invalid',
+            'suspicious_pattern'
+        ) NOT NULL,
+        severity ENUM ('warning', 'critical') DEFAULT 'warning',
+        user_id INT NULL,
+        ip_address VARCHAR(45) NOT NULL,
+        endpoint VARCHAR(255) NULL,
+        user_agent VARCHAR(255) NULL,
+        detail JSON NULL,
+        occurred_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE SET NULL,
+        INDEX idx_aalert_time (occurred_at),
+        INDEX idx_aalert_kind_time (kind, occurred_at),
+        INDEX idx_aalert_ip_time (ip_address, occurred_at)
+    );
+
+-- 14. Aktiv rate limit eszkalaciok IP/user-szinten. Az F5 alerting service tolti,
+-- a rateLimiter middleware olvassa, lejart sorokat a retention/cleanup tisztitja.
+CREATE TABLE
+    IF NOT EXISTS admin_rate_escalations (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        scope ENUM ('ip', 'user') NOT NULL,
+        scope_value VARCHAR(64) NOT NULL,
+        multiplier DECIMAL(4, 2) NOT NULL DEFAULT 5.00,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        reason VARCHAR(255) NULL,
+        UNIQUE KEY ux_rate_esc_scope (scope, scope_value),
+        INDEX idx_rate_esc_expires (expires_at)
     );
 
 -- 20 teszt felhasznalo (jelszo: 123456Ab)

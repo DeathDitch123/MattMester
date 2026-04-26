@@ -25,15 +25,73 @@ jest.mock('../sql/sql_funtions', () => {
     };
 });
 
-jest.mock('../api/middleware/rateLimiter.js', () => ({
-    playerSearchLimiter: (request, response, next) => next(),
-    verifyPasswordLimiter: (request, response, next) => next(),
-    profileUpdateLimiter: (request, response, next) => next(),
-    profileImageUploadLimiter: (request, response, next) => next(),
-    profileImageRemoveLimiter: (request, response, next) => next(),
-    profileDeleteLimiter: (request, response, next) => next(),
-    chatMessageLimiter: (request, response, next) => next(),
-    chatDirectOpenLimiter: (request, response, next) => next()
+jest.mock('../api/middleware/rateLimiter.js', () => {
+    const passthrough = (request, response, next) => next();
+    return {
+        createRateLimiter: () => passthrough,
+        userOrIpKeyGenerator: (request) => `uid:${request.session?.userId || 'anon'}`,
+        playerSearchLimiter: passthrough,
+        verifyPasswordLimiter: passthrough,
+        profileUpdateLimiter: passthrough,
+        profileImageUploadLimiter: passthrough,
+        profileImageRemoveLimiter: passthrough,
+        profileDeleteLimiter: passthrough,
+        chatMessageLimiter: passthrough,
+        chatDirectOpenLimiter: passthrough
+    };
+});
+
+// Admin step-up token middleware - tesztben sima role=admin atengedi.
+// Az F2 ota az admin endpointokon Authorization: Bearer kotelezo, de
+// itt a regi tesztek a session.role-ra epulnek; a token-ellenorzest atugorjuk.
+jest.mock('../api/admin/middleware.js', () => {
+    const actual = jest.requireActual('../api/admin/middleware.js');
+    return {
+        ...actual,
+        parseAdminToken: (request, response, next) => {
+            const sessionRole = request.session?.role;
+            const sessionUserId = Number(request.session?.userId) || 0;
+            if (!sessionUserId) {
+                return response.status(401).json({ success: false, message: 'Nincs session.' });
+            }
+            if (sessionRole !== 'admin') {
+                return response.status(403).json({ success: false, message: 'Nincs jogosultsag.' });
+            }
+            request.adminAuth = {
+                userId: sessionUserId,
+                username: request.session?.username || 'admin',
+                isSuperAdmin: Boolean(request.session?.is_super_admin),
+                tokenId: 1,
+                ipAddress: '127.0.0.1',
+                userAgent: 'jest'
+            };
+            return next();
+        }
+    };
+});
+
+jest.mock('../api/admin/adminRateLimiter.js', () => {
+    const passthrough = (request, response, next) => next();
+    return {
+        preCheckEscalation: passthrough,
+        adminBaseLimiter: passthrough,
+        adminLimiterChain: [passthrough]
+    };
+});
+
+jest.mock('../api/admin/auditService.js', () => ({
+    auditFlush: (request, response, next) => next(),
+    recordAuditEntry: jest.fn(() => Promise.resolve({ eventId: 1 })),
+    bindSocketHub: jest.fn(),
+    redactObject: (input) => input,
+    buildDiff: () => ({ before: null, after: null })
+}));
+
+jest.mock('../api/admin/alertingService.js', () => ({
+    bindSocketHub: jest.fn(),
+    recordUnauthorized: jest.fn(() => Promise.resolve({ alertId: 1 })),
+    recordTokenInvalid: jest.fn(() => Promise.resolve({ alertId: 1 })),
+    recordSuspiciousPattern: jest.fn(() => Promise.resolve({ alertId: 1 }))
 }));
 
 jest.mock('../services.js', () => ({
@@ -218,7 +276,7 @@ describe('Admin pending profile images jogosultsag + statuszvaltas', () => {
         const app = buildApp({ userId: 1, role: 'admin' });
         const response = await request(app)
             .post('/api/admin/profile-images/55/reject')
-            .send({ reviewNote: 'Nem alkalmas tartalom.' });
+            .send({ reviewNote: 'Nem alkalmas tartalom.', reason: 'Nem alkalmas tartalom; szabalysertes.' });
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);
         expect(response.body.data.status).toBe('rejected');

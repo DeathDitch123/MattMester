@@ -580,15 +580,12 @@ async function insertUserLog(userId, logData) {
             severity,
             source,
             success,
-            metric_key,
-            metric_value,
-            metric_delta,
             message,
             ip_address,
             user_agent,
             metadata,
             occurred_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -598,9 +595,6 @@ async function insertUserLog(userId, logData) {
         logData.severity || 'info',
         logData.source || 'backend',
         typeof logData.success === 'boolean' ? logData.success : null,
-        logData.metricKey || null,
-        typeof logData.metricValue === 'number' ? logData.metricValue : null,
-        typeof logData.metricDelta === 'number' ? logData.metricDelta : null,
         logData.message || null,
         ipAddress,
         userAgent,
@@ -2136,6 +2130,9 @@ const CHAT_BLOCKED_WORDS = [
     'tetu',
     'ribanc',
     'kurvajo',
+    'kurvanyomor',
+    'nigger',
+    'nigga',
     // Spanish profanity
     'mierda',
     'joder',
