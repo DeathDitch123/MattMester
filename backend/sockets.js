@@ -972,6 +972,42 @@ function createSocketHub(io) {
                 });
             }
         },
+        // Multi-tab szinkron: az adott userhez tartozó összes nyitott klienshez
+        // (minden tab) eljut, hogy adott értesítést azonnal eltávolítsa a UI-ból.
+        emitNotificationDismissed(userId, notificationId) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            const normalizedNotificationId = parsePositiveInteger(notificationId, null);
+            if (normalizedUserId && normalizedNotificationId) {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:dismissed', {
+                    notificationId: normalizedNotificationId,
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        // "Mind olvasott" gomb után: minden látható értesítés tűnjön el a
+        // user összes tab-jából.
+        emitNotificationDismissedAll(userId) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            if (normalizedUserId) {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:dismissed-all', {
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        // Friend action utáni cleanup: type+sender filter alapján a kliens
+        // törli a megfelelő értesítéseket (ID lista helyett szűrő-leírás).
+        emitNotificationDismissedBulk(userId, filter) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            if (normalizedUserId && filter && typeof filter === 'object') {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:dismissed-bulk', {
+                    filter: {
+                        type: typeof filter.type === 'string' ? filter.type : null,
+                        senderUserId: parsePositiveInteger(filter.senderUserId, null)
+                    },
+                    at: new Date().toISOString()
+                });
+            }
+        },
         emitChatUnreadUpdate(userId, totalUnread) {
             const normalizedUserId = parsePositiveInteger(userId, null);
             const normalizedTotal = Math.max(0, parsePositiveInteger(totalUnread, 0));

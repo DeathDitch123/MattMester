@@ -3063,6 +3063,7 @@ async function getNotificationsForUser(userId, userRole, limit = 30, cursor = nu
         }
         params.push(normalizedLimit + 1);
 
+        // Dismissed (per-user soft-deleted) értesítéseket nem listázzuk.
         const [rows] = await pool.execute(
             `
                 SELECT
@@ -3078,7 +3079,7 @@ async function getNotificationsForUser(userId, userRole, limit = 30, cursor = nu
                     n.payload,
                     n.severity,
                     n.created_at,
-                    CASE WHEN nr.notification_id IS NULL THEN 0 ELSE 1 END AS is_read
+                    CASE WHEN nr.read_at IS NULL THEN 0 ELSE 1 END AS is_read
                 FROM notifications n
                 LEFT JOIN notification_reads nr
                     ON nr.notification_id = n.id AND nr.user_id = ?
@@ -3088,6 +3089,7 @@ async function getNotificationsForUser(userId, userRole, limit = 30, cursor = nu
                     OR n.audience = 'global'
                     OR (n.audience = 'role' AND n.target_role = ?)
                 )
+                AND (nr.dismissed_at IS NULL)
                 ${cursorClause}
                 ORDER BY n.id DESC
                 LIMIT ?
@@ -3167,12 +3169,15 @@ async function markNotificationRead(userId, notificationId) {
         if (accessRows.length) {
             const [insertResult] = await pool.execute(
                 `
-                    INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at)
+                    INSERT INTO notification_reads (notification_id, user_id, read_at)
                     VALUES (?, ?, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        read_at = COALESCE(read_at, VALUES(read_at))
                 `,
                 [normalizedNotificationId, normalizedUserId]
             );
-            outcome = { changed: insertResult.affectedRows > 0 };
+            // affectedRows: 1 = beszúrva, 2 = update történt, 0 = no-op (már volt read_at)
+            outcome = { changed: insertResult.affectedRows === 1 };
         }
     } catch (error) {
         throw new Error(error.message || 'Hiba az értesítés olvasottá jelölése során.');
@@ -3180,7 +3185,67 @@ async function markNotificationRead(userId, notificationId) {
     return outcome;
 }
 
-async function markFriendRequestNotificationsReadForUser(userId, senderUserId) {
+// Egy adott értesítés permanens user-oldali eltávolítása (X / akció gomb).
+// Idempotens: többszöri hívás nem hibázik, dismissed_at nem íródik felül.
+async function dismissNotificationForUser(userId, notificationId) {
+    const pool = getPool();
+    let outcome = { changed: false, alreadyDismissed: false, accessible: false };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedNotificationId = normalizePositiveInt(notificationId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedNotificationId) {
+            throw new Error('Érvénytelen értesítés azonosító.');
+        }
+
+        const [accessRows] = await pool.execute(
+            `
+                SELECT n.id, nr.dismissed_at
+                FROM notifications n
+                LEFT JOIN users u ON u.id = ?
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE n.id = ?
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = u.role)
+                  )
+                LIMIT 1
+            `,
+            [normalizedUserId, normalizedUserId, normalizedNotificationId, normalizedUserId]
+        );
+
+        if (accessRows.length) {
+            outcome.accessible = true;
+            const wasAlreadyDismissed = accessRows[0].dismissed_at !== null;
+            outcome.alreadyDismissed = wasAlreadyDismissed;
+            if (!wasAlreadyDismissed) {
+                await pool.execute(
+                    `
+                        INSERT INTO notification_reads (notification_id, user_id, read_at, dismissed_at)
+                        VALUES (?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            read_at = COALESCE(read_at, VALUES(read_at)),
+                            dismissed_at = COALESCE(dismissed_at, VALUES(dismissed_at))
+                    `,
+                    [normalizedNotificationId, normalizedUserId]
+                );
+                outcome.changed = true;
+            }
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítés eltávolítása során.');
+    }
+    return outcome;
+}
+
+// Friend action utáni cleanup: az adott senderhez tartozó friend_request
+// értesítéseket dismiss-eli a current usernél (nem read csak), hogy
+// session-váltás után se jöjjenek vissza.
+async function dismissFriendRequestNotificationsForUser(userId, senderUserId) {
     const pool = getPool();
     let outcome = { changed: 0 };
     try {
@@ -3193,10 +3258,12 @@ async function markFriendRequestNotificationsReadForUser(userId, senderUserId) {
             throw new Error('Érvénytelen kuldo felhasznalo azonosito.');
         }
 
+        // 1. lépés: új sorokat húzunk fel azokra az értesítésekre, amelyek
+        //   még nincsenek a notification_reads-ben (új sor = read+dismiss együtt).
         const [insertResult] = await pool.execute(
             `
-                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at)
-                SELECT n.id, ?, NOW()
+                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at, dismissed_at)
+                SELECT n.id, ?, NOW(), NOW()
                 FROM notifications n
                 LEFT JOIN notification_reads nr
                     ON nr.notification_id = n.id AND nr.user_id = ?
@@ -3208,14 +3275,37 @@ async function markFriendRequestNotificationsReadForUser(userId, senderUserId) {
             [normalizedUserId, normalizedUserId, normalizedUserId, normalizedSenderUserId]
         );
 
-        outcome = { changed: Number(insertResult.affectedRows || 0) };
+        // 2. lépés: a már létező soroknál (csak read volt) dismissed_at beállítás.
+        const [updateResult] = await pool.execute(
+            `
+                UPDATE notification_reads nr
+                JOIN notifications n
+                    ON n.id = nr.notification_id
+                SET nr.dismissed_at = NOW(),
+                    nr.read_at = COALESCE(nr.read_at, NOW())
+                WHERE nr.user_id = ?
+                  AND nr.dismissed_at IS NULL
+                  AND n.type = 'friend_request'
+                  AND n.target_user_id = ?
+                  AND n.sender_user_id = ?
+            `,
+            [normalizedUserId, normalizedUserId, normalizedSenderUserId]
+        );
+
+        outcome = {
+            changed: Number(insertResult.affectedRows || 0) + Number(updateResult.affectedRows || 0)
+        };
     } catch (error) {
-        throw new Error(error.message || 'Hiba a friend request ertesites olvasott statusz mentesekor.');
+        throw new Error(error.message || 'Hiba a friend request ertesites eltavolitasakor.');
     }
     return outcome;
 }
 
-async function markAllNotificationsReadForUser(userId, userRole) {
+// "Mind olvasott" UI gomb backend-je: minden látható (még nem dismissed)
+// értesítést permanensen eltávolít a user nézetéből (read+dismiss együtt).
+// A felirat a UI-on magyar konvenció miatt marad "Mind olvasott", de a
+// viselkedés tényleges per-user dismiss minden listázott elemen.
+async function dismissAllNotificationsForUser(userId, userRole) {
     const pool = getPool();
     let outcome = { changed: 0 };
     try {
@@ -3227,8 +3317,8 @@ async function markAllNotificationsReadForUser(userId, userRole) {
 
         const [insertResult] = await pool.execute(
             `
-                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at)
-                SELECT n.id, ?, NOW()
+                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at, dismissed_at)
+                SELECT n.id, ?, NOW(), NOW()
                 FROM notifications n
                 LEFT JOIN notification_reads nr
                     ON nr.notification_id = n.id AND nr.user_id = ?
@@ -3242,12 +3332,38 @@ async function markAllNotificationsReadForUser(userId, userRole) {
             [normalizedUserId, normalizedUserId, normalizedUserId, normalizedRole]
         );
 
-        outcome = { changed: Number(insertResult.affectedRows || 0) };
+        const [updateResult] = await pool.execute(
+            `
+                UPDATE notification_reads nr
+                JOIN notifications n
+                    ON n.id = nr.notification_id
+                LEFT JOIN users u ON u.id = ?
+                SET nr.dismissed_at = NOW(),
+                    nr.read_at = COALESCE(nr.read_at, NOW())
+                WHERE nr.user_id = ?
+                  AND nr.dismissed_at IS NULL
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = ?)
+                  )
+            `,
+            [normalizedUserId, normalizedUserId, normalizedUserId, normalizedRole]
+        );
+
+        outcome = {
+            changed: Number(insertResult.affectedRows || 0) + Number(updateResult.affectedRows || 0)
+        };
     } catch (error) {
-        throw new Error(error.message || 'Hiba az értesítések tömeges olvasottá jelölése során.');
+        throw new Error(error.message || 'Hiba az értesítések tömeges eltávolítása során.');
     }
     return outcome;
 }
+
+// Visszafelé kompatibilis alias: a route-ok és külső hívók a régi nevet
+// használják, viselkedés ugyanaz mint a dismiss-all (per spec).
+const markAllNotificationsReadForUser = dismissAllNotificationsForUser;
+const markFriendRequestNotificationsReadForUser = dismissFriendRequestNotificationsForUser;
 
 async function getUnreadNotificationCount(userId, userRole) {
     const pool = getPool();
@@ -3259,13 +3375,18 @@ async function getUnreadNotificationCount(userId, userRole) {
         }
         const normalizedRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(userRole) ? userRole : 'player';
 
+        // Olvasatlan = read_at IS NULL ÉS dismissed_at IS NULL.
+        // (A dismiss workflow mindig read_at-et is beállít, így a két feltétel
+        // nem mond ellent egymásnak; a védelem szándékos, ha külső path
+        // valaha is csak dismissed_at-et állítana be.)
         const [rows] = await pool.execute(
             `
                 SELECT COUNT(*) AS unread_count
                 FROM notifications n
                 LEFT JOIN notification_reads nr
                     ON nr.notification_id = n.id AND nr.user_id = ?
-                WHERE nr.notification_id IS NULL
+                WHERE (nr.read_at IS NULL)
+                  AND (nr.dismissed_at IS NULL)
                   AND (
                         n.target_user_id = ?
                         OR n.audience = 'global'
@@ -3496,6 +3617,9 @@ module.exports = {
     insertNotification,
     getNotificationsForUser,
     markNotificationRead,
+    dismissNotificationForUser,
+    dismissFriendRequestNotificationsForUser,
+    dismissAllNotificationsForUser,
     markFriendRequestNotificationsReadForUser,
     markAllNotificationsReadForUser,
     getUnreadNotificationCount,

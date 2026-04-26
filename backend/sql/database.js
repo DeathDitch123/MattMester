@@ -263,11 +263,13 @@ async function createTables() {
         `CREATE TABLE IF NOT EXISTS notification_reads (
             notification_id BIGINT NOT NULL,
             user_id INT NOT NULL,
-            read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            read_at TIMESTAMP NULL DEFAULT NULL,
+            dismissed_at TIMESTAMP NULL DEFAULT NULL,
             PRIMARY KEY (notification_id, user_id),
             FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            INDEX idx_notification_reads_user (user_id)
+            INDEX idx_notification_reads_user (user_id),
+            INDEX idx_notification_reads_dismissed (user_id, dismissed_at)
         )`,
 
         `CREATE TABLE IF NOT EXISTS user_logs (
@@ -300,6 +302,77 @@ async function createTables() {
     }
 }
 
+// Forward-compat oszlop-szinkron: ha egy regi DB-ben hianyzik egy uj oszlop,
+// itt biztonsagosan, idempotensen hozzaadjuk. Sosem dropol es sosem modositja
+// a meglevo adatot. Csak az alkalmazas-szintu sema-evolucio helyettesitesere,
+// nem teljes migracio-runner.
+async function ensureSchemaColumns() {
+    const expectedColumns = [
+        {
+            table: 'notification_reads',
+            column: 'dismissed_at',
+            definition: 'TIMESTAMP NULL DEFAULT NULL AFTER read_at',
+            indexName: 'idx_notification_reads_dismissed',
+            indexColumns: '(user_id, dismissed_at)'
+        },
+        {
+            table: 'notification_reads',
+            column: 'read_at',
+            definition: 'TIMESTAMP NULL DEFAULT NULL',
+            // index nem kell, PK lefedi
+            indexName: null,
+            indexColumns: null,
+            relaxOnly: true // csak akkor modositunk ha a meglevo definicio NOT NULL es default CURRENT_TIMESTAMP
+        }
+    ];
+
+    for (const spec of expectedColumns) {
+        try {
+            const [colRows] = await pool.execute(
+                `
+                    SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_DEFAULT
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = ?
+                      AND COLUMN_NAME = ?
+                `,
+                [spec.table, spec.column]
+            );
+
+            if (!colRows.length) {
+                await pool.query(`ALTER TABLE \`${spec.table}\` ADD COLUMN \`${spec.column}\` ${spec.definition}`);
+                console.log(`[schema] hozzaadva: ${spec.table}.${spec.column}`);
+            } else if (spec.relaxOnly) {
+                const isNullable = String(colRows[0].IS_NULLABLE || '').toUpperCase() === 'YES';
+                if (!isNullable) {
+                    await pool.query(`ALTER TABLE \`${spec.table}\` MODIFY COLUMN \`${spec.column}\` ${spec.definition}`);
+                    console.log(`[schema] lazitva nullable-re: ${spec.table}.${spec.column}`);
+                }
+            }
+
+            if (spec.indexName) {
+                const [idxRows] = await pool.execute(
+                    `
+                        SELECT INDEX_NAME
+                        FROM INFORMATION_SCHEMA.STATISTICS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                          AND TABLE_NAME = ?
+                          AND INDEX_NAME = ?
+                        LIMIT 1
+                    `,
+                    [spec.table, spec.indexName]
+                );
+                if (!idxRows.length) {
+                    await pool.query(`ALTER TABLE \`${spec.table}\` ADD INDEX \`${spec.indexName}\` ${spec.indexColumns}`);
+                    console.log(`[schema] index hozzaadva: ${spec.table}.${spec.indexName}`);
+                }
+            }
+        } catch (err) {
+            console.warn(`[schema] ensureSchemaColumns hiba (${spec.table}.${spec.column}):`, err.message);
+        }
+    }
+}
+
 async function initDatabase() {
     try {
         await ensureDatabaseExists();
@@ -309,6 +382,7 @@ async function initDatabase() {
         conn.release();
 
         await createTables();
+        await ensureSchemaColumns();
         console.log('Database initialized successfully.');
     } catch (err) {
         console.error('Failed to initialize database:', err);

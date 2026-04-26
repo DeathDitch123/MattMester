@@ -63,17 +63,25 @@ async function pushFriendNotification(request, { senderUserId, targetUserId, typ
     return result;
 }
 
-// Backup safety-net: friend action utan a kapcsolodo friend_request ertesitest
-// olvasottra huzza az aktualis usernel, hogy ne jelenjen meg ujra bejelentkezes utan.
-async function markRelatedFriendRequestNotificationRead(request, currentUserId, targetUserId) {
+// Friend action (accept/reject/block) után a kapcsolódó friend_request
+// értesítéseket permanensen eltávolítja az aktuális user nézetéből, hogy
+// session-váltás / re-login után se jöjjenek vissza, és multi-tab szinkronhoz
+// kibocsát egy notification:dismissed-bulk eseményt.
+async function dismissRelatedFriendRequestNotification(request, currentUserId, targetUserId) {
     try {
-        const result = await sql.markFriendRequestNotificationsReadForUser(currentUserId, targetUserId);
+        const result = await sql.dismissFriendRequestNotificationsForUser(currentUserId, targetUserId);
         if (result.changed > 0) {
             const socketHub = request.app?.locals?.socketHub;
             await notificationService.refreshBadgeForUser(socketHub, currentUserId);
+            if (socketHub?.emitNotificationDismissedBulk) {
+                socketHub.emitNotificationDismissedBulk(currentUserId, {
+                    type: 'friend_request',
+                    senderUserId: targetUserId
+                });
+            }
         }
     } catch (error) {
-        console.warn('[friends] friend_request read safety-net hiba:', error.message);
+        console.warn('[friends] friend_request dismiss safety-net hiba:', error.message);
     }
 }
 
@@ -153,7 +161,7 @@ router.post('/friends/accept', friendActionLimiter, isAuthenticated, async (requ
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.acceptFriendRequest(currentUserId, targetUserId);
-        await markRelatedFriendRequestNotificationRead(request, currentUserId, targetUserId);
+        await dismissRelatedFriendRequestNotification(request, currentUserId, targetUserId);
         await logAuthenticatedAction(request, currentUserId, {
             eventType: 'friend_request_accepted',
             eventCategory: 'social',
@@ -191,7 +199,7 @@ router.post('/friends/reject', friendActionLimiter, isAuthenticated, async (requ
         if (!targetUserId) { statusCode = 400; throw new Error('Érvénytelen target user ID.'); }
 
         const result = await sql.rejectFriendRequest(currentUserId, targetUserId);
-        await markRelatedFriendRequestNotificationRead(request, currentUserId, targetUserId);
+        await dismissRelatedFriendRequestNotification(request, currentUserId, targetUserId);
         await logAuthenticatedAction(request, currentUserId, {
             eventType: 'friend_request_rejected',
             eventCategory: 'social',
@@ -221,7 +229,7 @@ router.post('/friends/block', friendActionLimiter, isAuthenticated, async (reque
         if (currentUserId === targetUserId) { statusCode = 400; throw new Error('Nem tilthatod le saját magadat.'); }
 
         const result = await sql.blockUserDirectional(currentUserId, targetUserId);
-        await markRelatedFriendRequestNotificationRead(request, currentUserId, targetUserId);
+        await dismissRelatedFriendRequestNotification(request, currentUserId, targetUserId);
         await performChatCleanupAfterRelationChange(request, currentUserId, targetUserId, 'blocked');
         const blocker = await sql.getUserBasicById(currentUserId);
         await pushFriendNotification(request, {

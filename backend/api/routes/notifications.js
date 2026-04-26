@@ -3,6 +3,7 @@ const sql = require('../../sql/sql_funtions.js');
 const { isAuthenticated } = require('../funtions.js');
 const { notificationService } = require('../../services.js');
 const { parsePositiveInteger, getAuthenticatedUserIdOrThrow } = require('./_shared.js');
+const { notificationActionLimiter } = require('../middleware/rateLimiter.js');
 
 const router = express.Router();
 
@@ -66,7 +67,7 @@ router.get('/notifications/unread-count', isAuthenticated, async (request, respo
     return response.status(statusCode).json(payload);
 });
 
-router.post('/notifications/:notificationId/read', isAuthenticated, async (request, response) => {
+router.post('/notifications/:notificationId/read', notificationActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, unreadCount: 0, changed: false, message: 'Szerverhiba az értesítés olvasottá jelölése során.' };
     try {
@@ -106,16 +107,21 @@ router.post('/notifications/:notificationId/read', isAuthenticated, async (reque
     return response.status(statusCode).json(payload);
 });
 
-router.post('/notifications/read-all', isAuthenticated, async (request, response) => {
+// "Mind olvasott" UI gomb backend-je: per-spec ez minden látható értesítést
+// permanensen eltávolít a user nézetéből (read+dismiss együtt).
+router.post('/notifications/read-all', notificationActionLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
-    let payload = { success: false, unreadCount: 0, changed: 0, message: 'Szerverhiba az értesítések tömeges olvasottá jelölése során.' };
+    let payload = { success: false, unreadCount: 0, changed: 0, message: 'Szerverhiba az értesítések tömeges eltávolítása során.' };
     try {
         const currentUserId = getAuthenticatedUserIdOrThrow(request);
         const userRole = String(request.session?.role || 'player');
-        const result = await sql.markAllNotificationsReadForUser(currentUserId, userRole);
+        const result = await sql.dismissAllNotificationsForUser(currentUserId, userRole);
         const socketHub = request.app?.locals?.socketHub;
         const unreadCount = await notificationService.refreshBadgeForUser(socketHub, currentUserId);
-        payload = { success: true, unreadCount, changed: result.changed, message: `${result.changed} értesítés olvasottnak jelölve.` };
+        if (socketHub?.emitNotificationDismissedAll) {
+            socketHub.emitNotificationDismissedAll(currentUserId);
+        }
+        payload = { success: true, unreadCount, changed: result.changed, message: `${result.changed} értesítés eltávolítva.` };
     } catch (error) {
         const message = String(error?.message || '').toLowerCase();
         if (message.includes('nincs bejelentkezett')) {
@@ -123,6 +129,46 @@ router.post('/notifications/read-all', isAuthenticated, async (request, response
         } else if (statusCode === 200) {
             statusCode = 500;
         }
+        payload.message = error.message || payload.message;
+    }
+    return response.status(statusCode).json(payload);
+});
+
+// Egy értesítés permanens user-oldali eltávolítása (X gomb + akció gombok).
+// Idempotens: már dismiss-elt értesítés újra-hívása nem hibázik.
+router.post('/notifications/:notificationId/dismiss', notificationActionLimiter, isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, unreadCount: 0, changed: false, message: 'Szerverhiba az értesítés eltávolítása során.' };
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+        const notificationId = parsePositiveInteger(request.params?.notificationId, null);
+        if (!notificationId) {
+            statusCode = 400;
+            throw new Error('Érvénytelen értesítés azonosító.');
+        }
+
+        const dismissResult = await sql.dismissNotificationForUser(currentUserId, notificationId);
+        const socketHub = request.app?.locals?.socketHub;
+        const unreadCount = await notificationService.refreshBadgeForUser(socketHub, currentUserId);
+        if (dismissResult.accessible && socketHub?.emitNotificationDismissed) {
+            socketHub.emitNotificationDismissed(currentUserId, notificationId);
+        }
+
+        payload = {
+            success: true,
+            unreadCount,
+            changed: Boolean(dismissResult.changed),
+            alreadyDismissed: Boolean(dismissResult.alreadyDismissed),
+            message: dismissResult.changed ? 'Értesítés eltávolítva.' : 'Az értesítés már el volt távolítva.'
+        };
+    } catch (error) {
+        const message = String(error?.message || '').toLowerCase();
+        if (message.includes('nincs bejelentkezett')) {
+            statusCode = 401;
+        } else if (statusCode === 200) {
+            statusCode = 500;
+        }
+        console.warn('[notifications] dismiss endpoint hiba:', error.message);
         payload.message = error.message || payload.message;
     }
     return response.status(statusCode).json(payload);

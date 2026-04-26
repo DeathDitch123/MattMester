@@ -336,18 +336,24 @@ CREATE TABLE
         INDEX idx_notifications_type (type)
     );
 
--- Per-user read state. Used for both directed notifications and broadcasts.
--- For broadcast notifications we lazily insert a row when the user marks the
--- given notification as read; absence of a row means "unread".
+-- Per-user read/dismiss state. Used for both directed notifications and broadcasts.
+-- For broadcast notifications we lazily insert a row when the user interacts with
+-- the notification; absence of a row means "unread + visible".
+-- dismissed_at IS NOT NULL means the user permanently removed the notification
+-- from their notification center view (X / action button / mind olvasott).
+-- The underlying entity (e.g. friend_request) is NOT deleted, only the
+-- notification entry is hidden from this user.
 CREATE TABLE
     IF NOT EXISTS notification_reads (
         notification_id BIGINT NOT NULL,
         user_id INT NOT NULL,
-        read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        read_at TIMESTAMP NULL DEFAULT NULL,
+        dismissed_at TIMESTAMP NULL DEFAULT NULL,
         PRIMARY KEY (notification_id, user_id),
         FOREIGN KEY (notification_id) REFERENCES notifications (id) ON DELETE CASCADE,
         FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-        INDEX idx_notification_reads_user (user_id)
+        INDEX idx_notification_reads_user (user_id),
+        INDEX idx_notification_reads_dismissed (user_id, dismissed_at)
     );
 
 -- 20 teszt felhasznalo (jelszo: 123456Ab)

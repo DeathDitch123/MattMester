@@ -194,6 +194,18 @@ const passwordResetTokenLimiter = createRateLimiter({
     message: 'Túl sok jelszó-visszaállítási kísérlet. Próbáld újra később.'
 });
 
+// Értesítés akciók (dismiss / read / read-all): 1 perces ablakban max 60 művelet
+// felhasználónként. Egy aktív user normál esetben 1-5 akciót csinál percenként;
+// 60-as plafon nyugodtan elnyeli a kényelmes UI-t és a multi-tab szinkront,
+// de spam-click / botabuzálást már stoppolja (egy gomb gyors klikkelése
+// másodpercenkénti 10+ POST-ot generálna).
+const notificationActionLimiter = createRateLimiter({
+    windowMs: 60 * 1000,
+    max: 60,
+    keyGenerator: userOrIpKeyGenerator,
+    message: 'Túl sok értesítés művelet rövid idő alatt. Próbáld újra később.'
+});
+
 module.exports = {
     createRateLimiter,
     userOrIpKeyGenerator,
@@ -212,5 +224,6 @@ module.exports = {
     emailVerifyResendLimiter,
     emailVerifyConsumeLimiter,
     passwordResetRequestLimiter,
-    passwordResetTokenLimiter
+    passwordResetTokenLimiter,
+    notificationActionLimiter
 };

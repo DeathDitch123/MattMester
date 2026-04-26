@@ -92,7 +92,14 @@ const notificationCenterState = {
     items: [],
     unreadCount: 0,
     maxItems: 50,
-    lastKnownUserId: 0
+    lastKnownUserId: 0,
+    // In-flight dismiss / akcio-folyamatok per notificationId. A click handler
+    // ezzel akadalyozza meg, hogy ugyanazt a gombot tobbszor is meg lehessen
+    // nyomni, mig egy futo POST be nem fejezodik (vagy vissza nem allitjuk).
+    pendingActionIds: new Set(),
+    // "Mind olvasott" gombhoz kulon, mert tobb gomb lehet (multi-tab),
+    // de ugyanazon a tab-on egyszerre csak egy futhasson.
+    markAllInFlight: false
 };
 const chatBadgeState = {
     bound: false,
@@ -449,6 +456,38 @@ async function markAllNotificationsReadOnServer() {
     return success;
 }
 
+// Per-spec: az X / akció gombok permanens user-oldali eltávolítást váltanak ki.
+// A backend a notification_reads.dismissed_at-be ír, így re-loginnal sem
+// jönnek vissza. Idempotens: ismételt hívás 200-at ad vissza.
+async function dismissNotificationOnServer(notificationId) {
+    let success = false;
+    try {
+        const normalizedNotificationId = Number(notificationId);
+        if (!Number.isInteger(normalizedNotificationId) || normalizedNotificationId <= 0) {
+            console.error('[notifications] dismiss kihagyva: ervenytelen notificationId:', notificationId);
+            return false;
+        }
+
+        const response = await fetch(`/api/notifications/${normalizedNotificationId}/dismiss`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        const json = await response.json().catch(() => ({}));
+        success = response.ok && Boolean(json?.success);
+
+        if (!success) {
+            console.error('[notifications] dismiss sikertelen:', {
+                notificationId: normalizedNotificationId,
+                status: response.status,
+                message: String(json?.message || 'ismeretlen hiba')
+            });
+        }
+    } catch (error) {
+        console.error('[notifications] dismiss hiba:', error.message);
+    }
+    return success;
+}
+
 async function performFriendActionFromNotification(action, fromUserId) {
     let outcome = { success: false, message: '' };
     try {
@@ -576,6 +615,58 @@ function bindNotificationCenterEvents() {
             });
         });
 
+        // Multi-tab szinkron: ha az adott user masik tabjan / a backend
+        // dismiss-elte az ertesitest, ezen a tabon is azonnal tunjon el.
+        window.addEventListener('mattmester:notification:dismissed', (event) => {
+            runSafely('notificationDismissedFromServer', () => {
+                const notificationId = Number(event?.detail?.notificationId) || 0;
+                if (notificationId > 0) {
+                    const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
+                    if (idx >= 0) {
+                        const wasUnread = !notificationCenterState.items[idx].isRead;
+                        notificationCenterState.items.splice(idx, 1);
+                        if (wasUnread) {
+                            setNotificationBadge(Math.max(0, notificationCenterState.unreadCount - 1));
+                        }
+                        renderNotificationCenterList();
+                    }
+                }
+            });
+        });
+
+        window.addEventListener('mattmester:notification:dismissed-all', () => {
+            runSafely('notificationDismissedAllFromServer', () => {
+                notificationCenterState.items = [];
+                setNotificationBadge(0);
+                renderNotificationCenterList();
+            });
+        });
+
+        window.addEventListener('mattmester:notification:dismissed-bulk', (event) => {
+            runSafely('notificationDismissedBulkFromServer', () => {
+                const filter = event?.detail?.filter || {};
+                const filterType = typeof filter.type === 'string' ? filter.type : null;
+                const filterSenderUserId = Number(filter.senderUserId) || null;
+                if (!filterType && !filterSenderUserId) {
+                    return;
+                }
+                let unreadDelta = 0;
+                notificationCenterState.items = notificationCenterState.items.filter((entry) => {
+                    const matchesType = !filterType || entry.type === filterType;
+                    const matchesSender = !filterSenderUserId || Number(entry.fromUserId) === filterSenderUserId;
+                    const shouldRemove = matchesType && matchesSender;
+                    if (shouldRemove && !entry.isRead) {
+                        unreadDelta += 1;
+                    }
+                    return !shouldRemove;
+                });
+                if (unreadDelta > 0) {
+                    setNotificationBadge(Math.max(0, notificationCenterState.unreadCount - unreadDelta));
+                }
+                renderNotificationCenterList();
+            });
+        });
+
         window.addEventListener('mattmester:chat:unread:reset', (event) => {
             runSafely('chatUnreadResetFromServer', () => {
                 const reason = String(event?.detail?.reason || 'session-change');
@@ -597,66 +688,125 @@ function bindNotificationCenterEvents() {
             list.addEventListener('click', (event) => {
                 runSafelyAsync('notificationListAction', async () => {
                     const button = event.target.closest('[data-notification-action]');
-                    if (button) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        const wrapper = button.closest('[data-notification-id]');
-                        const notificationId = Number(wrapper?.dataset.notificationId) || 0;
-                        const fromUserId = Number(wrapper?.dataset.fromUserId) || 0;
-                        const conversationId = Number(wrapper?.dataset.conversationId) || 0;
-                        const action = button.dataset.notificationAction;
+                    if (!button) {
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const wrapper = button.closest('[data-notification-id]');
+                    const notificationId = Number(wrapper?.dataset.notificationId) || 0;
+                    const fromUserId = Number(wrapper?.dataset.fromUserId) || 0;
+                    const conversationId = Number(wrapper?.dataset.conversationId) || 0;
+                    const action = button.dataset.notificationAction;
 
-                        if (action === 'profile' && fromUserId) {
-                            await openPlayerProfileModalByUserId(fromUserId);
-                        } else if ((action === 'accept' || action === 'reject' || action === 'block') && fromUserId) {
+                    // Profil = view-only, ratelimit / spam vedelem nem ertelmezett.
+                    if (action === 'profile' && fromUserId) {
+                        await openPlayerProfileModalByUserId(fromUserId);
+                        return;
+                    }
+
+                    // open_chat = read + modal close, nem optimistic remove.
+                    if (action === 'open_chat' && (conversationId || fromUserId)) {
+                        const isReadSaved = await markNotificationReadOnServer(notificationId);
+                        if (!isReadSaved) {
+                            console.error('[notifications] chat megnyitas mellett read mentes sikertelen:', notificationId);
+                        }
+                        window.dispatchEvent(new CustomEvent('mattmester:chat:open-conversation', {
+                            detail: { conversationId, targetUserId: fromUserId }
+                        }));
+                        if (modal) {
+                            bootstrap.Modal.getOrCreateInstance(modal).hide();
+                        }
+                        return;
+                    }
+
+                    // Innen lefele: minden ag dismiss-elendo, ami optimistic
+                    // local-removal-t es per-notif in-flight guardot ervenyesit.
+                    const isResolvingAction = (
+                        action === 'remove'
+                        || ((action === 'accept' || action === 'reject' || action === 'block') && fromUserId)
+                    );
+                    if (!isResolvingAction || !notificationId) {
+                        return;
+                    }
+
+                    // 1. lepes — abuse / double-click vedelem: ha mar fut egy
+                    //    POST erre az ertesitesre, a kovetkezo klikkek no-op-ok.
+                    if (notificationCenterState.pendingActionIds.has(notificationId)) {
+                        return;
+                    }
+                    notificationCenterState.pendingActionIds.add(notificationId);
+
+                    // 2. lepes — minden akcio-gombot disable-elunk a kartyan,
+                    //    hogy egy lassu valtas alatt se lehessen tovabbi POST-okat
+                    //    ramai meg. Mar nem latszik, ha eltunt, de safety-net.
+                    const cardButtons = wrapper
+                        ? Array.from(wrapper.querySelectorAll('[data-notification-action]'))
+                        : [button];
+                    cardButtons.forEach((btn) => { btn.disabled = true; });
+
+                    // 3. lepes — optimistic UI: local state-bol kivesszuk, mielott
+                    //    a halozati hivas befejezodne. Ha hibazik, visszaallitjuk.
+                    const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
+                    let removedItem = null;
+                    let removedIndex = -1;
+                    if (idx >= 0) {
+                        removedIndex = idx;
+                        removedItem = notificationCenterState.items[idx];
+                        notificationCenterState.items.splice(idx, 1);
+                        if (removedItem && !removedItem.isRead) {
+                            setNotificationBadge(Math.max(0, notificationCenterState.unreadCount - 1));
+                        }
+                        renderNotificationCenterList();
+                    }
+
+                    const restoreOnFailure = (feedbackMessage) => {
+                        if (removedItem && removedIndex >= 0) {
+                            const insertAt = Math.min(removedIndex, notificationCenterState.items.length);
+                            notificationCenterState.items.splice(insertAt, 0, removedItem);
+                            if (!removedItem.isRead) {
+                                setNotificationBadge(notificationCenterState.unreadCount + 1);
+                            }
+                            renderNotificationCenterList();
+                        }
+                        if (feedbackMessage && typeof setFriendsFeedback === 'function') {
+                            setFriendsFeedback(feedbackMessage, 'warning');
+                        }
+                    };
+
+                    try {
+                        if (action === 'remove') {
+                            const isDismissSaved = await dismissNotificationOnServer(notificationId);
+                            if (!isDismissSaved) {
+                                restoreOnFailure('Az ertesites eltavolitasa nem sikerult.');
+                            }
+                        } else {
+                            // accept / reject / block: friend action elobb, dismiss utana.
                             const result = await performFriendActionFromNotification(action, fromUserId);
                             if (result.success) {
-                                const isReadSaved = await markNotificationReadOnServer(notificationId);
-                                if (!isReadSaved) {
-                                    if (typeof setFriendsFeedback === 'function') {
-                                        setFriendsFeedback('A muvelet sikerult, de az ertesites olvasottnak jelolese nem sikerult. Frissitsd az oldalt.', 'warning');
-                                    }
-                                    return;
+                                const isDismissSaved = await dismissNotificationOnServer(notificationId);
+                                if (!isDismissSaved && typeof setFriendsFeedback === 'function') {
+                                    setFriendsFeedback('A muvelet sikerult, de az ertesites eltavolitasa nem sikerult. Frissitsd az oldalt.', 'warning');
                                 }
-                                const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
-                                if (idx >= 0) {
-                                    notificationCenterState.items.splice(idx, 1);
-                                }
-                                renderNotificationCenterList();
                                 if (typeof setFriendsFeedback === 'function') {
                                     setFriendsFeedback(result.message, 'success');
                                 }
                                 if (typeof refreshFriendsList === 'function') {
                                     await refreshFriendsList(friendsState?.activeFilter || 'friend');
                                 }
-                            } else if (typeof setFriendsFeedback === 'function') {
-                                setFriendsFeedback(result.message, 'error');
-                            }
-                        } else if (action === 'open_chat' && (conversationId || fromUserId)) {
-                            const isReadSaved = await markNotificationReadOnServer(notificationId);
-                            if (!isReadSaved) {
-                                console.error('[notifications] chat megnyitas mellett read mentes sikertelen:', notificationId);
-                            }
-                            window.dispatchEvent(new CustomEvent('mattmester:chat:open-conversation', {
-                                detail: { conversationId, targetUserId: fromUserId }
-                            }));
-                            if (modal) {
-                                bootstrap.Modal.getOrCreateInstance(modal).hide();
-                            }
-                        } else if (action === 'remove') {
-                            const isReadSaved = await markNotificationReadOnServer(notificationId);
-                            if (!isReadSaved) {
+                            } else {
+                                restoreOnFailure(null);
                                 if (typeof setFriendsFeedback === 'function') {
-                                    setFriendsFeedback('Az ertesites olvasottnak jelolese nem sikerult, ezert nem lett eltavolitva.', 'warning');
+                                    setFriendsFeedback(result.message || 'Hiba a muvelet soran.', 'error');
                                 }
-                                return;
                             }
-                            const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
-                            if (idx >= 0) {
-                                notificationCenterState.items.splice(idx, 1);
-                            }
-                            renderNotificationCenterList();
                         }
+                    } finally {
+                        notificationCenterState.pendingActionIds.delete(notificationId);
+                        // Ha a kartya meg latszik (hiba miatt visszaallt), engedelyezzuk
+                        // ujra a gombokat. Ha eltunt, a felhasznalo soha nem latja
+                        // oket, de a guard tisztitas igy is fontos a memoria miatt.
+                        cardButtons.forEach((btn) => { btn.disabled = false; });
                     }
                 });
             });
@@ -665,16 +815,35 @@ function bindNotificationCenterEvents() {
         if (markAllBtn) {
             markAllBtn.addEventListener('click', () => {
                 runSafelyAsync('markAllNotificationsRead', async () => {
-                    const success = await markAllNotificationsReadOnServer();
-                    if (!success) {
-                        if (typeof setFriendsFeedback === 'function') {
-                            setFriendsFeedback('A tobbes ertesites-olvasas mentese nem sikerult.', 'warning');
-                        }
+                    // Per spec: a "Mind olvasott" gomb feliratot megtartjuk, de
+                    // a viselkedese permanens user-oldali eltavolitas mindenre.
+                    if (notificationCenterState.markAllInFlight) {
                         return;
                     }
-                    notificationCenterState.items.forEach((entry) => { entry.isRead = true; });
+                    notificationCenterState.markAllInFlight = true;
+                    markAllBtn.disabled = true;
+
+                    // Optimistic: azonnal kiuritjuk a UI-t, hibara visszaallitjuk.
+                    const previousItems = notificationCenterState.items.slice();
+                    const previousUnread = notificationCenterState.unreadCount;
+                    notificationCenterState.items = [];
                     setNotificationBadge(0);
                     renderNotificationCenterList();
+
+                    try {
+                        const success = await markAllNotificationsReadOnServer();
+                        if (!success) {
+                            notificationCenterState.items = previousItems;
+                            setNotificationBadge(previousUnread);
+                            renderNotificationCenterList();
+                            if (typeof setFriendsFeedback === 'function') {
+                                setFriendsFeedback('Az ertesitesek tomeges eltavolitasa nem sikerult.', 'warning');
+                            }
+                        }
+                    } finally {
+                        notificationCenterState.markAllInFlight = false;
+                        markAllBtn.disabled = false;
+                    }
                 });
             });
         }

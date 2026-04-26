@@ -749,6 +749,49 @@
             }
         });
 
+        // Multi-tab szinkron: ha az adott user másik tabján egy értesítést
+        // dismiss-elt, vagy a backend dismiss-elt egy kapcsolódó értesítést
+        // (pl. friend action), itt érkezik be a parancs.
+        socket.on('notification:dismissed', (payload = {}) => {
+            try {
+                const notificationId = Number(payload?.notificationId) || 0;
+                if (notificationId > 0) {
+                    globalScope.dispatchEvent(new CustomEvent('mattmester:notification:dismissed', {
+                        detail: { notificationId, at: payload?.at || new Date().toISOString() }
+                    }));
+                }
+            } catch (dismissError) {
+                console.warn('[socketClient] notification:dismissed hiba:', dismissError.message);
+            }
+        });
+
+        socket.on('notification:dismissed-all', (payload = {}) => {
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:dismissed-all', {
+                    detail: { at: payload?.at || new Date().toISOString() }
+                }));
+            } catch (dismissAllError) {
+                console.warn('[socketClient] notification:dismissed-all hiba:', dismissAllError.message);
+            }
+        });
+
+        socket.on('notification:dismissed-bulk', (payload = {}) => {
+            try {
+                const filter = payload?.filter && typeof payload.filter === 'object' ? payload.filter : {};
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:dismissed-bulk', {
+                    detail: {
+                        filter: {
+                            type: typeof filter.type === 'string' ? filter.type : null,
+                            senderUserId: Number(filter.senderUserId) || null
+                        },
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (dismissBulkError) {
+                console.warn('[socketClient] notification:dismissed-bulk hiba:', dismissBulkError.message);
+            }
+        });
+
         socket.on('chat:unread:update', (payload = {}) => {
             // Authoritative chat unread összesen frissítés (pl. mark-read után).
             try {

@@ -36,6 +36,11 @@
 | 37 | **Chat konstansok duplikálva** – `CHAT_RATE_LIMIT_MAX_MESSAGES`, `CHAT_RATE_LIMIT_WINDOW_MS`, `CHAT_BLACKLIST_POLICY`, `CHAT_MAX_MESSAGE_LENGTH` kétszer van definiálva a [chat.js](backend/api/routes/chat.js) és [sockets.js](backend/sockets.js) fájlokban. Tedd át a [chatUtils.js](backend/api/chatUtils.js)-be egy konfig-objektumként. | [backend/api/routes/chat.js](backend/api/routes/chat.js), [backend/sockets.js](backend/sockets.js) | ☐ |
 | 38 | **`parsePositiveInteger` duplikáció** – ugyanaz a függvény a [_shared.js](backend/api/routes/_shared.js) és [sockets.js:54](backend/sockets.js#L54) között. Közös `backend/utils/parse.js`. | backend | ☐ |
 | 39 | **Session-mező setter helper** – a login és register ugyanazt a 8 mezőt állítja be a session-ben. `setSessionFromUser(request, user)` helper az [auth.js](backend/api/routes/auth.js)-ben. | [backend/api/routes/auth.js](backend/api/routes/auth.js) | ☐ |
+| 47 | **Duplikált frontend helper függvények** – `runSafely`, `runSafelyAsync` háromszor van definiálva (index.js, profile.js, adminPanel.js); `escapeHtml` kétszer + 1 leaderboard-variáns; `fetchSessionInfo` kétszer. Közös `frontend/javascript/_utils.js` (window-globalon) feloldja. | [index.js:13](frontend/javascript/index.js#L13), [profile.js:120](frontend/javascript/profile.js#L120), [adminPanel.js:4](frontend/javascript/adminPanel.js#L4) | ☐ |
+| 48 | **Három különböző szám-normalizáló** – `parsePositiveInteger` ([_shared.js](backend/api/routes/_shared.js) + [sockets.js:54](backend/sockets.js#L54)) és `normalizePositiveInt` ([sql_funtions.js:2280](backend/sql/sql_funtions.js#L2280)) ugyanazt csinálják enyhén eltérő szignatúrával. Közös `backend/utils/numbers.js` (#38 kibővítése). | backend | ☐ |
+| 49 | **`chess_barold` mappa félrevezető néven** – ez nem "régi" chess, hanem az aktuális játékfelület (`frontend/javascript/index.js:860` ide irányít). Átnevezés `chess`-re; egyetlen JS-referencia + HTML ref + 1 mappa-átnevezés. | [frontend/chess_barold/](frontend/chess_barold/) | ☐ |
+| 50 | **`requestController.cancelScheduled` sehol sincs hívva** – a [requestControl.js:41](frontend/javascript/requestControl.js#L41) exportálja, de egyetlen hívó sincs. Vagy bekötni az unmount/logout flow-ba a függő debounce-ok megszakítására, vagy törölni. | [frontend/javascript/requestControl.js](frontend/javascript/requestControl.js) | ☐ |
+| 51 | **Notification dismiss visszafelé-kompat aliasok takarítása** – a [sql_funtions.js:3365-3366](backend/sql/sql_funtions.js#L3365-L3366)-ben `markAllNotificationsReadForUser` és `markFriendRequestNotificationsReadForUser` aliasok a friss dismiss-átálláskor maradtak, de minden hívó már a `dismiss…` neveket használja. Aliasok és exportok törölhetők, hogy egyetlen kanonikus név maradjon. | [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ☐ |
 
 ---
 
@@ -63,6 +68,11 @@
 | 44 | **`viewUser` stub az admin panelben** – csak modalt nyit, nincs mögötte API. Vagy implementáld (tipp: `GET /api/admin/users/:id`), vagy távolítsd el a gombot. | [frontend/javascript/adminPanel.js:115](frontend/javascript/adminPanel.js#L115) | ☐ |
 | 45 | **Elérhetetlen ellenőrzés a profil settings-ben** – a [profile.js:119](backend/api/routes/profile.js#L119) belső `if (!currentPassword)` sosem fut le, mert a 113. soron már eldob. Törölhető. | [backend/api/routes/profile.js](backend/api/routes/profile.js) | ☐ |
 | 46 | **Chess `/user-elo` session-ből olvashat** – a `request.session.elo` már be van állítva login után, felesleges a DB-hit minden hívásnál. Fallback DB-ről, ha a session mező hiányzik. | [backend/api/chess_api.js:44](backend/api/chess_api.js#L44) | ☐ |
+| 52 | **`requireVerifiedEmail` minden hívásnál DB-hit** – az [funtions.js:28](backend/api/funtions.js#L28) `getUserVerificationStatusById`-t hív minden védett endpoint elején. A `is_email_verified` viszont a session-ben már elérhető login után. Cache-elés a session-ből, fallback DB-re csak ha hiányzik. | [backend/api/funtions.js](backend/api/funtions.js) | ☐ |
+| 53 | **`validation.js` (5 sor, 3 regex)** – jelenlegi formájában csak konstans-tár; vagy költöztetés a `_shared.js`-be (és törlés), vagy bekötés egy egységesített validátor middleware-be (#17 részeként). | [backend/api/validation.js](backend/api/validation.js) | ☐ |
+| 54 | **`default.png` 894 KB** – default avatar képnek extrém nagy. Optimalizálás (WebP / 100 KB alatti PNG) érzékelhetően gyorsítja a loadot és csökkenti a memória-/cache-nyomást, főleg a leaderboardon ahol egyszerre tucat avatar van. | [backend/profile_pictures/default.png](backend/profile_pictures/default.png) | ☐ |
+| 55 | **`console.log` sűrűség** – backend 45 + frontend 37 nem-test hívás vegyesen audit/debug/info célra. #18 (strukturált logger) bevezetéséig: a debug-szintű log-okat `if (process.env.DEBUG)` vagy frontend `if (window.MM_DEBUG)` mögé. Production zaj és véletlen PII-leakage csökkentésére. | backend, frontend | ☐ |
+| 56 | **DB törlés futás közben → admin escalation** – ha a 3000-es port aktív és a böngésző nyitott, és közben az adatbázis manuálisan újra-init-elődik (új `users` tábla, első ID = admin), a kliens-oldali session userId="1" most az új admin sorra mutat. Két lehetséges javítás: (a) DB init után az aktív session-eket invalidálja a backend (session-store-t üríti); (b) `requireAuth` middleware fast-check, hogy a session role megegyezik-e a DB-beli role-lal — eltérés esetén 401 + logout. (a) iskolai projektre arányosabb. | [backend/sql/database.js](backend/sql/database.js), [backend/server.js](backend/server.js) | ☐ |
 
 ---
 
@@ -86,18 +96,17 @@
 - **Admin session auth** — az [admin.js](backend/api/routes/admin.js) router-szintű `isAdmin` middleware-t használ, így minden új admin végpont automatikusan védett.
 - **Admin socket auth** — a [sockets.js](backend/sockets.js) `socket.use` middleware-e minden `admin:` prefixű eventet automatikusan blokkol nem-admin kliensek felől, és a `requireAdminSocket(socket, handler)` helper is elérhető manuális kézi csomagoláshoz.
 - **#4** — Rate-limit auth endpointokon: univerzális [rateLimiter.js](backend/api/middleware/rateLimiter.js) (`createRateLimiter` factory + `authLoginLimiter`, `authRegisterLimiter`, `verifyPasswordLimiter` presetek). Bekötve a `/login`, `/register`, `/profile/verify-current-password` útvonalakra; új endpointokhoz a factory-val pillanatok alatt készíthető további limiter.
+- **Notification permanens user-oldali eltávolítás** — `notification_reads.dismissed_at` oszlop, `dismissNotificationForUser` / `dismissAllNotificationsForUser` / `dismissFriendRequestNotificationsForUser` SQL fn-ek, `POST /notifications/:id/dismiss` endpoint, multi-tab szinkron `notification:dismissed` / `dismissed-all` / `dismissed-bulk` socket események. Friend accept/reject/block + X gomb + "Mind olvasott" gomb mind permanens DB-szintű eltávolítást vált ki, session-váltás után sem jönnek vissza. Tesztek: [notificationDismiss.test.js](backend/__tests__/notificationDismiss.test.js).
 
 ---
 
 ## 🎯 Javasolt Sorrend
 
 1. **Session és cookie hardening** → #1 – #3
-2. **Auth/session rendbetétele** → #36, #38, #39
-3. **Holt kód és fölös endpointok takarítása** → #40 – #45
-4. **Egyetlen értelmes schema-takarítás** → #9, #12, #15
-5. **Teszt és minőségjavítás** → #24, #27, #28
-6. **Bónusz funkciók csak ha marad idő** → #29 – #35
-
-
----------------------------------
-Legujabb, ha törlődik az adatbázis amikor a 127.0.0.1:3000 port nyitva és meg van nyitva a böngészőben az oldal akkor bedob az admin felasználóba, potencionális javítások: adatbázis ujrarakása törlődés esetén vagy csak szimplán szunjön meg a kapcsolat db törlés esetén
+2. **DB törlés → admin escalation javítása** → #56 (gyors win, valós bug)
+3. **Auth/session rendbetétele** → #36, #38, #39, #52
+4. **Holt kód és fölös endpointok takarítása** → #40 – #45, #50, #51
+5. **Frontend duplikáció feloldása** → #47, #48
+6. **Egyetlen értelmes schema/file-takarítás** → #9, #12, #15, #49, #53, #54
+7. **Teszt és minőségjavítás** → #24, #27, #28, #55
+8. **Bónusz funkciók csak ha marad idő** → #29 – #35
