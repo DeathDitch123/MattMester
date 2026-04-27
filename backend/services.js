@@ -6,12 +6,16 @@ const sql = require('./sql/sql_funtions.js');
 let currentStats = {
     public: {
         onlineUsers: 0,
+        onlinePlayers: 0,
+        onlineAdmins: 0,
         totalUsers: 0,
         totalGames: 0,
         onlineGames: 0
     },
     admin: {
         onlineUsers: 0,
+        onlinePlayers: 0,
+        onlineAdmins: 0,
         totalUsers: 0,
         totalGames: 0,
         onlineGames: 0,
@@ -23,6 +27,54 @@ let currentStats = {
     }
 };
 
+function computeOnlinePresenceCounts(io) {
+    let result = { onlineUsers: 0, onlinePlayers: 0, onlineAdmins: 0 };
+    try {
+        if (!io || !io.sockets || !io.sockets.adapter || !io.sockets.adapter.rooms) {
+            return result;
+        }
+
+        const userRoomPrefix = 'user-room:';
+        const rooms = io.sockets.adapter.rooms;
+        let onlineUsers = 0;
+        let onlinePlayers = 0;
+        let onlineAdmins = 0;
+
+        for (const [roomName, socketIds] of rooms.entries()) {
+            if (!String(roomName).startsWith(userRoomPrefix)) {
+                continue;
+            }
+
+            if (!socketIds || socketIds.size === 0) {
+                continue;
+            }
+
+            onlineUsers += 1;
+            let role = 'player';
+            for (const socketId of socketIds) {
+                const socket = io.sockets.sockets.get(socketId);
+                const socketRole = String(socket?.data?.socketContext?.role || '').trim().toLowerCase();
+                if (socketRole) {
+                    role = socketRole;
+                    break;
+                }
+            }
+
+            if (role === 'admin') {
+                onlineAdmins += 1;
+            } else {
+                onlinePlayers += 1;
+            }
+        }
+
+        result = { onlineUsers, onlinePlayers, onlineAdmins };
+    } catch (error) {
+        console.warn('Online presence szamitas hiba:', error.message);
+    }
+
+    return result;
+}
+
 const services = {
     getCurrentStats() {
         return currentStats;
@@ -32,8 +84,7 @@ const services = {
         try {
             const pool = getPool();
             if (pool) {
-
-                const onlineUsers = io.sockets.sockets.size;
+                const presenceCounts = computeOnlinePresenceCounts(io);
 
                 const [totalUsers, totalGames, onlineGames, allUsers, allRooms] = await Promise.all([
                     sql.getTotalUsers(),
@@ -43,7 +94,9 @@ const services = {
                     sql.getAllRooms()
                 ]);
                 currentStats.public = {
-                    onlineUsers,
+                    onlineUsers: presenceCounts.onlineUsers,
+                    onlinePlayers: presenceCounts.onlinePlayers,
+                    onlineAdmins: presenceCounts.onlineAdmins,
                     totalUsers,
                     totalGames,
                     onlineGames
@@ -106,7 +159,7 @@ let leaderboardCache = {
 };
 
 const leaderboardService = {
-    async updateLeaderboardCache() {
+    async updateLeaderboardCache(io = null) {
         try {
             const newEloCache = await sql.getLeaderBoardByElo();
             const newMMCache = await sql.getLeaderBoardByMM();
@@ -119,15 +172,20 @@ const leaderboardService = {
                 winRate: newWinRateCache,
                 lastUpdated: new Date()
             };
+
+            if (io) {
+                io.to('general-room').emit('leaderboard:update', leaderboardCache);
+            }
+
             console.log(`[Cache] Ranglista frissítve: ${new Date().toLocaleString()}`);
         } catch (error) {
             console.error('Error occurred while updating leaderboard cache:', error);   
         }
     },
-    handleLeaderBoardCache() {
-        this.updateLeaderboardCache();
+    handleLeaderBoardCache(io = null) {
+        this.updateLeaderboardCache(io);
         setInterval(() => {
-            this.updateLeaderboardCache();
+            this.updateLeaderboardCache(io);
         }, 60000); //?1 percenként frissítjük a ranglista cache-t
     },
     getLeaderBoard() {

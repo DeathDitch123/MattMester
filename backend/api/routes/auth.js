@@ -239,57 +239,52 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
             message: 'Sikeres regisztráció.'
         });
 
-        // Ne blokkoljuk a regisztráció HTTP választ SMTP timeouttal:
-        // a verifikációs email küldése háttérfeladatban fut.
-        setImmediate(() => {
-            (async () => {
-                try {
-                    const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
-                    await sql.saveEmailVerificationToken(result.insertId, tokenHash, expiresAt);
-                    const sendInfo = await sendVerificationEmail(email, username, rawToken, { flow: 'register' });
-                    await logAuthenticatedAction(request, result.insertId, {
-                        eventType: 'email_verification_sent',
-                        eventCategory: 'security',
-                        severity: 'info',
-                        source: 'backend',
-                        success: true,
-                        message: 'Verifikációs email elküldve regisztráció után.',
-                        metadata: {
-                            email,
-                            expiresAt,
-                            transport: sendInfo.transport || null,
-                            messageId: sendInfo.messageId || null,
-                            providerResponse: sendInfo.providerResponse || null
-                        }
-                    });
-                } catch (verificationError) {
-                    console.error('Verifikációs email hiba regisztráció után:', verificationError.message);
-                    await logAuthenticatedAction(request, result.insertId, {
-                        eventType: 'email_verification_sent',
-                        eventCategory: 'security',
-                        severity: 'error',
-                        source: 'backend',
-                        success: false,
-                        message: 'Verifikációs email küldése sikertelen regisztráció után.',
-                        metadata: {
-                            email,
-                            error: verificationError.message,
-                            smtpReason: verificationError.smtpReason || null
-                        }
-                    });
+        let verificationEmailSent = false;
+        try {
+            const { rawToken, tokenHash, expiresAt } = generateVerificationToken();
+            await sql.saveEmailVerificationToken(result.insertId, tokenHash, expiresAt);
+            const sendInfo = await sendVerificationEmail(email, username, rawToken, { flow: 'register' });
+            verificationEmailSent = true;
+            await logAuthenticatedAction(request, result.insertId, {
+                eventType: 'email_verification_sent',
+                eventCategory: 'security',
+                severity: 'info',
+                source: 'backend',
+                success: true,
+                message: 'Verifikációs email elküldve regisztráció után.',
+                metadata: {
+                    email,
+                    expiresAt,
+                    transport: sendInfo.transport || null,
+                    messageId: sendInfo.messageId || null,
+                    providerResponse: sendInfo.providerResponse || null
                 }
-            })().catch((error) => {
-                console.error('Háttér verifikációs feladat hiba:', error.message);
             });
-        });
+        } catch (verificationError) {
+            console.error('Verifikációs email hiba regisztráció után:', verificationError.message);
+            await logAuthenticatedAction(request, result.insertId, {
+                eventType: 'email_verification_sent',
+                eventCategory: 'security',
+                severity: 'error',
+                source: 'backend',
+                success: false,
+                message: 'Verifikációs email küldése sikertelen regisztráció után.',
+                metadata: {
+                    email,
+                    error: verificationError.message,
+                    smtpReason: verificationError.smtpReason || null
+                }
+            });
+        }
 
         payload = {
             success: true,
-            message: 'Sikeres regisztráció. A megerősítő email küldése folyamatban van, kérjük aktiváld a fiókodat, amint megérkezik.',
+            message: verificationEmailSent
+                ? 'Sikeres regisztráció. Küldtünk egy megerősítő emailt, kérjük aktiváld a fiókodat.'
+                : 'Sikeres regisztráció, de a verifikációs email küldése sikertelen — kérj újat a /resend-verification végponton.',
             emailVerification: {
                 required: true,
-                sent: null,
-                queued: true
+                sent: verificationEmailSent
             },
             user: {
                 id: result.insertId,

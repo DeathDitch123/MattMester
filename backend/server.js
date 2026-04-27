@@ -275,7 +275,7 @@ initDatabase()
     .then(async () => {
         await services.refreshStats(io);
         services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
-        leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
+        leaderboardService.handleLeaderBoardCache(io); //?Leaderboard cache periodikus frissítése + realtime socket push
         
         // Cleanup service: discarded profilképek törlése minden percben
         setInterval(cleanupDiscardedProfileImages, 60000); // 60 másodpercenként futtatás

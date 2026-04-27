@@ -358,7 +358,6 @@ CREATE TABLE
 -- =====================================================================
 -- ADMIN PANEL TABLAK (ADMIN_PANEL.md §6)
 -- =====================================================================
-
 -- 11. Admin tokenek (step-up auth) - csak SHA-256 hash van eltarolva.
 -- Plain token kiadaskor egyszer lathato a kliens fele, utana sehol.
 -- TTL: 15 perc sliding (last_used_at-tol szamitva).
@@ -618,3 +617,39 @@ VALUES
         TRUE,
         CURRENT_TIMESTAMP
     );
+
+-- Teszt userek ELO randomizalas (eletszeru tartomanyok)
+UPDATE users AS u
+JOIN (
+    SELECT
+        seeded.id,
+        seeded.base_elo,
+        GREATEST (
+            700,
+            LEAST (
+                2200,
+                seeded.base_elo + FLOOR((RAND () * 241) - 120)
+            )
+        ) AS new_elo_mm,
+        GREATEST (
+            650,
+            LEAST (
+                2300,
+                seeded.base_elo + FLOOR((RAND () * 321) - 160)
+            )
+        ) AS new_elo_bullet
+    FROM
+        (
+            SELECT
+                id,
+                FLOOR(850 + RAND () * 901) AS base_elo
+            FROM
+                users
+            WHERE
+                username REGEXP '^testuser(0[1-9]|1[0-9]|20)$'
+        ) AS seeded
+) AS random_elo ON random_elo.id = u.id
+SET
+    u.elo = random_elo.base_elo,
+    u.elo_MM = random_elo.new_elo_mm,
+    u.elo_bullet = random_elo.new_elo_bullet;

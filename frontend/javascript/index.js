@@ -549,6 +549,26 @@ function socketHandler() {
         socket.on('stats:public', (stats) => {
             updateGlobalStats(stats);
         });
+
+        socket.on('leaderboard:update', (payload) => {
+            try {
+                if (!payload || typeof payload !== 'object') {
+                    return;
+                }
+
+                LeaderboardData = {
+                    elo: Array.isArray(payload.elo) ? payload.elo : [],
+                    elo_MM: Array.isArray(payload.elo_MM) ? payload.elo_MM : [],
+                    elo_bullet: Array.isArray(payload.elo_bullet) ? payload.elo_bullet : [],
+                    winRate: Array.isArray(payload.winRate) ? payload.winRate : [],
+                    lastUpdated: payload.lastUpdated || null
+                };
+
+                renderLeaderBoard();
+            } catch (error) {
+                console.error('Hiba a leaderboard socket frissítés feldolgozásakor:', error);
+            }
+        });
     }
 }
 
@@ -563,7 +583,7 @@ function updateGlobalStats(stats) {
     const mapping = {
         players: stats.totalUsers,
         liveGames: stats.onlineGames,
-        online: stats.onlineUsers,
+        online: stats.onlinePlayers ?? stats.onlineUsers,
         allGames: stats.totalGames
     };
 
