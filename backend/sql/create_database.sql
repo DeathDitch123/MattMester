@@ -182,7 +182,7 @@ CREATE TABLE
         move_id INT,
         -- Lehet NULL, ha egy képességet nem konkrét lépéshez kötve használnak el (pl. passzív pajzs aktiválása a kör elején).
         player_id INT NOT NULL,
-        -- Tudnunk kell, ki használta, anélkül is, hogy a move_id-ből fejtenénk vissza.
+        -- Tudnunk kell, ki használta, anélkül is, hogy a move_id-ból fejtenénk vissza.
         ability_id INT NOT NULL,
         used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE CASCADE,
@@ -369,7 +369,7 @@ CREATE TABLE
         token_hash CHAR(64) NOT NULL,
         issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         last_used_at TIMESTAMP NULL,
-        expires_at TIMESTAMP NOT NULL,
+        expires_at TIMESTAMP NULL DEFAULT NULL,
         revoked_at TIMESTAMP NULL,
         issued_ip VARCHAR(45) NOT NULL,
         issued_user_agent VARCHAR(255) NULL,
@@ -442,7 +442,7 @@ CREATE TABLE
         scope_value VARCHAR(64) NOT NULL,
         multiplier DECIMAL(4, 2) NOT NULL DEFAULT 5.00,
         started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP NOT NULL,
+        expires_at TIMESTAMP NULL DEFAULT NULL,
         reason VARCHAR(255) NULL,
         UNIQUE KEY ux_rate_esc_scope (scope, scope_value),
         INDEX idx_rate_esc_expires (expires_at)
