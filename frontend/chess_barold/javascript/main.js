@@ -834,9 +834,11 @@ function pvpAllapotReset() {
     abilitiesReset();
 }
 
-async function jatekIndit(nehezseg) {
+async function jatekIndit(nehezseg, modal) {
     try {
         const allapot = await apiUjBotJatek(nehezseg);
+
+        if (modal) modal.classList.add("hidden");
 
         // Nevek frissítése
         nevekFrissit();
@@ -856,6 +858,10 @@ async function jatekIndit(nehezseg) {
         console.log(`[INIT] Bot játék indítva — ${botInfo.nev} (ELO: ${botInfo.elo})`);
     } catch (e) {
         console.error('Bot játék indítási hiba:', e);
+        const diffList = document.getElementById("difficulty-list");
+        if (diffList) {
+            diffList.innerHTML = `<p style="color:#f88">Hiba a játék indításakor: ${e.message || 'Ismeretlen hiba'}</p>`;
+        }
     }
 }
 
