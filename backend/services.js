@@ -93,7 +93,7 @@ const services = {
     handleHeartbeat(io) {
         setInterval(() => {
             this.refreshStats(io);
-        }, 10000); //?10 másodpercenként frissítjük a statisztikákat
+        }, 5000); //?5 másodpercenként frissítjük a statisztikákat
     }
 };
 
@@ -128,7 +128,7 @@ const leaderboardService = {
         this.updateLeaderboardCache();
         setInterval(() => {
             this.updateLeaderboardCache();
-        }, 86400000); //?naponta frissítjük a ranglista cache-t
+        }, 60000); //?1 percenként frissítjük a ranglista cache-t
     },
     getLeaderBoard() {
         return leaderboardCache;
