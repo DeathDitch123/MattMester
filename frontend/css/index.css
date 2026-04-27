@@ -554,6 +554,33 @@ h6 {
     color: var(--text-primary);
 }
 
+.login-panel .form-text {
+    min-height: 1.2rem;
+}
+
+.login-panel .form-control.is-valid,
+.login-panel .form-control.is-invalid {
+    padding-right: 2.75rem;
+}
+
+.login-panel .form-control.is-valid {
+    border-color: var(--accent-green);
+}
+
+.login-panel .form-control.is-invalid {
+    border-color: #ef4444;
+}
+
+.login-panel .form-control.is-valid:focus {
+    border-color: var(--accent-green);
+    box-shadow: 0 0 0 0.25rem rgba(16, 185, 129, 0.2);
+}
+
+.login-panel .form-control.is-invalid:focus {
+    border-color: #ef4444;
+    box-shadow: 0 0 0 0.25rem rgba(239, 68, 68, 0.2);
+}
+
 .forgot-password-link {
     color: #93c5fd;
     font-weight: 600;

@@ -20,35 +20,42 @@ function getRestorePasswordElements() {
     return result;
 }
 
-function setRestorePasswordMessage(type, message) {
-    const { message: messageElement, status } = getRestorePasswordElements();
-    const targets = [messageElement, status].filter(Boolean);
-    if (targets.length > 0) {
-        targets.forEach((target) => {
-            if (target === status) {
-                target.className = 'restore-status mt-3';
-                target.textContent = message || '';
-                if (!message) {
-                    return;
-                }
-                if (type === 'success') {
-                    target.classList.add('text-success');
-                } else if (type === 'danger') {
-                    target.classList.add('text-danger');
-                } else if (type === 'warning') {
-                    target.classList.add('text-warning');
-                }
-            } else {
-                if (!message) {
-                    target.className = 'mt-3 text-center alert d-none';
-                    target.textContent = '';
-                } else {
-                    target.className = `mt-3 text-center alert alert-${type}`;
-                    target.textContent = message;
-                }
-            }
-        });
+function setRestorePasswordStatus(type, message) {
+    const { status } = getRestorePasswordElements();
+    if (!status) {
+        return;
     }
+
+    status.className = 'restore-status mt-3';
+    status.textContent = message || '';
+
+    if (!message) {
+        return;
+    }
+
+    if (type === 'success') {
+        status.classList.add('text-success');
+    } else if (type === 'danger') {
+        status.classList.add('text-danger');
+    } else if (type === 'warning') {
+        status.classList.add('text-warning');
+    }
+}
+
+function setRestorePasswordAlert(type, message) {
+    const { message: messageElement } = getRestorePasswordElements();
+    if (!messageElement) {
+        return;
+    }
+
+    if (!message) {
+        messageElement.className = 'mt-3 text-center alert d-none';
+        messageElement.textContent = '';
+        return;
+    }
+
+    messageElement.className = `mt-3 text-center alert alert-${type}`;
+    messageElement.textContent = message;
 }
 
 function applyPasswordFeedback(inputElement, feedbackElement, state, message) {
@@ -163,7 +170,8 @@ function validateRestorePasswordForm() {
             elements.submitButton.disabled = !isValid;
         }
 
-        setRestorePasswordMessage(isValid ? 'success' : 'warning', overallMessage);
+        setRestorePasswordStatus(isValid ? 'success' : 'warning', overallMessage);
+        setRestorePasswordAlert('', '');
     } else {
         if (elements.newPasswordInput) {
             elements.newPasswordInput.classList.remove('is-valid', 'is-invalid');
@@ -174,7 +182,8 @@ function validateRestorePasswordForm() {
         overallMessage = resetTokenState === 'invalid'
             ? 'A visszaállító link érvénytelen vagy lejárt.'
             : 'A visszaállító link ellenőrzése folyamatban van.';
-        setRestorePasswordMessage(resetTokenState === 'invalid' ? 'danger' : 'warning', overallMessage);
+        setRestorePasswordStatus(resetTokenState === 'invalid' ? 'danger' : 'warning', overallMessage);
+        setRestorePasswordAlert('', '');
     }
 
     const result = {
@@ -211,15 +220,16 @@ function setTokenState(state, message) {
 
     if (message) {
         if (state === 'ready') {
-            setRestorePasswordMessage('success', message);
+            setRestorePasswordStatus('success', message);
         } else if (state === 'invalid') {
-            setRestorePasswordMessage('danger', message);
+            setRestorePasswordStatus('danger', message);
         } else {
-            setRestorePasswordMessage('warning', message);
+            setRestorePasswordStatus('warning', message);
         }
     } else {
-        setRestorePasswordMessage('warning', '');
+        setRestorePasswordStatus('warning', '');
     }
+    setRestorePasswordAlert('', '');
 }
 
 async function verifyResetToken() {
@@ -253,7 +263,7 @@ async function submitRestorePassword() {
         const validation = validateRestorePasswordForm();
         if (!validation.isValid || resetTokenState !== 'ready') {
             if (resetTokenState !== 'ready') {
-                setRestorePasswordMessage('danger', 'Hiányzó token. Nyisd meg újra a levélben kapott linket.');
+                setRestorePasswordAlert('danger', 'Hiányzó token. Nyisd meg újra a levélben kapott linket.');
             }
         } else {
             if (elements.submitButton) {
@@ -277,7 +287,8 @@ async function submitRestorePassword() {
             }
 
             success = true;
-            setRestorePasswordMessage('success', result.message || 'A jelszavad sikeresen frissítve lett.');
+            setRestorePasswordAlert('success', result.message || 'A jelszavad sikeresen frissítve lett.');
+            setRestorePasswordStatus('success', 'A jelszófrissítés sikeres.');
             if (elements.form) {
                 elements.form.reset();
             }
@@ -290,7 +301,7 @@ async function submitRestorePassword() {
         }
     } catch (error) {
         console.error('Jelszó visszaállítási hiba:', error);
-        setRestorePasswordMessage('danger', error.message || 'Nem sikerült frissíteni a jelszót.');
+        setRestorePasswordAlert('danger', error.message || 'Nem sikerült frissíteni a jelszót.');
     } finally {
         if (elements.submitButton) {
             elements.submitButton.textContent = 'Jelszó frissítése';

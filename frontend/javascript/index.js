@@ -258,153 +258,415 @@ function renderLeaderBoard() {
     }
 }
 
+function setFieldFeedback(inputElement, feedbackElement, state, message) {
+    if (!inputElement || !feedbackElement) {
+        return;
+    }
+
+    inputElement.classList.remove('is-valid', 'is-invalid');
+    feedbackElement.classList.remove('text-secondary', 'text-success', 'text-danger');
+    feedbackElement.textContent = message || '';
+
+    if (state === 'error') {
+        inputElement.classList.add('is-invalid');
+        feedbackElement.classList.add('text-danger');
+    } else if (state === 'success') {
+        inputElement.classList.add('is-valid');
+        feedbackElement.classList.add('text-success');
+    } else {
+        feedbackElement.classList.add('text-secondary');
+    }
+}
+
+function clearFieldFeedback(inputElement, feedbackElement) {
+    if (!inputElement || !feedbackElement) {
+        return;
+    }
+    inputElement.classList.remove('is-valid', 'is-invalid');
+    feedbackElement.classList.remove('text-secondary', 'text-success', 'text-danger');
+    feedbackElement.textContent = '';
+}
+
+function validateLoginInput(usernameOrMail, password) {
+    const result = {
+        isValid: false,
+        summary: '',
+        fields: {
+            username: { state: 'neutral', message: 'Add meg a felhasználóneved vagy email címed.' },
+            password: { state: 'neutral', message: 'Add meg a jelszavad.' }
+        }
+    };
+
+    if (!usernameOrMail) {
+        result.fields.username = { state: 'error', message: 'A felhasználónév vagy email megadása kötelező.' };
+    } else if (usernameOrMail.includes('@')) {
+        if (!EMAIL_REGEX.test(usernameOrMail)) {
+            result.fields.username = { state: 'error', message: 'Az email cím formátuma érvénytelen.' };
+        } else {
+            result.fields.username = { state: 'success', message: 'Az email cím formátuma megfelelő.' };
+        }
+    } else if (usernameOrMail.length < 3 || usernameOrMail.length > 50) {
+        result.fields.username = { state: 'error', message: 'A felhasználónév 3-50 karakter között lehet.' };
+    } else if (!USERNAME_REGEX.test(usernameOrMail)) {
+        result.fields.username = { state: 'error', message: 'A felhasználónév tiltott karaktert tartalmaz.' };
+    } else {
+        result.fields.username = { state: 'success', message: 'A felhasználónév formátuma megfelelő.' };
+    }
+
+    if (!password) {
+        result.fields.password = { state: 'error', message: 'A jelszó megadása kötelező.' };
+    } else {
+        result.fields.password = { state: 'success', message: 'A jelszó megadva.' };
+    }
+
+    const firstError = Object.values(result.fields).find((field) => field.state === 'error');
+    result.isValid = !firstError;
+    result.summary = firstError ? firstError.message : '';
+    return result;
+}
+
+function validateRegisterInput(username, email, password) {
+    const result = {
+        isValid: false,
+        summary: '',
+        fields: {
+            username: { state: 'neutral', message: 'Adj meg egy 3-50 karakteres felhasználónevet.' },
+            email: { state: 'neutral', message: 'Add meg az email címed.' },
+            password: { state: 'neutral', message: 'Legalább 8 karakter, kisbetű, nagybetű, szám.' }
+        }
+    };
+
+    if (!username) {
+        result.fields.username = { state: 'error', message: 'A felhasználónév megadása kötelező.' };
+    } else if (username.length < 3 || username.length > 50) {
+        result.fields.username = { state: 'error', message: 'A felhasználónévnek 3 és 50 karakter között kell lennie.' };
+    } else if (!USERNAME_REGEX.test(username)) {
+        result.fields.username = { state: 'error', message: 'A felhasználónév csak betűt, számot, pontot, aláhúzást és kötőjelet tartalmazhat.' };
+    } else {
+        result.fields.username = { state: 'success', message: 'A felhasználónév formátuma megfelelő.' };
+    }
+
+    if (!email) {
+        result.fields.email = { state: 'error', message: 'Az email cím megadása kötelező.' };
+    } else if (!EMAIL_REGEX.test(email)) {
+        result.fields.email = { state: 'error', message: 'Érvénytelen email cím formátum.' };
+    } else {
+        result.fields.email = { state: 'success', message: 'Az email cím formátuma megfelelő.' };
+    }
+
+    if (!password) {
+        result.fields.password = { state: 'error', message: 'A jelszó megadása kötelező.' };
+    } else if (password.length < 8) {
+        result.fields.password = { state: 'error', message: 'A jelszónak legalább 8 karakter hosszúnak kell lennie.' };
+    } else if (!PASSWORD_REGEX.test(password)) {
+        result.fields.password = { state: 'error', message: 'A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot.' };
+    } else {
+        result.fields.password = { state: 'success', message: 'A jelszó formátuma megfelelő.' };
+    }
+
+    const firstError = Object.values(result.fields).find((field) => field.state === 'error');
+    result.isValid = !firstError;
+    result.summary = firstError ? firstError.message : '';
+    return result;
+}
+
+function renderLoginValidation(showNeutral = false) {
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
+    const usernameFeedback = document.getElementById('loginUsernameFeedback');
+    const passwordFeedback = document.getElementById('loginPasswordFeedback');
+    const submitButton = document.getElementById('loginSubmitButton');
+
+    if (!usernameInput || !passwordInput || !usernameFeedback || !passwordFeedback) {
+        return { isValid: false, summary: 'A login mezők nem találhatók.' };
+    }
+
+    const validation = validateLoginInput(usernameInput.value.trim(), passwordInput.value);
+    const usernameState = showNeutral ? validation.fields.username.state : (usernameInput.value.trim() ? validation.fields.username.state : 'neutral');
+    const passwordState = showNeutral ? validation.fields.password.state : (passwordInput.value ? validation.fields.password.state : 'neutral');
+    const usernameMessage = showNeutral ? validation.fields.username.message : (usernameInput.value.trim() ? validation.fields.username.message : 'Add meg a felhasználóneved vagy email címed.');
+    const passwordMessage = showNeutral ? validation.fields.password.message : (passwordInput.value ? validation.fields.password.message : 'Add meg a jelszavad.');
+
+    setFieldFeedback(usernameInput, usernameFeedback, usernameState, usernameMessage);
+    setFieldFeedback(passwordInput, passwordFeedback, passwordState, passwordMessage);
+
+    if (submitButton) {
+        submitButton.disabled = !validation.isValid;
+    }
+
+    return validation;
+}
+
+function renderRegisterValidation(showNeutral = false) {
+    const usernameInput = document.getElementById('registerUsername');
+    const emailInput = document.getElementById('registerEmail');
+    const passwordInput = document.getElementById('registerPassword');
+    const usernameFeedback = document.getElementById('registerUsernameFeedback');
+    const emailFeedback = document.getElementById('registerEmailFeedback');
+    const passwordFeedback = document.getElementById('registerPasswordFeedback');
+    const submitButton = document.getElementById('registerSubmitButton');
+
+    if (!usernameInput || !emailInput || !passwordInput || !usernameFeedback || !emailFeedback || !passwordFeedback) {
+        return { isValid: false, summary: 'A regisztrációs mezők nem találhatók.' };
+    }
+
+    const validation = validateRegisterInput(
+        usernameInput.value.trim(),
+        emailInput.value.trim(),
+        passwordInput.value
+    );
+
+    const usernameState = showNeutral ? validation.fields.username.state : (usernameInput.value.trim() ? validation.fields.username.state : 'neutral');
+    const emailState = showNeutral ? validation.fields.email.state : (emailInput.value.trim() ? validation.fields.email.state : 'neutral');
+    const passwordState = showNeutral ? validation.fields.password.state : (passwordInput.value ? validation.fields.password.state : 'neutral');
+
+    const usernameMessage = showNeutral ? validation.fields.username.message : (usernameInput.value.trim() ? validation.fields.username.message : 'Adj meg egy 3-50 karakteres felhasználónevet.');
+    const emailMessage = showNeutral ? validation.fields.email.message : (emailInput.value.trim() ? validation.fields.email.message : 'Add meg az email címed.');
+    const passwordMessage = showNeutral ? validation.fields.password.message : (passwordInput.value ? validation.fields.password.message : 'Legalább 8 karakter, kisbetű, nagybetű, szám.');
+
+    setFieldFeedback(usernameInput, usernameFeedback, usernameState, usernameMessage);
+    setFieldFeedback(emailInput, emailFeedback, emailState, emailMessage);
+    setFieldFeedback(passwordInput, passwordFeedback, passwordState, passwordMessage);
+
+    if (submitButton) {
+        submitButton.disabled = !validation.isValid;
+    }
+
+    return validation;
+}
+
+function resetLoginValidationState() {
+    clearFieldFeedback(document.getElementById('loginUsername'), document.getElementById('loginUsernameFeedback'));
+    clearFieldFeedback(document.getElementById('loginPassword'), document.getElementById('loginPasswordFeedback'));
+    const submitButton = document.getElementById('loginSubmitButton');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+}
+
+function resetRegisterValidationState() {
+    clearFieldFeedback(document.getElementById('registerUsername'), document.getElementById('registerUsernameFeedback'));
+    clearFieldFeedback(document.getElementById('registerEmail'), document.getElementById('registerEmailFeedback'));
+    clearFieldFeedback(document.getElementById('registerPassword'), document.getElementById('registerPasswordFeedback'));
+    const submitButton = document.getElementById('registerSubmitButton');
+    if (submitButton) {
+        submitButton.disabled = true;
+    }
+}
+
 function bindLoginForm() {
     const loginForm = document.getElementById('loginForm');
-    if (loginForm) {
-        loginForm.addEventListener('submit', async (event) => {
-            await runSafelyAsync('loginSubmitHandler', async () => {
-                event.preventDefault();
+    const loginModal = document.getElementById('loginModal');
+    const usernameInput = document.getElementById('loginUsername');
+    const passwordInput = document.getElementById('loginPassword');
+    const submitButton = document.getElementById('loginSubmitButton');
+    let isSubmitting = false;
 
-                const messageElement = document.getElementById('loginMessage');
-                const usernameInput = document.getElementById('loginUsername');
-                const passwordInput = document.getElementById('loginPassword');
-                const rememberElement = document.getElementById('rememberMe');
+    if (!loginForm || !usernameInput || !passwordInput) {
+        return;
+    }
 
-                if (!usernameInput || !passwordInput) {
-                    throw new Error('A login mezok nem talalhatok.');
-                }
+    const validateLive = () => {
+        const validation = renderLoginValidation(false);
+        if (submitButton) {
+            submitButton.disabled = isSubmitting || !validation.isValid;
+        }
+    };
 
-                const usernameOrMail = usernameInput.value.trim();
-                const password = passwordInput.value;
-                const remember = rememberElement ? rememberElement.checked : false;
+    usernameInput.addEventListener('input', validateLive);
+    usernameInput.addEventListener('blur', validateLive);
+    passwordInput.addEventListener('input', validateLive);
+    passwordInput.addEventListener('blur', validateLive);
 
-                clearFormMessage(messageElement);
-
-                if (!usernameOrMail || !password) {
-                    throw new Error('Minden mező kitöltése kötelező.');
-                }
-
-                requestController.schedule('loginSubmit', async () => {
-                    try {
-                        const response = await fetch('/api/login', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ usernameOrMail, password, remember }),
-                            signal: requestController.withAbortSignal('login')
-                        });
-                        const result = await parseJson(response);
-
-                        if (!response.ok) {
-                            throw new Error(result.message || 'Sikertelen bejelentkezes.');
-                        }
-
-                        showFormMessage(messageElement, 'success', result.message || 'Sikeres bejelentkezes.');
-                        loginForm.reset();
-                        hideModalById('loginModal');
-                        showToast('Sikeres bejelentkezes.');
-
-                        if (socket) {
-                            console.log('Login form successful, refreshing stats via socket...');
-                            socket.disconnect();
-                            socket.connect();
-                        }
-                        await refreshAuthUi('login-success');
-                    } catch (error) {
-                        rethrowIfAborted(error);
-                        showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
-                        console.error('Hiba a bejelentkezes soran:', error);
-                    } finally {
-                        requestController.clearSignal('login');
-                    }
-                });
-            });
+    if (loginModal) {
+        loginModal.addEventListener('show.bs.modal', () => {
+            resetLoginValidationState();
+            clearFormMessage(document.getElementById('loginMessage'));
+        });
+        loginModal.addEventListener('hidden.bs.modal', () => {
+            resetLoginValidationState();
+            clearFormMessage(document.getElementById('loginMessage'));
         });
     }
+
+    resetLoginValidationState();
+
+    loginForm.addEventListener('submit', async (event) => {
+        await runSafelyAsync('loginSubmitHandler', async () => {
+            event.preventDefault();
+
+            if (isSubmitting) {
+                return;
+            }
+
+            const messageElement = document.getElementById('loginMessage');
+            const rememberElement = document.getElementById('rememberMe');
+            const usernameOrMail = usernameInput.value.trim();
+            const password = passwordInput.value;
+            const remember = rememberElement ? rememberElement.checked : false;
+
+            clearFormMessage(messageElement);
+
+            const validation = renderLoginValidation(true);
+            if (!validation.isValid) {
+                showFormMessage(messageElement, 'danger', 'Javítsd a pirossal jelölt mezőket.');
+                return;
+            }
+
+            isSubmitting = true;
+            if (submitButton) {
+                submitButton.disabled = true;
+            }
+
+            requestController.schedule('loginSubmit', async () => {
+                let loginSucceeded = false;
+                try {
+                    const response = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ usernameOrMail, password, remember }),
+                        signal: requestController.withAbortSignal('login')
+                    });
+                    const result = await parseJson(response);
+
+                    if (!response.ok) {
+                        throw new Error(result.message || 'Sikertelen bejelentkezes.');
+                    }
+
+                    loginSucceeded = true;
+
+                    showFormMessage(messageElement, 'success', result.message || 'Sikeres bejelentkezes.');
+                    loginForm.reset();
+                    resetLoginValidationState();
+                    hideModalById('loginModal');
+                    showToast('Sikeres bejelentkezes.');
+
+                    if (socket) {
+                        console.log('Login form successful, refreshing stats via socket...');
+                        socket.disconnect();
+                        socket.connect();
+                    }
+                    await refreshAuthUi('login-success');
+                } catch (error) {
+                    rethrowIfAborted(error);
+                    showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                    console.error('Hiba a bejelentkezes soran:', error);
+                } finally {
+                    isSubmitting = false;
+                    requestController.clearSignal('login');
+                    if (!loginSucceeded) {
+                        validateLive();
+                    }
+                }
+            });
+        });
+    });
 }
 
 function bindRegisterForm() {
     const registerForm = document.getElementById('registerForm');
-    if (registerForm) {
-        registerForm.addEventListener('submit', async (event) => {
-            await runSafelyAsync('registerSubmitHandler', async () => {
-                event.preventDefault();
+    const registerModal = document.getElementById('registerModal');
+    const usernameInput = document.getElementById('registerUsername');
+    const emailInput = document.getElementById('registerEmail');
+    const passwordInput = document.getElementById('registerPassword');
+    const submitButton = document.getElementById('registerSubmitButton');
+    let isSubmitting = false;
 
-                const messageElement = document.getElementById('registerMessage');
-                const usernameInput = document.getElementById('registerUsername');
-                const emailInput = document.getElementById('registerEmail');
-                const passwordInput = document.getElementById('registerPassword');
+    if (!registerForm || !usernameInput || !emailInput || !passwordInput) {
+        return;
+    }
 
-                if (!usernameInput || !emailInput || !passwordInput) {
-                    throw new Error('A register mezok nem talalhatok.');
-                }
+    const validateLive = () => {
+        const validation = renderRegisterValidation(false);
+        if (submitButton) {
+            submitButton.disabled = isSubmitting || !validation.isValid;
+        }
+    };
 
-                const username = usernameInput.value.trim();
-                const email = emailInput.value.trim();
-                const password = passwordInput.value;
+    usernameInput.addEventListener('input', validateLive);
+    usernameInput.addEventListener('blur', validateLive);
+    emailInput.addEventListener('input', validateLive);
+    emailInput.addEventListener('blur', validateLive);
+    passwordInput.addEventListener('input', validateLive);
+    passwordInput.addEventListener('blur', validateLive);
 
-                clearFormMessage(messageElement);
-
-                const validationMessage = validateRegisterInput(username, email, password);
-                if (validationMessage !== '') {
-                    throw new Error(validationMessage);
-                }
-
-                requestController.schedule('registerSubmit', async () => {
-                    try {
-                        const response = await fetch('/api/register', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ username, email, password }),
-                            signal: requestController.withAbortSignal('register')
-                        });
-
-                        const result = await parseJson(response);
-
-                        if (!response.ok) {
-                            throw new Error(result.message || 'Sikertelen regisztráció.');
-                        }
-
-                        showFormMessage(messageElement, 'success', result.message || 'Sikeres regisztráció.');
-                        registerForm.reset();
-                        hideModalById('registerModal');
-                        await refreshAuthUi('register-success');
-                        showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
-                    } catch (error) {
-                        rethrowIfAborted(error);
-                        showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
-                        console.error('Hiba a regisztráció soran:', error);
-                    } finally {
-                        requestController.clearSignal('register');
-                    }
-                });
-            });
+    if (registerModal) {
+        registerModal.addEventListener('show.bs.modal', () => {
+            resetRegisterValidationState();
+            clearFormMessage(document.getElementById('registerMessage'));
+        });
+        registerModal.addEventListener('hidden.bs.modal', () => {
+            resetRegisterValidationState();
+            clearFormMessage(document.getElementById('registerMessage'));
         });
     }
-}
 
-function validateRegisterInput(username, email, password) {
-    let message = "";
+    resetRegisterValidationState();
 
-    if (!username || !email || !password) {
-        message = 'Minden mező kitöltése kötelező.';
-    }
-    else if (username.length < 3 || username.length > 50) {
-        message = 'A felhasználónévnek 3 és 50 karakter között kell lennie.';
-    }
-    else if (!USERNAME_REGEX.test(username)) {
-        message = 'A felhasználónév csak alfanumerikus karaktereket, pontot, aláhúzást és kötőjelet tartalmazhat.';
-    }
-    else if (!EMAIL_REGEX.test(email)) {
-        message = 'Érvénytelen email cím formátum.';
-    }
-    else if (password.length < 8) {
-        message = 'A jelszónak legalább 8 karakter hosszú kell legyen.';
-    }
-    else if (!PASSWORD_REGEX.test(password)) {
-        message = 'A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot.';
-    }
+    registerForm.addEventListener('submit', async (event) => {
+        await runSafelyAsync('registerSubmitHandler', async () => {
+            event.preventDefault();
 
-    return message;
+            if (isSubmitting) {
+                return;
+            }
+
+            const messageElement = document.getElementById('registerMessage');
+            const username = usernameInput.value.trim();
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+
+            clearFormMessage(messageElement);
+
+            const validation = renderRegisterValidation(true);
+            if (!validation.isValid) {
+                showFormMessage(messageElement, 'danger', 'Javítsd a pirossal jelölt mezőket.');
+                return;
+            }
+
+            isSubmitting = true;
+            if (submitButton) {
+                submitButton.disabled = true;
+            }
+
+            requestController.schedule('registerSubmit', async () => {
+                let registerSucceeded = false;
+                try {
+                    const response = await fetch('/api/register', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, email, password }),
+                        signal: requestController.withAbortSignal('register')
+                    });
+
+                    const result = await parseJson(response);
+
+                    if (!response.ok) {
+                        throw new Error(result.message || 'Sikertelen regisztráció.');
+                    }
+
+                    registerSucceeded = true;
+
+                    showFormMessage(messageElement, 'success', result.message || 'Sikeres regisztráció.');
+                    registerForm.reset();
+                    resetRegisterValidationState();
+                    hideModalById('registerModal');
+                    await refreshAuthUi('register-success');
+                    showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
+                } catch (error) {
+                    rethrowIfAborted(error);
+                    showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                    console.error('Hiba a regisztráció soran:', error);
+                } finally {
+                    isSubmitting = false;
+                    requestController.clearSignal('register');
+                    if (!registerSucceeded) {
+                        validateLive();
+                    }
+                }
+            });
+        });
+    });
 }
 async function handleLogout() {
     try {
