@@ -300,7 +300,7 @@ async function createTables() {
             token_hash CHAR(64) NOT NULL,
             issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_used_at TIMESTAMP NULL,
-            expires_at TIMESTAMP NOT NULL,
+            expires_at TIMESTAMP NULL DEFAULT NULL,
             revoked_at TIMESTAMP NULL,
             issued_ip VARCHAR(45) NOT NULL,
             issued_user_agent VARCHAR(255) NULL,
@@ -360,7 +360,7 @@ async function createTables() {
             scope_value VARCHAR(64) NOT NULL,
             multiplier DECIMAL(4, 2) NOT NULL DEFAULT 5.00,
             started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMP NOT NULL,
+            expires_at TIMESTAMP NULL DEFAULT NULL,
             reason VARCHAR(255) NULL,
             UNIQUE KEY ux_rate_esc_scope (scope, scope_value),
             INDEX idx_rate_esc_expires (expires_at)
