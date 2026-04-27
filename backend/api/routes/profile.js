@@ -406,6 +406,52 @@ router.post('/profile/upload-image', profileImageUploadLimiter, isAuthenticated,
     });
 });
 
+// Bejelentkezett user képesség-használati statisztikája — ability_log + abilities join.
+// Visszaad: [{ key, displayName, count }] minden lehetséges ability-re (count=0 ha sosem használt).
+router.get('/profile/abilities-usage', isAuthenticated, async (request, response) => {
+    try {
+        const { getPool } = require('../../sql/database.js');
+        const pool = getPool();
+        const userId = request.session.userId;
+
+        // Összes ability + a userhez tartozó használat (LEFT JOIN, hogy nem-használt is megjelenjen)
+        const [rows] = await pool.execute(
+            `SELECT a.name AS \`key\`, a.description, COALESCE(cnt.db, 0) AS db
+             FROM abilities a
+             LEFT JOIN (
+                 SELECT ability_id, COUNT(*) AS db
+                 FROM ability_log
+                 WHERE player_id = ?
+                 GROUP BY ability_id
+             ) cnt ON cnt.ability_id = a.id
+             ORDER BY a.id ASC`,
+            [userId]
+        );
+
+        const DISPLAY = {
+            time_pause: { name: 'Időmegállítás',  icon: 'timer' },
+            freeze:     { name: 'Bábu fagyasztás', icon: 'snowflake' },
+            swap:       { name: 'Bábucsere',       icon: 'shuffle' },
+            board_hide: { name: 'Tábla eltakar',   icon: 'eye-off' },
+            shield:     { name: 'Pajzs',           icon: 'shield' },
+            time_steal: { name: 'Időlopás',        icon: 'hourglass' }
+        };
+
+        const items = rows.map(r => ({
+            key: r.key,
+            name: DISPLAY[r.key]?.name || r.key,
+            icon: DISPLAY[r.key]?.icon || 'zap',
+            description: r.description || '',
+            count: Number(r.db) || 0
+        }));
+
+        return response.status(200).json({ success: true, abilities: items });
+    } catch (error) {
+        console.error('[profile/abilities-usage] hiba:', error);
+        return response.status(500).json({ success: false, message: 'Szerverhiba a statisztika lekérdezésekor.' });
+    }
+});
+
 router.post('/profile/remove-image', profileImageRemoveLimiter, isAuthenticated, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };

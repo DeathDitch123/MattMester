@@ -60,6 +60,9 @@ export function abilitiesAllapotFrissit(allapot) {
     }
     lastAllapot = allapot;
     bartMegjelenit();
+    // Ha az oldalVazVisszaallit() (main.js) közben kiürítette a gomb-konténert,
+    // újrarendereljük. Ez idempotens: csak akkor render-el ha a DOM tényleg üres.
+    bemutatBartFrissit();
     pontokFrissit(allapot);
     gombokFrissit(allapot);
     effektekFrissit(allapot);
@@ -100,6 +103,10 @@ function bartElrejt() {
 function bemutatBartFrissit() {
     const cont = document.getElementById('ability-buttons');
     if (!cont || !cfg) return;
+    // Idempotens: ha már van bent ugyanannyi gomb, nem rendereljük újra
+    // (a frissítést a `gombokFrissit` végzi state-update-eknél).
+    const cfgKeyCount = Object.keys(cfg).length;
+    if (cont.children.length === cfgKeyCount) return;
     cont.innerHTML = '';
     for (const key in cfg) {
         const c = cfg[key];

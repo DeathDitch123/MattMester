@@ -21,7 +21,13 @@
       "Bash(node -c chess/bot.js)",
       "Bash(node -c api/chess_api.js)",
       "Bash(node -c chess/chess_sql_functions.js)",
-      "Bash(node -c sql/database.js)"
+      "Bash(node -c sql/database.js)",
+      "Bash(node -c api/routes/profile.js)",
+      "Bash(node -e \"console.log\\(require\\('nodemailer'\\) ? 'OK' : 'MISSING'\\)\")",
+      "Bash(ls -la .env*)",
+      "Bash(ls -la ../.env*)",
+      "Bash(node -e ' *)",
+      "Bash(node -c api/emailVerification.js)"
     ]
   }
 }
