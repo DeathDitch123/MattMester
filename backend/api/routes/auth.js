@@ -390,15 +390,8 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
 
         if (!user) {
             statusCode = 400;
-            await logAuthenticatedAction(request, 0, {
-                eventType: 'email_verification_failed',
-                eventCategory: 'security',
-                severity: 'warning',
-                source: 'backend',
-                success: false,
-                message: 'Érvénytelen vagy ismeretlen verifikációs token.',
-                metadata: { reason: 'not_found' }
-            }).catch(() => { });
+            // Nincs azonosítható user, ezért itt nem írunk user_logs sort (FK: user_id NOT NULL).
+            console.warn('[auth/verify-email] Érvénytelen vagy ismeretlen verifikációs token érkezett.');
             payload.code = 'INVALID_TOKEN';
             throw new Error('Érvénytelen vagy már felhasznált verifikációs token.');
         }
@@ -442,7 +435,11 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
             };
         }
     } catch (error) {
-        console.error('Email verify hiba:', error.message);
+        if (statusCode >= 500) {
+            console.error('Email verify hiba:', error.message);
+        } else {
+            console.warn('Email verify figyelmeztetes:', error.message);
+        }
         if (statusCode === 200) statusCode = 500;
         payload = {
             success: false,
