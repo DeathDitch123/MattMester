@@ -95,6 +95,244 @@
 | 70 | **`#43` ütközés:** az F2 fázisban a `/admin/test` endpoint az új middleware-láncot kapja meg, és csak `NODE_ENV=development` esetén regisztráljuk. | [backend/api/routes/admin.js](backend/api/routes/admin.js) | ☐ |
 | 71 | **`#33` és `#34` redundancia:** ezeket az új admin track (F3, F9) lefedi, a Bónusz-szekcióban már nem szükséges külön nyilvántartani. | – | ☐ |
 
+### Részletes admin-panel backlog
+
+Az alábbi bontás az [ADMIN_PANEL.md](ADMIN_PANEL.md) teljes tervét backlog-formába teszi át. Ez az a sorrend, amiben az admin panel megvalósítható, úgy hogy minden lépés külön tesztelhető legyen.
+
+#### F1. Séma + token alapok
+
+**Cél:** az admin infrastruktúra adatbázis-oldalának létrehozása, plusz az admin seed egyértelmű szétválasztása a sima admin szereptől.
+
+**Feladatok:**
+- `users.is_super_admin` oszlop hozzáadása.
+- Új táblák létrehozása: `admin_tokens`, `admin_audit_log`, `admin_alert_log`, `admin_rate_escalations`.
+- A `user_logs`-ból a holt `metric_*` mezők és az ezekhez tartozó index törlése.
+- A meglévő `admin` seed user megkapja az `is_super_admin = TRUE` értéket.
+- A séma- és init logika átvezetése a `backend/sql/create_database.sql` és `backend/sql/database.js` fájlokban.
+
+**Kimenet:** az app üres DB-n indulva is létrehozza az admin alapstruktúrát.
+
+**Elfogadási kritérium:**
+- az admin seed super-adminként jön létre,
+- a táblák létrejönnek,
+- a `metric_*` mezők ténylegesen eltűnnek,
+- a backend indulása nem törik.
+
+#### F2. Step-up admin auth és token kezelés
+
+**Cél:** az admin műveletekhez külön, rövid életű, nem JWT alapú token legyen.
+
+**Feladatok:**
+- `POST /api/admin/auth/elevate` jelszavas emeléssel.
+- `POST /api/admin/auth/refresh` a sliding TTL miatt.
+- `POST /api/admin/auth/revoke` token visszavonásra.
+- `GET /api/admin/auth/status` a UI pollhoz.
+- `parseAdminToken` middleware megvalósítása `Authorization: Bearer <token>` alapján.
+- `adminElevateLimiter` hozzáadása.
+
+**Szabályok:**
+- opaque token, SHA-256 hash tárolás,
+- 15 perces sliding TTL,
+- a plain token nem kerülhet DB-be vagy logba,
+- a token és a session user azonosítója egyezzen,
+- kritikus művelet után opcionális token rotáció.
+
+**Elfogadási kritérium:**
+- session nélkül nincs admin hozzáférés,
+- rossz token 401-et ad,
+- lejárt token 401-et ad,
+- helyes tokennel az admin endpointok működnek.
+
+#### F3. AuditLogService és audit middleware lánc
+
+**Cél:** minden admin mutáló művelet auditálása egységes formátumban.
+
+**Feladatok:**
+- `AuditLogService.record(...)` service létrehozása.
+- `requireReasonOnMutate` middleware, amely normál műveletnél 10, kritikusnál 30 karakteres indoklást vár.
+- `auditContext` létrehozása ULID request ID-val.
+- `auditFlush` vagy azzal ekvivalens mentési pont, amely sikeres és sikertelen műveletet is naplóz.
+- redaction allowlist implementálása, hogy a sensitive mezők sose kerüljenek be a logba.
+
+**Audit-szabályok:**
+- normál műveletnél csak a változott mezők menjenek be,
+- kritikus műveletnél teljes snapshot menjen be,
+- append-only működés,
+- minden audit sor tartalmazza az actor, target, reason, severity, ip, user-agent és request-id mezőket.
+
+**Elfogadási kritérium:**
+- egy admin művelet után audit sor keletkezik,
+- hibás vagy elutasított kérés is auditot kap,
+- a tiltott mezők sosem kerülnek ki.
+
+#### F4. `/admin` WebSocket namespace
+
+**Cél:** a valós idejű admin események leválasztása a normál socket forgalomról.
+
+**Feladatok:**
+- `io.of('/admin')` namespace bevezetése.
+- handshake ellenőrzés: session + admin token.
+- `admin:room` közös admin szoba.
+- opcionális per-admin room célzott üzenetekhez.
+- replay támogatás reconnect után.
+
+**Események:**
+- `admin:audit:created`
+- `admin:alert:unauthorized`
+- `admin:alert:rate_escalated`
+- `admin:alert:token_invalid`
+- `admin:stats:tick`
+- `admin:user:updated`
+- `admin:user:banned`
+- `admin:user:unbanned`
+- `admin:profile_image:queue_changed`
+- `admin:notification:sent`
+- `admin:session:revoked`
+
+**Replay szabályok:**
+- max 200 event / batch,
+- 24 óránál régebbi replay nincs,
+- max 5 batch / kapcsolat,
+- a kliens csak memóriában tartja az utolsó `eventId`-t.
+
+**Elfogadási kritérium:**
+- két admin kliens egyszerre ugyanazt az admin eseményt látja,
+- reconnect után a hiányzó események visszajönnek,
+- nem-admin kliens nem tud belépni a namespace-be.
+
+#### F5. AlertingService és adaptív rate limit
+
+**Cél:** a jogosulatlan vagy gyanús admin próbálkozások automatikus jelzése és lassítása.
+
+**Feladatok:**
+- `admin_alert_log` írása,
+- `admin:alert:*` WS broadcast,
+- IP vagy user scope alapú rate limit eszkaláció,
+- `admin_rate_escalations` táblába mentett ideiglenes szigorítás,
+- a meglévő rate limiter factory kiegészítése admin esetre.
+
+**Elfogadási kritérium:**
+- hibás token vagy session nélküli hívás alertet generál,
+- ismétlődő próbálkozás szigorúbb limitet kap,
+- az admin roomban megjelenik a figyelmeztetés.
+
+#### F6. Super-admin műveletek
+
+**Cél:** a legmagasabb szintű jogosultságok külön kezelése.
+
+**Feladatok:**
+- admin lista endpoint,
+- grant/revoke endpointok,
+- last-super-admin lock,
+- minden ilyen művelet critical audit.
+
+**Elfogadási kritérium:**
+- sima admin nem tud super jogosultságot adni vagy elvenni,
+- az utolsó super-admin saját magát nem tudja elveszíteni,
+- minden ilyen művelet auditált.
+
+#### F7. Meglévő admin endpointok migrálása
+
+**Cél:** a jelenlegi admin képességek átvezetése az új auth/audit láncra.
+
+**Feladatok:**
+- `notifications/send` bekötése,
+- `profile-images/approve` és `profile-images/reject` bekötése,
+- `export-users` átállítása,
+- a `reason` kötelező/opcionális logikájának külön kezelése,
+- a `/admin/test` smoke endpoint csak dev környezetben maradjon.
+
+**Elfogadási kritérium:**
+- az új láncon átmennek a már létező admin actionök,
+- az approve/reject és export szabályai a doksi szerint működnek.
+
+#### F8. Read-only admin API
+
+**Cél:** a dashboardhoz szükséges lekérdezések stabil API-n legyenek elérhetők.
+
+**Feladatok:**
+- audit kereső endpoint,
+- CSV export,
+- recent alerts endpoint,
+- users list endpoint,
+- stats snapshot endpoint.
+
+**Keresési tengelyek:**
+- actor,
+- action,
+- severity,
+- időtartomány,
+- target id vagy target key,
+- request id.
+
+**Elfogadási kritérium:**
+- a szűrések működnek,
+- a CSV export a szűrt listát adja,
+- a frontendhez kellő adat elérhető.
+
+#### F9. Retention job
+
+**Cél:** az audit és alert adatok életciklusának lezárása.
+
+**Feladatok:**
+- napi törlési job 18 hónapos retentionnel,
+- hard delete,
+- saját retention audit entry,
+- a job induljon startupkor is, majd napi ciklusban fusson.
+
+**Elfogadási kritérium:**
+- a régi rekordok eltűnnek,
+- a retention futás is auditálva van,
+- a rendszer nem lassul el ettől a feladattól.
+
+#### F10. Admin frontend MVP
+
+**Cél:** a backend készségeihez illeszkedő első használható admin felület.
+
+**Feladatok:**
+- users table + row detail modal,
+- audit viewer szűrőkkel,
+- moderation queue,
+- admin token elevate modal,
+- statikus, egyszerű, de kényelmes UI.
+
+**Elfogadási kritérium:**
+- a legfontosabb admin műveletek UI-ból végrehajthatók,
+- a token kezelés a UI-ban is működik,
+- a realtime események látszanak.
+
+### Közös biztonsági és működési szabályok
+
+- admin token csak memóriában élhet a kliensen,
+- `localStorage` használata tiltott,
+- minden mutáló admin endpointon kell reason,
+- kritikus műveleteknél confirmPassword is kell,
+- minden admin endpointon legyen auth, token, rate limit és audit sorrendben,
+- a `403` és `401` válaszok legyenek egységesek,
+- a sensitive mezők ne jelenjenek meg logban vagy audit payloadban,
+- az audit log append-only legyen.
+
+### Tesztelési bontás
+
+- **Unit:** token hash, reason validáció, audit diff, redaction, permissions.
+- **Integration:** login → elevate → admin endpoint → audit sor.
+- **Auth bypass:** session nélkül, token nélkül, lejárt tokennel, más user tokenjével.
+- **WS:** admin room csatlakozás, replay, unauthorized disconnect.
+- **Abuse:** többszöri hibás elevate, rate limit eszkaláció, alert generálás.
+
+### Javasolt sorrend az issues backloghoz
+
+1. F1 séma + token alapok.
+2. F2 step-up auth.
+3. F3 audit chain.
+4. F4 admin socket namespace.
+5. F5 alerting + rate limit.
+6. F6 super-admin műveletek.
+7. F7 meglévő endpointok migrálása.
+8. F8 read-only API.
+9. F9 retention job.
+10. F10 frontend.
+
 ---
 
 ## 🟢 Bónusz, ha marad idő
