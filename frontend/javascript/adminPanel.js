@@ -1566,8 +1566,22 @@ function startTokenCountdown() {
         // Auto-refresh: ha 60s alatti, kérünk egy refresh-t (sliding TTL)
         if (state.adminToken && left > 0 && left <= 60 && !autoRefreshing) {
             autoRefreshing = true;
-            try { await callRefresh(); }
-            catch (_) { /* csendes, a következő tick majd újrapróbálja */ }
+            try {
+                await callRefresh();
+            } catch (error) {
+                const refreshCode = error?.code || '';
+                if (refreshCode === 'NO_SESSION') {
+                    clearAdminToken();
+                    updateTokenPill();
+                    showToast('A session lejárt — jelentkezz be újra.', 'danger', 'bi-shield-fill-x');
+                    window.location.replace('/');
+                } else if (refreshCode === 'TOKEN_INVALID') {
+                    clearAdminToken();
+                    updateTokenPill();
+                    showToast('Az admin token érvénytelen lett — kérj új elevate-et.', 'warning', 'bi-shield-fill-x');
+                    showElevateModal();
+                }
+            }
             finally { autoRefreshing = false; }
         }
 
@@ -1593,7 +1607,10 @@ async function callRefresh() {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data?.success) {
-        throw new Error(data?.message || 'Refresh sikertelen.');
+        const error = new Error(data?.message || 'Refresh sikertelen.');
+        error.code = data?.code || (res.status === 401 ? 'TOKEN_INVALID' : 'ADMIN_REFRESH_FAILED');
+        error.status = res.status;
+        throw error;
     }
     if (data.data?.expiresAt) {
         state.adminTokenExpiresAt = new Date(data.data.expiresAt);
@@ -1615,10 +1632,18 @@ async function refreshAdminToken() {
         showToast('Admin token meghosszabbítva.', 'success', 'bi-shield-fill-check');
     } catch (error) {
         console.error('refreshAdminToken hiba:', error);
-        clearAdminToken();
-        updateTokenPill();
-        showToast('Token frissítés sikertelen — újra elevate.', 'danger', 'bi-shield-fill-x');
-        showElevateModal();
+        const errorCode = error?.code || '';
+        if (errorCode === 'NO_SESSION') {
+            clearAdminToken();
+            updateTokenPill();
+            showToast('A session megszűnt — visszairányítunk a főoldalra.', 'danger', 'bi-shield-fill-x');
+            window.location.replace('/');
+        } else {
+            clearAdminToken();
+            updateTokenPill();
+            showToast('Token frissítés sikertelen — újra elevate.', 'danger', 'bi-shield-fill-x');
+            showElevateModal();
+        }
     }
 }
 
