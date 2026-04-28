@@ -1552,6 +1552,43 @@ function getRemainingTokenSeconds() {
     return Math.max(0, Math.floor((state.adminTokenExpiresAt - new Date()) / 1000));
 }
 
+// Auth flow forras-igazsag: shared/adminAuthFlow.js (browser + Node-tesztelheto).
+// A factory-t lazyn instanciaaljuk, hogy a fuggvenyhivatkozasok hoist-olt deklaraciokra
+// mutathassanak (clearAdminToken / updateTokenPill / showElevateModal / showToast).
+let _adminAuthFlow = null;
+function getAdminAuthFlow() {
+    if (_adminAuthFlow) {
+        return _adminAuthFlow;
+    }
+    const factory = window.MattMesterAdminAuthFlow && window.MattMesterAdminAuthFlow.createAdminAuthFlow;
+    if (typeof factory !== 'function') {
+        throw new Error('MattMesterAdminAuthFlow nincs betoltve (shared/adminAuthFlow.js).');
+    }
+    _adminAuthFlow = factory({
+        state,
+        fetchFn: (input, init) => fetch(input, init),
+        clearAdminToken,
+        updateTokenPill,
+        showElevateModal,
+        showToast,
+        redirect: (url) => window.location.replace(url),
+        flashPill: () => {
+            const pill = document.getElementById('adminTokenPill');
+            pill?.classList.add('refresh-flash');
+            setTimeout(() => pill?.classList.remove('refresh-flash'), 600);
+        }
+    });
+    return _adminAuthFlow;
+}
+
+function handleAdminAuthError(code) {
+    return getAdminAuthFlow().handleAdminAuthError(code);
+}
+
+function adminAuthHeaders(extra) {
+    return getAdminAuthFlow().adminAuthHeaders(extra);
+}
+
 /* =============================================================
    13) Token countdown — VALÓS (server expiresAt alapján)
    ============================================================= */
@@ -1570,18 +1607,8 @@ function startTokenCountdown() {
             try {
                 await callRefresh();
             } catch (error) {
-                const refreshCode = error?.code || '';
-                if (refreshCode === 'ADMIN_NO_SESSION') {
-                    clearAdminToken();
-                    updateTokenPill();
-                    showToast('A session lejárt — jelentkezz be újra.', 'danger', 'bi-shield-fill-x');
-                    window.location.replace('/');
-                } else if (refreshCode === 'ADMIN_TOKEN_INVALID') {
-                    clearAdminToken();
-                    updateTokenPill();
-                    showToast('Az admin token érvénytelen lett — kérj új elevate-et.', 'warning', 'bi-shield-fill-x');
-                    showElevateModal();
-                }
+                // Auth hiba -> handleAdminAuthError elintezi; halozat/5xx -> token marad, kovetkezo tick ujraprobalja.
+                handleAdminAuthError(error?.code || '');
             }
             finally { autoRefreshing = false; }
         }
@@ -1599,53 +1626,13 @@ function startTokenCountdown() {
     }, 1000);
 }
 
+// callRefresh / refreshAdminToken kozos forras: shared/adminAuthFlow.js.
 async function callRefresh() {
-    if (!state.adminToken) throw new Error('Nincs admin token.');
-    const res = await fetch('/api/admin/auth/refresh', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${state.adminToken}` },
-        credentials: 'same-origin'
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok || !data?.success) {
-        const error = new Error(data?.message || 'Refresh sikertelen.');
-        error.code = data?.code || (res.status === 401 ? 'ADMIN_TOKEN_INVALID' : 'ADMIN_REFRESH_FAILED');
-        error.status = res.status;
-        throw error;
-    }
-    if (data.data?.expiresAt) {
-        state.adminTokenExpiresAt = new Date(data.data.expiresAt);
-    }
-    return data;
+    return getAdminAuthFlow().callRefresh();
 }
 
 async function refreshAdminToken() {
-    if (!state.adminToken) {
-        showElevateModal();
-        return;
-    }
-    const pill = document.getElementById('adminTokenPill');
-    pill?.classList.add('refresh-flash');
-    setTimeout(() => pill?.classList.remove('refresh-flash'), 600);
-    try {
-        await callRefresh();
-        updateTokenPill();
-        showToast('Admin token meghosszabbítva.', 'success', 'bi-shield-fill-check');
-    } catch (error) {
-        console.error('refreshAdminToken hiba:', error);
-        const errorCode = error?.code || '';
-        if (errorCode === 'ADMIN_NO_SESSION') {
-            clearAdminToken();
-            updateTokenPill();
-            showToast('A session megszűnt — visszairányítunk a főoldalra.', 'danger', 'bi-shield-fill-x');
-            window.location.replace('/');
-        } else {
-            clearAdminToken();
-            updateTokenPill();
-            showToast('Token frissítés sikertelen — újra elevate.', 'danger', 'bi-shield-fill-x');
-            showElevateModal();
-        }
-    }
+    return getAdminAuthFlow().refreshAdminToken();
 }
 
 function updateTokenPill() {
@@ -1932,17 +1919,6 @@ function executeCriticalAction() {
 /* =============================================================
    17) Háttér műveletek (logout, export, modal)
    ============================================================= */
-async function logAuthStatusReport(contextLabel = 'admin-logout') {
-    try {
-        const response = await fetch('/api/sessionInfo');
-        const data = await response.json().catch(() => ({}));
-        console.clear();
-        console.log('--- Auth Status Report ---', contextLabel, response.ok ? data : { success: false, loggedIn: false });
-    } catch (error) {
-        console.error('Hiba az auth status report naplozasakor:', error);
-    }
-}
-
 function exportUsers() {
     try {
         showToast('Az export még nincs bekötve, ez csak shell gomb.', 'info', 'bi-cone-striped');
@@ -2051,12 +2027,6 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
         }
     }
 
-    function authHeaders(extra = {}) {
-        const h = { ...extra };
-        if (state.adminToken) h['Authorization'] = `Bearer ${state.adminToken}`;
-        return h;
-    }
-
     function renderRows(rows) {
         const tbody = document.getElementById('profileImageReviewTableBody');
         if (!tbody) return;
@@ -2104,15 +2074,19 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                 setMessage(null, '');
 
                 const response = await fetch('/api/admin/profile-images/pending', {
-                    headers: authHeaders(),
+                    headers: adminAuthHeaders(),
                     credentials: 'same-origin'
                 });
                 const result = await response.json().catch(() => ({}));
-                if (!response.ok || !result?.success) {
+                const authHandled = response.status === 401 && handleAdminAuthError(result?.code || '');
+                if (authHandled) {
+                    renderRows([]);
+                } else if (!response.ok || !result?.success) {
                     throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
+                } else {
+                    renderRows(result.data || []);
+                    refreshed = true;
                 }
-                renderRows(result.data || []);
-                refreshed = true;
             }
         } catch (error) {
             console.error('admin profile-images pending fetch hiba:', error);

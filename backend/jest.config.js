@@ -1,5 +1,7 @@
 module.exports = {
     testEnvironment: 'node',
+    // Frontend shared modulok unit tesztjei is futnak (frontend/__tests__/*.test.js).
+    roots: ['<rootDir>', '<rootDir>/../frontend'],
     testMatch: ['**/__tests__/**/*.test.js', '**/*.test.js'],
     collectCoverageFrom: [
         'api/**/*.js',
