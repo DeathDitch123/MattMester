@@ -3,11 +3,11 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self';
-            connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+            connect-src 'self' https://cdn.jsdelivr.net;
             script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
             style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
-            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob: https://ui-avatars.com;">
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Profil</title>
 
@@ -138,8 +138,8 @@
                         <div class="d-flex flex-column flex-md-row align-items-center gap-4">
                             <div class="position-relative">
                                 <img id="profileAvatarDashboard" class="profile-avatar"
-                                    src="https://ui-avatars.com/api/?name=Grand+Master&background=d4af37&color=000&size=128"
-                                    alt="GrandMaster_99">
+                                    src="/profile_pictures/default.png"
+                                    alt="Profil">
                                 <span class="position-absolute bottom-0 end-0 p-1">
                                     <span class="status-dot shadow-glow"></span>
                                 </span>
@@ -475,9 +475,9 @@
                                 <div class="row g-4">
                                     <div class="col-md-12 d-flex align-items-center gap-4 border-bottom pb-4"
                                         style="border-color: var(--border-color) !important;">
-                                        <img src="https://ui-avatars.com/api/?name=GrandMaster_99&background=1e293b&color=d4af37&size=240"
-                                            alt="Current Avatar" id="profileAvatarSettings" class="profile-avatar"
-                                            style="width: 80px; height: 80px;">
+                                        <img src="/profile_pictures/default.png"
+                                            alt="Profil" id="profileAvatarSettings" class="profile-avatar"
+                                            style="width: 80px; height: 80px; object-fit: cover;">
                                         <div>
                                             <h6 class="text-white mb-2">Profile Picture</h6>
                                             <div class="d-flex gap-2">

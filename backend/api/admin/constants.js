@@ -39,6 +39,16 @@ const REDACTED_FIELDS = Object.freeze(new Set([
     'reset_token_expires'
 ]));
 
+// UI Client Timing Constants (shared with frontend)
+const ADMIN_UI_TOKEN_TICK_INTERVAL_MS = 1000;  // Token countdown ticker interval
+const ADMIN_UI_TOKEN_REFRESH_THRESHOLD_SEC = 60;  // Refresh token when <= 60 sec left
+const ADMIN_UI_FOCUS_RESTORE_DELAY_MS = 250;  // Delay before restoring focus after modal close
+const ADMIN_UI_ERROR_TOAST_DURATION_MS = 3000;  // How long error toasts appear
+
+// Scheduler/Background Service Timing (milliseconds)
+const ADMIN_SCHEDULER_STARTUP_DELAY_MS = 30 * 1000;  // Delay retention job startup on server boot
+const ADMIN_SCHEDULER_RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;  // Run cleanup every 24 hours
+
 // Permission konstansok.
 const ADMIN_PERMISSIONS = Object.freeze({
     USERS_VIEW: 'users.view',
@@ -117,5 +127,11 @@ module.exports = {
     ADMIN_PERMISSIONS,
     SUPER_ONLY_PERMISSIONS,
     CRITICAL_ACTIONS,
-    ADMIN_ERROR_CODES
+    ADMIN_ERROR_CODES,
+    ADMIN_UI_TOKEN_TICK_INTERVAL_MS,
+    ADMIN_UI_TOKEN_REFRESH_THRESHOLD_SEC,
+    ADMIN_UI_FOCUS_RESTORE_DELAY_MS,
+    ADMIN_UI_ERROR_TOAST_DURATION_MS,
+    ADMIN_SCHEDULER_STARTUP_DELAY_MS,
+    ADMIN_SCHEDULER_RETENTION_INTERVAL_MS
 };

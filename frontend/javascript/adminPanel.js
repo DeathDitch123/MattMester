@@ -117,14 +117,22 @@ const h = {
         return `<span class="badge bg-${variant}${dark ? ' text-dark' : ''}">${text}</span>`;
     },
 
-    avatar: (name, size = 32) => `
-        <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random"
-            class="rounded-circle" width="${size}" height="${size}" alt="">
-    `,
+    avatar: (userObj, size = 32) => {
+        const viewModel = window.MattMesterProfileImage?.buildProfileImageViewModel?.(userObj) || {
+            src: '/profile_pictures/default.png',
+            username: typeof userObj === 'string' ? userObj : (userObj?.username || 'Felhasználó'),
+            alt: 'Profilkép'
+        };
+        return `
+            <img src="${viewModel.src}"
+                class="rounded-circle" width="${size}" height="${size}" alt="${viewModel.alt}"
+                data-profile-image-status="${viewModel.status || 'approved'}" style="object-fit:cover;">
+        `;
+    },
 
-    user: ({ name, email, struck = false }) => `
+    user: ({ name, email, struck = false, profile_image = null, username = null } = {}) => `
         <div class="d-flex align-items-center gap-2">
-            ${h.avatar(name)}
+            ${h.avatar({ username: username || name, profile_image }, 32)}
             <div class="lh-sm">
                 <div class="fw-semibold text-white${struck ? ' text-decoration-line-through opacity-75' : ''}">${name}</div>
                 ${email ? `<small class="text-secondary">${email}</small>` : ''}
@@ -253,8 +261,6 @@ const state = {
     adminTokenExpiresAt: null,    // Date
     isSuperAdmin: false,
     elevated: false,              // sikeres elevate után true
-    demoMode: false,              // backend nélküli shell fallback
-    demoNoticeShown: false,
 
     // WebSocket /admin namespace
     adminSocket: null,
@@ -277,9 +283,9 @@ const MAX_LIVE_BUFFER = 50;
    ============================================================= */
 const SAMPLE = {
     users: [
-        { name: 'Magnus Carlsen',  email: 'magnus@chess.hu', elo: 2847, role: 'admin',  status: 'active', last: '2 perce', joined: '2024-01-15' },
-        { name: 'Hikaru Nakamura', email: 'hikaru@chess.hu', elo: 2768, role: 'player', status: 'active', last: '5 órája', joined: '2024-02-20' },
-        { name: 'Anish Giri',      email: 'anish@chess.hu',  elo: 0,    role: 'player', status: 'banned', last: '—',        joined: '2024-03-10', struck: true }
+        { username: 'MagnusCarlsen',  name: 'Magnus Carlsen',  email: 'magnus@chess.hu', elo: 2847, role: 'admin',  status: 'active', last: '2 perce', joined: '2024-01-15', profile_image: '/profile_pictures/default.png' },
+        { username: 'HikaruNakamura', name: 'Hikaru Nakamura', email: 'hikaru@chess.hu', elo: 2768, role: 'player', status: 'active', last: '5 órája', joined: '2024-02-20', profile_image: '/profile_pictures/default.png' },
+        { username: 'AnishGiri',      name: 'Anish Giri',      email: 'anish@chess.hu',  elo: 0,    role: 'player', status: 'banned', last: '—',        joined: '2024-03-10', struck: true, profile_image: '/profile_pictures/default.png' }
     ],
     games: [
         { id: '#4932', white: 'Carlsen (2847)',  black: 'Nakamura (2768)', status: 'live',     winner: '—',          moves: 24, time: '10+0' },
@@ -327,19 +333,8 @@ const SAMPLE_ADMINS = [
     { id: 8, name: 'ModeratorBéla',    email: 'bela@mattmester.hu',  isSuper: false, joined: '2024-08-12', lastSeen: '15 perce' }
 ];
 
-const DEMO_ADMIN_USER = {
-    username: 'Admin Demo',
-    role: 'admin',
-    profile_image: ''
-};
-
-const DEMO_PROFILE_IMAGE_REVIEWS = [
-    { uploadId: 501, userId: 12, username: 'Magnus Carlsen', filename: '/profile_pictures/demo-magnus.png', uploadTime: '5 perce' },
-    { uploadId: 502, userId: 27, username: 'SakkMester99', filename: '/profile_pictures/demo-sakkmester.png', uploadTime: '22 perce' }
-];
-
 /* =============================================================
-   6) Live data hozzáférési helperek (WS vs fallback)
+   6) Live data hozzáférési helperek
    ============================================================= */
 function liveStatsOrFallback() {
     return state.liveStats || {
@@ -459,13 +454,6 @@ const SECTIONS = {
         const alerts = alertsList().slice(0, 2);
         const last24 = stats.last24h || {};
         return `
-            ${state.demoMode ? `
-                <div class="alert alert-warning bg-warning bg-opacity-10 border-warning mb-4" role="alert">
-                    <i class="bi bi-cone-striped me-2"></i>
-                    Demo shell aktív: a felület betölt, de a legtöbb admin művelet még nincs bekötve.
-                </div>
-            ` : ''}
-
             ${h.header({
                 icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
                 subtitle: 'A projekt fő mutatói egy pillantásra',
@@ -633,8 +621,8 @@ const SECTIONS = {
                     classes: 'profile-summary',
                     body: `
                         <div class="text-center">
-                            <img src="https://ui-avatars.com/api/?name=Magnus+Carlsen&size=128&background=d4af37&color=000"
-                                class="rounded-circle border border-3 border-gold mb-3" alt="" style="width:120px;height:120px;">
+                            <img id="userDetailProfileImage"
+                                class="rounded-circle border border-3 border-gold mb-3" alt="Profil" style="width:120px;height:120px;object-fit:cover;" data-fallback="true">
                             <h4 class="text-white mb-1">Magnus Carlsen</h4>
                             <small class="text-secondary d-block mb-3">magnus@chess.hu</small>
                             ${rolePill('admin')}
@@ -1416,45 +1404,28 @@ function toggleSidebar() {
    12) AUTH bootstrap — session ellenőrzés + step-up elevate
    ============================================================= */
 async function bootstrapAdminAuth() {
-    const authState = { sessionOk: false, shellMode: false };
     try {
         const r = await fetch('/api/sessionInfo', { credentials: 'same-origin' });
         const data = await r.json().catch(() => ({}));
 
-        if (data?.loggedIn && data.user?.role === 'admin') {
-            state.currentUser = data.user;
-            state.demoMode = false;
-            populateHeaderFromUser(data.user);
-            authState.sessionOk = true;
+        if (!data?.loggedIn || data.user?.role !== 'admin') {
+            window.location.replace('/');
+            return false;
         } else {
-            state.currentUser = DEMO_ADMIN_USER;
-            state.demoMode = true;
-            populateHeaderFromUser(DEMO_ADMIN_USER);
-            authState.shellMode = true;
-            if (!state.demoNoticeShown) {
-                showToast('Demo shell mód: a backend session nem admin vagy nem elérhető.', 'warning', 'bi-cone-striped');
-                state.demoNoticeShown = true;
-            }
+            state.currentUser = data.user;
+            populateHeaderFromUser(data.user);
         }
     } catch (error) {
         console.error('bootstrapAdminAuth sessionInfo hiba:', error);
-        state.currentUser = DEMO_ADMIN_USER;
-        state.demoMode = true;
-        populateHeaderFromUser(DEMO_ADMIN_USER);
-        authState.shellMode = true;
-        if (!state.demoNoticeShown) {
-            showToast('Demo shell mód: backend auth nem elérhető, a felület még betölt.', 'warning', 'bi-cone-striped');
-            state.demoNoticeShown = true;
-        }
+        window.location.replace('/');
+        return false;
     }
 
-    if (authState.sessionOk) {
-        showElevateModal();
-    }
+    showElevateModal();
 
     showSection(state.currentSectionId || DEFAULT_SECTION, null, { silent: true });
 
-    return authState.sessionOk || authState.shellMode;
+    return true;
 }
 
 function populateHeaderFromUser(user) {
@@ -1462,12 +1433,11 @@ function populateHeaderFromUser(user) {
     setText('headerUsername', username);
     setText('headerRole', user?.role === 'admin' ? 'Admin' : (user?.role || ''));
     const avatar = document.getElementById('headerAvatar');
-    if (avatar) {
-        const img = (user?.profile_image && user.profile_image.trim() !== '/profile_pictures/default.png')
-            ? user.profile_image
-            : `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=d4af37&color=000`;
-        avatar.src = img;
-        avatar.alt = username;
+    if (avatar && window.MattMesterProfileImage) {
+        window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
+            source: user,
+            size: 40
+        });
     }
 }
 
@@ -2106,22 +2076,16 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                 STATE.loading = true;
                 setMessage(null, '');
 
-                if (state.demoMode) {
-                    renderRows(DEMO_PROFILE_IMAGE_REVIEWS);
-                    setMessage('info', 'Demo mód: minta profilképek látszanak.');
-                    refreshed = true;
-                } else {
-                    const response = await fetch('/api/admin/profile-images/pending', {
-                        headers: authHeaders(),
-                        credentials: 'same-origin'
-                    });
-                    const result = await response.json().catch(() => ({}));
-                    if (!response.ok || !result?.success) {
-                        throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
-                    }
-                    renderRows(result.data || []);
-                    refreshed = true;
+                const response = await fetch('/api/admin/profile-images/pending', {
+                    headers: authHeaders(),
+                    credentials: 'same-origin'
+                });
+                const result = await response.json().catch(() => ({}));
+                if (!response.ok || !result?.success) {
+                    throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
                 }
+                renderRows(result.data || []);
+                refreshed = true;
             }
         } catch (error) {
             console.error('admin profile-images pending fetch hiba:', error);
@@ -2137,13 +2101,8 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
     async function approve(uploadId) {
         let approved = false;
         try {
-            if (state.demoMode) {
-                setMessage('success', 'Demo módban a jóváhagyás csak vizuális állapot.');
-                approved = true;
-            } else {
-                setMessage('success', 'A profilkép jóváhagyás nézetben van, de a backend művelet még nincs bekötve.');
-                approved = true;
-            }
+            setMessage('success', 'A profilkép jóváhagyás nézetben van, de a backend művelet még nincs bekötve.');
+            approved = true;
             await refresh();
         } catch (error) {
             console.error('admin profile-image approve hiba:', error);
@@ -2158,13 +2117,8 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
         const reviewNote = reviewNoteRaw.trim().slice(0, 500);
         let rejected = false;
         try {
-            if (state.demoMode) {
-                setMessage('success', reviewNote ? `Demo mód: elutasítási indok rögzítve: ${reviewNote}` : 'Demo mód: elutasítás csak vizuális állapot.');
-                rejected = true;
-            } else {
-                setMessage('success', 'Az elutasítás nézetben van, de a backend művelet még nincs bekötve.');
-                rejected = true;
-            }
+            setMessage('success', reviewNote ? `Elutasítási indok rögzítve: ${reviewNote}` : 'Az elutasítás nézetben van, de a backend művelet még nincs bekötve.');
+            rejected = true;
             await refresh();
         } catch (error) {
             console.error('admin profile-image reject hiba:', error);

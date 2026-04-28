@@ -39,6 +39,14 @@ A meglévő rendszer szilárd alapot ad (rate limiter factory, notifications + r
 
 A meglévő `metric_*` mezőket kivesszük a `user_logs`-ból (használatlanok). A frontend nélkül is tesztelhető API+Socket szerződéseket szállítunk fázisonként.
 
+### Jelenlegi frontend állapot, localhost-arányosan
+
+- Az admin shell már betölt: sidebar, top navbar, dashboard-váz, szekcióváltás és token pill látszik.
+- A headerben lévő token gomb működik: ha van aktív admin token, frissíti az `expiresAt`-et; ha nincs token, az elevate modalt nyitja.
+- A token countdown másodpercenként frissül, 60 másodperc alatt automatikus refresh-t próbál, lejáratkor pedig törli a tokent és új elevate-t kér.
+- Ha a backend session nem admin vagy nem elérhető, a felület demo shell módban is betölt, hogy localhoston ne essen ki azonnal.
+- A shellen kívüli funkciók nagy része még vázlat vagy mintaadat-alapú, ezt a későbbi fázisok kötik majd vissza valódi API-ra.
+
 ---
 
 ## ✅ Eldöntött tervezési pontok

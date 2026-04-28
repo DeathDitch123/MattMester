@@ -333,6 +333,14 @@ Az alábbi bontás az [ADMIN_PANEL.md](ADMIN_PANEL.md) teljes tervét backlog-fo
 9. F9 retention job.
 10. F10 frontend.
 
+### Jelenlegi készültség, localhost-arányosan
+
+- Az admin shell már feláll: sidebar, top navbar, dashboard-váz és szekcióváltás működik.
+- A header token gomb működő flow: ha van token, a visszaszámláló alapján refresh-el, ha nincs, az elevate modalt nyitja.
+- A token countdown él: 60 másodperc alatt automatikus refresh-t próbál, lejáratkor új elevate-t kér.
+- Ha a backend session nem admin vagy nem elérhető, a felület demo shell módban is betölt, hogy localhoston használható maradjon.
+- A shellen kívüli admin műveletek nagy része még terv vagy mintaadat-alapú, ezeket a F1–F8 lépések kötik majd vissza valódi backendre.
+
 ---
 
 ## 🟢 Bónusz, ha marad idő
