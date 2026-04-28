@@ -1538,6 +1538,7 @@ function clearAdminToken() {
     state.adminToken = null;
     state.adminTokenExpiresAt = null;
     state.elevated = false;
+    requestController.cancelAll?.();
     if (state.adminSocket) {
         try { state.adminSocket.disconnect(); } catch (_) {}
         state.adminSocket = null;
@@ -1972,6 +1973,7 @@ function logout() {
     let redirected = false;
     try {
         if (confirm('Biztosan ki szeretnél lépni?')) {
+            requestController.cancelAll?.();
             clearAdminToken();
             window.location.href = '/';
             redirected = true;

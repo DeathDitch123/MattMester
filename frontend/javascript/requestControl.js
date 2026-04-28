@@ -47,11 +47,29 @@
             state.timers[key] = null;
         }
 
+        function cancelAll() {
+            Object.keys(state.timers).forEach((key) => {
+                if (state.timers[key]) {
+                    clearTimeout(state.timers[key]);
+                    state.timers[key] = null;
+                }
+            });
+
+            Object.keys(state.controllers).forEach((key) => {
+                const controller = state.controllers[key];
+                if (controller) {
+                    controller.abort();
+                }
+                state.controllers[key] = null;
+            });
+        }
+
         return {
             schedule,
             withAbortSignal,
             clearSignal,
-            cancelScheduled
+            cancelScheduled,
+            cancelAll
         };
     }
 

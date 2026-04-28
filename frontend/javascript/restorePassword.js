@@ -1,4 +1,4 @@
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+const PASSWORD_REGEX = window.MattMesterValidationRules?.PASSWORD_REGEX || /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const RESET_TOKEN = new URLSearchParams(window.location.search).get('token') || '';
 let resetTokenState = RESET_TOKEN ? 'pending' : 'invalid';
 
