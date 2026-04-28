@@ -245,6 +245,39 @@ module.exports = { parseAdminToken };
 
 A 15 perc sliding mellett **kritikus művelet után automatikusan új tokent állítunk ki** és invalidáljuk a régit. UI átveszi az új tokent a válasz body-jából (`{ ...result, newAdminToken: '...' }`). Ez lecsökkenti a token érvényes ablakát kritikus művelet után.
 
+## 2.8 Admin auth lifecycle — Frontend / Backend szerződés (új)
+
+Ez a szakasz részletezi a backend és a frontend közötti pontos viselkedési szerződést az admin step-up token kezelésére. A cél: egyértelmű hibakódok, konzisztens kezelési ágak és tesztelhetőség.
+
+- Error kódok (backend → frontend):
+  - `ADMIN_NO_SESSION` — a user session megszűnt vagy nincs admin jogosultság. A frontendnek: **azonnali token törlés, UI frissítés, redirect a `/`-ra**. Nem nyit elevate modalt.
+  - `ADMIN_TOKEN_INVALID` — token hibás vagy nem található. A frontendnek: **token törlése, UI frissítés, elevate modal megnyitása**.
+  - `ADMIN_TOKEN_EXPIRED` — token lejárt. Kezelés megegyezik `ADMIN_TOKEN_INVALID`-dal.
+  - `ADMIN_TOKEN_MISSING` — token hiányzik a kérésből. Kezelés megegyezik `ADMIN_TOKEN_INVALID`-dal.
+  - Egyéb hibakódok vagy hálózati/5xx hibák: a frontend **ne kezelje auth-hibaként**; inkább warningot/Poor network toastot jelenítsen meg és ne törölje a tokent.
+
+- Frontend szerkezet és forrás-igazság:
+  - A frontend az új `frontend/javascript/shared/adminAuthFlow.js` fájlra támaszkodik, amely egy DI-friendly factory-t (`createAdminAuthFlow(deps)`) exportál. A factory biztosítja a következő API-t: `adminAuthHeaders(extra)`, `handleAdminAuthError(code)`, `callRefresh()`, `refreshAdminToken()`.
+  - A `adminPanel.js` lazán példányosítja ezt a factory-t `getAdminAuthFlow()`-val, és minden token-művelet ebből a forrásból hívódik. Így egy forrás-igazság szabályozza a viselkedést.
+
+- Kötelező frontend viselkedés (összefoglalva):
+  1. Minden admin fetch **Authorization** headerét az `adminAuthHeaders()` szolgáltassa.
+  2. Minden async hálózati művelet köré `try { } catch (err) { }` kell, és a függvények **legfeljebb egy `return`-t** tartalmazzanak (használj `result/success` flag-et).
+  3. `ADMIN_NO_SESSION` → `clearAdminToken(); updateTokenPill(); showToast(...,'danger'); window.location.replace('/')`.
+  4. `ADMIN_TOKEN_INVALID|EXPIRED|MISSING` → `clearAdminToken(); updateTokenPill(); showToast(...,'warning'); showElevateModal()`.
+  5. Hálózati/5xx hibák → `showToast(...,'warning')`, ne távolítsd el a tokent és ne redirectelj.
+
+- Tesztelés és hitelesség
+  - A frontendhez létrehoztunk `frontend/__tests__/adminTokenFlow.test.js`-t (Jest + mockált `fetch`), amely lefedi:
+    - sikeres `callRefresh()` → `state.adminTokenExpiresAt` frissül;
+    - `401 + ADMIN_NO_SESSION` → `clearAdminToken + redirect` (nincs elevate modal);
+    - `500` és `fetch`-reject (network) → token marad, `refreshAdminToken()` `success=false`, warning toast.
+  - A backend tesztjei (`adminAuthRoutes` és `adminMiddleware`) zöldek, megerősítve, hogy a megfelelő hibakódokat küldik.
+
+- Implementációs megjegyzések
+  - A frontend most `window.MattMesterAdminAuthFlow`-on keresztül érhető el a böngészőben és `module.exports` Node tesztekhez.
+  - A bevezetés során fontold meg a backend konstansok publikussá tételét (kis `/api/public/admin-constants` endpoint), hogy a frontend build-time vagy runtime egy forrásból olvassa a TTL-eket és kódneveket.
+
 ---
 
 ## 3. Jogosultsági modell

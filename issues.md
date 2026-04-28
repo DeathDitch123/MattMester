@@ -82,9 +82,9 @@
 
 | # | Teendő | Hely | Státusz |
 |---|--------|------|:------:|
-| 60 | **F1. Séma + token alapok** – `users.is_super_admin` oszlop, `admin_tokens`, `admin_audit_log`, `admin_alert_log`, `admin_rate_escalations` táblák. `metric_key/metric_value/metric_delta` mezők és `idx_user_logs_user_metric_time` index eltávolítása a `user_logs`-ból (jelenleg holt kód, nincs hívó). Admin seed `is_super_admin=TRUE`-val. **DB üres → nincs migráció, csak séma sablont kell átírni.** | [backend/sql/create_database.sql](backend/sql/create_database.sql), [backend/sql/database.js](backend/sql/database.js), [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ☐ |
-| 61 | **F2. Step-up admin token** – `POST /api/admin/auth/elevate / refresh / revoke / status` endpointok. `parseAdminToken` middleware (Authorization Bearer header + DB hash check). 15 perc sliding TTL. Token hash SHA-256-tal tárolva, plain token sosem DB-ben/logban. Külön `adminElevateLimiter` (5 / 15 perc). | [backend/api/routes/admin.js](backend/api/routes/admin.js), [backend/api/funtions.js](backend/api/funtions.js) | ☐ |
-| 62 | **F3. AuditLogService + middleware lánc** – `requireReasonOnMutate` (10/30 char min), `auditContext` (ULID requestId), `auditFlush` (sikeres + sikertelen ág is naplóz). Redaction allowlist: `password_hash`, `email_verification_token_hash`, `reset_password_token` SOSEM kerülnek be. Diff-only normál, full snapshot critical-nél. | backend/api/admin/* (új mappa) | ☐ |
+| 60 | **F1. Séma + token alapok** – `users.is_super_admin` oszlop, `admin_tokens`, `admin_audit_log`, `admin_alert_log`, `admin_rate_escalations` táblák. `metric_key/metric_value/metric_delta` mezők és `idx_user_logs_user_metric_time` index eltávolítása a `user_logs`-ból (jelenleg holt kód, nincs hívó). Admin seed `is_super_admin=TRUE`-val. **DB üres → nincs migráció, csak séma sablont kell átírni.** | [backend/sql/create_database.sql](backend/sql/create_database.sql), [backend/sql/database.js](backend/sql/database.js), [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ✅ |
+| 61 | **F2. Step-up admin token** – `POST /api/admin/auth/elevate / refresh / revoke / status` endpointok. `parseAdminToken` middleware (Authorization Bearer header + DB hash check). 15 perc sliding TTL. Token hash SHA-256-tal tárolva, plain token sosem DB-ben/logban. Külön `adminElevateLimiter` (5 / 15 perc). | [backend/api/routes/admin.js](backend/api/routes/admin.js), [backend/api/admin/authRoutes.js](backend/api/admin/authRoutes.js), [backend/api/admin/middleware.js](backend/api/admin/middleware.js) | ✅ |
+| 62 | **F3. AuditLogService + middleware lánc** – `requireReasonOnMutate` (10/30 char min), `auditContext` (ULID requestId), `auditFlush` (sikeres + sikertelen ág is naplóz). Redaction allowlist: `password_hash`, `email_verification_token_hash`, `reset_password_token` SOSEM kerülnek be. Diff-only normál, full snapshot critical-nél. | [backend/api/admin/auditService.js](backend/api/admin/auditService.js), [backend/api/admin/middleware.js](backend/api/admin/middleware.js) | ✅ |
 | 63 | **F4. Admin socket namespace `/admin`** – `io.of('/admin')` + handshake auth (session + admin token kettős check). `admin:room` szoba. `admin:replay:request/batch` reconnect után, max 200/batch, 24h ablak, max 5 batch/kapcsolat. Eseménynevezéktan: `admin:<domain>:<action>`. | [backend/sockets.js](backend/sockets.js) | ☐ |
 | 64 | **F5. AlertingService + adaptive rate limit** – jogosulatlan próbálkozás → audit + `admin:alert:unauthorized` broadcast + escalation (`multiplier=5`, 15 perc, IP-scope). `admin_rate_escalations` tábla a meglévő `rateLimiter.js`-be bekötve. | [backend/api/middleware/rateLimiter.js](backend/api/middleware/rateLimiter.js) | ☐ |
 | 65 | **F6. Super-admin műveletek** – `POST /api/admin/admins/grant`, `POST /api/admin/admins/revoke`, `GET /api/admin/admins`. Utolsó super-admin lock (saját `is_super_admin` nem vehető le, ha utolsó). Mind `severity='critical'`. | backend/api/routes/admin.js | ☐ |
@@ -92,12 +92,27 @@
 | 67 | **F8. Read-only admin API** – `/admin/audit/search` (actor/action/időtartomány/severity/target szűrőkkel), `/admin/audit/export` (CSV), `/admin/alerts/recent`, `/admin/users/list`, `/admin/stats/snapshot`. | backend/api/routes/admin.js | ☐ |
 | 68 | **F9. Audit retention job (18 hónap, hard delete)** – napi 1× `setInterval` az `initDatabase` után. Saját audit entry minden futáshoz (`action='audit.retention.run'`, törölt sorok száma metadata-ban). Iskolai projekthez hard delete elég; JSONL archive opció a `🟢 Bónusz`-ban. | [backend/server.js](backend/server.js) | ☐ |
 | 69 | **F10. Admin frontend** – külön iteráció, akkor indul, ha az API + WS oldalon F1–F9 zöld. | [frontend/javascript/adminPanel.js](frontend/javascript/adminPanel.js) | ☐ |
-| 70 | **`#43` ütközés:** az F2 fázisban a `/admin/test` endpoint az új middleware-láncot kapja meg, és csak `NODE_ENV=development` esetén regisztráljuk. | [backend/api/routes/admin.js](backend/api/routes/admin.js) | ☐ |
-| 71 | **`#33` és `#34` redundancia:** ezeket az új admin track (F3, F9) lefedi, a Bónusz-szekcióban már nem szükséges külön nyilvántartani. | – | ☐ |
+| 70 | **Frontend auth flow módosítások** – az új `frontend/javascript/shared/adminAuthFlow.js` DI factory (`createAdminAuthFlow`) helyez egy forrás-igazságot az admin token + refresh + auth error kezelésre. Frontend tesztek: `frontend/__tests__/adminTokenFlow.test.js` (9 teszt, 3 kötelező szcenárió). A frissítés betartja a \"1 function = max 1 return\" és \"try-catch minden async\"-t. | [frontend/javascript/shared/adminAuthFlow.js](frontend/javascript/shared/adminAuthFlow.js), [frontend/javascript/adminPanel.js](frontend/javascript/adminPanel.js), [frontend/__tests__/adminTokenFlow.test.js](frontend/__tests__/adminTokenFlow.test.js), [ADMIN_AUTH_CHANGES.md](ADMIN_AUTH_CHANGES.md) | ✅ |
+| 71 | **WS event-name szinkronizálás** – backend `admin:alert:suspicious` vs frontend `admin:alert:suspicious_pattern` eltérés. Szinkronizálás egy külön PR-ben javasolt. | [backend/api/admin/alertingService.js](backend/api/admin/alertingService.js), [frontend/javascript/adminPanel.js](frontend/javascript/adminPanel.js) | ☐ |
+| 72 | **Backend konstansok expozíciója** – javaslat: kis `/api/public/admin-constants` endpoint, amely a frontend számára közös TTL-eket, error kódokat, és egyéb admin-specifikus konstansokat szolgáltat. | [backend/api/routes/admin.js](backend/api/routes/admin.js) vagy új file | ☐ |
+| 73 | **Dead backend exportok takarítása** – `isAdmin` helper az [funtions.js](backend/api/funtions.js)-ben már nem használt (helyette `parseAdminToken` middleware). Deprecate megjegyzés + külön PR a törléshez. | [backend/api/funtions.js](backend/api/funtions.js) | ☐ |
 
 ### Részletes admin-panel backlog
 
 Az alábbi bontás az [ADMIN_PANEL.md](ADMIN_PANEL.md) teljes tervét backlog-formába teszi át. Ez az a sorrend, amiben az admin panel megvalósítható, úgy hogy minden lépés külön tesztelhető legyen.
+
+---
+
+## ✅ Utolsó frissítés (2026-04-29)
+
+**Admin auth coherence pass 1. kész:**
+- ✅ Frontend `shared/adminAuthFlow.js` factory (DI, single source of truth)
+- ✅ Frontend `adminTokenFlow.test.js` (9 teszt, 3 kötelező szcenárió + 6 kiegészítő)
+- ✅ Backend tesztek zöldek (`adminAuthRoutes`, `adminMiddleware`, `adminAuditService`)
+- ✅ Dokumentáció: `ADMIN_PANEL.md` § 2.8 auth lifecycle, `ADMIN_AUTH_CHANGES.md` változásnapló
+- ☐ WS event-name szinkronizálás → külön PR
+- ☐ Backend konstansok expozíciója (`/api/public/admin-constants` endpoint) → javaslat
+- ☐ Dead backend exportok eltávolítása (`isAdmin`) → külön PR
 
 #### F1. Séma + token alapok
 

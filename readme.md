@@ -166,26 +166,60 @@ PUBLIC_BASE_URL=http://127.0.0.1:3000
 
 A backend mappában (`cd backend`):
 
-| Parancs | Mire jó |
-|---|---|
-| `npm run dev` | Fejlesztői mód: `kill-port 3000` + nodemon (auto-restart fájlváltozásra) |
-| `npm run dev:raw` | Csak nodemon, port-felszabadítás nélkül |
-| `npm run start` | Egyszerű `node server.js` (nincs auto-restart) |
-| `npm test` | Összes Jest teszt futtatása |
-| `npm run test:watch` | Tesztek figyelési módban |
-| `npm run test:coverage` | Code coverage report |
+| Parancs | Cwd | Mire jó |
+|---|---|---|
+| `npm run dev` | `backend/` | Fejlesztői mód: `kill-port 3000` + nodemon (auto-restart fájlváltozásra) |
+| `npm run dev:raw` | `backend/` | Csak nodemon, port-felszabadítás nélkül |
+| `npm run start` | `backend/` | Egyszerű `node server.js` (nincs auto-restart) |
+| `npm test` | `backend/` | Összes Jest teszt futtatása (backend + frontend, a frissített `jest.config.js` alapján) |
+| `npm run test:watch` | `backend/` | Tesztek figyelési módban |
+| `npm run test:coverage` | `backend/` | Code coverage report |
 
 Ha a 3000-es port lefagyott a háttérben:
 
 ```bash
+cd backend
 npx kill-port 3000
 ```
 
 ---
 
+## Admin panel
+
+> A teljes architekturális terv: [ADMIN_PANEL.md](ADMIN_PANEL.md).
+
+### Jelenlegi állapot (2026-04-29)
+
+Az admin panel auth és token kezelése az **F1–F3 fázison** át van vezetve:
+- ✅ **F1**: Séma (`users.is_super_admin`, `admin_tokens`, `admin_audit_log`, `admin_alert_log`, `admin_rate_escalations`). Meglévő `metric_*` mezők `user_logs`-ból eltávolítva.
+- ✅ **F2**: Step-up admin token (`POST /api/admin/auth/elevate/refresh/revoke/status`). `parseAdminToken` middleware. 15 perc sliding TTL, SHA-256 hash.
+- ✅ **F3**: `AuditLogService` + middleware lánc (`requireReasonOnMutate`, `auditContext`, `auditFlush`). Redaction, before/after diff.
+- 🟡 **F4–F9**: WebSocket `/admin` namespace, AlertingService, super-admin ops, read-only API-k, retention job — tervezve, de implementáció awaiting.
+- 🔵 **Frontend**: Az új `frontend/javascript/shared/adminAuthFlow.js` DI factory kentralizálja az auth hibakezelést és token refresht. Frontend tesztek: `adminTokenFlow.test.js` (9 teszt).
+
+### Ismert nyitott kérdések
+
+- **WS event-name eltérés**: backend `admin:alert:suspicious` vs frontend `admin:alert:suspicious_pattern`. Szinkronizálás egy külön PR-ben.
+- **Backend konstansok expozíciója**: jelenleg hardcoded TTL-ek (15 min, 60s refresh window). Javaslat: kis `/api/public/admin-constants` endpoint.
+- **Dead backend exports**: `isAdmin` helper már nem használt (helyette `parseAdminToken` middleware). Deprecate + külön PR eltávolítás.
+
+### Következő lépések
+
+1. Végigmenni az F4–F9 fázisokon (WebSocket, AlertingService, super-admin ops).
+2. WS event-name szinkronizálás.
+3. Backend konstansok expozíciója.
+4. Dead exportok takarítása.
+5. Frontend admin operációk (ban, unban, profile image review, stb.) — ezek az F4–F9 mögé kerülnek.
+
+További részletekért nézd meg az [ADMIN_PANEL.md](ADMIN_PANEL.md) és [ADMIN_AUTH_CHANGES.md](ADMIN_AUTH_CHANGES.md) fájlokat.
+
+---
+
 ## Tesztek
 
-Helye: [backend/__tests__/](backend/__tests__/). A `npm test` jelenleg **7 teszt-fájlt, 71 tesztet** futtat:
+Helye: [backend/__tests__/](backend/__tests__/) és [frontend/__tests__/](frontend/__tests__/). A `npm test` (repo gyökérből, a frissített `jest.config.js`-sel) jelenleg **11 teszt-suite-ot, 104 tesztet** futtat:
+
+### Backend tesztek
 
 | Fájl | Lefedi |
 |---|---|
@@ -196,8 +230,32 @@ Helye: [backend/__tests__/](backend/__tests__/). A `npm test` jelenleg **7 teszt
 | `profileImageUtils.test.js` | Profilkép útvonal-normalizálás |
 | `profileImageVisibility.test.js` | Profilkép láthatósági szabályok (pending/approved/admin) |
 | `notificationDismiss.test.js` | Értesítés permanens user-oldali eltávolítás (multi-tab szinkron + SQL filter) |
+| `adminAuthRoutes.test.js` | Admin step-up token (elevate/refresh/revoke/status endpointok) |
+| `adminMiddleware.test.js` | Admin auth middleware (`parseAdminToken`, error codes) |
+| `adminAuditService.test.js` | Audit log recording, diff, redaction |
+
+### Frontend tesztek (ÚJ — 2026-04-29)
+
+| Fájl | Lefedi |
+|---|---|
+| `adminTokenFlow.test.js` | Shared `adminAuthFlow.js` factory (9 teszt: sikeres refresh, auth errors, hálózati hibák) |
 
 A coverage küszöb (`package.json` → `jest.coverageThreshold`) jelenleg 50% minden dimenzióra.
+
+### Tesztek futtatása
+
+```bash
+# Backend tesztek (backend/ mappában)
+cd backend
+npm test
+
+# Frontend tesztek (backend/ mappában, jest.config.js konfig miatt)
+cd backend
+npx jest ../frontend/__tests__/adminTokenFlow.test.js --runInBand
+
+# Összes teszt (backend/ mappában)
+npx jest --config jest.config.js --runInBand
+```
 
 ---
 
@@ -299,6 +357,26 @@ A natív C++ build tools hiányzik. Telepíts Visual Studio Build Tools-t, vagy 
 ### `Unknown column 'nr.dismissed_at'`
 
 Régi DB-d van új kódbázissal. Indítsd újra a backendet — az `ensureSchemaColumns` automatikusan hozzáadja a hiányzó oszlopot.
+
+### Admin token lifecycle
+
+Browser DevTools (Network tab):
+- `POST /api/admin/auth/elevate` → `{ token, expiresAt, isSuperAdmin }`
+- `POST /api/admin/auth/refresh` → `{ success: true }` + token extension
+- `Authorization: Bearer <token>` header minden admin fetch-en
+- `401 + { code: 'ADMIN_NO_SESSION'|'ADMIN_TOKEN_INVALID'|… }` → frontend handle (redirect / elevate modal)
+
+Browser Console:
+- `window.MattMesterAdminAuthFlow.adminAuthHeaders()` → aktuális Bearer header
+- `window.createRequestController()` → pending request track + cancel-capable
+
+### WebSocket admin namespace
+
+Browser Console (socket.io debug):
+```javascript
+window.io('/admin').on('connect', () => console.log('✓ /admin connected'));
+window.io('/admin').on('admin:audit:created', (payload) => console.log('📋 audit:', payload));
+```
 
 ---
 
