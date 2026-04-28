@@ -46,9 +46,8 @@
             </div>
             <div class="d-flex align-items-center gap-2 gap-md-3">
                 <!-- Admin token visszaszámláló (15 perc sliding TTL) -->
-                <button type="button" class="admin-token-pill healthy" id="adminTokenPill"
-                    onclick="refreshAdminToken()" aria-label="Admin token frissítése"
-                    title="Admin token érvényessége — kattints a frissítéshez">
+                <button type="button" class="admin-token-pill healthy" id="adminTokenPill" onclick="refreshAdminToken()"
+                    aria-label="Admin token frissítése" title="Admin token érvényessége — kattints a frissítéshez">
                     <i class="bi bi-shield-fill-check token-icon"></i>
                     <span class="token-label">Token</span>
                     <span class="token-countdown" id="tokenCountdown">15:00</span>
@@ -61,19 +60,20 @@
                 </button>
                 <div class="user-profile dropdown">
                     <div data-bs-toggle="dropdown">
-                        <img src="https://ui-avatars.com/api/?name=Admin+User&background=d4af37&color=000" alt="Admin"
+                        <img id="headerAvatar"
+                            src="https://ui-avatars.com/api/?name=Admin&background=d4af37&color=000" alt="Admin"
                             class="user-avatar">
                         <div class="d-none d-md-block">
-                            <div class="fw-bold text-white">Nagymester Admin</div>
-                            <small class="text-muted">ELO: 1500</small>
+                            <div class="fw-bold text-white" id="headerUsername">Betöltés...</div>
+                            <small class="text-muted" id="headerRole">—</small>
                         </div>
                         <i class="bi bi-chevron-down text-secondary ms-2"></i>
                     </div>
                     <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary">
                         <li><a class="dropdown-item text-light" href="#"><i class="bi bi-person me-2"></i>Profil</a>
                         </li>
-                        <li><a class="dropdown-item text-light" href="#"><i
-                                    class="bi bi-gear me-2"></i>Beállítások</a></li>
+                        <li><a class="dropdown-item text-light" href="#"><i class="bi bi-gear me-2"></i>Beállítások</a>
+                        </li>
                         <li>
                             <hr class="dropdown-divider border-secondary">
                         </li>
@@ -194,6 +194,45 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-gold">Felhasználó létrehozása</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin step-up elevate modal (ADMIN_PANEL.md §2.3) -->
+    <div class="modal fade" id="adminElevateModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content elevate-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-shield-lock-fill me-2 text-gold"></i>
+                        Admin szint aktiválása
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <div class="elevate-info">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div>
+                            A session bejelentkezés mellett az admin műveletekhez szükséges egy
+                            <strong>15 perc érvényességű step-up token</strong>.
+                            Add meg a saját jelszavadat a token kiállításához.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="elevatePassword" class="form-label">Jelszó <span class="text-danger">*</span></label>
+                        <input id="elevatePassword" type="password" class="form-control form-control-lg"
+                            placeholder="Saját jelszavad" autocomplete="current-password">
+                    </div>
+
+                    <div id="elevateError" class="alert alert-danger d-none mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" onclick="logout()">Kilépés</button>
+                    <button type="button" class="btn btn-gold" id="elevateSubmit" onclick="performElevate()">
+                        <i class="bi bi-shield-fill-check me-1"></i>Aktiválás (15 perc)
+                    </button>
                 </div>
             </div>
         </div>

@@ -25,6 +25,16 @@ const formatJSON = (obj) => {
     return `<pre class="json-block">${escapeHtml(JSON.stringify(obj, null, 2))}</pre>`;
 };
 
+const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = String(value);
+};
+
+const formatHM = (date) => {
+    const d = date instanceof Date ? date : new Date(date);
+    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+};
+
 /* =============================================================
    2) HTML render helperek (h.*)
    ============================================================= */
@@ -48,7 +58,7 @@ const h = {
                     <div class="col-md-${mdCol} col-xl-${xlCol}">
                         <div class="stat-card">
                             <div class="stat-icon bg-${it.color || 'primary'}-soft"><i class="bi ${it.icon}"></i></div>
-                            <div class="stat-value">${it.value}</div>
+                            <div class="stat-value"${it.valueId ? ` id="${it.valueId}"` : ''}>${it.value}</div>
                             <div class="stat-label">${it.label}</div>
                             ${it.hint ? `<small class="stat-hint ${it.hintClass || 'text-muted'}">${it.hint}</small>` : ''}
                         </div>
@@ -181,18 +191,17 @@ const h = {
         </div>
     `,
 
-    // Tick chip — egyetlen mini stat horizontális csíkba (admin:stats:tick adatokhoz)
-    tickChip: ({ icon, label, value, color = 'gold' }) => `
+    tickChip: ({ icon, label, value, valueId, color = 'gold' }) => `
         <div class="tick-chip">
             <i class="bi ${icon} text-${color}"></i>
             <span class="tick-chip-label">${label}</span>
-            <strong class="tick-chip-value">${value}</strong>
+            <strong class="tick-chip-value"${valueId ? ` id="${valueId}"` : ''}>${value}</strong>
         </div>
     `
 };
 
 /* =============================================================
-   3) Severity / alert helperek (ADMIN_PANEL.md §5.1, §5.2)
+   3) Severity / alert helperek
    ============================================================= */
 const SEVERITY = {
     info:     { label: 'Info',     icon: 'bi-info-circle-fill',          cls: 'sev-info' },
@@ -200,12 +209,11 @@ const SEVERITY = {
     critical: { label: 'Critical', icon: 'bi-exclamation-octagon-fill',  cls: 'sev-critical' }
 };
 const ALERT_KIND = {
-    unauthorized:       { label: 'Jogosulatlan próba',  icon: 'bi-shield-fill-x' },
+    unauthorized:       { label: 'Jogosulatlan próba',    icon: 'bi-shield-fill-x' },
     rate_escalated:     { label: 'Rate limit szigorítás', icon: 'bi-speedometer2' },
-    token_invalid:      { label: 'Token hiba',          icon: 'bi-key-fill' },
-    suspicious_pattern: { label: 'Gyanús minta',        icon: 'bi-bug-fill' }
+    token_invalid:      { label: 'Token hiba',            icon: 'bi-key-fill' },
+    suspicious_pattern: { label: 'Gyanús minta',          icon: 'bi-bug-fill' }
 };
-
 const severityPill = (key) => {
     const s = SEVERITY[key] || SEVERITY.info;
     return `<span class="severity-pill ${s.cls}"><i class="bi ${s.icon}"></i>${s.label}</span>`;
@@ -214,71 +222,6 @@ const alertKindLabel = (key) => {
     const k = ALERT_KIND[key] || { label: key, icon: 'bi-question-circle' };
     return `<span class="alert-kind"><i class="bi ${k.icon}"></i>${k.label}</span>`;
 };
-
-/* =============================================================
-   4) Demo adatok és pill helperek
-   ============================================================= */
-const SAMPLE = {
-    users: [
-        { name: 'Magnus Carlsen',  email: 'magnus@chess.hu', elo: 2847, role: 'admin',  status: 'active', last: '2 perce',  joined: '2024-01-15' },
-        { name: 'Hikaru Nakamura', email: 'hikaru@chess.hu', elo: 2768, role: 'player', status: 'active', last: '5 órája',  joined: '2024-02-20' },
-        { name: 'Anish Giri',      email: 'anish@chess.hu',  elo: 0,    role: 'player', status: 'banned', last: '—',         joined: '2024-03-10', struck: true }
-    ],
-    games: [
-        { id: '#4932', white: 'Carlsen (2847)',  black: 'Nakamura (2768)', status: 'live',     winner: '—',          moves: 24, time: '10+0' },
-        { id: '#4931', white: 'Firouzja (2785)', black: 'Ding (2812)',     status: 'finished', winner: 'Ding Liren', moves: 67, time: '3+2' },
-        { id: '#4930', white: 'SakkMester99',    black: 'RookRider',       status: 'live',     winner: '—',          moves: 8,  time: '5+0' },
-        { id: '#4929', white: 'Carlsen (2847)',  black: 'KirályKezelő',    status: 'finished', winner: 'Carlsen',    moves: 41, time: '10+0' }
-    ],
-    logins: [
-        { user: 'Magnus Carlsen',  ip: '192.168.1.10',   location: 'Budapest, HU',  device: 'Chrome / Windows', deviceIcon: 'bi-browser-chrome', time: 'Most',     risk: 'low' },
-        { user: 'Hikaru Nakamura', ip: '127.0.0.1',      location: 'localhost',     device: 'Firefox / Linux',  deviceIcon: 'bi-browser-firefox',time: '5 perce',  risk: 'low' },
-        { user: 'SakkMester99',    ip: '192.168.1.42',   location: 'Budapest, HU',  device: 'Safari / macOS',   deviceIcon: 'bi-browser-safari', time: '12 perce', risk: 'medium' }
-    ]
-};
-
-const SAMPLE_AUDIT = [
-    { id: 12345, time: '14:32:01', actor: 'admin',     action: 'users.ban',              severity: 'critical',
-      target: { type: 'user', id: 47, label: 'spammer42' },
-      reason: 'Reklámspam a játék-chat csatornán; harmadik figyelmeztetés.',
-      diff: { before: { is_banned: false, ban_reason: null }, after: { is_banned: true, ban_reason: 'spam' } } },
-    { id: 12344, time: '14:30:45', actor: 'admin',     action: 'users.edit_profile',     severity: 'info',
-      target: { type: 'user', id: 12, label: 'SakkMester99' },
-      reason: 'ELO korrekció helytelen pontozás miatt.',
-      diff: { before: { elo: 1500 }, after: { elo: 1450 } } },
-    { id: 12343, time: '14:28:12', actor: 'modBéla',   action: 'profile_image.review',   severity: 'info',
-      target: { type: 'profile_image', id: 88, label: 'RookRider' },
-      reason: 'Megfelelő profilkép, jóváhagyva.',
-      diff: { before: { status: 'pending' }, after: { status: 'approved' } } },
-    { id: 12342, time: '14:25:00', actor: 'admin',     action: 'notifications.broadcast', severity: 'critical',
-      target: null,
-      reason: 'Új szezon indul 2026-05-01-én — minden online felhasználó értesítése.',
-      diff: null },
-    { id: 12341, time: '13:48:33', actor: 'admin',     action: 'users.unban',            severity: 'warning',
-      target: { type: 'user', id: 33, label: 'PiacGyilkos' },
-      reason: 'Fellebbezés elfogadva — első esetben jogos panasz.',
-      diff: { before: { is_banned: true }, after: { is_banned: false } } }
-];
-
-const SAMPLE_ALERTS = [
-    { id: 882, time: '14:18:11', kind: 'unauthorized',       severity: 'warning',
-      ip: '203.0.113.55',  user: '—',         endpoint: 'GET /api/admin/users',
-      detail: { reason: 'no_session', rateLimitState: { escalated: true, multiplier: 5, ttlSec: 900 } } },
-    { id: 881, time: '14:16:40', kind: 'token_invalid',      severity: 'warning',
-      ip: '127.0.0.1',     user: 'SakkMester99', endpoint: 'POST /api/admin/users/ban',
-      detail: { reason: 'token_expired' } },
-    { id: 880, time: '13:55:02', kind: 'rate_escalated',     severity: 'warning',
-      ip: '203.0.113.55',  user: '—',         endpoint: '*',
-      detail: { multiplier: 5, ttlSec: 900, trigger: '5 unauthorized in 10min' } },
-    { id: 879, time: '12:30:15', kind: 'suspicious_pattern', severity: 'critical',
-      ip: '185.220.101.42', user: '—',        endpoint: 'POST /api/admin/auth/elevate',
-      detail: { pattern: 'tor_exit_node + 10x failed elevate' } }
-];
-
-const SAMPLE_ADMINS = [
-    { id: 1, name: 'Nagymester Admin', email: 'admin@mattmester.hu', isSuper: true,  joined: '2024-01-01', lastSeen: 'Most' },
-    { id: 8, name: 'ModeratorBéla',    email: 'bela@mattmester.hu',  isSuper: false, joined: '2024-08-12', lastSeen: '15 perce' }
-];
 
 const STATUS_BADGE = {
     active:   { label: 'Aktív',       cls: 'badge-status-active' },
@@ -296,13 +239,113 @@ const RISK_BADGE = {
     medium: { label: 'Közepes',  cls: 'bg-warning text-dark' },
     high:   { label: 'Magas',    cls: 'bg-danger' }
 };
-
 const statusPill = (key) => `<span class="badge ${STATUS_BADGE[key].cls}">${STATUS_BADGE[key].label}</span>`;
 const rolePill   = (key) => `<span class="badge ${ROLE_BADGE[key].cls}">${ROLE_BADGE[key].label}</span>`;
 const riskPill   = (key) => `<span class="badge ${RISK_BADGE[key].cls}">${RISK_BADGE[key].label}</span>`;
 
 /* =============================================================
-   5) Navigációs fa - ADMIN_PANEL.md alapján bővítve
+   4) Globális modul state (ADMIN_PANEL.md §2.6 — memóriában)
+   ============================================================= */
+const state = {
+    // Auth
+    currentUser: null,            // /api/sessionInfo eredménye
+    adminToken: null,             // step-up admin token (memóriában, NEM localStorage)
+    adminTokenExpiresAt: null,    // Date
+    isSuperAdmin: false,
+    elevated: false,              // sikeres elevate után true
+
+    // WebSocket /admin namespace
+    adminSocket: null,
+    adminSocketConnected: false,
+
+    // Real-time data buffers (WS-ből töltődnek)
+    liveStats: null,              // admin:stats:tick legutolsó payload
+    liveStatsAt: null,            // utolsó tick időpontja
+    liveAudit: [],                // admin:audit:created események (legújabb elöl)
+    liveAlerts: [],               // admin:alert:* események (legújabb elöl)
+
+    // Section navigation
+    currentSectionId: null
+};
+
+const MAX_LIVE_BUFFER = 50;
+
+/* =============================================================
+   5) Demo adatok (fallback amíg WS nem küld semmit)
+   ============================================================= */
+const SAMPLE = {
+    users: [
+        { name: 'Magnus Carlsen',  email: 'magnus@chess.hu', elo: 2847, role: 'admin',  status: 'active', last: '2 perce', joined: '2024-01-15' },
+        { name: 'Hikaru Nakamura', email: 'hikaru@chess.hu', elo: 2768, role: 'player', status: 'active', last: '5 órája', joined: '2024-02-20' },
+        { name: 'Anish Giri',      email: 'anish@chess.hu',  elo: 0,    role: 'player', status: 'banned', last: '—',        joined: '2024-03-10', struck: true }
+    ],
+    games: [
+        { id: '#4932', white: 'Carlsen (2847)',  black: 'Nakamura (2768)', status: 'live',     winner: '—',          moves: 24, time: '10+0' },
+        { id: '#4931', white: 'Firouzja (2785)', black: 'Ding (2812)',     status: 'finished', winner: 'Ding Liren', moves: 67, time: '3+2' },
+        { id: '#4930', white: 'SakkMester99',    black: 'RookRider',       status: 'live',     winner: '—',          moves: 8,  time: '5+0' }
+    ],
+    logins: [
+        { user: 'Magnus Carlsen',  ip: '192.168.1.10',   location: 'Budapest, HU', device: 'Chrome / Windows', deviceIcon: 'bi-browser-chrome', time: 'Most',     risk: 'low' },
+        { user: 'Hikaru Nakamura', ip: '127.0.0.1',      location: 'localhost',    device: 'Firefox / Linux',  deviceIcon: 'bi-browser-firefox',time: '5 perce',  risk: 'low' },
+        { user: 'SakkMester99',    ip: '192.168.1.42',   location: 'Budapest, HU', device: 'Safari / macOS',   deviceIcon: 'bi-browser-safari', time: '12 perce', risk: 'medium' }
+    ]
+};
+
+const SAMPLE_AUDIT = [
+    { eventId: 12345, occurredAt: new Date(Date.now() - 60000).toISOString(),
+      actor: { username: 'admin' }, action: 'users.ban', severity: 'critical',
+      target: { type: 'user', id: 47, label: 'spammer42' },
+      reason: 'Reklámspam a játék-chat csatornán; harmadik figyelmeztetés.',
+      diff: { before: { is_banned: false }, after: { is_banned: true } } },
+    { eventId: 12344, occurredAt: new Date(Date.now() - 180000).toISOString(),
+      actor: { username: 'admin' }, action: 'users.edit_profile', severity: 'info',
+      target: { type: 'user', id: 12, label: 'SakkMester99' },
+      reason: 'ELO korrekció helytelen pontozás miatt.',
+      diff: { before: { elo: 1500 }, after: { elo: 1450 } } },
+    { eventId: 12343, occurredAt: new Date(Date.now() - 360000).toISOString(),
+      actor: { username: 'modBéla' }, action: 'profile_image.review', severity: 'info',
+      target: { type: 'profile_image', id: 88, label: 'RookRider' },
+      reason: 'Megfelelő profilkép, jóváhagyva.',
+      diff: { before: { status: 'pending' }, after: { status: 'approved' } } }
+];
+
+const SAMPLE_ALERTS = [
+    { alertId: 882, occurredAt: new Date(Date.now() - 90000).toISOString(),
+      kind: 'unauthorized', severity: 'warning',
+      ip: '203.0.113.55', userId: null, endpoint: 'GET /api/admin/users',
+      detail: { reason: 'no_session' } },
+    { alertId: 881, occurredAt: new Date(Date.now() - 240000).toISOString(),
+      kind: 'token_invalid', severity: 'warning',
+      ip: '127.0.0.1', userId: 12, endpoint: 'POST /api/admin/users/ban',
+      detail: { reason: 'token_expired' } }
+];
+
+const SAMPLE_ADMINS = [
+    { id: 1, name: 'Nagymester Admin', email: 'admin@mattmester.hu', isSuper: true,  joined: '2024-01-01', lastSeen: 'Most' },
+    { id: 8, name: 'ModeratorBéla',    email: 'bela@mattmester.hu',  isSuper: false, joined: '2024-08-12', lastSeen: '15 perce' }
+];
+
+/* =============================================================
+   6) Live data hozzáférési helperek (WS vs fallback)
+   ============================================================= */
+function liveStatsOrFallback() {
+    return state.liveStats || {
+        online:    { totalUsers: 0, totalAdmins: 0, inGame: 0, inMatchmaking: 0 },
+        pending:   { profileImages: 0, friendRequests: 0 },
+        last24h:   { logins: 0, registrations: 0, auditEntries: 0, criticalAuditEntries: 0, alerts: 0, newBans: 0 },
+        rateLimit: { activeEscalations: 0 }
+    };
+}
+
+const auditList  = () => (state.liveAudit.length  ? state.liveAudit  : SAMPLE_AUDIT);
+const alertsList = () => (state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS);
+
+const formatAuditTime = (iso) => {
+    try { return formatHM(iso); } catch (_) { return iso || '—'; }
+};
+
+/* =============================================================
+   7) Navigációs fa
    ============================================================= */
 const NAV_TREE = [
     { id: 'dashboard', label: 'Vezérlőpult', icon: 'bi-grid-1x2-fill', leaf: true },
@@ -318,7 +361,6 @@ const NAV_TREE = [
 
     {
         id: 'group-moderation', label: 'Moderáció', icon: 'bi-shield-exclamation',
-        badge: { text: '12', variant: 'danger' },
         items: [
             { id: 'chats',              label: 'Chat moderálás', icon: 'bi-chat-dots-fill' },
             { id: 'profileImageReview', label: 'Profilképek',    icon: 'bi-image' },
@@ -337,21 +379,22 @@ const NAV_TREE = [
     {
         id: 'group-logs', label: 'Naplók', icon: 'bi-journal-text',
         items: [
-            { id: 'security', label: 'Bejelentkezések',  icon: 'bi-shield-check' },
-            { id: 'auditLog', label: 'Audit napló',      icon: 'bi-journal-check' },
-            { id: 'alerts',   label: 'Riasztások',       icon: 'bi-exclamation-octagon-fill', badge: { text: '4', variant: 'warning' } }
+            { id: 'security', label: 'Bejelentkezések', icon: 'bi-shield-check' },
+            { id: 'auditLog', label: 'Audit napló',     icon: 'bi-journal-check' },
+            { id: 'alerts',   label: 'Riasztások',      icon: 'bi-exclamation-octagon-fill' }
         ]
     },
 
-    { id: 'superAdmin', label: 'Super admin',            icon: 'bi-stars',     leaf: true },
-    { id: 'friends',    label: 'Közösségi kapcsolatok', icon: 'bi-people',    leaf: true },
-    { id: 'settings',   label: 'Beállítások',           icon: 'bi-gear-fill', leaf: true }
+    { id: 'superAdmin', label: 'Super admin',           icon: 'bi-stars',         leaf: true },
+    { id: 'friends',    label: 'Közösségi kapcsolatok', icon: 'bi-people',        leaf: true },
+    { id: 'tests',      label: 'Tesztek',               icon: 'bi-clipboard2-check', leaf: true },
+    { id: 'settings',   label: 'Beállítások',           icon: 'bi-gear-fill',     leaf: true }
 ];
 
 const DEFAULT_SECTION = 'dashboard';
 
 /* =============================================================
-   6) Sidebar render
+   8) Sidebar render
    ============================================================= */
 function renderSidebar() {
     const target = document.getElementById('sidebarMenu');
@@ -392,109 +435,104 @@ function renderSidebar() {
 }
 
 /* =============================================================
-   7) Szekció renderek
+   9) Szekció renderek
    ============================================================= */
 const SECTIONS = {
 
-    /* ---------- Vezérlőpult — admin:stats:tick mintára gazdag dashboard ---------- */
-    dashboard: () => `
-        ${h.header({
-            icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
-            subtitle: 'A projekt fő mutatói egy pillantásra',
-            actions: [
-                { label: 'Auto-frissítés 5mp', variant: 'outline-success', size: 'sm',
-                  attrs: 'disabled', icon: 'bi-broadcast' },
-                { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm' }
-            ]
-        })}
+    /* ---------- Vezérlőpult ---------- */
+    dashboard: () => {
+        const stats = liveStatsOrFallback();
+        const audit = auditList().slice(0, 4);
+        const alerts = alertsList().slice(0, 2);
+        const last24 = stats.last24h || {};
+        return `
+            ${h.header({
+                icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
+                subtitle: 'A projekt fő mutatói egy pillantásra',
+                actions: [
+                    { label: '<span id="wsStatusLabel">Csatlakozás...</span>', variant: 'outline-secondary', size: 'sm',
+                      attrs: 'id="wsStatusBtn" disabled', icon: 'bi-broadcast' },
+                    { label: 'Kézi frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
+                      onclick: 'requestStatsTick()' }
+                ]
+            })}
 
-        ${h.stats([
-            { icon: 'bi-people-fill',  value: '24',     label: 'Regisztrált játékos', color: 'primary',
-              hint: '+3 ezen a héten', hintClass: 'text-success' },
-            { icon: 'bi-king',         value: '4',      label: 'Aktív játszma',       color: 'success',
-              hint: '<span class="live-indicator"><span class="live-dot"></span>Élőben most</span>', hintClass: 'text-success' },
-            { icon: 'bi-journal-check',value: '24',     label: '24h audit bejegyzés', color: 'warning',
-              hint: '2 kritikus művelet', hintClass: 'text-warning' },
-            { icon: 'bi-exclamation-octagon-fill', value: '4', label: 'Nyitott riasztás', color: 'danger',
-              hint: '1 kritikus', hintClass: 'text-danger' }
-        ])}
+            ${h.stats([
+                { icon: 'bi-people-fill',  value: stats.online?.totalUsers ?? 0, valueId: 'mainOnlineTotal',
+                  label: 'Online felhasználó', color: 'primary',
+                  hint: `<span id="mainOnlineHint">${stats.online?.totalAdmins ?? 0} admin közöttük</span>`, hintClass: 'text-success' },
+                { icon: 'bi-king',         value: stats.online?.inGame ?? 0, valueId: 'mainInGame',
+                  label: 'Aktív játszma', color: 'success',
+                  hint: '<span class="live-indicator"><span class="live-dot"></span>Élőben most</span>', hintClass: 'text-success' },
+                { icon: 'bi-journal-check',value: last24.auditEntries ?? 0, valueId: 'mainAuditCount',
+                  label: '24h audit bejegyzés', color: 'warning',
+                  hint: `<span id="mainAuditCriticalHint">${last24.criticalAuditEntries ?? 0} kritikus művelet</span>`, hintClass: 'text-warning' },
+                { icon: 'bi-exclamation-octagon-fill', value: last24.alerts ?? 0, valueId: 'mainAlertCount',
+                  label: '24h riasztás', color: 'danger',
+                  hint: `<span id="mainNewBansHint">${last24.newBans ?? 0} új tiltás</span>`, hintClass: 'text-danger' }
+            ])}
 
-        <!-- admin:stats:tick band — kompakt élő mutatók -->
-        <div class="tick-band mb-4">
-            <div class="tick-band-header">
-                <span class="live-indicator text-success"><span class="live-dot"></span>Élő tick</span>
-                <span class="tick-band-time">Frissítve: <span id="tickBandTime">most</span></span>
+            <div class="tick-band mb-4">
+                <div class="tick-band-header">
+                    <span class="live-indicator text-success"><span class="live-dot"></span>Élő tick</span>
+                    <span class="tick-band-time">Frissítve: <span id="tickBandTime">—</span></span>
+                </div>
+                <div class="tick-band-body">
+                    ${h.tickChip({ icon: 'bi-wifi',          label: 'Online',         valueId: 'tickOnline',         value: stats.online?.totalUsers ?? 0,    color: 'success' })}
+                    ${h.tickChip({ icon: 'bi-shield-fill',   label: 'Adminok',        valueId: 'tickAdmins',         value: stats.online?.totalAdmins ?? 0,   color: 'gold' })}
+                    ${h.tickChip({ icon: 'bi-controller',    label: 'Játékban',       valueId: 'tickInGame',         value: stats.online?.inGame ?? 0,        color: 'primary' })}
+                    ${h.tickChip({ icon: 'bi-search',        label: 'Matchmakingben', valueId: 'tickMatchmaking',    value: stats.online?.inMatchmaking ?? 0, color: 'primary' })}
+                    ${h.tickChip({ icon: 'bi-image',         label: 'Pending kép',    valueId: 'tickPendingImages',  value: stats.pending?.profileImages ?? 0, color: 'warning' })}
+                    ${h.tickChip({ icon: 'bi-person-plus',   label: 'Pending barát',  valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary' })}
+                    ${h.tickChip({ icon: 'bi-speedometer2',  label: 'Aktív rate esc.',valueId: 'tickRateEsc',        value: stats.rateLimit?.activeEscalations ?? 0, color: 'secondary' })}
+                </div>
             </div>
-            <div class="tick-band-body">
-                ${h.tickChip({ icon: 'bi-wifi',          label: 'Online',         value: '12', color: 'success' })}
-                ${h.tickChip({ icon: 'bi-shield-fill',   label: 'Adminok',        value: '1',  color: 'gold' })}
-                ${h.tickChip({ icon: 'bi-controller',    label: 'Játékban',       value: '4',  color: 'primary' })}
-                ${h.tickChip({ icon: 'bi-search',        label: 'Matchmakingben', value: '2',  color: 'primary' })}
-                ${h.tickChip({ icon: 'bi-image',         label: 'Pending kép',    value: '3',  color: 'warning' })}
-                ${h.tickChip({ icon: 'bi-person-plus',   label: 'Pending barát',  value: '17', color: 'primary' })}
-                ${h.tickChip({ icon: 'bi-speedometer2',  label: 'Aktív rate esc.',value: '0',  color: 'secondary' })}
-            </div>
-        </div>
 
-        <div class="row g-4">
-            <div class="col-xl-7">
-                ${h.card({
-                    title: 'Aktivitás (utolsó 24 óra)', icon: 'bi-activity',
-                    headerExtra: h.btn({ label: 'Riport', size: 'sm' }),
-                    body: '<div style="position:relative;height:300px;"><canvas id="activityChart"></canvas></div>',
-                    classes: 'h-100'
-                })}
-            </div>
-            <div class="col-xl-5">
-                <div class="content-card h-100 live-feed-card">
-                    <div class="card-header">
-                        <h5 class="card-title"><i class="bi bi-broadcast me-2 text-gold"></i>Élő admin tevékenység</h5>
-                        <span class="live-indicator text-success small"><span class="live-dot"></span>WS /admin</span>
-                    </div>
-                    <div class="card-body p-0">
-                        <ul class="live-feed-list" id="dashboardLiveFeed">
-                            ${SAMPLE_AUDIT.slice(0, 4).map(a => `
-                                <li class="live-feed-row sev-${a.severity}">
-                                    <span class="live-feed-time">${a.time}</span>
-                                    <span class="live-feed-action">${a.action}</span>
-                                    ${a.target ? `<span class="live-feed-target">${a.target.label}</span>` : '<span class="live-feed-target text-muted">—</span>'}
-                                    ${severityPill(a.severity)}
-                                </li>
-                            `).join('')}
-                            ${SAMPLE_ALERTS.slice(0, 2).map(al => `
-                                <li class="live-feed-row sev-${al.severity} live-feed-alert">
-                                    <span class="live-feed-time">${al.time}</span>
-                                    <span class="live-feed-action">${al.kind}</span>
-                                    <span class="live-feed-target font-monospace text-secondary">${al.ip}</span>
-                                    ${severityPill(al.severity)}
-                                </li>
-                            `).join('')}
-                        </ul>
+            <div class="row g-4">
+                <div class="col-xl-7">
+                    ${h.card({
+                        title: 'Aktivitás (utolsó 24 óra)', icon: 'bi-activity',
+                        headerExtra: h.btn({ label: 'Riport', size: 'sm' }),
+                        body: '<div style="position:relative;height:300px;"><canvas id="activityChart"></canvas></div>',
+                        classes: 'h-100'
+                    })}
+                </div>
+                <div class="col-xl-5">
+                    <div class="content-card h-100 live-feed-card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="bi bi-broadcast me-2 text-gold"></i>Élő admin tevékenység</h5>
+                            <span class="live-indicator text-success small" id="wsStatusBadge"><span class="live-dot"></span>WS /admin</span>
+                        </div>
+                        <div class="card-body p-0">
+                            <ul class="live-feed-list" id="dashboardLiveFeed">
+                                ${audit.map(a => liveFeedRow('audit', a)).join('')}
+                                ${alerts.map(a => liveFeedRow('alert', a)).join('')}
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- last24h mini cards (admin:stats:tick.last24h) -->
-        <div class="row g-3 mt-2">
-            ${[
-                { icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés',     value: '38', color: 'primary' },
-                { icon: 'bi-person-plus-fill',   label: '24h regisztráció',      value: '5',  color: 'success' },
-                { icon: 'bi-journal-text',       label: '24h audit',             value: '24', color: 'warning' },
-                { icon: 'bi-exclamation-octagon',label: '24h kritikus művelet',  value: '2',  color: 'danger' },
-                { icon: 'bi-shield-fill-x',      label: '24h riasztás',          value: '7',  color: 'warning' },
-                { icon: 'bi-ban',                label: '24h új tiltás',         value: '1',  color: 'danger' }
-            ].map(item => `
-                <div class="col-6 col-md-4 col-xl-2">
-                    <div class="mini-stat">
-                        <i class="bi ${item.icon} text-${item.color}"></i>
-                        <div class="mini-stat-value">${item.value}</div>
-                        <div class="mini-stat-label">${item.label}</div>
+            <div class="row g-3 mt-2">
+                ${[
+                    { id: 'mini24Logins',         icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés',    value: last24.logins ?? 0,          color: 'primary' },
+                    { id: 'mini24Registrations',  icon: 'bi-person-plus-fill',   label: '24h regisztráció',     value: last24.registrations ?? 0,   color: 'success' },
+                    { id: 'mini24Audit',          icon: 'bi-journal-text',       label: '24h audit',            value: last24.auditEntries ?? 0,    color: 'warning' },
+                    { id: 'mini24Critical',       icon: 'bi-exclamation-octagon',label: '24h kritikus',         value: last24.criticalAuditEntries ?? 0, color: 'danger' },
+                    { id: 'mini24Alerts',         icon: 'bi-shield-fill-x',      label: '24h riasztás',         value: last24.alerts ?? 0,          color: 'warning' },
+                    { id: 'mini24Bans',           icon: 'bi-ban',                label: '24h új tiltás',        value: last24.newBans ?? 0,         color: 'danger' }
+                ].map(item => `
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="mini-stat">
+                            <i class="bi ${item.icon} text-${item.color}"></i>
+                            <div class="mini-stat-value" id="${item.id}">${item.value}</div>
+                            <div class="mini-stat-label">${item.label}</div>
+                        </div>
                     </div>
-                </div>
-            `).join('')}
-        </div>
-    `,
+                `).join('')}
+            </div>
+        `;
+    },
 
     /* ---------- Felhasználók > Lista ---------- */
     users: () => `
@@ -526,7 +564,6 @@ const SECTIONS = {
                         <option value="">Rendezés</option>
                         <option value="username">Név</option>
                         <option value="elo">ELO</option>
-                        <option value="memberSince">Regisztráció</option>
                     </select>
                 </div>
             `,
@@ -534,8 +571,7 @@ const SECTIONS = {
             rows: SAMPLE.users.map((u, idx) => [
                 h.user({ name: u.name, email: u.email, struck: u.struck }),
                 `<span class="fw-semibold ${u.elo > 0 ? 'text-gold' : 'text-secondary'}">${u.elo}</span>`,
-                rolePill(u.role),
-                statusPill(u.status),
+                rolePill(u.role), statusPill(u.status),
                 `<span class="text-secondary">${u.last}</span>`,
                 `<span class="text-secondary">${u.joined}</span>`,
                 h.actions(u.status === 'banned'
@@ -546,20 +582,9 @@ const SECTIONS = {
                     : [
                         { icon: 'bi-eye',    variant: 'light',  title: 'Megtekintés', onclick: `viewUser(${idx + 1})` },
                         { icon: 'bi-pencil', variant: 'gold',   title: 'Szerkesztés', onclick: "showSection('userDetail')" },
-                        { icon: 'bi-ban',    variant: 'danger', title: 'Tiltás (kritikus művelet)', onclick: `openCriticalAction('users.ban', '${u.name}')` }
+                        { icon: 'bi-ban',    variant: 'danger', title: 'Tiltás (kritikus)', onclick: `openCriticalAction('users.ban', '${u.name}')` }
                     ])
-            ]),
-            footer: `
-                <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <small class="text-secondary">24 felhasználóból 1–3. megjelenítve</small>
-                    <nav aria-label="Lapozás"><ul class="pagination pagination-sm mb-0">
-                        <li class="page-item disabled"><a class="page-link" href="#">Előző</a></li>
-                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
-                        <li class="page-item"><a class="page-link" href="#">2</a></li>
-                        <li class="page-item"><a class="page-link" href="#">Köv.</a></li>
-                    </ul></nav>
-                </div>
-            `
+            ])
         })}
     `,
 
@@ -599,7 +624,6 @@ const SECTIONS = {
                         </div>
                     `
                 })}
-
                 <div class="content-card mt-4">
                     <div class="card-header"><h5 class="card-title"><i class="bi bi-bar-chart-fill me-2 text-gold"></i>Statisztika</h5></div>
                     <div class="card-body">
@@ -611,7 +635,6 @@ const SECTIONS = {
                     </div>
                 </div>
             </div>
-
             <div class="col-lg-8">
                 ${h.card({
                     title: 'Alapadatok szerkesztése', icon: 'bi-pencil-square',
@@ -623,15 +646,12 @@ const SECTIONS = {
                             { id: 'editRole',        label: 'Szerepkör', type: 'select',
                               options: [{ value: 'player', label: 'Játékos' }, { value: 'admin', label: 'Admin', selected: true }] },
                             { id: 'editReason',      label: 'Indok (kötelező — min. 10 char)', col: 12, type: 'textarea',
-                              placeholder: 'Miért módosítod ezeket az adatokat? Naplózásra kerül.' },
-                            { id: 'editBio',         label: 'Bio', col: 12, type: 'textarea',
-                              value: 'Sakk nagymester és világbajnok.' }
+                              placeholder: 'Miért módosítod ezeket az adatokat? Naplózásra kerül.' }
                         ],
                         cancel: { label: 'Mégse' },
                         submit: { label: 'Mentés', icon: 'bi-check2', variant: 'gold' }
                     })
                 })}
-
                 <div class="content-card mt-4 danger-zone">
                     <div class="card-header">
                         <h5 class="card-title text-danger"><i class="bi bi-exclamation-octagon-fill me-2"></i>Veszélyes műveletek</h5>
@@ -707,9 +727,8 @@ const SECTIONS = {
                             <thead><tr><th>Felhasználó</th><th>Típus</th><th>Lejár</th><th class="text-end">Művelet</th></tr></thead>
                             <tbody>
                                 ${[
-                                    { name: 'Anish Giri',  type: ['Végleges',  'danger'],  expires: 'Soha',             expClass: 'text-danger' },
-                                    { name: 'ChatSpammer', type: ['Ideiglenes','warning'], expires: '2026-05-04 14:32' },
-                                    { name: 'ToxikusZoli', type: ['Csak chat', 'info'],    expires: '2026-04-29 09:00' }
+                                    { name: 'Anish Giri',  type: ['Végleges',  'danger'],  expires: 'Soha', expClass: 'text-danger' },
+                                    { name: 'ChatSpammer', type: ['Ideiglenes','warning'], expires: '2026-05-04 14:32' }
                                 ].map(b => `
                                     <tr>
                                         <td>${h.user({ name: b.name })}</td>
@@ -779,7 +798,7 @@ const SECTIONS = {
         })}
         ${h.card({
             body: `
-                <p class="text-secondary mb-3">A függő profilképeket csak a feltöltő látja. Jóváhagyás után globálisan láthatóvá válnak; elutasítás esetén a publikus kép visszaáll az alapértelmezettre. <span class="text-warning">Elutasítás esetén indok kötelező</span>, jóváhagyásnál opcionális.</p>
+                <p class="text-secondary mb-3">A függő profilképeket csak a feltöltő látja. Jóváhagyás után globálisan láthatóvá válnak; elutasítás esetén a publikus kép visszaáll az alapértelmezettre.</p>
                 <div id="profileImageReviewMessage" class="alert d-none" role="alert"></div>
                 <div class="table-responsive">
                     <table class="table align-middle mb-0">
@@ -814,9 +833,9 @@ const SECTIONS = {
         ${h.table({
             headers: ['Bejelentő', 'Bejelentett', 'Kategória', 'Üzenet', 'Állapot', ''],
             rows: [
-                { reporter: 'FairPlayer',   target: 'AgresszívJatekos99', cat: ['Toxikusság', 'danger'],     msg: 'Sértegető megjegyzések a chat-ben.',         status: ['Nyitott', 'warning'] },
-                { reporter: 'SakkMester99', target: 'CheaterX',           cat: ['Csalás gyanú', 'danger'],   msg: 'Engine használat gyanúja.',                  status: ['Vizsgálat alatt', 'warning'] },
-                { reporter: 'RookRider',    target: 'SpamKing',           cat: ['Spam', 'warning'],          msg: 'Reklám linkek küldése privátban.',           status: ['Lezárva', 'success'] }
+                { reporter: 'FairPlayer',   target: 'AgresszívJatekos99', cat: ['Toxikusság', 'danger'],     msg: 'Sértegető megjegyzések a chat-ben.', status: ['Nyitott', 'warning'] },
+                { reporter: 'SakkMester99', target: 'CheaterX',           cat: ['Csalás gyanú', 'danger'],   msg: 'Engine használat gyanúja.',          status: ['Vizsgálat alatt', 'warning'] },
+                { reporter: 'RookRider',    target: 'SpamKing',           cat: ['Spam', 'warning'],          msg: 'Reklám linkek küldése privátban.',  status: ['Lezárva', 'success'] }
             ].map(r => [
                 `<span class="text-white">${r.reporter}</span>`,
                 `<span class="text-white">${r.target}</span>`,
@@ -830,13 +849,11 @@ const SECTIONS = {
 
     /* ---------- Játékok > Játszmák ---------- */
     games: () => `
-        ${h.header({
-            icon: 'bi-knight-fill', title: 'Játszmák',
-            subtitle: 'Lefutott és folyamatban lévő játszmák'
-        })}
+        ${h.header({ icon: 'bi-knight-fill', title: 'Játszmák',
+            subtitle: 'Lefutott és folyamatban lévő játszmák' })}
         ${h.stats([
-            { icon: 'bi-play-circle-fill', value: SAMPLE.games.filter(g => g.status === 'live').length,     label: 'Folyamatban', color: 'success' },
-            { icon: 'bi-trophy-fill',      value: SAMPLE.games.filter(g => g.status === 'finished').length, label: 'Befejezett',  color: 'warning' },
+            { icon: 'bi-play-circle-fill', value: SAMPLE.games.filter(g => g.status === 'live').length,     label: 'Folyamatban',  color: 'success' },
+            { icon: 'bi-trophy-fill',      value: SAMPLE.games.filter(g => g.status === 'finished').length, label: 'Befejezett',   color: 'warning' },
             { icon: 'bi-x-circle-fill',    value: '2',                                                      label: 'Megszakított', color: 'danger' }
         ])}
         ${h.table({
@@ -863,16 +880,14 @@ const SECTIONS = {
 
     /* ---------- Játékok > Képességek ---------- */
     abilities: () => `
-        ${h.header({
-            icon: 'bi-magic', title: 'Képességek / Erősítők',
+        ${h.header({ icon: 'bi-magic', title: 'Képességek / Erősítők',
             subtitle: 'Speciális játékos képességek kezelése',
-            actions: [{ label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold' }]
-        })}
+            actions: [{ label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold' }] })}
         <div class="row g-4">
             ${[
-                { name: 'Időutazás',       desc: '+30 másodperc hozzáadása az óra idejéhez játszmánként egyszer.', uses: '1 234' },
-                { name: 'Gyalogválasztás', desc: 'Egy gyalog azonnali előléptetése bármilyen figurára (a király kivételével).', uses: '892' },
-                { name: 'Csere visszavonás', desc: 'Az utolsó lépés visszavonása az ellenfél jóváhagyásával.', uses: '445' }
+                { name: 'Időutazás',         desc: '+30 másodperc hozzáadása az óra idejéhez játszmánként egyszer.', uses: '1 234' },
+                { name: 'Gyalogválasztás',   desc: 'Egy gyalog azonnali előléptetése bármilyen figurára.',           uses: '892' },
+                { name: 'Csere visszavonás', desc: 'Az utolsó lépés visszavonása az ellenfél jóváhagyásával.',       uses: '445' }
             ].map(a => `
                 <div class="col-md-6 col-lg-4">
                     ${h.card({
@@ -892,25 +907,14 @@ const SECTIONS = {
                     })}
                 </div>
             `).join('')}
-            <div class="col-md-6 col-lg-4">
-                <button type="button" class="content-card add-card w-100 h-100 border-0">
-                    <div class="card-body d-flex flex-column align-items-center justify-content-center text-center p-5">
-                        <i class="bi bi-plus-circle display-4 text-gold mb-3"></i>
-                        <h5 class="text-white">Új képesség</h5>
-                        <p class="text-secondary small mb-0">Hozz létre egy új erősítőt a játékélmény fokozásához</p>
-                    </div>
-                </button>
-            </div>
         </div>
     `,
 
     /* ---------- Naplók > Bejelentkezések ---------- */
     security: () => `
-        ${h.header({
-            icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
+        ${h.header({ icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
             subtitle: 'Sikeres és sikertelen bejelentkezési kísérletek',
-            actions: [{ label: 'Napló export', icon: 'bi-download', size: 'sm' }]
-        })}
+            actions: [{ label: 'Napló export', icon: 'bi-download', size: 'sm' }] })}
         ${h.table({
             headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
             rows: SAMPLE.logins.map(l => [
@@ -924,177 +928,101 @@ const SECTIONS = {
         })}
     `,
 
-    /* ---------- Naplók > Audit napló (severity-rich + diff) ---------- */
-    auditLog: () => `
-        ${h.header({
-            icon: 'bi-journal-check', title: 'Audit napló',
-            subtitle: 'Admin műveletek append-only nyomvonala — kötelező indok, before/after diff',
-            actions: [{ label: 'Audit export', icon: 'bi-download', size: 'sm' }]
-        })}
+    /* ---------- Naplók > Audit napló ---------- */
+    auditLog: () => {
+        const list = auditList();
+        const counts = {
+            info: list.filter(a => a.severity === 'info').length,
+            warning: list.filter(a => a.severity === 'warning').length,
+            critical: list.filter(a => a.severity === 'critical').length
+        };
+        return `
+            ${h.header({ icon: 'bi-journal-check', title: 'Audit napló',
+                subtitle: 'Admin műveletek append-only nyomvonala — kötelező indok, before/after diff',
+                actions: [{ label: 'Audit export', icon: 'bi-download', size: 'sm' }] })}
 
-        <!-- Statisztika sáv -->
-        <div class="row g-3 mb-4">
-            ${[
-                { icon: 'bi-info-circle-fill',          label: 'Info',     value: '18', color: 'primary' },
-                { icon: 'bi-exclamation-triangle-fill', label: 'Warning',  value: '4',  color: 'warning' },
-                { icon: 'bi-exclamation-octagon-fill',  label: 'Critical', value: '2',  color: 'danger' },
-                { icon: 'bi-clock-history',             label: '24h-ban',  value: '24', color: 'success' }
-            ].map(item => `
-                <div class="col-6 col-md-3">
-                    <div class="mini-stat">
-                        <i class="bi ${item.icon} text-${item.color}"></i>
-                        <div class="mini-stat-value">${item.value}</div>
-                        <div class="mini-stat-label">${item.label}</div>
+            <div class="row g-3 mb-4">
+                ${[
+                    { icon: 'bi-info-circle-fill',          label: 'Info',     value: counts.info,     color: 'primary' },
+                    { icon: 'bi-exclamation-triangle-fill', label: 'Warning',  value: counts.warning,  color: 'warning' },
+                    { icon: 'bi-exclamation-octagon-fill',  label: 'Critical', value: counts.critical, color: 'danger' },
+                    { icon: 'bi-clock-history',             label: 'Listázott', value: list.length,    color: 'success' }
+                ].map(item => `
+                    <div class="col-6 col-md-3">
+                        <div class="mini-stat">
+                            <i class="bi ${item.icon} text-${item.color}"></i>
+                            <div class="mini-stat-value">${item.value}</div>
+                            <div class="mini-stat-label">${item.label}</div>
+                        </div>
                     </div>
-                </div>
-            `).join('')}
-        </div>
+                `).join('')}
+            </div>
 
-        ${h.card({
-            classes: 'audit-log-card',
-            headerExtra: `
-                <div class="filter-bar">
-                    <input type="text" class="form-control form-control-sm" placeholder="Action / target / actor keresés...">
-                    <select class="form-select form-select-sm">
-                        <option value="">Minden severity</option>
-                        <option value="info">Info</option>
-                        <option value="warning">Warning</option>
-                        <option value="critical">Critical</option>
-                    </select>
-                    <select class="form-select form-select-sm">
-                        <option value="">Minden actor</option>
-                        <option value="admin">admin</option>
-                        <option value="modBéla">modBéla</option>
-                    </select>
-                </div>
-            `,
-            body: `
-                <div class="audit-log-list">
-                    ${SAMPLE_AUDIT.map((a, idx) => `
-                        <article class="audit-row sev-${a.severity}" data-audit-id="${a.id}">
-                            <div class="audit-row-head">
-                                <span class="audit-row-time font-monospace">${a.time}</span>
-                                <span class="audit-row-actor"><i class="bi bi-person-circle me-1"></i>${a.actor}</span>
-                                <span class="audit-row-arrow"><i class="bi bi-arrow-right"></i></span>
-                                <span class="audit-row-action font-monospace">${a.action}</span>
-                                ${a.target ? `<span class="audit-row-target"><i class="bi bi-bullseye me-1"></i>${a.target.label}</span>` : ''}
-                                <div class="audit-row-spacer"></div>
-                                ${severityPill(a.severity)}
-                                <button type="button" class="btn btn-sm btn-outline-gold btn-icon ms-2 audit-row-toggle"
-                                    onclick="document.getElementById('auditDetail-${idx}').classList.toggle('d-none'); this.classList.toggle('open');"
-                                    aria-label="Részletek">
-                                    <i class="bi bi-chevron-down"></i>
-                                </button>
-                            </div>
-                            <div class="audit-row-reason"><i class="bi bi-quote me-1"></i>${a.reason}</div>
-                            <div id="auditDetail-${idx}" class="audit-row-detail d-none">
-                                <div class="row g-3">
-                                    <div class="col-md-6">
-                                        <div class="audit-diff-label">before</div>
-                                        ${formatJSON(a.diff?.before)}
-                                    </div>
-                                    <div class="col-md-6">
-                                        <div class="audit-diff-label">after</div>
-                                        ${formatJSON(a.diff?.after)}
-                                    </div>
-                                </div>
-                                <div class="audit-meta mt-3">
-                                    <span><strong>event_id:</strong> <span class="font-monospace text-gold">${a.id}</span></span>
-                                    <span><strong>severity:</strong> ${a.severity}</span>
-                                    ${a.target ? `<span><strong>target:</strong> ${a.target.type}#${a.target.id}</span>` : ''}
-                                </div>
-                            </div>
-                        </article>
-                    `).join('')}
-                </div>
-            `
-        })}
-    `,
+            ${h.card({
+                classes: 'audit-log-card',
+                headerExtra: `
+                    <div class="filter-bar">
+                        <input type="text" class="form-control form-control-sm" placeholder="Action / target / actor keresés...">
+                        <select class="form-select form-select-sm">
+                            <option value="">Minden severity</option>
+                            <option value="info">Info</option>
+                            <option value="warning">Warning</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                    </div>
+                `,
+                body: `<div class="audit-log-list">${list.map(renderAuditRow).join('')}</div>`
+            })}
+        `;
+    },
 
     /* ---------- Naplók > Riasztások ---------- */
-    alerts: () => `
-        ${h.header({
-            icon: 'bi-exclamation-octagon-fill', title: 'Riasztások',
-            subtitle: 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
-            actions: [{ label: 'Mind elolvasva', icon: 'bi-check-all', size: 'sm' }]
-        })}
+    alerts: () => {
+        const list = alertsList();
+        const byKind = {};
+        Object.keys(ALERT_KIND).forEach(k => byKind[k] = list.filter(a => a.kind === k).length);
+        return `
+            ${h.header({ icon: 'bi-exclamation-octagon-fill', title: 'Riasztások',
+                subtitle: 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
+                actions: [{ label: 'Mind elolvasva', icon: 'bi-check-all', size: 'sm' }] })}
 
-        <div class="row g-3 mb-4">
-            ${[
-                { icon: 'bi-shield-fill-x', label: 'Unauthorized',       value: '1', color: 'warning' },
-                { icon: 'bi-key-fill',      label: 'Token hiba',         value: '1', color: 'warning' },
-                { icon: 'bi-speedometer2',  label: 'Rate escalated',     value: '1', color: 'warning' },
-                { icon: 'bi-bug-fill',      label: 'Suspicious pattern', value: '1', color: 'danger'  }
-            ].map(item => `
-                <div class="col-6 col-md-3">
-                    <div class="mini-stat">
-                        <i class="bi ${item.icon} text-${item.color}"></i>
-                        <div class="mini-stat-value">${item.value}</div>
-                        <div class="mini-stat-label">${item.label}</div>
+            <div class="row g-3 mb-4">
+                ${[
+                    { icon: 'bi-shield-fill-x', label: 'Unauthorized',       value: byKind.unauthorized || 0,       color: 'warning' },
+                    { icon: 'bi-key-fill',      label: 'Token hiba',         value: byKind.token_invalid || 0,      color: 'warning' },
+                    { icon: 'bi-speedometer2',  label: 'Rate escalated',     value: byKind.rate_escalated || 0,     color: 'warning' },
+                    { icon: 'bi-bug-fill',      label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger'  }
+                ].map(item => `
+                    <div class="col-6 col-md-3">
+                        <div class="mini-stat">
+                            <i class="bi ${item.icon} text-${item.color}"></i>
+                            <div class="mini-stat-value">${item.value}</div>
+                            <div class="mini-stat-label">${item.label}</div>
+                        </div>
                     </div>
-                </div>
-            `).join('')}
-        </div>
+                `).join('')}
+            </div>
 
-        ${h.card({
-            headerExtra: `
-                <div class="filter-bar">
-                    <select class="form-select form-select-sm">
-                        <option>Minden típus</option>
-                        <option>unauthorized</option><option>token_invalid</option>
-                        <option>rate_escalated</option><option>suspicious_pattern</option>
-                    </select>
-                    <select class="form-select form-select-sm">
-                        <option>Minden severity</option><option>warning</option><option>critical</option>
-                    </select>
-                </div>
-            `,
-            body: `
-                <div class="alert-list">
-                    ${SAMPLE_ALERTS.map((a, idx) => `
-                        <article class="alert-row sev-${a.severity}">
-                            <div class="alert-row-icon"><i class="bi ${ALERT_KIND[a.kind]?.icon || 'bi-question'}"></i></div>
-                            <div class="alert-row-body">
-                                <div class="alert-row-head">
-                                    ${alertKindLabel(a.kind)}
-                                    ${severityPill(a.severity)}
-                                    <span class="alert-row-time font-monospace ms-auto">${a.time}</span>
-                                </div>
-                                <div class="alert-row-meta">
-                                    <span><strong>IP:</strong> <span class="font-monospace text-gold">${a.ip}</span></span>
-                                    <span><strong>User:</strong> ${a.user}</span>
-                                    <span><strong>Endpoint:</strong> <span class="font-monospace">${a.endpoint}</span></span>
-                                </div>
-                                <div class="alert-row-detail">${formatJSON(a.detail)}</div>
-                                <div class="alert-row-actions">
-                                    ${h.btn({ label: 'IP tiltás',     icon: 'bi-ban',          variant: 'outline-danger',  size: 'sm' })}
-                                    ${h.btn({ label: 'Audit nyitás',  icon: 'bi-journal-text', variant: 'outline-gold',    size: 'sm', onclick: "showSection('auditLog')" })}
-                                    ${h.btn({ label: 'Elutasít',      icon: 'bi-x-circle',     variant: 'outline-secondary', size: 'sm' })}
-                                </div>
-                            </div>
-                        </article>
-                    `).join('')}
-                </div>
-            `,
-            noBodyPadding: true
-        })}
-    `,
+            ${h.card({
+                body: `<div class="alert-list">${list.map(renderAlertRow).join('')}</div>`,
+                noBodyPadding: true
+            })}
+        `;
+    },
 
-    /* ---------- Super admin (only visible page section) ---------- */
+    /* ---------- Super admin ---------- */
     superAdmin: () => `
-        ${h.header({
-            icon: 'bi-stars', title: 'Super admin',
+        ${h.header({ icon: 'bi-stars', title: 'Super admin',
             subtitle: 'Admin szerepkörök kiosztása és visszavonása',
             actions: [{ label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold',
-                onclick: "openCriticalAction('admin.grant', 'új admin')" }]
-        })}
+                onclick: "openCriticalAction('admin.grant', 'új admin')" }] })}
 
         <div class="alert alert-warning bg-warning bg-opacity-10 border-warning d-flex align-items-start gap-2">
             <i class="bi bi-info-circle-fill text-warning mt-1"></i>
             <div class="flex-grow-1">
                 <strong>Last-super-admin lock</strong> aktív — egy super-admin saját
                 <code>is_super_admin</code> flag-jét nem tudja levenni, ha ő az utolsó.
-                Minden admin grant/revoke <strong>kritikus művelet</strong>: 30 char indok + jelszó megerősítés szükséges.
+                Minden admin grant/revoke <strong>kritikus művelet</strong>: 30 char indok + jelszó megerősítés.
             </div>
         </div>
 
@@ -1120,12 +1048,10 @@ const SECTIONS = {
         })}
     `,
 
-    /* ---------- Közösségi kapcsolatok ---------- */
+    /* ---------- Közösségi ---------- */
     friends: () => `
-        ${h.header({
-            icon: 'bi-people', title: 'Közösségi kapcsolatok',
-            subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen'
-        })}
+        ${h.header({ icon: 'bi-people', title: 'Közösségi kapcsolatok',
+            subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen' })}
         ${h.stats([
             { icon: 'bi-diagram-3-fill', value: '142', label: 'Összes barátság', color: 'primary' },
             { icon: 'bi-person-plus',    value: '8',   label: 'Függő kérelem',   color: 'warning' },
@@ -1135,46 +1061,147 @@ const SECTIONS = {
             <div class="col-lg-7">
                 ${h.card({
                     title: 'Függő barátkérelmek', icon: 'bi-person-plus-fill', noBodyPadding: true,
-                    body: `
-                        <table class="table mb-0">
-                            <thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end"></th></tr></thead>
-                            <tbody>
-                                ${[
-                                    { from: 'SakkMester99',   to: 'RookRider',       when: '2 órája' },
-                                    { from: 'FairPlayer',     to: 'Magnus Carlsen',  when: '1 napja' },
-                                    { from: 'ChessRookie',    to: 'Hikaru Nakamura', when: '3 napja' }
-                                ].map(r => `
-                                    <tr>
-                                        <td><span class="text-white">${r.from}</span></td>
-                                        <td><span class="text-white">${r.to}</span></td>
-                                        <td><span class="text-secondary">${r.when}</span></td>
-                                        <td class="text-end">${h.btn({ label: 'Részletek', size: 'sm' })}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    `
+                    body: `<table class="table mb-0"><thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end"></th></tr></thead><tbody>
+                        ${[
+                            { from: 'SakkMester99',   to: 'RookRider',       when: '2 órája' },
+                            { from: 'FairPlayer',     to: 'Magnus Carlsen',  when: '1 napja' }
+                        ].map(r => `<tr><td><span class="text-white">${r.from}</span></td><td><span class="text-white">${r.to}</span></td><td><span class="text-secondary">${r.when}</span></td><td class="text-end">${h.btn({ label: 'Részletek', size: 'sm' })}</td></tr>`).join('')}
+                    </tbody></table>`
                 })}
             </div>
             <div class="col-lg-5">
                 ${h.card({
                     title: 'Aktív blokkolások', icon: 'bi-person-x-fill', noBodyPadding: true,
+                    body: `<table class="table mb-0"><thead><tr><th>Blokkoló</th><th>Blokkolt</th><th class="text-end"></th></tr></thead><tbody>
+                        ${[
+                            { who: 'FairPlayer',   whom: 'ToxikusZoli' },
+                            { who: 'SakkMester99', whom: 'SpamKing' }
+                        ].map(b => `<tr><td><span class="text-white">${b.who}</span></td><td><span class="text-white">${b.whom}</span></td><td class="text-end">${h.btn({ label: 'Feloldás', variant: 'outline-success', size: 'sm' })}</td></tr>`).join('')}
+                    </tbody></table>`
+                })}
+            </div>
+        </div>
+    `,
+
+    /* ---------- Tesztek (formaterv — placeholder) ---------- */
+    tests: () => `
+        ${h.header({
+            icon: 'bi-clipboard2-check', title: 'Tesztek',
+            subtitle: 'Frontend és backend tesztek áttekintése — eredmények és lefedettség',
+            actions: [
+                { label: 'Összes futtatása', icon: 'bi-play-fill', variant: 'gold', size: 'sm', attrs: 'disabled' },
+                { label: 'Frissítés',        icon: 'bi-arrow-clockwise', size: 'sm', attrs: 'disabled' }
+            ]
+        })}
+
+        <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-4">
+            <i class="bi bi-info-circle-fill me-1"></i>
+            Ez a szekció <strong>formaterv</strong> — a tesztfuttatás integráció (Jest + Supertest) még nincs bekötve.
+            A vázlat azt mutatja, hogyan fognak megjelenni az eredmények.
+        </div>
+
+        ${h.stats([
+            { icon: 'bi-check-circle-fill', value: '<span class="text-secondary">—</span>', label: 'Sikeres', color: 'success' },
+            { icon: 'bi-x-circle-fill',     value: '<span class="text-secondary">—</span>', label: 'Sikertelen', color: 'danger' },
+            { icon: 'bi-skip-forward-fill', value: '<span class="text-secondary">—</span>', label: 'Kihagyott', color: 'warning' },
+            { icon: 'bi-stopwatch',         value: '<span class="text-secondary">—</span>', label: 'Futási idő', color: 'primary' }
+        ])}
+
+        <div class="row g-4">
+            <div class="col-lg-7">
+                ${h.card({
+                    title: 'Tesztek listája', icon: 'bi-list-check',
+                    headerExtra: `
+                        <div class="filter-bar">
+                            <select class="form-select form-select-sm" disabled>
+                                <option>Minden suite</option>
+                                <option>Unit (Jest)</option>
+                                <option>Integration (Supertest)</option>
+                                <option>Auth bypass</option>
+                                <option>Rate limit</option>
+                                <option>Real-time</option>
+                            </select>
+                            <select class="form-select form-select-sm" disabled>
+                                <option>Minden státusz</option>
+                                <option>Pass</option>
+                                <option>Fail</option>
+                                <option>Skip</option>
+                            </select>
+                        </div>
+                    `,
+                    noBodyPadding: true,
+                    body: `<div class="test-list">
+                        ${[
+                            { suite: 'Unit',        name: 'permissions.js — SUPER_ONLY halmaz integritása',     status: 'pending' },
+                            { suite: 'Unit',        name: 'AuditLogService.record — redaction allowlist',     status: 'pending' },
+                            { suite: 'Unit',        name: 'parseAdminToken — hash egyeztetés + lejárat',      status: 'pending' },
+                            { suite: 'Unit',        name: 'requireReasonOnMutate — char limitek',              status: 'pending' },
+                            { suite: 'Integration', name: 'Login → elevate → admin endpoint → 200',           status: 'pending' },
+                            { suite: 'Integration', name: 'Player elevate → 403',                              status: 'pending' },
+                            { suite: 'Integration', name: 'Critical action confirmPassword nélkül → 400',     status: 'pending' },
+                            { suite: 'Auth bypass', name: 'Admin endpoint admin token nélkül → 401',           status: 'pending' },
+                            { suite: 'Auth bypass', name: 'WS /admin player session-nel → connect_error',     status: 'pending' },
+                            { suite: 'Rate limit',  name: '10× rossz token egy IP-ről → 11. már 429',         status: 'pending' },
+                            { suite: 'Real-time',   name: '2 socket-kliens → audit:created 500ms-en belül',   status: 'pending' }
+                        ].map(t => `
+                            <div class="test-row test-${t.status}">
+                                <div class="test-status-dot"></div>
+                                <span class="test-suite">${t.suite}</span>
+                                <span class="test-name">${t.name}</span>
+                                <span class="test-status-label">${
+                                    t.status === 'pass' ? 'PASS' :
+                                    t.status === 'fail' ? 'FAIL' :
+                                    t.status === 'skip' ? 'SKIP' : 'függő'
+                                }</span>
+                                <span class="test-duration">—</span>
+                            </div>
+                        `).join('')}
+                    </div>`
+                })}
+            </div>
+            <div class="col-lg-5">
+                ${h.card({
+                    title: 'Eredmények log', icon: 'bi-terminal-fill',
                     body: `
-                        <table class="table mb-0">
-                            <thead><tr><th>Blokkoló</th><th>Blokkolt</th><th class="text-end"></th></tr></thead>
-                            <tbody>
-                                ${[
-                                    { who: 'FairPlayer',   whom: 'ToxikusZoli' },
-                                    { who: 'SakkMester99', whom: 'SpamKing' }
-                                ].map(b => `
-                                    <tr>
-                                        <td><span class="text-white">${b.who}</span></td>
-                                        <td><span class="text-white">${b.whom}</span></td>
-                                        <td class="text-end">${h.btn({ label: 'Feloldás', variant: 'outline-success', size: 'sm' })}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                        <pre class="json-block" style="max-height:280px;overflow:auto;">$ npm test
+[ ... ide kerül a tesztek kimenete élőben streamelve ... ]
+
+A teszt-runner integráció a következő iterációban
+kerül bekötésre. Helyettesítő nézet: lista bal oldalt.</pre>
+                    `
+                })}
+
+                ${h.card({
+                    title: 'Lefedettség', icon: 'bi-pie-chart-fill', classes: 'mt-4',
+                    body: `
+                        <div class="coverage-row">
+                            <span class="coverage-label">Statements</span>
+                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
+                                <div class="progress-bar bg-secondary" style="width:0%"></div>
+                            </div>
+                            <span class="coverage-value">—</span>
+                        </div>
+                        <div class="coverage-row">
+                            <span class="coverage-label">Branches</span>
+                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
+                                <div class="progress-bar bg-secondary" style="width:0%"></div>
+                            </div>
+                            <span class="coverage-value">—</span>
+                        </div>
+                        <div class="coverage-row">
+                            <span class="coverage-label">Functions</span>
+                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
+                                <div class="progress-bar bg-secondary" style="width:0%"></div>
+                            </div>
+                            <span class="coverage-value">—</span>
+                        </div>
+                        <div class="coverage-row">
+                            <span class="coverage-label">Lines</span>
+                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
+                                <div class="progress-bar bg-secondary" style="width:0%"></div>
+                            </div>
+                            <span class="coverage-value">—</span>
+                        </div>
                     `
                 })}
             </div>
@@ -1183,10 +1210,8 @@ const SECTIONS = {
 
     /* ---------- Beállítások ---------- */
     settings: () => `
-        ${h.header({
-            icon: 'bi-gear-fill', title: 'Beállítások',
-            subtitle: 'Általános platform paraméterek'
-        })}
+        ${h.header({ icon: 'bi-gear-fill', title: 'Beállítások',
+            subtitle: 'Általános platform paraméterek' })}
         ${h.card({
             body: h.form({
                 fields: [
@@ -1206,18 +1231,113 @@ const SECTIONS = {
 };
 
 /* =============================================================
-   8) Szekció váltás + sidebar állapot
+   10) Audit / alert / live-feed row renderelők
    ============================================================= */
-function showSection(sectionId, event) {
+function renderAuditRow(a, idx = 0) {
+    const sev = a.severity || 'info';
+    const time = formatAuditTime(a.occurredAt);
+    const actor = a.actor?.username || 'rendszer';
+    const targetLabel = a.target?.label
+        ? `<span class="audit-row-target"><i class="bi bi-bullseye me-1"></i>${escapeHtml(a.target.label)}</span>` : '';
+    const detailId = `auditDetail-${a.eventId || idx}-${Math.random().toString(36).slice(2, 7)}`;
+    return `
+        <article class="audit-row sev-${sev}" data-audit-id="${a.eventId || ''}">
+            <div class="audit-row-head">
+                <span class="audit-row-time font-monospace">${time}</span>
+                <span class="audit-row-actor"><i class="bi bi-person-circle me-1"></i>${escapeHtml(actor)}</span>
+                <span class="audit-row-arrow"><i class="bi bi-arrow-right"></i></span>
+                <span class="audit-row-action font-monospace">${escapeHtml(a.action || '')}</span>
+                ${targetLabel}
+                <div class="audit-row-spacer"></div>
+                ${severityPill(sev)}
+                <button type="button" class="btn btn-sm btn-outline-gold btn-icon ms-2 audit-row-toggle"
+                    onclick="document.getElementById('${detailId}').classList.toggle('d-none'); this.classList.toggle('open');"
+                    aria-label="Részletek">
+                    <i class="bi bi-chevron-down"></i>
+                </button>
+            </div>
+            <div class="audit-row-reason"><i class="bi bi-quote me-1"></i>${escapeHtml(a.reason || '')}</div>
+            <div id="${detailId}" class="audit-row-detail d-none">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="audit-diff-label">before</div>
+                        ${formatJSON(a.diff?.before)}
+                    </div>
+                    <div class="col-md-6">
+                        <div class="audit-diff-label">after</div>
+                        ${formatJSON(a.diff?.after)}
+                    </div>
+                </div>
+                <div class="audit-meta mt-3">
+                    <span><strong>event_id:</strong> <span class="font-monospace text-gold">${a.eventId || '—'}</span></span>
+                    <span><strong>severity:</strong> ${sev}</span>
+                    ${a.target ? `<span><strong>target:</strong> ${escapeHtml(a.target.type || '')}#${a.target.id || ''}</span>` : ''}
+                </div>
+            </div>
+        </article>
+    `;
+}
+
+function renderAlertRow(a) {
+    const kind = a.kind || 'unauthorized';
+    const sev = a.severity || 'warning';
+    const time = formatAuditTime(a.occurredAt);
+    const userLabel = a.userId ? `#${a.userId}` : (a.user || '—');
+    return `
+        <article class="alert-row sev-${sev}">
+            <div class="alert-row-icon"><i class="bi ${ALERT_KIND[kind]?.icon || 'bi-question'}"></i></div>
+            <div class="alert-row-body">
+                <div class="alert-row-head">
+                    ${alertKindLabel(kind)}
+                    ${severityPill(sev)}
+                    <span class="alert-row-time font-monospace ms-auto">${time}</span>
+                </div>
+                <div class="alert-row-meta">
+                    <span><strong>IP:</strong> <span class="font-monospace text-gold">${escapeHtml(a.ip || '—')}</span></span>
+                    <span><strong>User:</strong> ${escapeHtml(String(userLabel))}</span>
+                    <span><strong>Endpoint:</strong> <span class="font-monospace">${escapeHtml(a.endpoint || '*')}</span></span>
+                </div>
+                <div class="alert-row-detail">${formatJSON(a.detail)}</div>
+                <div class="alert-row-actions">
+                    ${h.btn({ label: 'IP tiltás',     icon: 'bi-ban',          variant: 'outline-danger',  size: 'sm' })}
+                    ${h.btn({ label: 'Audit nyitás',  icon: 'bi-journal-text', variant: 'outline-gold',    size: 'sm', onclick: "showSection('auditLog')" })}
+                    ${h.btn({ label: 'Elutasít',      icon: 'bi-x-circle',     variant: 'outline-secondary', size: 'sm' })}
+                </div>
+            </div>
+        </article>
+    `;
+}
+
+function liveFeedRow(kind, ev) {
+    const sev = ev.severity || (kind === 'alert' ? 'warning' : 'info');
+    const time = formatAuditTime(ev.occurredAt);
+    const action = kind === 'alert' ? (ev.kind || 'alert') : (ev.action || '');
+    const target = kind === 'alert' ? (ev.ip || '') : (ev.target?.label || '—');
+    return `
+        <li class="live-feed-row sev-${sev}${kind === 'alert' ? ' live-feed-alert' : ''}">
+            <span class="live-feed-time">${time}</span>
+            <span class="live-feed-action">${escapeHtml(action)}</span>
+            <span class="live-feed-target ${kind === 'alert' ? 'font-monospace text-secondary' : ''}">${escapeHtml(target)}</span>
+            ${severityPill(sev)}
+        </li>
+    `;
+}
+
+/* =============================================================
+   11) Szekció váltás
+   ============================================================= */
+function showSection(sectionId, event, options = {}) {
     if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    const silent = options.silent === true;
 
     const renderer = SECTIONS[sectionId] || SECTIONS[DEFAULT_SECTION];
     const target = document.getElementById('adminSections');
     if (!target) return;
 
-    target.innerHTML = `<div class="section-content animate-slide-in">${renderer()}</div>`;
+    state.currentSectionId = sectionId;
 
-    // Sidebar aktív állapot frissítése
+    target.innerHTML = `<div class="section-content${silent ? '' : ' animate-slide-in'}">${renderer()}</div>`;
+
     document.querySelectorAll('.sidebar .nav-link').forEach(l => l.classList.remove('active'));
     document.querySelectorAll('.menu-group-toggle').forEach(t => t.classList.remove('has-active'));
 
@@ -1236,13 +1356,15 @@ function showSection(sectionId, event) {
         }
     }
 
-    // Szekció-specifikus init
-    if (sectionId === 'dashboard') initChart();
+    if (sectionId === 'dashboard') {
+        initChart();
+        applyWsStatusToDashboard();
+        if (state.liveStatsAt) setText('tickBandTime', formatHM(state.liveStatsAt));
+    }
     if (sectionId === 'profileImageReview') {
         window.MattMesterAdminProfileImages?.refresh?.();
     }
 
-    // Mobil sidebar bezárása
     if (window.innerWidth < 992) {
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('mobileOverlay');
@@ -1251,7 +1373,9 @@ function showSection(sectionId, event) {
         overlay?.classList.remove('show');
     }
 
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!silent) {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 }
 
 function toggleSidebar() {
@@ -1269,27 +1393,231 @@ function toggleSidebar() {
 }
 
 /* =============================================================
-   9) Admin token visszaszámláló (ADMIN_PANEL.md §2.5)
-   - 15 perces sliding TTL vizualizációja
-   - csak UI demo, valódi API hívás nincs
+   12) AUTH bootstrap — session ellenőrzés + step-up elevate
    ============================================================= */
-const TOKEN_TTL_SECONDS = 15 * 60;
-let tokenSecondsLeft = TOKEN_TTL_SECONDS;
+async function bootstrapAdminAuth() {
+    let sessionOk = false;
+    try {
+        const r = await fetch('/api/sessionInfo', { credentials: 'same-origin' });
+        const data = await r.json().catch(() => ({}));
+
+        if (!data?.loggedIn || data.user?.role !== 'admin') {
+            // Nincs admin session -> redirect a kezdőlapra
+            window.location.replace('/');
+            return false;
+        }
+        state.currentUser = data.user;
+        sessionOk = true;
+        populateHeaderFromUser(data.user);
+    } catch (error) {
+        console.error('bootstrapAdminAuth sessionInfo hiba:', error);
+        window.location.replace('/');
+        return false;
+    }
+
+    // Session OK -> elevate modal megjelenítése
+    if (sessionOk) {
+        showElevateModal();
+    }
+    return sessionOk;
+}
+
+function populateHeaderFromUser(user) {
+    const username = user?.username || 'Admin';
+    setText('headerUsername', username);
+    setText('headerRole', user?.role === 'admin' ? 'Admin' : (user?.role || ''));
+    const avatar = document.getElementById('headerAvatar');
+    if (avatar) {
+        const img = (user?.profile_image && user.profile_image.trim() !== '/profile_pictures/default.png')
+            ? user.profile_image
+            : `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=d4af37&color=000`;
+        avatar.src = img;
+        avatar.alt = username;
+    }
+}
+
+function showElevateModal() {
+    const modalEl = document.getElementById('adminElevateModal');
+    if (!modalEl || !window.bootstrap?.Modal) return;
+    const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl, {
+        backdrop: 'static',
+        keyboard: false
+    });
+    document.getElementById('elevateError')?.classList.add('d-none');
+    const pwField = document.getElementById('elevatePassword');
+    if (pwField) {
+        pwField.value = '';
+        // Enter -> submit
+        pwField.onkeydown = (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); performElevate(); }
+        };
+    }
+    modal.show();
+    setTimeout(() => pwField?.focus(), 250);
+}
+
+async function performElevate() {
+    const pwField = document.getElementById('elevatePassword');
+    const errBox = document.getElementById('elevateError');
+    const submitBtn = document.getElementById('elevateSubmit');
+    const password = pwField?.value || '';
+
+    if (errBox) errBox.classList.add('d-none');
+
+    if (!password) {
+        if (errBox) {
+            errBox.textContent = 'A jelszó megadása kötelező.';
+            errBox.classList.remove('d-none');
+        }
+        return;
+    }
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Aktiválás...';
+    }
+
+    try {
+        const res = await fetch('/api/admin/auth/elevate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ password })
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data?.success) {
+            const msg = data?.message || 'Sikertelen elevate. Ellenőrizd a jelszót.';
+            if (errBox) {
+                errBox.textContent = msg;
+                errBox.classList.remove('d-none');
+            }
+            return;
+        }
+
+        const tokenData = data.data || {};
+        setAdminToken(tokenData.token, tokenData.expiresAt, Boolean(tokenData.isSuperAdmin));
+
+        // Header role frissitese super-admin info alapjan
+        setText('headerRole', state.isSuperAdmin ? 'Super admin' : 'Admin');
+
+        // Modal bezarasa
+        const modalEl = document.getElementById('adminElevateModal');
+        if (modalEl) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+
+        showToast('Admin szint aktiválva — token kiállítva (15 perc).', 'success', 'bi-shield-fill-check');
+
+        // Token countdown indítás + WS csatlakozás + dashboard re-render
+        startTokenCountdown();
+        connectAdminSocket();
+        showSection(state.currentSectionId || DEFAULT_SECTION, null, { silent: true });
+    } catch (error) {
+        console.error('performElevate hiba:', error);
+        if (errBox) {
+            errBox.textContent = 'Hálózati hiba az elevate során.';
+            errBox.classList.remove('d-none');
+        }
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="bi bi-shield-fill-check me-1"></i>Aktiválás (15 perc)';
+        }
+    }
+}
+
+function setAdminToken(token, expiresAtIso, isSuper) {
+    state.adminToken = token || null;
+    state.adminTokenExpiresAt = expiresAtIso ? new Date(expiresAtIso) : null;
+    state.isSuperAdmin = Boolean(isSuper);
+    state.elevated = Boolean(token);
+}
+
+function clearAdminToken() {
+    state.adminToken = null;
+    state.adminTokenExpiresAt = null;
+    state.elevated = false;
+    if (state.adminSocket) {
+        try { state.adminSocket.disconnect(); } catch (_) {}
+        state.adminSocket = null;
+        state.adminSocketConnected = false;
+        applyWsStatusToDashboard();
+    }
+}
+
+function getRemainingTokenSeconds() {
+    if (!state.adminTokenExpiresAt) return 0;
+    return Math.max(0, Math.floor((state.adminTokenExpiresAt - new Date()) / 1000));
+}
+
+/* =============================================================
+   13) Token countdown — VALÓS (server expiresAt alapján)
+   ============================================================= */
 let tokenIntervalId = null;
+let autoRefreshing = false;
 
 function startTokenCountdown() {
-    updateTokenPill();
     if (tokenIntervalId) clearInterval(tokenIntervalId);
-    tokenIntervalId = setInterval(() => {
-        tokenSecondsLeft = Math.max(0, tokenSecondsLeft - 1);
-        updateTokenPill();
-        if (tokenSecondsLeft === 0) {
-            // Demo: 0-nál csak figyelmeztetés, nem reset
-            // (valós flow: re-elevate jelszóval új tokenért)
-            // 5mp után visszaállítjuk demo célból
-            setTimeout(() => { tokenSecondsLeft = TOKEN_TTL_SECONDS; updateTokenPill(); }, 5000);
+    updateTokenPill();
+    tokenIntervalId = setInterval(async () => {
+        const left = getRemainingTokenSeconds();
+
+        // Auto-refresh: ha 60s alatti, kérünk egy refresh-t (sliding TTL)
+        if (state.adminToken && left > 0 && left <= 60 && !autoRefreshing) {
+            autoRefreshing = true;
+            try { await callRefresh(); }
+            catch (_) { /* csendes, a következő tick majd újrapróbálja */ }
+            finally { autoRefreshing = false; }
         }
+
+        // Lejárat -> új elevate kérése
+        if (state.adminToken && left === 0) {
+            clearAdminToken();
+            updateTokenPill();
+            showToast('Az admin token lejárt — újra elevate.', 'warning', 'bi-shield-fill-x');
+            showElevateModal();
+            return;
+        }
+
+        updateTokenPill();
     }, 1000);
+}
+
+async function callRefresh() {
+    if (!state.adminToken) throw new Error('Nincs admin token.');
+    const res = await fetch('/api/admin/auth/refresh', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${state.adminToken}` },
+        credentials: 'same-origin'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data?.success) {
+        throw new Error(data?.message || 'Refresh sikertelen.');
+    }
+    if (data.data?.expiresAt) {
+        state.adminTokenExpiresAt = new Date(data.data.expiresAt);
+    }
+    return data;
+}
+
+async function refreshAdminToken() {
+    if (!state.adminToken) {
+        showElevateModal();
+        return;
+    }
+    const pill = document.getElementById('adminTokenPill');
+    pill?.classList.add('refresh-flash');
+    setTimeout(() => pill?.classList.remove('refresh-flash'), 600);
+    try {
+        await callRefresh();
+        updateTokenPill();
+        showToast('Admin token meghosszabbítva.', 'success', 'bi-shield-fill-check');
+    } catch (error) {
+        console.error('refreshAdminToken hiba:', error);
+        clearAdminToken();
+        updateTokenPill();
+        showToast('Token frissítés sikertelen — újra elevate.', 'danger', 'bi-shield-fill-x');
+        showElevateModal();
+    }
 }
 
 function updateTokenPill() {
@@ -1297,32 +1625,195 @@ function updateTokenPill() {
     const countdown = document.getElementById('tokenCountdown');
     if (!pill || !countdown) return;
 
-    const m = Math.floor(tokenSecondsLeft / 60);
-    const s = tokenSecondsLeft % 60;
+    const left = state.adminToken ? getRemainingTokenSeconds() : 0;
+    const m = Math.floor(left / 60);
+    const s = left % 60;
     countdown.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 
     pill.classList.remove('healthy', 'warning', 'expiring', 'expired');
-    if (tokenSecondsLeft === 0)         pill.classList.add('expired');
-    else if (tokenSecondsLeft <= 60)    pill.classList.add('expiring');
-    else if (tokenSecondsLeft <= 300)   pill.classList.add('warning');
-    else                                pill.classList.add('healthy');
+    if (!state.adminToken)            pill.classList.add('expired');
+    else if (left === 0)              pill.classList.add('expired');
+    else if (left <= 60)              pill.classList.add('expiring');
+    else if (left <= 300)             pill.classList.add('warning');
+    else                              pill.classList.add('healthy');
 
-    const pct = (tokenSecondsLeft / TOKEN_TTL_SECONDS) * 100;
+    const totalCap = 15 * 60;
+    const pct = (left / totalCap) * 100;
     pill.style.setProperty('--token-progress', `${pct}%`);
 }
 
-function refreshAdminToken() {
-    // Demo: visszaállítjuk 15 percre. Valós flow: POST /api/admin/auth/refresh
-    tokenSecondsLeft = TOKEN_TTL_SECONDS;
-    updateTokenPill();
-    const pill = document.getElementById('adminTokenPill');
-    pill?.classList.add('refresh-flash');
-    setTimeout(() => pill?.classList.remove('refresh-flash'), 600);
-    showToast('Admin token frissítve (+15 perc).', 'success', 'bi-shield-fill-check');
+/* =============================================================
+   14) Admin socket namespace (/admin) - real-time data feed
+   ============================================================= */
+function connectAdminSocket() {
+    if (typeof window.io !== 'function') {
+        console.warn('Socket.IO kliens nem érhető el — admin WS skip.');
+        return;
+    }
+    if (!state.adminToken) return;
+
+    if (state.adminSocket) {
+        try { state.adminSocket.disconnect(); } catch (_) {}
+        state.adminSocket = null;
+    }
+
+    const sock = window.io('/admin', {
+        auth: { adminToken: state.adminToken },
+        transports: ['websocket', 'polling'],
+        forceNew: true
+    });
+
+    sock.on('connect', () => {
+        state.adminSocketConnected = true;
+        applyWsStatusToDashboard();
+        try { sock.emit('admin:presence:hello'); } catch (_) {}
+    });
+
+    sock.on('disconnect', () => {
+        state.adminSocketConnected = false;
+        applyWsStatusToDashboard();
+    });
+
+    sock.on('connect_error', (err) => {
+        console.warn('admin socket connect_error:', err?.message || err);
+        state.adminSocketConnected = false;
+        applyWsStatusToDashboard();
+    });
+
+    sock.on('admin:presence:welcome', (payload = {}) => {
+        // Server megerősítette az admin handshake-et
+        console.log('[admin-ws] welcome:', payload);
+    });
+
+    // Audit események
+    sock.on('admin:audit:created', (payload) => {
+        if (!payload) return;
+        state.liveAudit.unshift(payload);
+        if (state.liveAudit.length > MAX_LIVE_BUFFER) state.liveAudit.length = MAX_LIVE_BUFFER;
+        onLiveAuditUpdate(payload);
+    });
+
+    // Alert események
+    ['admin:alert:unauthorized', 'admin:alert:rate_escalated', 'admin:alert:token_invalid', 'admin:alert:suspicious_pattern'].forEach((eventName) => {
+        sock.on(eventName, (payload = {}) => {
+            const kind = eventName.replace('admin:alert:', '');
+            const enriched = { ...payload, kind, severity: payload.severity || (kind === 'suspicious_pattern' ? 'critical' : 'warning') };
+            state.liveAlerts.unshift(enriched);
+            if (state.liveAlerts.length > MAX_LIVE_BUFFER) state.liveAlerts.length = MAX_LIVE_BUFFER;
+            onLiveAlertUpdate(enriched);
+        });
+    });
+
+    // Stats tick
+    sock.on('admin:stats:tick', (payload) => {
+        state.liveStats = payload;
+        state.liveStatsAt = new Date();
+        onLiveStatsUpdate();
+    });
+
+    state.adminSocket = sock;
 }
 
 /* =============================================================
-   10) Toast + kritikus művelet modal helperek
+   15) Live update handlerek - targeted DOM frissítés
+   Re-render csak akkor, ha a chart NEM aktív (nem dashboard).
+   ============================================================= */
+function onLiveStatsUpdate() {
+    if (state.currentSectionId === 'dashboard') {
+        applyDashboardLiveStats();
+    }
+    // egyéb szekciók: amikor a user oda navigál, friss adat lesz
+}
+
+function onLiveAuditUpdate(audit) {
+    if (state.currentSectionId === 'dashboard') {
+        prependLiveFeedRow(liveFeedRow('audit', audit));
+    } else if (state.currentSectionId === 'auditLog') {
+        showSection('auditLog', null, { silent: true });
+    }
+}
+
+function onLiveAlertUpdate(alert) {
+    if (state.currentSectionId === 'dashboard') {
+        prependLiveFeedRow(liveFeedRow('alert', alert));
+    } else if (state.currentSectionId === 'alerts') {
+        showSection('alerts', null, { silent: true });
+    }
+}
+
+function applyDashboardLiveStats() {
+    const stats = liveStatsOrFallback();
+    const last24 = stats.last24h || {};
+
+    setText('tickOnline',         stats.online?.totalUsers     ?? 0);
+    setText('tickAdmins',         stats.online?.totalAdmins    ?? 0);
+    setText('tickInGame',         stats.online?.inGame         ?? 0);
+    setText('tickMatchmaking',    stats.online?.inMatchmaking  ?? 0);
+    setText('tickPendingImages',  stats.pending?.profileImages ?? 0);
+    setText('tickPendingFriends', stats.pending?.friendRequests ?? 0);
+    setText('tickRateEsc',        stats.rateLimit?.activeEscalations ?? 0);
+
+    setText('mainOnlineTotal',  stats.online?.totalUsers ?? 0);
+    setText('mainInGame',       stats.online?.inGame ?? 0);
+    setText('mainAuditCount',   last24.auditEntries ?? 0);
+    setText('mainAlertCount',   last24.alerts ?? 0);
+
+    const onlineHint = document.getElementById('mainOnlineHint');
+    if (onlineHint) onlineHint.textContent = `${stats.online?.totalAdmins ?? 0} admin közöttük`;
+    const critHint = document.getElementById('mainAuditCriticalHint');
+    if (critHint) critHint.textContent = `${last24.criticalAuditEntries ?? 0} kritikus művelet`;
+    const bansHint = document.getElementById('mainNewBansHint');
+    if (bansHint) bansHint.textContent = `${last24.newBans ?? 0} új tiltás`;
+
+    setText('mini24Logins',        last24.logins ?? 0);
+    setText('mini24Registrations', last24.registrations ?? 0);
+    setText('mini24Audit',         last24.auditEntries ?? 0);
+    setText('mini24Critical',      last24.criticalAuditEntries ?? 0);
+    setText('mini24Alerts',        last24.alerts ?? 0);
+    setText('mini24Bans',          last24.newBans ?? 0);
+
+    if (state.liveStatsAt) setText('tickBandTime', formatHM(state.liveStatsAt));
+}
+
+function prependLiveFeedRow(html) {
+    const feed = document.getElementById('dashboardLiveFeed');
+    if (!feed) return;
+    feed.insertAdjacentHTML('afterbegin', html);
+    while (feed.children.length > 25) feed.lastElementChild.remove();
+    // Új sor villanó kiemelése
+    const newRow = feed.firstElementChild;
+    if (newRow) {
+        newRow.classList.add('live-feed-flash');
+        setTimeout(() => newRow.classList.remove('live-feed-flash'), 1200);
+    }
+}
+
+function applyWsStatusToDashboard() {
+    const badge = document.getElementById('wsStatusBadge');
+    const btn = document.getElementById('wsStatusBtn');
+    const label = document.getElementById('wsStatusLabel');
+    const connected = state.adminSocketConnected;
+    if (badge) {
+        badge.classList.remove('text-success', 'text-danger', 'text-warning');
+        badge.classList.add(connected ? 'text-success' : 'text-warning');
+        badge.innerHTML = `<span class="live-dot"></span>WS /admin ${connected ? 'élő' : 'offline'}`;
+    }
+    if (btn) {
+        btn.classList.remove('btn-outline-success', 'btn-outline-warning', 'btn-outline-secondary');
+        btn.classList.add(connected ? 'btn-outline-success' : 'btn-outline-warning');
+    }
+    if (label) {
+        label.textContent = connected ? 'Élő (WS /admin)' : (state.adminToken ? 'Csatlakozás...' : 'Nincs token');
+    }
+}
+
+function requestStatsTick() {
+    // Demo: a /admin namespace szerver oldal automatán emit-eli a tick-eket; itt csak vizuális.
+    showToast('Frissítés kérve — a tick magától érkezni fog.', 'info', 'bi-broadcast');
+}
+
+/* =============================================================
+   16) Toast + kritikus művelet modal helperek
    ============================================================= */
 function showToast(message, variant = 'success', icon = 'bi-check-circle-fill') {
     let container = document.getElementById('adminToastContainer');
@@ -1334,7 +1825,7 @@ function showToast(message, variant = 'success', icon = 'bi-check-circle-fill') 
     }
     const toast = document.createElement('div');
     toast.className = `admin-toast admin-toast-${variant}`;
-    toast.innerHTML = `<i class="bi ${icon}"></i><span>${message}</span>`;
+    toast.innerHTML = `<i class="bi ${icon}"></i><span>${escapeHtml(message)}</span>`;
     container.appendChild(toast);
     requestAnimationFrame(() => toast.classList.add('show'));
     setTimeout(() => {
@@ -1355,10 +1846,10 @@ function openCriticalAction(action, targetLabel) {
         'admin.grant':            'Admin szerep kiosztása',
         'admin.revoke':           'Admin szerep visszavonása'
     };
-    document.getElementById('criticalActionTitle').textContent = titleMap[action] || action;
+    setText('criticalActionTitle', titleMap[action] || action);
     document.getElementById('criticalActionDescription').innerHTML = `
-        <strong class="text-white">Művelet:</strong> <code class="text-gold">${action}</code><br>
-        <strong class="text-white">Cél:</strong> ${targetLabel}
+        <strong class="text-white">Művelet:</strong> <code class="text-gold">${escapeHtml(action)}</code><br>
+        <strong class="text-white">Cél:</strong> ${escapeHtml(targetLabel)}
     `;
     const reasonField = document.getElementById('criticalReason');
     const counter = document.getElementById('criticalReasonCount');
@@ -1377,7 +1868,6 @@ function openCriticalAction(action, targetLabel) {
 }
 
 function executeCriticalAction() {
-    // Demo: csak vizuális megerősítés, valódi végrehajtás nincs
     const modalEl = document.getElementById('criticalActionModal');
     const reason = document.getElementById('criticalReason').value;
     const password = document.getElementById('criticalPassword').value;
@@ -1395,33 +1885,18 @@ function executeCriticalAction() {
         window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
     }
     showToast('Kritikus művelet naplózva (demo).', 'success', 'bi-shield-fill-check');
-    // Token rotáció kritikus művelet után (ADMIN_PANEL.md §2.7)
     refreshAdminToken();
 }
 
 /* =============================================================
-   11) Háttér műveletek (logout, export, modal nyitás)
+   17) Háttér műveletek (logout, export, modal)
    ============================================================= */
 async function logAuthStatusReport(contextLabel = 'admin-logout') {
     try {
         const response = await fetch('/api/sessionInfo');
         const data = await response.json().catch(() => ({}));
-
         console.clear();
-        console.log('--- Auth Status Report ---');
-        console.log('Context:', contextLabel);
-        console.log('Session info:', response.ok ? data : { success: false, loggedIn: false });
-
-        if (window.MattMesterSocket?.socket) {
-            console.log('SocketInfo:', window.MattMesterSocket?.getSnapshot ? window.MattMesterSocket.getSnapshot() : {
-                socketId: window.MattMesterSocket.socket.id,
-                connected: window.MattMesterSocket.socket.connected,
-                sessionBound: window.MattMesterSocket.socket.connected ? 'Active' : 'Disconnected/Pending'
-            });
-        } else {
-            console.warn('SocketInfo: A socket objektum nem található vagy még nem lett inicializálva.');
-        }
-        console.log('--------------------------');
+        console.log('--- Auth Status Report ---', contextLabel, response.ok ? data : { success: false, loggedIn: false });
     } catch (error) {
         console.error('Hiba az auth status report naplozasakor:', error);
     }
@@ -1431,7 +1906,9 @@ function exportUsers() {
     runSafelyAsync('exportUsers', async () => {
         requestController.schedule('exportUsers', async () => {
             try {
+                const headers = state.adminToken ? { 'Authorization': `Bearer ${state.adminToken}` } : {};
                 const response = await fetch('/api/admin/export-users', {
+                    headers,
                     signal: requestController.withAbortSignal('exportUsers')
                 });
                 if (!response.ok) throw new Error('Hiba történt a felhasználók exportálása során.');
@@ -1447,7 +1924,7 @@ function exportUsers() {
             } catch (error) {
                 if (error?.name === 'AbortError') throw error;
                 console.error('Hiba:', error);
-                alert(error.message || 'Hiba történt a felhasználók exportálása során.');
+                showToast(error.message || 'Exportálás sikertelen.', 'danger', 'bi-exclamation-triangle-fill');
             } finally {
                 requestController.clearSignal('exportUsers');
             }
@@ -1466,6 +1943,18 @@ function logout() {
     runSafelyAsync('adminLogout', async () => {
         requestController.schedule('logout', async () => {
             try {
+                // Token revoke ha van
+                if (state.adminToken) {
+                    try {
+                        await fetch('/api/admin/auth/revoke', {
+                            method: 'POST',
+                            headers: { 'Authorization': `Bearer ${state.adminToken}` },
+                            credentials: 'same-origin'
+                        });
+                    } catch (_) {}
+                }
+                clearAdminToken();
+
                 const response = await fetch('/api/logout', {
                     method: 'POST',
                     signal: requestController.withAbortSignal('logout')
@@ -1475,7 +1964,6 @@ function logout() {
             } catch (error) {
                 if (error?.name === 'AbortError') throw error;
                 console.error('Logout hiba:', error);
-                throw error;
             } finally {
                 requestController.clearSignal('logout');
                 window.location.href = '/';
@@ -1485,7 +1973,7 @@ function logout() {
 }
 
 /* =============================================================
-   12) Activity chart
+   18) Activity chart
    ============================================================= */
 function initChart() {
     const canvas = document.getElementById('activityChart');
@@ -1507,8 +1995,7 @@ function initChart() {
                 {
                     label: 'Online játékosok',
                     data: [2, 1, 4, 8, 12, 18, 14],
-                    borderColor: '#d4af37',
-                    backgroundColor: gradient,
+                    borderColor: '#d4af37', backgroundColor: gradient,
                     borderWidth: 3, fill: true, tension: 0.4,
                     pointBackgroundColor: '#d4af37', pointBorderColor: '#fff',
                     pointBorderWidth: 2, pointRadius: 4
@@ -1534,7 +2021,7 @@ function initChart() {
 }
 
 /* =============================================================
-   13) Profilkép moderáció (eseménydelegációval)
+   19) Profilkép moderáció - admin tokennel
    ============================================================= */
 window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
     const STATE = { loading: false, bound: false };
@@ -1549,6 +2036,12 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
             el.className = `alert alert-${type}`;
             el.textContent = message;
         }
+    }
+
+    function authHeaders(extra = {}) {
+        const h = { ...extra };
+        if (state.adminToken) h['Authorization'] = `Bearer ${state.adminToken}`;
+        return h;
     }
 
     function renderRows(rows) {
@@ -1595,7 +2088,10 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
         STATE.loading = true;
         setMessage(null, '');
         try {
-            const response = await fetch('/api/admin/profile-images/pending');
+            const response = await fetch('/api/admin/profile-images/pending', {
+                headers: authHeaders(),
+                credentials: 'same-origin'
+            });
             const result = await response.json().catch(() => ({}));
             if (!response.ok || !result?.success) {
                 throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
@@ -1613,7 +2109,10 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
     async function approve(uploadId) {
         try {
             const response = await fetch(`/api/admin/profile-images/${encodeURIComponent(uploadId)}/approve`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                credentials: 'same-origin',
+                body: JSON.stringify({})
             });
             const result = await response.json().catch(() => ({}));
             if (!response.ok || !result?.success) throw new Error(result?.message || 'A jóváhagyás sikertelen.');
@@ -1630,7 +2129,9 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
         const reviewNote = reviewNoteRaw.trim().slice(0, 500);
         try {
             const response = await fetch(`/api/admin/profile-images/${encodeURIComponent(uploadId)}/reject`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                credentials: 'same-origin',
                 body: JSON.stringify({ reviewNote: reviewNote || null })
             });
             const result = await response.json().catch(() => ({}));
@@ -1669,7 +2170,7 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
 })();
 
 /* =============================================================
-   14) Init
+   20) Init
    ============================================================= */
 function initResponsiveSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -1689,7 +2190,9 @@ document.addEventListener('DOMContentLoaded', () => {
         renderSidebar();
         showSection(DEFAULT_SECTION);
         initResponsiveSidebar();
-        startTokenCountdown();
+        updateTokenPill();          // initial: 00:00 expired pill
         window.MattMesterChatModal?.init();
+        // Auth bootstrap: session check + elevate modal
+        bootstrapAdminAuth();
     });
 });
