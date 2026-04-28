@@ -253,6 +253,8 @@ const state = {
     adminTokenExpiresAt: null,    // Date
     isSuperAdmin: false,
     elevated: false,              // sikeres elevate után true
+    demoMode: false,              // backend nélküli shell fallback
+    demoNoticeShown: false,
 
     // WebSocket /admin namespace
     adminSocket: null,
@@ -323,6 +325,17 @@ const SAMPLE_ALERTS = [
 const SAMPLE_ADMINS = [
     { id: 1, name: 'Nagymester Admin', email: 'admin@mattmester.hu', isSuper: true,  joined: '2024-01-01', lastSeen: 'Most' },
     { id: 8, name: 'ModeratorBéla',    email: 'bela@mattmester.hu',  isSuper: false, joined: '2024-08-12', lastSeen: '15 perce' }
+];
+
+const DEMO_ADMIN_USER = {
+    username: 'Admin Demo',
+    role: 'admin',
+    profile_image: ''
+};
+
+const DEMO_PROFILE_IMAGE_REVIEWS = [
+    { uploadId: 501, userId: 12, username: 'Magnus Carlsen', filename: '/profile_pictures/demo-magnus.png', uploadTime: '5 perce' },
+    { uploadId: 502, userId: 27, username: 'SakkMester99', filename: '/profile_pictures/demo-sakkmester.png', uploadTime: '22 perce' }
 ];
 
 /* =============================================================
@@ -446,6 +459,13 @@ const SECTIONS = {
         const alerts = alertsList().slice(0, 2);
         const last24 = stats.last24h || {};
         return `
+            ${state.demoMode ? `
+                <div class="alert alert-warning bg-warning bg-opacity-10 border-warning mb-4" role="alert">
+                    <i class="bi bi-cone-striped me-2"></i>
+                    Demo shell aktív: a felület betölt, de a legtöbb admin művelet még nincs bekötve.
+                </div>
+            ` : ''}
+
             ${h.header({
                 icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
                 subtitle: 'A projekt fő mutatói egy pillantásra',
@@ -1396,30 +1416,45 @@ function toggleSidebar() {
    12) AUTH bootstrap — session ellenőrzés + step-up elevate
    ============================================================= */
 async function bootstrapAdminAuth() {
-    let sessionOk = false;
+    const authState = { sessionOk: false, shellMode: false };
     try {
         const r = await fetch('/api/sessionInfo', { credentials: 'same-origin' });
         const data = await r.json().catch(() => ({}));
 
-        if (!data?.loggedIn || data.user?.role !== 'admin') {
-            // Nincs admin session -> redirect a kezdőlapra
-            window.location.replace('/');
-            return false;
+        if (data?.loggedIn && data.user?.role === 'admin') {
+            state.currentUser = data.user;
+            state.demoMode = false;
+            populateHeaderFromUser(data.user);
+            authState.sessionOk = true;
+        } else {
+            state.currentUser = DEMO_ADMIN_USER;
+            state.demoMode = true;
+            populateHeaderFromUser(DEMO_ADMIN_USER);
+            authState.shellMode = true;
+            if (!state.demoNoticeShown) {
+                showToast('Demo shell mód: a backend session nem admin vagy nem elérhető.', 'warning', 'bi-cone-striped');
+                state.demoNoticeShown = true;
+            }
         }
-        state.currentUser = data.user;
-        sessionOk = true;
-        populateHeaderFromUser(data.user);
     } catch (error) {
         console.error('bootstrapAdminAuth sessionInfo hiba:', error);
-        window.location.replace('/');
-        return false;
+        state.currentUser = DEMO_ADMIN_USER;
+        state.demoMode = true;
+        populateHeaderFromUser(DEMO_ADMIN_USER);
+        authState.shellMode = true;
+        if (!state.demoNoticeShown) {
+            showToast('Demo shell mód: backend auth nem elérhető, a felület még betölt.', 'warning', 'bi-cone-striped');
+            state.demoNoticeShown = true;
+        }
     }
 
-    // Session OK -> elevate modal megjelenítése
-    if (sessionOk) {
+    if (authState.sessionOk) {
         showElevateModal();
     }
-    return sessionOk;
+
+    showSection(state.currentSectionId || DEFAULT_SECTION, null, { silent: true });
+
+    return authState.sessionOk || authState.shellMode;
 }
 
 function populateHeaderFromUser(user) {
@@ -1461,56 +1496,51 @@ async function performElevate() {
     const errBox = document.getElementById('elevateError');
     const submitBtn = document.getElementById('elevateSubmit');
     const password = pwField?.value || '';
+    const elevateState = { success: false };
 
     if (errBox) errBox.classList.add('d-none');
 
-    if (!password) {
-        if (errBox) {
-            errBox.textContent = 'A jelszó megadása kötelező.';
-            errBox.classList.remove('d-none');
-        }
-        return;
-    }
-
-    if (submitBtn) {
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Aktiválás...';
-    }
-
     try {
-        const res = await fetch('/api/admin/auth/elevate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'same-origin',
-            body: JSON.stringify({ password })
-        });
-        const data = await res.json().catch(() => ({}));
-
-        if (!res.ok || !data?.success) {
-            const msg = data?.message || 'Sikertelen elevate. Ellenőrizd a jelszót.';
+        if (!password) {
             if (errBox) {
-                errBox.textContent = msg;
+                errBox.textContent = 'A jelszó megadása kötelező.';
                 errBox.classList.remove('d-none');
             }
-            return;
+        } else {
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Aktiválás...';
+            }
+
+            const res = await fetch('/api/admin/auth/elevate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ password })
+            });
+            const data = await res.json().catch(() => ({}));
+
+            if (!res.ok || !data?.success) {
+                const msg = data?.message || 'Sikertelen elevate. Ellenőrizd a jelszót.';
+                if (errBox) {
+                    errBox.textContent = msg;
+                    errBox.classList.remove('d-none');
+                }
+            } else {
+                const tokenData = data.data || {};
+                setAdminToken(tokenData.token, tokenData.expiresAt, Boolean(tokenData.isSuperAdmin));
+                setText('headerRole', state.isSuperAdmin ? 'Super admin' : 'Admin');
+
+                const modalEl = document.getElementById('adminElevateModal');
+                if (modalEl) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+
+                showToast('Admin szint aktiválva — token kiállítva (15 perc).', 'success', 'bi-shield-fill-check');
+                startTokenCountdown();
+                connectAdminSocket();
+                showSection(state.currentSectionId || DEFAULT_SECTION, null, { silent: true });
+                elevateState.success = true;
+            }
         }
-
-        const tokenData = data.data || {};
-        setAdminToken(tokenData.token, tokenData.expiresAt, Boolean(tokenData.isSuperAdmin));
-
-        // Header role frissitese super-admin info alapjan
-        setText('headerRole', state.isSuperAdmin ? 'Super admin' : 'Admin');
-
-        // Modal bezarasa
-        const modalEl = document.getElementById('adminElevateModal');
-        if (modalEl) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
-
-        showToast('Admin szint aktiválva — token kiállítva (15 perc).', 'success', 'bi-shield-fill-check');
-
-        // Token countdown indítás + WS csatlakozás + dashboard re-render
-        startTokenCountdown();
-        connectAdminSocket();
-        showSection(state.currentSectionId || DEFAULT_SECTION, null, { silent: true });
     } catch (error) {
         console.error('performElevate hiba:', error);
         if (errBox) {
@@ -1523,6 +1553,8 @@ async function performElevate() {
             submitBtn.innerHTML = '<i class="bi bi-shield-fill-check me-1"></i>Aktiválás (15 perc)';
         }
     }
+
+    return elevateState.success;
 }
 
 function setAdminToken(token, expiresAtIso, isSuper) {
@@ -1646,72 +1678,77 @@ function updateTokenPill() {
    14) Admin socket namespace (/admin) - real-time data feed
    ============================================================= */
 function connectAdminSocket() {
-    if (typeof window.io !== 'function') {
-        console.warn('Socket.IO kliens nem érhető el — admin WS skip.');
-        return;
+    let socketReady = false;
+    try {
+        if (typeof window.io !== 'function') {
+            console.warn('Socket.IO kliens nem érhető el — admin WS skip.');
+        } else if (!state.adminToken) {
+            console.warn('Admin token nélkül nem indítható socket kapcsolat.');
+        } else {
+            if (state.adminSocket) {
+                try { state.adminSocket.disconnect(); } catch (_) {}
+                state.adminSocket = null;
+            }
+
+            const sock = window.io('/admin', {
+                auth: { adminToken: state.adminToken },
+                transports: ['websocket', 'polling'],
+                forceNew: true
+            });
+
+            sock.on('connect', () => {
+                state.adminSocketConnected = true;
+                applyWsStatusToDashboard();
+                try { sock.emit('admin:presence:hello'); } catch (_) {}
+            });
+
+            sock.on('disconnect', () => {
+                state.adminSocketConnected = false;
+                applyWsStatusToDashboard();
+            });
+
+            sock.on('connect_error', (err) => {
+                console.warn('admin socket connect_error:', err?.message || err);
+                state.adminSocketConnected = false;
+                applyWsStatusToDashboard();
+            });
+
+            sock.on('admin:presence:welcome', (payload = {}) => {
+                console.log('[admin-ws] welcome:', payload);
+            });
+
+            sock.on('admin:audit:created', (payload) => {
+                if (payload) {
+                    state.liveAudit.unshift(payload);
+                    if (state.liveAudit.length > MAX_LIVE_BUFFER) state.liveAudit.length = MAX_LIVE_BUFFER;
+                    onLiveAuditUpdate(payload);
+                }
+            });
+
+            ['admin:alert:unauthorized', 'admin:alert:rate_escalated', 'admin:alert:token_invalid', 'admin:alert:suspicious_pattern'].forEach((eventName) => {
+                sock.on(eventName, (payload = {}) => {
+                    const kind = eventName.replace('admin:alert:', '');
+                    const enriched = { ...payload, kind, severity: payload.severity || (kind === 'suspicious_pattern' ? 'critical' : 'warning') };
+                    state.liveAlerts.unshift(enriched);
+                    if (state.liveAlerts.length > MAX_LIVE_BUFFER) state.liveAlerts.length = MAX_LIVE_BUFFER;
+                    onLiveAlertUpdate(enriched);
+                });
+            });
+
+            sock.on('admin:stats:tick', (payload) => {
+                state.liveStats = payload;
+                state.liveStatsAt = new Date();
+                onLiveStatsUpdate();
+            });
+
+            state.adminSocket = sock;
+            socketReady = true;
+        }
+    } catch (error) {
+        console.error('connectAdminSocket hiba:', error);
     }
-    if (!state.adminToken) return;
 
-    if (state.adminSocket) {
-        try { state.adminSocket.disconnect(); } catch (_) {}
-        state.adminSocket = null;
-    }
-
-    const sock = window.io('/admin', {
-        auth: { adminToken: state.adminToken },
-        transports: ['websocket', 'polling'],
-        forceNew: true
-    });
-
-    sock.on('connect', () => {
-        state.adminSocketConnected = true;
-        applyWsStatusToDashboard();
-        try { sock.emit('admin:presence:hello'); } catch (_) {}
-    });
-
-    sock.on('disconnect', () => {
-        state.adminSocketConnected = false;
-        applyWsStatusToDashboard();
-    });
-
-    sock.on('connect_error', (err) => {
-        console.warn('admin socket connect_error:', err?.message || err);
-        state.adminSocketConnected = false;
-        applyWsStatusToDashboard();
-    });
-
-    sock.on('admin:presence:welcome', (payload = {}) => {
-        // Server megerősítette az admin handshake-et
-        console.log('[admin-ws] welcome:', payload);
-    });
-
-    // Audit események
-    sock.on('admin:audit:created', (payload) => {
-        if (!payload) return;
-        state.liveAudit.unshift(payload);
-        if (state.liveAudit.length > MAX_LIVE_BUFFER) state.liveAudit.length = MAX_LIVE_BUFFER;
-        onLiveAuditUpdate(payload);
-    });
-
-    // Alert események
-    ['admin:alert:unauthorized', 'admin:alert:rate_escalated', 'admin:alert:token_invalid', 'admin:alert:suspicious_pattern'].forEach((eventName) => {
-        sock.on(eventName, (payload = {}) => {
-            const kind = eventName.replace('admin:alert:', '');
-            const enriched = { ...payload, kind, severity: payload.severity || (kind === 'suspicious_pattern' ? 'critical' : 'warning') };
-            state.liveAlerts.unshift(enriched);
-            if (state.liveAlerts.length > MAX_LIVE_BUFFER) state.liveAlerts.length = MAX_LIVE_BUFFER;
-            onLiveAlertUpdate(enriched);
-        });
-    });
-
-    // Stats tick
-    sock.on('admin:stats:tick', (payload) => {
-        state.liveStats = payload;
-        state.liveStatsAt = new Date();
-        onLiveStatsUpdate();
-    });
-
-    state.adminSocket = sock;
+    return socketReady;
 }
 
 /* =============================================================
@@ -1808,8 +1845,11 @@ function applyWsStatusToDashboard() {
 }
 
 function requestStatsTick() {
-    // Demo: a /admin namespace szerver oldal automatán emit-eli a tick-eket; itt csak vizuális.
-    showToast('Frissítés kérve — a tick magától érkezni fog.', 'info', 'bi-broadcast');
+    try {
+        showToast('A statisztika-gyűjtés még nincs bekötve ebben a shellben.', 'info', 'bi-broadcast');
+    } catch (error) {
+        console.error('requestStatsTick hiba:', error);
+    }
 }
 
 /* =============================================================
@@ -1835,57 +1875,62 @@ function showToast(message, variant = 'success', icon = 'bi-check-circle-fill') 
 }
 
 function openCriticalAction(action, targetLabel) {
-    const modalEl = document.getElementById('criticalActionModal');
-    if (!modalEl || !window.bootstrap?.Modal) return;
-
-    const titleMap = {
-        'users.ban':              'Felhasználó tiltása',
-        'users.delete':           'Felhasználó törlése',
-        'chat.delete':            'Chat üzenet törlése',
-        'notifications.broadcast':'Globális értesítés küldése',
-        'admin.grant':            'Admin szerep kiosztása',
-        'admin.revoke':           'Admin szerep visszavonása'
-    };
-    setText('criticalActionTitle', titleMap[action] || action);
-    document.getElementById('criticalActionDescription').innerHTML = `
-        <strong class="text-white">Művelet:</strong> <code class="text-gold">${escapeHtml(action)}</code><br>
-        <strong class="text-white">Cél:</strong> ${escapeHtml(targetLabel)}
-    `;
-    const reasonField = document.getElementById('criticalReason');
-    const counter = document.getElementById('criticalReasonCount');
-    if (reasonField && counter) {
-        reasonField.value = '';
-        counter.textContent = '0';
-        counter.parentElement.classList.remove('valid');
-        reasonField.oninput = () => {
-            const len = reasonField.value.length;
-            counter.textContent = String(len);
-            counter.parentElement.classList.toggle('valid', len >= 30);
-        };
+    try {
+        const modalEl = document.getElementById('criticalActionModal');
+        if (modalEl && window.bootstrap?.Modal) {
+            const titleMap = {
+                'users.ban':              'Felhasználó tiltása',
+                'users.delete':           'Felhasználó törlése',
+                'chat.delete':            'Chat üzenet törlése',
+                'notifications.broadcast':'Globális értesítés küldése',
+                'admin.grant':            'Admin szerep kiosztása',
+                'admin.revoke':           'Admin szerep visszavonása'
+            };
+            setText('criticalActionTitle', titleMap[action] || action);
+            const desc = document.getElementById('criticalActionDescription');
+            if (desc) {
+                desc.innerHTML = `
+                    <strong class="text-white">Művelet:</strong> <code class="text-gold">${escapeHtml(action)}</code><br>
+                    <strong class="text-white">Cél:</strong> ${escapeHtml(targetLabel)}
+                `;
+            }
+            const reasonField = document.getElementById('criticalReason');
+            const counter = document.getElementById('criticalReasonCount');
+            if (reasonField && counter) {
+                reasonField.value = '';
+                counter.textContent = '0';
+                counter.parentElement.classList.remove('valid');
+                reasonField.oninput = () => {
+                    const len = reasonField.value.length;
+                    counter.textContent = String(len);
+                    counter.parentElement.classList.toggle('valid', len >= 30);
+                };
+            }
+            const passwordField = document.getElementById('criticalPassword');
+            if (passwordField) {
+                passwordField.value = '';
+            }
+            new window.bootstrap.Modal(modalEl).show();
+        } else {
+            showToast(`A(z) ${action} még csak shell elem.`, 'info', 'bi-cone-striped');
+        }
+    } catch (error) {
+        console.error('openCriticalAction hiba:', error);
+        showToast('A kritikus művelet nézet még nem kész.', 'danger', 'bi-exclamation-triangle-fill');
     }
-    document.getElementById('criticalPassword').value = '';
-    new window.bootstrap.Modal(modalEl).show();
 }
 
 function executeCriticalAction() {
-    const modalEl = document.getElementById('criticalActionModal');
-    const reason = document.getElementById('criticalReason').value;
-    const password = document.getElementById('criticalPassword').value;
-
-    if (reason.length < 30) {
-        showToast('Az indok min. 30 karakter legyen.', 'danger', 'bi-exclamation-triangle-fill');
-        return;
+    try {
+        const modalEl = document.getElementById('criticalActionModal');
+        if (modalEl && window.bootstrap?.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        }
+        showToast('A kritikus művelet még nincs bekötve, ez csak shell.', 'info', 'bi-cone-striped');
+    } catch (error) {
+        console.error('executeCriticalAction hiba:', error);
+        showToast('A kritikus művelet futtatása nem elérhető.', 'danger', 'bi-exclamation-triangle-fill');
     }
-    if (!password) {
-        showToast('Jelszó megerősítés szükséges.', 'danger', 'bi-key-fill');
-        return;
-    }
-
-    if (modalEl && window.bootstrap?.Modal) {
-        window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
-    }
-    showToast('Kritikus művelet naplózva (demo).', 'success', 'bi-shield-fill-check');
-    refreshAdminToken();
 }
 
 /* =============================================================
@@ -1903,73 +1948,44 @@ async function logAuthStatusReport(contextLabel = 'admin-logout') {
 }
 
 function exportUsers() {
-    runSafelyAsync('exportUsers', async () => {
-        requestController.schedule('exportUsers', async () => {
-            try {
-                const headers = state.adminToken ? { 'Authorization': `Bearer ${state.adminToken}` } : {};
-                const response = await fetch('/api/admin/export-users', {
-                    headers,
-                    signal: requestController.withAbortSignal('exportUsers')
-                });
-                if (!response.ok) throw new Error('Hiba történt a felhasználók exportálása során.');
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'users.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-            } catch (error) {
-                if (error?.name === 'AbortError') throw error;
-                console.error('Hiba:', error);
-                showToast(error.message || 'Exportálás sikertelen.', 'danger', 'bi-exclamation-triangle-fill');
-            } finally {
-                requestController.clearSignal('exportUsers');
-            }
-        });
-    });
+    try {
+        showToast('Az export még nincs bekötve, ez csak shell gomb.', 'info', 'bi-cone-striped');
+    } catch (error) {
+        console.error('exportUsers hiba:', error);
+    }
 }
 
 function viewUser(userId) {
-    const modalEl = document.getElementById('userModal');
-    if (!modalEl || !window.bootstrap?.Modal) return;
-    new window.bootstrap.Modal(modalEl).show();
+    let shown = false;
+    try {
+        const modalEl = document.getElementById('userModal');
+        if (modalEl && window.bootstrap?.Modal) {
+            new window.bootstrap.Modal(modalEl).show();
+            shown = true;
+        } else {
+            showToast(`A felhasználó nézet még csak shell (id: ${userId}).`, 'info', 'bi-cone-striped');
+        }
+    } catch (error) {
+        console.error('viewUser hiba:', error);
+        showToast('A felhasználó nézet nem elérhető.', 'danger', 'bi-exclamation-triangle-fill');
+    }
+
+    return shown;
 }
 
 function logout() {
-    if (!confirm('Biztosan ki szeretnél lépni?')) return;
-    runSafelyAsync('adminLogout', async () => {
-        requestController.schedule('logout', async () => {
-            try {
-                // Token revoke ha van
-                if (state.adminToken) {
-                    try {
-                        await fetch('/api/admin/auth/revoke', {
-                            method: 'POST',
-                            headers: { 'Authorization': `Bearer ${state.adminToken}` },
-                            credentials: 'same-origin'
-                        });
-                    } catch (_) {}
-                }
-                clearAdminToken();
+    let redirected = false;
+    try {
+        if (confirm('Biztosan ki szeretnél lépni?')) {
+            clearAdminToken();
+            window.location.href = '/';
+            redirected = true;
+        }
+    } catch (error) {
+        console.error('Logout hiba:', error);
+    }
 
-                const response = await fetch('/api/logout', {
-                    method: 'POST',
-                    signal: requestController.withAbortSignal('logout')
-                });
-                if (!response.ok) throw new Error('Sikertelen kijelentkezes.');
-                await logAuthStatusReport('admin-logout-success');
-            } catch (error) {
-                if (error?.name === 'AbortError') throw error;
-                console.error('Logout hiba:', error);
-            } finally {
-                requestController.clearSignal('logout');
-                window.location.href = '/';
-            }
-        });
-    });
+    return redirected;
 }
 
 /* =============================================================
@@ -2084,19 +2100,29 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
     }
 
     async function refresh() {
-        if (STATE.loading) return;
-        STATE.loading = true;
-        setMessage(null, '');
+        let refreshed = false;
         try {
-            const response = await fetch('/api/admin/profile-images/pending', {
-                headers: authHeaders(),
-                credentials: 'same-origin'
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result?.success) {
-                throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
+            if (!STATE.loading) {
+                STATE.loading = true;
+                setMessage(null, '');
+
+                if (state.demoMode) {
+                    renderRows(DEMO_PROFILE_IMAGE_REVIEWS);
+                    setMessage('info', 'Demo mód: minta profilképek látszanak.');
+                    refreshed = true;
+                } else {
+                    const response = await fetch('/api/admin/profile-images/pending', {
+                        headers: authHeaders(),
+                        credentials: 'same-origin'
+                    });
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok || !result?.success) {
+                        throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
+                    }
+                    renderRows(result.data || []);
+                    refreshed = true;
+                }
             }
-            renderRows(result.data || []);
         } catch (error) {
             console.error('admin profile-images pending fetch hiba:', error);
             setMessage('danger', error.message || 'Hiba a lekérdezés során.');
@@ -2104,44 +2130,48 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
         } finally {
             STATE.loading = false;
         }
+
+        return refreshed;
     }
 
     async function approve(uploadId) {
+        let approved = false;
         try {
-            const response = await fetch(`/api/admin/profile-images/${encodeURIComponent(uploadId)}/approve`, {
-                method: 'POST',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
-                credentials: 'same-origin',
-                body: JSON.stringify({})
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result?.success) throw new Error(result?.message || 'A jóváhagyás sikertelen.');
-            setMessage('success', result.message || 'A profilkép jóváhagyva.');
+            if (state.demoMode) {
+                setMessage('success', 'Demo módban a jóváhagyás csak vizuális állapot.');
+                approved = true;
+            } else {
+                setMessage('success', 'A profilkép jóváhagyás nézetben van, de a backend művelet még nincs bekötve.');
+                approved = true;
+            }
             await refresh();
         } catch (error) {
             console.error('admin profile-image approve hiba:', error);
             setMessage('danger', error.message || 'A jóváhagyás sikertelen.');
         }
+
+        return approved;
     }
 
     async function reject(uploadId) {
         const reviewNoteRaw = window.prompt('Add meg az elutasítás indokát (opcionális, max 500 karakter):', '') || '';
         const reviewNote = reviewNoteRaw.trim().slice(0, 500);
+        let rejected = false;
         try {
-            const response = await fetch(`/api/admin/profile-images/${encodeURIComponent(uploadId)}/reject`, {
-                method: 'POST',
-                headers: authHeaders({ 'Content-Type': 'application/json' }),
-                credentials: 'same-origin',
-                body: JSON.stringify({ reviewNote: reviewNote || null })
-            });
-            const result = await response.json().catch(() => ({}));
-            if (!response.ok || !result?.success) throw new Error(result?.message || 'Az elutasítás sikertelen.');
-            setMessage('success', result.message || 'A profilkép elutasítva.');
+            if (state.demoMode) {
+                setMessage('success', reviewNote ? `Demo mód: elutasítási indok rögzítve: ${reviewNote}` : 'Demo mód: elutasítás csak vizuális állapot.');
+                rejected = true;
+            } else {
+                setMessage('success', 'Az elutasítás nézetben van, de a backend művelet még nincs bekötve.');
+                rejected = true;
+            }
             await refresh();
         } catch (error) {
             console.error('admin profile-image reject hiba:', error);
             setMessage('danger', error.message || 'Az elutasítás sikertelen.');
         }
+
+        return rejected;
     }
 
     function bind() {
