@@ -18,7 +18,7 @@ const envPaths = [
 
 envPaths.forEach((envPath) => {
     if (fs.existsSync(envPath)) {
-        dotenv.config({ path: envPath, override: false });
+        dotenv.config({ path: envPath, override: false, quiet: true });
     }
 });
 
