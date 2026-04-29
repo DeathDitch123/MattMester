@@ -534,6 +534,90 @@ async function setUserAdminRole(userId, makeAdmin, makeSuperAdmin) {
     return { beforeState, afterState };
 }
 
+// =====================================================================
+// dashboard statisztikak (admin:stats:tick)
+// Egy fenti hely: minden szamlalo egyetlen forrasbol jon, hogy a UI es
+// a /stats/snapshot endpoint koherens legyen.
+// =====================================================================
+
+async function countPendingProfileImages() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM profile_image_uploads WHERE status = 'pending'`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countPendingProfileImages hiba:', error.message);
+        throw new Error('Pending profile image szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countPendingFriendRequests() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM friends WHERE status = 'pending'`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countPendingFriendRequests hiba:', error.message);
+        throw new Error('Pending friend request szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countOngoingGames() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM games WHERE status = 'ongoing'`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countOngoingGames hiba:', error.message);
+        throw new Error('Aktiv jatszma szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countLoginsSince(sinceDate) {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM user_logs
+             WHERE event_type = 'login' AND occurred_at >= ?`,
+            [sinceDate]
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countLoginsSince hiba:', error.message);
+        throw new Error('Login szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countRegistrationsSince(sinceDate) {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM users WHERE created_at >= ?`,
+            [sinceDate]
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countRegistrationsSince hiba:', error.message);
+        throw new Error('Registration szamolasi hiba.');
+    }
+    return result;
+}
+
 module.exports = {
     // tokens
     createAdminToken,
@@ -562,5 +646,11 @@ module.exports = {
     getUserForAdminAuth,
     countSuperAdmins,
     getAdminUserList,
-    setUserAdminRole
+    setUserAdminRole,
+    // dashboard counters
+    countPendingProfileImages,
+    countPendingFriendRequests,
+    countOngoingGames,
+    countLoginsSince,
+    countRegistrationsSince
 };

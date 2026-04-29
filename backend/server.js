@@ -184,6 +184,10 @@ app.locals.adminSocketHub = adminSocketHub;
 adminAuditService.bindSocketHub(adminSocketHub);
 adminAlertingService.bindSocketHub(adminSocketHub);
 
+// Admin dashboard - 5 mp-enkenti stats tick (admin:stats:tick)
+const adminStatsTickService = require('./api/admin/statsTickService.js');
+adminStatsTickService.start({ adminSocketHub, socketHub });
+
 // Belepett felhasznalo ellenorzese vedett oldalakhoz
 function requireAuth(req, res, next) {
     if (!req.session || !req.session.userId) {

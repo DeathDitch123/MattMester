@@ -35,6 +35,55 @@ const formatHM = (date) => {
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
 };
 
+// Egyseges relativ ido formazo - egy forras-igazsag a "Most / X mp / X perce" feliratokhoz
+const formatRelative = (date) => {
+    let result = '—';
+    try {
+        if (date) {
+            const d = date instanceof Date ? date : new Date(date);
+            const diffSec = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
+            if (diffSec < 5)         result = 'Épp most';
+            else if (diffSec < 60)   result = `${diffSec} mp-e`;
+            else if (diffSec < 3600) result = `${Math.floor(diffSec / 60)} perce`;
+            else if (diffSec < 86400) result = `${Math.floor(diffSec / 3600)} órája`;
+            else                     result = `${Math.floor(diffSec / 86400)} napja`;
+        }
+    } catch (err) {
+        console.warn('formatRelative hiba:', err);
+        result = '—';
+    }
+    return result;
+};
+
+// setText + value-flash: ha a szam valtozott, rovid villantast kap (zold no, sarga csokken)
+const setTextWithFlash = (id, value) => {
+    try {
+        const el = document.getElementById(id);
+        if (el) {
+            const prevText = el.textContent;
+            const nextText = String(value);
+            if (prevText !== nextText) {
+                const prevNum = Number(prevText);
+                const nextNum = Number(nextText);
+                el.textContent = nextText;
+                el.classList.remove('value-flash-up', 'value-flash-down', 'value-flash-eq');
+                if (Number.isFinite(prevNum) && Number.isFinite(nextNum)) {
+                    if (nextNum > prevNum) el.classList.add('value-flash-up');
+                    else if (nextNum < prevNum) el.classList.add('value-flash-down');
+                    else el.classList.add('value-flash-eq');
+                } else {
+                    el.classList.add('value-flash-eq');
+                }
+                setTimeout(() => {
+                    el.classList.remove('value-flash-up', 'value-flash-down', 'value-flash-eq');
+                }, 850);
+            }
+        }
+    } catch (err) {
+        console.warn('setTextWithFlash hiba:', err);
+    }
+};
+
 /* =============================================================
    2) HTML render helperek (h.*)
    ============================================================= */
@@ -52,20 +101,32 @@ const h = {
     stats: (items) => {
         const xlCol = { 1: 12, 2: 6, 3: 4, 4: 3 }[items.length] || 3;
         const mdCol = items.length === 1 ? 12 : 6;
-        return `
-            <div class="row g-3 mb-4">
-                ${items.map(it => `
-                    <div class="col-md-${mdCol} col-xl-${xlCol}">
-                        <div class="stat-card">
-                            <div class="stat-icon bg-${it.color || 'primary'}-soft"><i class="bi ${it.icon}"></i></div>
-                            <div class="stat-value"${it.valueId ? ` id="${it.valueId}"` : ''}>${it.value}</div>
-                            <div class="stat-label">${it.label}</div>
-                            ${it.hint ? `<small class="stat-hint ${it.hintClass || 'text-muted'}">${it.hint}</small>` : ''}
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        `;
+        const renderCard = (it) => {
+            const tag = it.interactive ? 'button' : 'div';
+            const interactiveAttrs = it.interactive
+                ? ` type="button" onclick="showSection('${it.interactive}', event)" aria-label="${it.label} — ugrás a ${it.interactive} szekcióra"`
+                : '';
+            const stateClasses = [
+                'stat-card',
+                it.interactive ? 'stat-card-clickable' : '',
+                it.empty ? 'stat-card-empty' : '',
+                it.emblem === 'chess' ? 'stat-card-chess' : '',
+                it.cardId ? '' : ''
+            ].filter(Boolean).join(' ');
+            const idAttr = it.cardId ? ` id="${it.cardId}"` : '';
+            return `
+                <div class="col-md-${mdCol} col-xl-${xlCol}">
+                    <${tag} class="${stateClasses}"${idAttr}${interactiveAttrs}>
+                        ${it.emblem === 'chess' ? '<span class="stat-card-chess-bg" aria-hidden="true"></span>' : ''}
+                        <div class="stat-icon bg-${it.color || 'primary'}-soft"><i class="bi ${it.icon}"></i></div>
+                        <div class="stat-value"${it.valueId ? ` id="${it.valueId}"` : ''}>${it.value}</div>
+                        <div class="stat-label">${it.label}</div>
+                        ${it.hint ? `<small class="stat-hint ${it.hintClass || 'text-muted'}">${it.hint}</small>` : ''}
+                    </${tag}>
+                </div>
+            `;
+        };
+        return `<div class="row g-3 mb-4">${items.map(renderCard).join('')}</div>`;
     },
 
     card: ({ title, icon, headerExtra = '', body, classes = '', noBodyPadding = false }) => `
@@ -252,6 +313,18 @@ const rolePill   = (key) => `<span class="badge ${ROLE_BADGE[key].cls}">${ROLE_B
 const riskPill   = (key) => `<span class="badge ${RISK_BADGE[key].cls}">${RISK_BADGE[key].label}</span>`;
 
 /* =============================================================
+   3.5) WS allapot - egy forras-igazsag a fejlec pill, feed badge,
+        tick-band, kezi frissites gomb szamara.
+   ============================================================= */
+const WS_STATUS = Object.freeze({
+    no_token:     { key: 'no_token',     label: 'Nincs admin token',         short: 'Nincs token',  variant: 'secondary', icon: 'bi-shield-slash',         dotClass: 'ws-dot-idle',       spin: false },
+    connecting:   { key: 'connecting',   label: 'Csatlakozás…',              short: 'Csatlakozás…', variant: 'warning',   icon: 'bi-arrow-repeat',         dotClass: 'ws-dot-connecting', spin: true  },
+    connected:    { key: 'connected',    label: 'Élő — WS /admin',           short: 'Élő',          variant: 'success',   icon: 'bi-broadcast-pin',        dotClass: 'ws-dot-live',       spin: false },
+    disconnected: { key: 'disconnected', label: 'Megszakadt — újrapróbálom', short: 'Offline',      variant: 'danger',    icon: 'bi-plug',                 dotClass: 'ws-dot-down',       spin: false }
+});
+const WS_STATUS_VARIANTS = ['success', 'warning', 'danger', 'secondary'];
+
+/* =============================================================
    4) Globális modul state (ADMIN_PANEL.md §2.6 — memóriában)
    ============================================================= */
 const state = {
@@ -265,6 +338,10 @@ const state = {
     // WebSocket /admin namespace
     adminSocket: null,
     adminSocketConnected: false,
+    wsStatus: 'no_token',         // WS_STATUS kulcs - egy forras-igazsag
+    wsStaleTimerId: null,         // setTimeout id a stale figyeleshez
+    wsStale: false,               // true ha 15 mp-nel regebbi a tick
+    manualRefreshLockUntil: 0,    // kezi frissites debounce timestamp
 
     // Real-time data buffers (WS-ből töltődnek)
     liveStats: null,              // admin:stats:tick legutolsó payload
@@ -338,7 +415,7 @@ const SAMPLE_ADMINS = [
    ============================================================= */
 function liveStatsOrFallback() {
     return state.liveStats || {
-        online:    { totalUsers: 0, totalAdmins: 0, inGame: 0, inMatchmaking: 0 },
+        online:    { totalUsers: 0, totalAdmins: 0, inGame: 0, inMatchmaking: 0, activeTabs: 0, totalTabs: 0, totalSockets: 0 },
         pending:   { profileImages: 0, friendRequests: 0 },
         last24h:   { logins: 0, registrations: 0, auditEntries: 0, criticalAuditEntries: 0, alerts: 0, newBans: 0 },
         rateLimit: { activeEscalations: 0 }
@@ -347,6 +424,29 @@ function liveStatsOrFallback() {
 
 const auditList  = () => (state.liveAudit.length  ? state.liveAudit  : SAMPLE_AUDIT);
 const alertsList = () => (state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS);
+
+// Egy forras-igazsag: a feed-ekhez visszaadjuk az adatokat ÉS a forrast (live / demo / empty).
+// Igy a renderelo egyertelmuen tudja vizualisan elkuloniteni a mockot az elotol.
+function liveDataSource(kind) {
+    let result = { items: [], isLive: false, isEmpty: true, kind };
+    try {
+        const buffer = kind === 'audit' ? state.liveAudit : (kind === 'alert' ? state.liveAlerts : []);
+        const sample = kind === 'audit' ? SAMPLE_AUDIT : (kind === 'alert' ? SAMPLE_ALERTS : []);
+        if (buffer && buffer.length) {
+            result = { items: buffer, isLive: true, isEmpty: false, kind };
+        } else if (state.adminSocketConnected) {
+            // Csatlakozva vagyunk, de meg nem erkezett esemeny -> ures allapot (NEM mock).
+            result = { items: [], isLive: true, isEmpty: true, kind };
+        } else {
+            // Nincs WS - demo / fallback adat, vizualisan elkulonitve.
+            result = { items: sample, isLive: false, isEmpty: false, kind };
+        }
+    } catch (err) {
+        console.warn('liveDataSource hiba:', err);
+        result = { items: [], isLive: false, isEmpty: true, kind };
+    }
+    return result;
+}
 
 const formatAuditTime = (iso) => {
     try { return formatHM(iso); } catch (_) { return iso || '—'; }
@@ -450,45 +550,78 @@ const SECTIONS = {
     /* ---------- Vezérlőpult ---------- */
     dashboard: () => {
         const stats = liveStatsOrFallback();
-        const audit = auditList().slice(0, 4);
-        const alerts = alertsList().slice(0, 2);
         const last24 = stats.last24h || {};
+        const auditSrc = liveDataSource('audit');
+        const alertSrc = liveDataSource('alert');
+        const auditItems = auditSrc.items.slice(0, 4);
+        const alertItems = alertSrc.items.slice(0, 2);
+        const wsStatus = WS_STATUS[state.wsStatus] || WS_STATUS.no_token;
+        const inGameValue = stats.online?.inGame ?? 0;
+        const inGameEmpty = inGameValue <= 0;
+        const feedHasContent = auditItems.length > 0 || alertItems.length > 0;
+        const feedIsLive = auditSrc.isLive && alertSrc.isLive;
+        const feedDemoBadge = (!auditSrc.isLive && auditSrc.items.length) || (!alertSrc.isLive && alertSrc.items.length)
+            ? `<span class="data-source-badge data-source-demo" title="Statikus minta — nincs élő WS adat"><i class="bi bi-flask"></i>Demo</span>`
+            : `<span class="data-source-badge data-source-live" title="Élő WS forrás"><i class="bi bi-broadcast"></i>Élő</span>`;
         return `
             ${h.header({
                 icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
                 subtitle: 'A projekt fő mutatói egy pillantásra',
                 actions: [
-                    { label: '<span id="wsStatusLabel">Csatlakozás...</span>', variant: 'outline-secondary', size: 'sm',
-                      attrs: 'id="wsStatusBtn" disabled', icon: 'bi-broadcast' },
+                    {
+                        label: `<span class="ws-pill-content">
+                                    <span class="ws-pill-dot ${wsStatus.dotClass}" aria-hidden="true"></span>
+                                    <span class="ws-pill-label" id="wsStatusLabel">${wsStatus.label}</span>
+                                    <span class="ws-pill-time" id="wsStatusTime">${state.liveStatsAt ? 'tick: ' + formatRelative(state.liveStatsAt) : 'nincs tick'}</span>
+                                </span>`,
+                        variant: `outline-${wsStatus.variant}`,
+                        size: 'sm',
+                        attrs: `id="wsStatusBtn" data-ws-status="${wsStatus.key}" title="WS /admin kapcsolat állapota — kattintásra újracsatlakozás" aria-label="WebSocket kapcsolat állapota: ${wsStatus.label}"`,
+                        icon: wsStatus.icon,
+                        classes: `ws-status-pill ws-status-${wsStatus.key}${wsStatus.spin ? ' ws-status-spin' : ''}`,
+                        onclick: 'reconnectAdminSocket()'
+                    },
                     { label: 'Kézi frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
-                      onclick: 'requestStatsTick()' }
+                      attrs: 'id="manualRefreshBtn"', onclick: 'requestStatsTick()' }
                 ]
             })}
 
             ${h.stats([
                 { icon: 'bi-people-fill',  value: stats.online?.totalUsers ?? 0, valueId: 'mainOnlineTotal',
                   label: 'Online felhasználó', color: 'primary',
-                  hint: `<span id="mainOnlineHint">${stats.online?.totalAdmins ?? 0} admin közöttük</span>`, hintClass: 'text-success' },
-                { icon: 'bi-king',         value: stats.online?.inGame ?? 0, valueId: 'mainInGame',
-                  label: 'Aktív játszma', color: 'success',
-                  hint: '<span class="live-indicator"><span class="live-dot"></span>Élőben most</span>', hintClass: 'text-success' },
+                  hint: `<span id="mainOnlineHint">${stats.online?.totalAdmins ?? 0} admin · ${stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0} aktív tab</span>`,
+                  hintClass: 'text-success', interactive: 'users', cardId: 'mainOnlineCard' },
+                { icon: 'bi-trophy-fill',  value: inGameValue, valueId: 'mainInGame',
+                  label: 'Aktív játszma', color: inGameEmpty ? 'secondary' : 'success',
+                  hint: inGameEmpty
+                        ? '<span class="text-muted"><i class="bi bi-pause-circle me-1"></i>Nincs élő játszma</span>'
+                        : '<span class="live-indicator text-success"><span class="live-dot"></span>Élőben most</span>',
+                  hintClass: inGameEmpty ? 'text-muted' : 'text-success',
+                  interactive: inGameEmpty ? null : 'liveGames',
+                  cardId: 'mainInGameCard',
+                  emblem: 'chess', empty: inGameEmpty },
                 { icon: 'bi-journal-check',value: last24.auditEntries ?? 0, valueId: 'mainAuditCount',
                   label: '24h audit bejegyzés', color: 'warning',
-                  hint: `<span id="mainAuditCriticalHint">${last24.criticalAuditEntries ?? 0} kritikus művelet</span>`, hintClass: 'text-warning' },
+                  hint: `<span id="mainAuditCriticalHint">${last24.criticalAuditEntries ?? 0} kritikus művelet</span>`,
+                  hintClass: 'text-warning', interactive: 'auditLog', cardId: 'mainAuditCard' },
                 { icon: 'bi-exclamation-octagon-fill', value: last24.alerts ?? 0, valueId: 'mainAlertCount',
                   label: '24h riasztás', color: 'danger',
-                  hint: `<span id="mainNewBansHint">${last24.newBans ?? 0} új tiltás</span>`, hintClass: 'text-danger' }
+                  hint: `<span id="mainNewBansHint">${last24.newBans ?? 0} új tiltás</span>`,
+                  hintClass: 'text-danger', interactive: 'alerts', cardId: 'mainAlertCard' }
             ])}
 
-            <div class="tick-band mb-4">
+            <div class="tick-band mb-4" id="tickBand" data-ws-status="${wsStatus.key}">
                 <div class="tick-band-header">
-                    <span class="live-indicator text-success"><span class="live-dot"></span>Élő tick</span>
-                    <span class="tick-band-time">Frissítve: <span id="tickBandTime">—</span></span>
+                    <span class="live-indicator ${state.adminSocketConnected ? 'text-success' : 'text-muted'}" id="tickBandIndicator">
+                        <span class="live-dot"></span>Élő tick
+                    </span>
+                    <span class="tick-band-time">Frissítve: <span id="tickBandTime">${state.liveStatsAt ? formatRelative(state.liveStatsAt) : '—'}</span></span>
                 </div>
                 <div class="tick-band-body">
                     ${h.tickChip({ icon: 'bi-wifi',          label: 'Online',         valueId: 'tickOnline',         value: stats.online?.totalUsers ?? 0,    color: 'success' })}
+                    ${h.tickChip({ icon: 'bi-window-stack',  label: 'Aktív tabok',    valueId: 'tickActiveTabs',     value: stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0, color: 'primary' })}
                     ${h.tickChip({ icon: 'bi-shield-fill',   label: 'Adminok',        valueId: 'tickAdmins',         value: stats.online?.totalAdmins ?? 0,   color: 'gold' })}
-                    ${h.tickChip({ icon: 'bi-controller',    label: 'Játékban',       valueId: 'tickInGame',         value: stats.online?.inGame ?? 0,        color: 'primary' })}
+                    ${h.tickChip({ icon: 'bi-trophy-fill',   label: 'Játékban',       valueId: 'tickInGame',         value: stats.online?.inGame ?? 0,        color: inGameEmpty ? 'secondary' : 'success' })}
                     ${h.tickChip({ icon: 'bi-search',        label: 'Matchmakingben', valueId: 'tickMatchmaking',    value: stats.online?.inMatchmaking ?? 0, color: 'primary' })}
                     ${h.tickChip({ icon: 'bi-image',         label: 'Pending kép',    valueId: 'tickPendingImages',  value: stats.pending?.profileImages ?? 0, color: 'warning' })}
                     ${h.tickChip({ icon: 'bi-person-plus',   label: 'Pending barát',  valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary' })}
@@ -499,22 +632,39 @@ const SECTIONS = {
             <div class="row g-4">
                 <div class="col-xl-7">
                     ${h.card({
-                        title: 'Aktivitás (utolsó 24 óra)', icon: 'bi-activity',
-                        headerExtra: h.btn({ label: 'Riport', size: 'sm' }),
+                        title: 'Aktivitás — utolsó 24 óra',
+                        icon: 'bi-activity',
+                        headerExtra: `<span class="card-subtle-hint">Összesített trend (5 perces bin)</span>` +
+                                     h.btn({ label: 'Riport', size: 'sm', attrs: 'disabled title="Hamarosan elérhető"', classes: 'btn-soon' }),
                         body: '<div style="position:relative;height:300px;"><canvas id="activityChart"></canvas></div>',
-                        classes: 'h-100'
+                        classes: 'h-100 dashboard-equal-card'
                     })}
                 </div>
                 <div class="col-xl-5">
-                    <div class="content-card h-100 live-feed-card">
+                    <div class="content-card h-100 live-feed-card dashboard-equal-card">
                         <div class="card-header">
-                            <h5 class="card-title"><i class="bi bi-broadcast me-2 text-gold"></i>Élő admin tevékenység</h5>
-                            <span class="live-indicator text-success small" id="wsStatusBadge"><span class="live-dot"></span>WS /admin</span>
+                            <h5 class="card-title">
+                                <i class="bi bi-broadcast me-2 text-gold"></i>Élő admin tevékenység
+                                <span class="card-subtle-hint d-block">Élő események — utolsó 25 db</span>
+                            </h5>
+                            <span class="ws-feed-badge ws-feed-${wsStatus.key}" id="wsStatusBadge" title="${wsStatus.label}">
+                                <span class="ws-pill-dot ${wsStatus.dotClass}" aria-hidden="true"></span>
+                                <span id="wsStatusBadgeLabel">${wsStatus.short}</span>
+                            </span>
                         </div>
                         <div class="card-body p-0">
-                            <ul class="live-feed-list" id="dashboardLiveFeed">
-                                ${audit.map(a => liveFeedRow('audit', a)).join('')}
-                                ${alerts.map(a => liveFeedRow('alert', a)).join('')}
+                            <div class="live-feed-meta">
+                                ${feedDemoBadge}
+                                <span class="live-feed-meta-count" id="liveFeedCount">${feedHasContent ? auditItems.length + alertItems.length : 0} esemény</span>
+                            </div>
+                            <ul class="live-feed-list ${!feedIsLive && feedHasContent ? 'live-feed-demo' : ''}" id="dashboardLiveFeed" data-feed-state="${feedHasContent ? (feedIsLive ? 'live' : 'demo') : (state.adminSocketConnected ? 'live-empty' : 'offline-empty')}">
+                                ${feedHasContent
+                                    ? auditItems.map(a => liveFeedRow('audit', a)).join('') + alertItems.map(a => liveFeedRow('alert', a)).join('')
+                                    : `<li class="live-feed-empty">
+                                          <i class="bi ${state.adminSocketConnected ? 'bi-inbox' : 'bi-plug'}"></i>
+                                          <div class="live-feed-empty-title">${state.adminSocketConnected ? 'Még nem érkezett esemény' : 'Nincs élő WS kapcsolat'}</div>
+                                          <div class="live-feed-empty-sub">${state.adminSocketConnected ? 'Az új audit/alert sorok automatikusan ide kerülnek.' : 'A demo adatok elrejtve — csatlakozz az élő nézethez.'}</div>
+                                      </li>`}
                             </ul>
                         </div>
                     </div>
@@ -523,19 +673,19 @@ const SECTIONS = {
 
             <div class="row g-3 mt-2">
                 ${[
-                    { id: 'mini24Logins',         icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés',    value: last24.logins ?? 0,          color: 'primary' },
-                    { id: 'mini24Registrations',  icon: 'bi-person-plus-fill',   label: '24h regisztráció',     value: last24.registrations ?? 0,   color: 'success' },
-                    { id: 'mini24Audit',          icon: 'bi-journal-text',       label: '24h audit',            value: last24.auditEntries ?? 0,    color: 'warning' },
-                    { id: 'mini24Critical',       icon: 'bi-exclamation-octagon',label: '24h kritikus',         value: last24.criticalAuditEntries ?? 0, color: 'danger' },
-                    { id: 'mini24Alerts',         icon: 'bi-shield-fill-x',      label: '24h riasztás',         value: last24.alerts ?? 0,          color: 'warning' },
-                    { id: 'mini24Bans',           icon: 'bi-ban',                label: '24h új tiltás',        value: last24.newBans ?? 0,         color: 'danger' }
+                    { id: 'mini24Logins',         icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés',    value: last24.logins ?? 0,          color: 'primary',  nav: 'auditLog' },
+                    { id: 'mini24Registrations',  icon: 'bi-person-plus-fill',   label: '24h regisztráció',     value: last24.registrations ?? 0,   color: 'success',  nav: 'users' },
+                    { id: 'mini24Audit',          icon: 'bi-journal-text',       label: '24h audit',            value: last24.auditEntries ?? 0,    color: 'warning',  nav: 'auditLog' },
+                    { id: 'mini24Critical',       icon: 'bi-exclamation-octagon',label: '24h kritikus',         value: last24.criticalAuditEntries ?? 0, color: 'danger', nav: 'auditLog' },
+                    { id: 'mini24Alerts',         icon: 'bi-shield-fill-x',      label: '24h riasztás',         value: last24.alerts ?? 0,          color: 'warning',  nav: 'alerts' },
+                    { id: 'mini24Bans',           icon: 'bi-ban',                label: '24h új tiltás',        value: last24.newBans ?? 0,         color: 'danger',   nav: 'users' }
                 ].map(item => `
                     <div class="col-6 col-md-4 col-xl-2">
-                        <div class="mini-stat">
+                        <button type="button" class="mini-stat mini-stat-clickable" onclick="showSection('${item.nav}', event)" aria-label="${item.label} — ugrás a ${item.nav} szekcióra">
                             <i class="bi ${item.icon} text-${item.color}"></i>
                             <div class="mini-stat-value" id="${item.id}">${item.value}</div>
                             <div class="mini-stat-label">${item.label}</div>
-                        </div>
+                        </button>
                     </div>
                 `).join('')}
             </div>
@@ -1367,7 +1517,11 @@ function showSection(sectionId, event, options = {}) {
     if (sectionId === 'dashboard') {
         initChart();
         applyWsStatusToDashboard();
-        if (state.liveStatsAt) setText('tickBandTime', formatHM(state.liveStatsAt));
+        startWsRelativeTicker();
+        if (state.liveStatsAt) {
+            setText('tickBandTime', formatRelative(state.liveStatsAt));
+            rescheduleStaleWatchdog();
+        }
     }
     if (sectionId === 'profileImageReview') {
         window.MattMesterAdminProfileImages?.refresh?.();
@@ -1665,13 +1819,17 @@ function connectAdminSocket() {
     try {
         if (typeof window.io !== 'function') {
             console.warn('Socket.IO kliens nem érhető el — admin WS skip.');
+            setWsStatus('disconnected');
         } else if (!state.adminToken) {
             console.warn('Admin token nélkül nem indítható socket kapcsolat.');
+            setWsStatus('no_token');
         } else {
             if (state.adminSocket) {
                 try { state.adminSocket.disconnect(); } catch (_) {}
                 state.adminSocket = null;
             }
+
+            setWsStatus('connecting');
 
             const sock = window.io('/admin', {
                 auth: { adminToken: state.adminToken },
@@ -1681,19 +1839,19 @@ function connectAdminSocket() {
 
             sock.on('connect', () => {
                 state.adminSocketConnected = true;
-                applyWsStatusToDashboard();
+                setWsStatus('connected');
                 try { sock.emit('admin:presence:hello'); } catch (_) {}
             });
 
             sock.on('disconnect', () => {
                 state.adminSocketConnected = false;
-                applyWsStatusToDashboard();
+                setWsStatus(state.adminToken ? 'disconnected' : 'no_token');
             });
 
             sock.on('connect_error', (err) => {
                 console.warn('admin socket connect_error:', err?.message || err);
                 state.adminSocketConnected = false;
-                applyWsStatusToDashboard();
+                setWsStatus(state.adminToken ? 'disconnected' : 'no_token');
             });
 
             sock.on('admin:presence:welcome', (payload = {}) => {
@@ -1762,76 +1920,259 @@ function onLiveAlertUpdate(alert) {
 }
 
 function applyDashboardLiveStats() {
-    const stats = liveStatsOrFallback();
-    const last24 = stats.last24h || {};
+    try {
+        const stats = liveStatsOrFallback();
+        const last24 = stats.last24h || {};
+        const inGameValue = stats.online?.inGame ?? 0;
 
-    setText('tickOnline',         stats.online?.totalUsers     ?? 0);
-    setText('tickAdmins',         stats.online?.totalAdmins    ?? 0);
-    setText('tickInGame',         stats.online?.inGame         ?? 0);
-    setText('tickMatchmaking',    stats.online?.inMatchmaking  ?? 0);
-    setText('tickPendingImages',  stats.pending?.profileImages ?? 0);
-    setText('tickPendingFriends', stats.pending?.friendRequests ?? 0);
-    setText('tickRateEsc',        stats.rateLimit?.activeEscalations ?? 0);
+        setTextWithFlash('tickOnline',         stats.online?.totalUsers     ?? 0);
+        setTextWithFlash('tickActiveTabs',     stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0);
+        setTextWithFlash('tickAdmins',         stats.online?.totalAdmins    ?? 0);
+        setTextWithFlash('tickInGame',         inGameValue);
+        setTextWithFlash('tickMatchmaking',    stats.online?.inMatchmaking  ?? 0);
+        setTextWithFlash('tickPendingImages',  stats.pending?.profileImages ?? 0);
+        setTextWithFlash('tickPendingFriends', stats.pending?.friendRequests ?? 0);
+        setTextWithFlash('tickRateEsc',        stats.rateLimit?.activeEscalations ?? 0);
 
-    setText('mainOnlineTotal',  stats.online?.totalUsers ?? 0);
-    setText('mainInGame',       stats.online?.inGame ?? 0);
-    setText('mainAuditCount',   last24.auditEntries ?? 0);
-    setText('mainAlertCount',   last24.alerts ?? 0);
+        setTextWithFlash('mainOnlineTotal',  stats.online?.totalUsers ?? 0);
+        setTextWithFlash('mainInGame',       inGameValue);
+        setTextWithFlash('mainAuditCount',   last24.auditEntries ?? 0);
+        setTextWithFlash('mainAlertCount',   last24.alerts ?? 0);
 
-    const onlineHint = document.getElementById('mainOnlineHint');
-    if (onlineHint) onlineHint.textContent = `${stats.online?.totalAdmins ?? 0} admin közöttük`;
-    const critHint = document.getElementById('mainAuditCriticalHint');
-    if (critHint) critHint.textContent = `${last24.criticalAuditEntries ?? 0} kritikus művelet`;
-    const bansHint = document.getElementById('mainNewBansHint');
-    if (bansHint) bansHint.textContent = `${last24.newBans ?? 0} új tiltás`;
+        const onlineHint = document.getElementById('mainOnlineHint');
+        if (onlineHint) {
+            onlineHint.textContent = `${stats.online?.totalAdmins ?? 0} admin · ${stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0} aktív tab`;
+        }
+        const critHint = document.getElementById('mainAuditCriticalHint');
+        if (critHint) critHint.textContent = `${last24.criticalAuditEntries ?? 0} kritikus művelet`;
+        const bansHint = document.getElementById('mainNewBansHint');
+        if (bansHint) bansHint.textContent = `${last24.newBans ?? 0} új tiltás`;
 
-    setText('mini24Logins',        last24.logins ?? 0);
-    setText('mini24Registrations', last24.registrations ?? 0);
-    setText('mini24Audit',         last24.auditEntries ?? 0);
-    setText('mini24Critical',      last24.criticalAuditEntries ?? 0);
-    setText('mini24Alerts',        last24.alerts ?? 0);
-    setText('mini24Bans',          last24.newBans ?? 0);
+        // Aktiv jatszma kartya allapot frissites (ures vs eles)
+        const inGameCard = document.getElementById('mainInGameCard');
+        if (inGameCard) {
+            inGameCard.classList.toggle('stat-card-empty', inGameValue <= 0);
+        }
 
-    if (state.liveStatsAt) setText('tickBandTime', formatHM(state.liveStatsAt));
+        setTextWithFlash('mini24Logins',        last24.logins ?? 0);
+        setTextWithFlash('mini24Registrations', last24.registrations ?? 0);
+        setTextWithFlash('mini24Audit',         last24.auditEntries ?? 0);
+        setTextWithFlash('mini24Critical',      last24.criticalAuditEntries ?? 0);
+        setTextWithFlash('mini24Alerts',        last24.alerts ?? 0);
+        setTextWithFlash('mini24Bans',          last24.newBans ?? 0);
+
+        // Tick band relatv ido + flash
+        const tickBand = document.getElementById('tickBand');
+        if (tickBand) {
+            tickBand.classList.add('tick-band-flash');
+            setTimeout(() => tickBand.classList.remove('tick-band-flash'), 600);
+        }
+        setText('tickBandTime', state.liveStatsAt ? formatRelative(state.liveStatsAt) : '—');
+
+        // Stale watchdog ujrainditasa
+        rescheduleStaleWatchdog();
+    } catch (err) {
+        console.error('applyDashboardLiveStats hiba:', err);
+    }
 }
 
 function prependLiveFeedRow(html) {
-    const feed = document.getElementById('dashboardLiveFeed');
-    if (!feed) return;
-    feed.insertAdjacentHTML('afterbegin', html);
-    while (feed.children.length > 25) feed.lastElementChild.remove();
-    // Új sor villanó kiemelése
-    const newRow = feed.firstElementChild;
-    if (newRow) {
-        newRow.classList.add('live-feed-flash');
-        setTimeout(() => newRow.classList.remove('live-feed-flash'), 1200);
+    try {
+        const feed = document.getElementById('dashboardLiveFeed');
+        if (feed) {
+            // Ha eppen az "ures allapot" sor van benne, toroljuk
+            const empty = feed.querySelector('.live-feed-empty');
+            if (empty) empty.remove();
+            // Ha demo modban voltunk, valts elesre
+            feed.classList.remove('live-feed-demo');
+            feed.dataset.feedState = 'live';
+
+            feed.insertAdjacentHTML('afterbegin', html);
+            while (feed.children.length > 25) feed.lastElementChild.remove();
+            const newRow = feed.firstElementChild;
+            if (newRow) {
+                newRow.classList.add('live-feed-flash');
+                setTimeout(() => newRow.classList.remove('live-feed-flash'), 1200);
+            }
+            const counter = document.getElementById('liveFeedCount');
+            if (counter) counter.textContent = `${feed.querySelectorAll('.live-feed-row').length} esemény`;
+            // Demo badge -> Live badge
+            const meta = feed.parentElement?.querySelector('.live-feed-meta');
+            const badge = meta?.querySelector('.data-source-badge');
+            if (badge) {
+                badge.classList.remove('data-source-demo');
+                badge.classList.add('data-source-live');
+                badge.title = 'Élő WS forrás';
+                badge.innerHTML = '<i class="bi bi-broadcast"></i>Élő';
+            }
+        }
+    } catch (err) {
+        console.warn('prependLiveFeedRow hiba:', err);
+    }
+}
+
+// =============================================================
+// WS allapot - egy forras-igazsag setter, minden DOM-update innen
+// =============================================================
+function setWsStatus(nextKey) {
+    try {
+        const next = WS_STATUS[nextKey] ? nextKey : 'disconnected';
+        state.wsStatus = next;
+        applyWsStatusToDashboard();
+    } catch (err) {
+        console.error('setWsStatus hiba:', err);
     }
 }
 
 function applyWsStatusToDashboard() {
-    const badge = document.getElementById('wsStatusBadge');
-    const btn = document.getElementById('wsStatusBtn');
-    const label = document.getElementById('wsStatusLabel');
-    const connected = state.adminSocketConnected;
-    if (badge) {
-        badge.classList.remove('text-success', 'text-danger', 'text-warning');
-        badge.classList.add(connected ? 'text-success' : 'text-warning');
-        badge.innerHTML = `<span class="live-dot"></span>WS /admin ${connected ? 'élő' : 'offline'}`;
+    try {
+        const status = WS_STATUS[state.wsStatus] || WS_STATUS.disconnected;
+        const btn = document.getElementById('wsStatusBtn');
+        const labelEl = document.getElementById('wsStatusLabel');
+        const timeEl = document.getElementById('wsStatusTime');
+        const badge = document.getElementById('wsStatusBadge');
+        const badgeLabel = document.getElementById('wsStatusBadgeLabel');
+        const tickBand = document.getElementById('tickBand');
+        const tickIndicator = document.getElementById('tickBandIndicator');
+
+        if (btn) {
+            // outline-* variansok cserje
+            WS_STATUS_VARIANTS.forEach((v) => btn.classList.remove(`btn-outline-${v}`));
+            btn.classList.add(`btn-outline-${status.variant}`);
+            // status data-attribute (CSS hooks)
+            btn.dataset.wsStatus = status.key;
+            // spin osztaly
+            btn.classList.toggle('ws-status-spin', Boolean(status.spin));
+            // pill state classes
+            ['no_token', 'connecting', 'connected', 'disconnected'].forEach((k) => btn.classList.remove(`ws-status-${k}`));
+            btn.classList.add(`ws-status-${status.key}`);
+            // disabled state ha nincs token (nincs mit reconnectalni)
+            btn.disabled = status.key === 'no_token';
+            btn.title = status.label;
+            // ikon szinkronizalas
+            const icon = btn.querySelector('i.bi');
+            if (icon) {
+                ['bi-broadcast-pin', 'bi-arrow-repeat', 'bi-plug', 'bi-shield-slash', 'bi-broadcast'].forEach((c) => icon.classList.remove(c));
+                icon.classList.add(status.icon);
+            }
+        }
+        if (labelEl) labelEl.textContent = status.label;
+        if (timeEl)  timeEl.textContent = state.liveStatsAt ? `tick: ${formatRelative(state.liveStatsAt)}` : 'nincs tick';
+
+        if (badge) {
+            ['no_token', 'connecting', 'connected', 'disconnected'].forEach((k) => badge.classList.remove(`ws-feed-${k}`));
+            badge.classList.add(`ws-feed-${status.key}`);
+            badge.title = status.label;
+            // dot osztaly cserje
+            const dot = badge.querySelector('.ws-pill-dot');
+            if (dot) {
+                ['ws-dot-idle', 'ws-dot-connecting', 'ws-dot-live', 'ws-dot-down'].forEach((c) => dot.classList.remove(c));
+                dot.classList.add(status.dotClass);
+            }
+        }
+        if (badgeLabel) badgeLabel.textContent = status.short;
+
+        if (tickBand) {
+            tickBand.dataset.wsStatus = status.key;
+        }
+        if (tickIndicator) {
+            tickIndicator.classList.toggle('text-success', status.key === 'connected');
+            tickIndicator.classList.toggle('text-muted',   status.key !== 'connected');
+        }
+
+        // Manualis frissites gomb disabled-e ha nincs WS
+        const refreshBtn = document.getElementById('manualRefreshBtn');
+        if (refreshBtn && !state.manualRefreshLockUntil) {
+            refreshBtn.disabled = status.key !== 'connected';
+        }
+    } catch (err) {
+        console.error('applyWsStatusToDashboard hiba:', err);
     }
-    if (btn) {
-        btn.classList.remove('btn-outline-success', 'btn-outline-warning', 'btn-outline-secondary');
-        btn.classList.add(connected ? 'btn-outline-success' : 'btn-outline-warning');
+}
+
+function rescheduleStaleWatchdog() {
+    try {
+        if (state.wsStaleTimerId) {
+            clearTimeout(state.wsStaleTimerId);
+            state.wsStaleTimerId = null;
+        }
+        state.wsStale = false;
+        const tickBand = document.getElementById('tickBand');
+        if (tickBand) tickBand.classList.remove('tick-band-stale');
+        state.wsStaleTimerId = setTimeout(() => {
+            state.wsStale = true;
+            const band = document.getElementById('tickBand');
+            if (band) band.classList.add('tick-band-stale');
+            const timeEl = document.getElementById('wsStatusTime');
+            if (timeEl && state.liveStatsAt) timeEl.textContent = `⚠ elavult (${formatRelative(state.liveStatsAt)})`;
+        }, 15000);
+    } catch (err) {
+        console.warn('rescheduleStaleWatchdog hiba:', err);
     }
-    if (label) {
-        label.textContent = connected ? 'Élő (WS /admin)' : (state.adminToken ? 'Csatlakozás...' : 'Nincs token');
+}
+
+// Periodikus relativ ido frissites a fejlec pill-en es a tick-band-en (1 mp)
+let __wsRelativeIntervalId = null;
+function startWsRelativeTicker() {
+    try {
+        if (__wsRelativeIntervalId) clearInterval(__wsRelativeIntervalId);
+        __wsRelativeIntervalId = setInterval(() => {
+            const timeEl = document.getElementById('wsStatusTime');
+            if (timeEl && state.liveStatsAt && !state.wsStale) {
+                timeEl.textContent = `tick: ${formatRelative(state.liveStatsAt)}`;
+            }
+            const tickTime = document.getElementById('tickBandTime');
+            if (tickTime && state.liveStatsAt) {
+                tickTime.textContent = formatRelative(state.liveStatsAt);
+            }
+        }, 1000);
+    } catch (err) {
+        console.warn('startWsRelativeTicker hiba:', err);
+    }
+}
+
+function reconnectAdminSocket() {
+    try {
+        if (!state.adminToken) {
+            showToast('Nincs admin token — kérlek aktiváld újra.', 'warning', 'bi-shield-slash');
+        } else {
+            setWsStatus('connecting');
+            connectAdminSocket();
+            showToast('Újracsatlakozás folyamatban…', 'info', 'bi-arrow-repeat');
+        }
+    } catch (err) {
+        console.error('reconnectAdminSocket hiba:', err);
     }
 }
 
 function requestStatsTick() {
     try {
-        showToast('A statisztika-gyűjtés még nincs bekötve ebben a shellben.', 'info', 'bi-broadcast');
+        const sock = state.adminSocket;
+        const refreshBtn = document.getElementById('manualRefreshBtn');
+        if (!sock || !state.adminSocketConnected) {
+            showToast('Nincs élő WS kapcsolat — a tick frissítés nem küldhető.', 'warning', 'bi-exclamation-triangle');
+        } else if (Date.now() < state.manualRefreshLockUntil) {
+            showToast('Túl gyors — várj egy pillanatot.', 'info', 'bi-hourglass-split');
+        } else {
+            sock.emit('admin:stats:request');
+            // Loading state: 2 mp-ig disabled + spin ikon
+            state.manualRefreshLockUntil = Date.now() + 2000;
+            if (refreshBtn) {
+                refreshBtn.disabled = true;
+                refreshBtn.classList.add('btn-loading');
+                const icon = refreshBtn.querySelector('i.bi');
+                if (icon) icon.classList.add('spin');
+                setTimeout(() => {
+                    refreshBtn.disabled = state.wsStatus !== 'connected';
+                    refreshBtn.classList.remove('btn-loading');
+                    if (icon) icon.classList.remove('spin');
+                    state.manualRefreshLockUntil = 0;
+                }, 2000);
+            }
+        }
     } catch (error) {
         console.error('requestStatsTick hiba:', error);
+        showToast('Tick frissítés hiba: ' + (error?.message || 'ismeretlen'), 'danger', 'bi-x-circle');
     }
 }
 

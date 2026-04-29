@@ -619,37 +619,17 @@ router.get(
         let statusCode = 200;
         let payload = { success: false, data: null, message: 'Belso hiba a stats snapshot soran.' };
         try {
+            // Egy forras-igazsag: ugyanaz a payload, amit az admin:stats:tick kuld.
+            const statsTickService = require('../admin/statsTickService.js');
             const socketHub = request.app?.locals?.socketHub;
-            const presence = socketHub?.getPresenceSnapshot ? socketHub.getPresenceSnapshot() : null;
-
-            const last24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const auditCountTotal = await adminRepo.searchAuditEntries({
-                fromDate: last24h, limit: 500
-            });
-            const criticalCount = auditCountTotal.filter((row) => row.severity === 'critical').length;
-            const alertCount = await adminRepo.countAlertsSince(last24h);
-            const escalationCount = await adminRepo.countActiveRateEscalations();
-
-            payload = {
-                success: true,
-                data: {
-                    occurredAt: new Date().toISOString(),
-                    online: {
-                        totalUsers: presence?.onlineUsers || 0,
-                        totalSockets: presence?.onlineSockets || 0,
-                        totalTabs: presence?.onlineTabs || 0
-                    },
-                    last24h: {
-                        auditEntries: auditCountTotal.length,
-                        criticalAuditEntries: criticalCount,
-                        alerts: alertCount
-                    },
-                    rateLimit: {
-                        activeEscalations: escalationCount
-                    }
-                }
-            };
-            response.locals.adminAudit.skip = true;
+            const tick = await statsTickService.computeTickPayload(socketHub);
+            if (tick) {
+                payload = { success: true, data: tick };
+                response.locals.adminAudit.skip = true;
+            } else {
+                statusCode = 500;
+                payload = { success: false, data: null, message: 'Stats tick nem szamithato.' };
+            }
         } catch (error) {
             console.error('admin/stats/snapshot hiba:', error.message);
             statusCode = 500;
