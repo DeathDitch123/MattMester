@@ -532,13 +532,11 @@ function lepesFormaz(lepes, szin) {
 // használ képességeket időnként. swap és board_hide nincs benne (túl absztrakt döntés).
 
 const { mezoTamadva } = require('./logika.js');
+const { ABILITY_CONFIG } = require('./abilities.js');
 
 function botKepessegValaszt(jatek, nehezseg) {
     if (!jatek.abilities) return null;
     if (!jatek.botSzin) return null;
-
-    // Late require — elkerüli a cirkuláris importot az abilities.js-szel
-    const { ABILITY_CONFIG } = require('./abilities.js');
 
     const botSzin = jatek.botSzin;
     const ellenSzin = (botSzin === 'white') ? 'black' : 'white';

@@ -405,13 +405,12 @@ function kuldRequest(key, params) {
                 hintMutat(data.error || 'Sikertelen aktiválás.');
                 return;
             }
-            // Bot meccsen a REST a teljes új allapot-ot küldi vissza
-            if (data.allapot) {
+            // A REST a teljes új allapot-ot küldi vissza — átadjuk a main.js-nek
+            // hogy a tábla, óra, ability bar mind frissüljön egy ponton.
+            if (data.allapot && typeof ctxKeret.onAllapotValtozas === 'function') {
+                ctxKeret.onAllapotValtozas(data.allapot);
+            } else if (data.allapot) {
                 abilitiesAllapotFrissit(data.allapot);
-                // A main.js-nek is kell tudnia hogy a state változott (board újrarajzolás)
-                if (typeof window.__abilityAllapotCallback === 'function') {
-                    window.__abilityAllapotCallback(data.allapot);
-                }
             }
         })
         .catch(err => {

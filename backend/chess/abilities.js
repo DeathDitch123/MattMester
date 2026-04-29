@@ -14,6 +14,8 @@
 // ============================================================
 
 const { mezoKeres } = require('./state.js');
+const { mezoTamadva } = require('./logika.js');
+const { idoFut } = require('./timer.js');
 
 // ── KÉPESSÉG KONFIG ──
 //   ar:           pontköltség
@@ -122,7 +124,6 @@ function abilityAktival(jatek, szin, key, params) {
         cooldownTickAndCleanup(jatek, szin, ujSzin);
         jatek.koronLevo = ujSzin;
         jatek.lepesszam++;
-        const { idoFut } = require('./timer.js');
         idoFut(jatek, jatek.koronLevo);
     }
 
@@ -139,40 +140,56 @@ function applyTimePause(jatek, szin) {
     return { success: true };
 }
 
-function applyFreeze(jatek, szin, params) {
+// Közös célmező-validátor freeze-hez és shield-hez.
+// `tulajdonos` = 'sajat' (shield) vagy 'ellen' (freeze).
+// Visszaad { success: true, mezo } vagy { success: false, error }.
+function celMezoValidate(jatek, szin, params, tulajdonos) {
     if (!params || params.x == null || params.y == null) {
         return { success: false, error: 'Hiányzó célmező.' };
     }
     const mezo = mezoKeres(jatek, params.x, params.y);
-    if (!mezo)         return { success: false, error: 'Érvénytelen mező.' };
-    if (!mezo.piece)   return { success: false, error: 'Üres mező.' };
-    if (mezo.piece.color === szin) {
+    if (!mezo)        return { success: false, error: 'Érvénytelen mező.' };
+    if (!mezo.piece)  return { success: false, error: 'Üres mező.' };
+
+    const sajat = mezo.piece.color === szin;
+    if (tulajdonos === 'sajat' && !sajat) {
+        return { success: false, error: 'Csak saját bábura tehetsz pajzsot.' };
+    }
+    if (tulajdonos === 'ellen' && sajat) {
         return { success: false, error: 'Csak ellenséges bábu jegelhető.' };
     }
+    return { success: true, mezo };
+}
+
+function applyFreeze(jatek, szin, params) {
+    const v = celMezoValidate(jatek, szin, params, 'ellen');
+    if (!v.success) return v;
+    const mezo = v.mezo;
+
     // Király nem jegelhető (különben matt nem lenne kivédhető).
     if (mezo.piece.type === 'king') {
         return { success: false, error: 'Király nem jegelhető.' };
     }
 
-    // Egy mezőn csak egy fagyasztás lehet egyszerre — ha már ott van, hibajelzés.
-    const existing = jatek.abilities.effects.frozenPieces.find(f => f.x === mezo.x && f.y === mezo.y);
-    if (existing) return { success: false, error: 'Ez a bábu már jegelve van.' };
+    // Egy mezőn csak egy fagyasztás lehet egyszerre.
+    if (jatek.abilities.effects.frozenPieces.some(f => f.x === mezo.x && f.y === mezo.y)) {
+        return { success: false, error: 'Ez a bábu már jegelve van.' };
+    }
 
-    // A fagyasztás a CÉLPONT színének következő körének VÉGÉIG tart, vagyis
-    // amikor a célpont szín legközelebb lép, az a lépés már nem indítható ezzel
-    // a bábuval — utána lejár.
+    // A fagyasztás a CÉLPONT színének következő köréig tart — amikor a célpont
+    // szín legközelebb lép, a hatás lejár (cooldownTickAndCleanup törli).
     jatek.abilities.effects.frozenPieces.push({
         x: mezo.x,
         y: mezo.y,
         ofColor: mezo.piece.color,
-        untilMoveOf: mezo.piece.color   // amíg a célpont szín meg nem lép, addig fagyott
+        untilMoveOf: mezo.piece.color
     });
 
     return { success: true };
 }
 
 function applySwap(jatek, szin, params) {
-    if (!params || params.from == null || params.to == null) {
+    if (!params || !params.from || !params.to) {
         return { success: false, error: 'Hiányzó mezők (from, to).' };
     }
     const a = mezoKeres(jatek, params.from.x, params.from.y);
@@ -187,9 +204,18 @@ function applySwap(jatek, szin, params) {
     }
     if (a === b) return { success: false, error: 'Ugyanaz a két mező.' };
 
-    // Csere
+    // EXPLOIT FIX #2 — jegelt bábu nem cserélhető (különben a freeze megkerülhető).
+    if (isMezoFagyott(jatek, a.x, a.y) || isMezoFagyott(jatek, b.x, b.y)) {
+        return { success: false, error: 'Jegelt bábut nem cserélhetsz.' };
+    }
+
     const piA = a.piece;
     const piB = b.piece;
+    // EXPLOIT FIX #1 — eredeti hasMoved-eket eltároljuk a teljes rollback-hez.
+    const piAHadMoved = piA.hasMoved;
+    const piBHadMoved = piB.hasMoved;
+
+    // Csere
     a.piece = piB; piB.square = a;
     b.piece = piA; piA.square = b;
     // A castling jogot a bábuk elveszik (mintha mozogtak volna)
@@ -197,7 +223,6 @@ function applySwap(jatek, szin, params) {
     piB.hasMoved = true;
 
     // Self-check ellenőrzés — ha a saját király most sakkban van, visszacsinálunk.
-    const { mezoTamadva } = require('./logika.js');
     let kingSquare = null;
     for (let i = 0; i < jatek.tabla.length; i++) {
         const m = jatek.tabla[i];
@@ -207,11 +232,19 @@ function applySwap(jatek, szin, params) {
         }
     }
     if (kingSquare && mezoTamadva(jatek, kingSquare.x, kingSquare.y, ellenkezoSzin(szin))) {
-        // Visszavonás
+        // EXPLOIT FIX #1 — TELJES rollback: pozíció + hasMoved.
         a.piece = piA; piA.square = a;
         b.piece = piB; piB.square = b;
+        piA.hasMoved = piAHadMoved;
+        piB.hasMoved = piBHadMoved;
         return { success: false, error: 'A csere sakkba állítaná a saját királyodat.' };
     }
+
+    // EXPLOIT FIX #3 — shield/freeze pozíció-rekordok átkötése a két mező között.
+    // (Freeze itt csak akkor érintett, ha valamilyen okból ott van — a fenti check
+    //  már elutasítja a jegelt mezőről induló swap-et, de a defenzív kötés ártalmatlan.)
+    swapPositionRecords(jatek.abilities.effects.shieldedPieces, a, b);
+    swapPositionRecords(jatek.abilities.effects.frozenPieces,   a, b);
 
     // Utolsó lépés frissítés (animációhoz / kiemeléshez), en passant törlés
     jatek.utolsoLepes = {
@@ -226,6 +259,17 @@ function applySwap(jatek, szin, params) {
     return { success: true };
 }
 
+// Két mező közötti pozíció-rekordok cseréje (swap segéd).
+// A rekord-tömbben a `(a.x, a.y)`-en és `(b.x, b.y)`-en található elemek
+// koordinátái cserélődnek — így pl. a shield/freeze "követi" a bábut a swap után.
+function swapPositionRecords(records, a, b) {
+    if (!Array.isArray(records) || records.length === 0) return;
+    const aRec = records.find(r => r.x === a.x && r.y === a.y);
+    const bRec = records.find(r => r.x === b.x && r.y === b.y);
+    if (aRec) { aRec.x = b.x; aRec.y = b.y; }
+    if (bRec) { bRec.x = a.x; bRec.y = a.y; }
+}
+
 function applyBoardHide(jatek, szin) {
     // Ellenfél a köre kezdetétől BOARD_HIDE_MS-ig nem léphet.
     // Mivel most még a mi körünkben vagyunk, az "ellenfél köre kezdődik" pillanat
@@ -237,21 +281,17 @@ function applyBoardHide(jatek, szin) {
 }
 
 function applyShield(jatek, szin, params) {
-    if (!params || params.x == null || params.y == null) {
-        return { success: false, error: 'Hiányzó célmező.' };
-    }
-    const mezo = mezoKeres(jatek, params.x, params.y);
-    if (!mezo)            return { success: false, error: 'Érvénytelen mező.' };
-    if (!mezo.piece)      return { success: false, error: 'Üres mező.' };
-    if (mezo.piece.color !== szin) {
-        return { success: false, error: 'Csak saját bábura tehetsz pajzsot.' };
-    }
+    const v = celMezoValidate(jatek, szin, params, 'sajat');
+    if (!v.success) return v;
+    const mezo = v.mezo;
+
     if (mezo.piece.type === 'king') {
         return { success: false, error: 'Királyra nem tehető pajzs (matt különben nem lenne lehetséges).' };
     }
 
-    const existing = jatek.abilities.effects.shieldedPieces.find(s => s.x === mezo.x && s.y === mezo.y);
-    if (existing) return { success: false, error: 'Ez a bábu már védett.' };
+    if (jatek.abilities.effects.shieldedPieces.some(s => s.x === mezo.x && s.y === mezo.y)) {
+        return { success: false, error: 'Ez a bábu már védett.' };
+    }
 
     // A pajzs a védett szín következő körének VÉGÉIG tart (1 körre védi).
     jatek.abilities.effects.shieldedPieces.push({
@@ -364,17 +404,12 @@ function cooldownTickAndCleanup(jatek, lepoSzin, ujSzin) {
         return s.untilMoveOf !== lepoSzin;
     });
 
-    // 4. Pajzs követi a bábut: ha a most lépett bábu pajzsos volt, az új mezőn
-    //    is védett marad. (A tisztítás után ez már nem érdekes mert most lejárt;
-    //    de ha valamiért még él, akkor frissítenénk a koordinátákat. Itt az 1-körös
-    //    pajzs miatt általában törlés történik a tisztításban.)
-
-    // 5. Board_hide pending → ténylegesen aktiválás az ellenfél új körének elején.
+    // 4. Board_hide pending → ténylegesen aktiválás az ellenfél új körének elején.
     //    Az ujSzin kapja meg a blokkot, ha az ő blockedUntilMs-je -1 (pending).
     if (jatek.abilities.effects.blockedUntilMs[ujSzin] === -1) {
         jatek.abilities.effects.blockedUntilMs[ujSzin] = Date.now() + BOARD_HIDE_MS;
     }
-    // Lejárt board_hide törlése (csak takarítás):
+    // Lejárt board_hide törlése.
     for (const sz of ['white', 'black']) {
         const u = jatek.abilities.effects.blockedUntilMs[sz];
         if (u && u > 0 && Date.now() >= u) {

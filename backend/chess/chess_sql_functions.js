@@ -208,10 +208,13 @@ async function abilityLogMentDb(params) {
         `INSERT INTO ability_log (game_id, move_id, player_id, ability_id) VALUES (?, ?, ?, ?)`,
         [params.gameId, params.moveId || null, params.playerId, abilityId]
     );
-    // statistics.abilities_used inkrement
+    // statistics.abilities_used inkrement — UPSERT, hogy a hiányzó sor
+    // (új user akinek még nincs statistics rekordja) ne nyelje el némán.
     try {
         await pool.execute(
-            `UPDATE statistics SET abilities_used = abilities_used + 1 WHERE user_id = ?`,
+            `INSERT INTO statistics (user_id, abilities_used)
+             VALUES (?, 1)
+             ON DUPLICATE KEY UPDATE abilities_used = abilities_used + 1`,
             [params.playerId]
         );
     } catch (err) {

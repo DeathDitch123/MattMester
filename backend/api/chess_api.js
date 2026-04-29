@@ -384,13 +384,23 @@ router.post('/:id/ability', requireVerifiedEmail, async (req, res) => {
         const { key, params } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Hiányzó képesség (key).' });
 
-        // Bot meccsen a játékos színe alapból white (a chess_api.js:118 új-bot-játéknál
-        // a fehér oldalra ülteti a usert). Biztonság kedvéért a session-ből nézzük az
-        // userId-t és megkeressük a színt.
+        // A session-ből vesszük az userId-t és megkeressük a játékban a hozzá
+        // tartozó színt. Bot meccsnél: user=white, bot=black (userId=null).
+        // Hot-seat (lokális) meccsnél: mindkét oldal ugyanaz az userId →
+        // ilyenkor a koronLevo szerinti aktív színt használjuk, hogy mindkét
+        // játékos tudjon képességet aktiválni a saját körében.
         const userId = req.session?.userId || null;
+        const whiteId = jatek.jatekosok.white.userId;
+        const blackId = jatek.jatekosok.black.userId;
+
         let szin = null;
-        if (jatek.jatekosok.white.userId === userId) szin = 'white';
-        else if (jatek.jatekosok.black.userId === userId) szin = 'black';
+        if (whiteId === blackId && whiteId === userId) {
+            szin = jatek.koronLevo;             // hot-seat: aktív szín
+        } else if (whiteId === userId) {
+            szin = 'white';
+        } else if (blackId === userId) {
+            szin = 'black';
+        }
 
         if (!szin) {
             return res.status(403).json({ error: 'Nem vagy résztvevője ennek a játéknak.' });

@@ -674,6 +674,9 @@ function pvpJatekKezdet(data) {
     pvpKliensIdoIndit();
 
     // Képesség UI inicializálás
+    // PvP-ben a state.update socket eventen érkezik vissza, így nem kell
+    // onAllapotValtozas callback — a meglévő `chess:state:update` handler
+    // hívja a pvpAllapotFrissit-et, ami az ability bar-t is frissíti.
     abilitiesInit({
         getGameId: () => pvpGameId,
         getSzin:   () => sajatSzin,
@@ -851,7 +854,10 @@ async function jatekIndit(nehezseg, modal) {
             getGameId: () => gameId,
             getSzin:   () => 'white',  // bot meccsen a játékos mindig white
             isPvp:     () => false,
-            getSocket: () => null
+            getSocket: () => null,
+            // REST ability response: a teljes új allapot-ot átfuttatjuk a fő
+            // állapot-frissítőn, hogy a tábla, óra és ability bar mind szinkron legyen.
+            onAllapotValtozas: (uj) => allapotFrissit(uj)
         });
         abilitiesAllapotFrissit(allapot);
 

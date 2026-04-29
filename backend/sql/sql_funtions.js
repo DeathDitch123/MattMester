@@ -1109,14 +1109,30 @@ async function deleteUserProfileWithTransaction(userId) {
         // Ez akkor is ved, ha egy regi adatbazisban hianyosak az FK-k.
         await connection.execute('DELETE FROM user_logs WHERE user_id = ?', [userId]);
         await connection.execute('DELETE FROM profile_image_uploads WHERE user_id = ?', [userId]);
+        // Masok kepei amiket o reviewolt: SET NULL hogy a torles ne bukjon el RESTRICT-en.
+        await connection.execute(
+            'UPDATE profile_image_uploads SET reviewed_by = NULL WHERE reviewed_by = ?',
+            [userId]
+        );
         await connection.execute(
             'DELETE FROM friends WHERE user1_id = ? OR user2_id = ? OR action_user_id = ?',
             [userId, userId, userId]
         );
+        await connection.execute(
+            'DELETE FROM friend_blocks WHERE blocker_user_id = ? OR blocked_user_id = ?',
+            [userId, userId]
+        );
+
+        // Chat: a felhasznalo altal kuldott uzeneteket es a beszelgetesekben valo
+        // resztvetelt is takaritjuk. A chat_conversations tabla nem hivatkozik
+        // userre kozvetlenul, ezert nem toroljuk eros kezzel — orphan-ok kesobb is OK.
+        await connection.execute('DELETE FROM chat_messages WHERE sender_id = ?', [userId]);
+        await connection.execute('DELETE FROM chat_participants WHERE user_id = ?', [userId]);
 
         await connection.execute('UPDATE games SET winner_id = NULL WHERE winner_id = ?', [userId]);
         await connection.execute('DELETE FROM moves WHERE player_id = ?', [userId]);
         await connection.execute('DELETE FROM ability_log WHERE player_id = ?', [userId]);
+        // game_chats a games(id) ON DELETE CASCADE-en keresztul torlodik a games-szel egyutt.
         await connection.execute('DELETE FROM games WHERE white_player_id = ? OR black_player_id = ?', [userId, userId]);
         await connection.execute('DELETE FROM statistics WHERE user_id = ?', [userId]);
 

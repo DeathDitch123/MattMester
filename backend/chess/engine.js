@@ -325,6 +325,11 @@ async function lepesKoordinataval(jatek, fromX, fromY, toX, toY, atvalTipus = "q
     if (celMezo.piece && isMezoVedett(jatek, toX, toY)) {
         return { success: false, error: "A célbábu pajzs alatt — nem üthető." };
     }
+    // EXPLOIT FIX #4 — en passant esetén a captured pawn másik mezőn van; külön check.
+    if (talaltLepes.special === "enpassant" && talaltLepes.captured
+        && isMezoVedett(jatek, talaltLepes.captured.x, talaltLepes.captured.y)) {
+        return { success: false, error: "A célbábu pajzs alatt — nem üthető (en passant)." };
+    }
 
     // Átváltozás: gyalog az utolsó sorba lép
     if (babu.type === "pawn") {
