@@ -130,35 +130,33 @@ const dbConfig = {
 
 ## Környezeti változók (.env)
 
-A `backend/.env` fájl opcionális — ha hiányzik, a backend észszerű alapértelmezésekkel indul (csak az email küldés vált fallback "json-dev" módba). Példa tartalom:
+A repo gyökerében található [.env.example](.env.example) sablont másold át `.env` néven (akár a repo gyökerébe, akár `backend/` alá — a backend mindkét helyet betölti, a `backend/.env` előbbre van rangsorolva). A fejlesztői környezet észszerű alapértelmezésekkel indul akkor is, ha hiányzik (`SESSION_SECRET` esetén dev-ben warning + véletlen érték; production-ben azonnali fail).
 
-```env
-# CORS — vesszővel elválasztott origin-lista
-ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+| Változó | Kötelező? | Default | Megjegyzés |
+|---|---|---|---|
+| `NODE_ENV` | nem | `development` | `production` esetén `cookie.secure=true`, `sameSite=strict` és kötelező `SESSION_SECRET`. |
+| `SESSION_SECRET` | **production-ben igen** | dev-ben véletlen érték (warning) | Production-ben hiánya azonnali kilépést okoz. |
+| `ALLOWED_ORIGINS` | nem | `http://localhost:3000` | Vesszővel elválasztott CORS origin lista. |
+| `DB_HOST` | nem | `127.0.0.1` | MySQL host. |
+| `DB_PORT` | nem | `3306` | MySQL port. |
+| `DB_USER` | nem | `root` | MySQL user. |
+| `DB_PASSWORD` | nem | (üres) | MySQL jelszó. |
+| `DB_NAME` | nem | `mattmester` | MySQL DB név (létrehozás auto). |
+| `DEBUG` | nem | (üres) | Debug-szintű log kapcsoló (lásd issues.md #55). |
+| `CHAT_BLACKLIST_POLICY` | nem | `hard_block` | `soft_warn` \| `hard_block`. |
+| `SMTP_*` | nem | fallback `json-dev` mód | Üresen hagyva a levelek a logba kerülnek. |
+| `PUBLIC_BASE_URL` | csak SMTP-hez | `http://127.0.0.1:3000` | Verifikációs / reset link base URL-je. |
 
-# Session secret — production-ben kötelező legyen erős érték
-SESSION_SECRET=cseréld-le-egy-erős-random-stringre
+> **Koherencia**: minden változó pontosan ezen a néven szerepel a kódban és a [.env.example](.env.example) fájlban is. Új változót hozzáadáskor mindkét helyen frissíteni kell.
 
-# Chat moderáció: 'soft_warn' | 'hard_block'
-CHAT_BLACKLIST_POLICY=hard_block
+### `trust proxy: 1` használata
 
-# SMTP — email verifikációhoz / jelszó-visszaállításhoz
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=kuldo@example.com
-SMTP_PASS=app-password-vagy-smtp-jelszo
-SMTP_SECURE=false
-SMTP_FROM=MattMester <kuldo@example.com>
-PUBLIC_BASE_URL=http://127.0.0.1:3000
-```
+A backend [backend/server.js](backend/server.js) `app.set('trust proxy', 1)` beállítása arra utasítja az Express-t, hogy **pontosan egy** előtte álló reverse proxy `X-Forwarded-*` headerét megbízhatónak tekintse (pl. ezekből olvas IP-t és protokollt a rate limiter és a `cookie.secure`).
 
-| Változó | Kötelező? | Default |
-|---|---|---|
-| `ALLOWED_ORIGINS` | nem | `http://localhost:3000` |
-| `SESSION_SECRET` | nem (de production-ben igen) | hardcoded fallback |
-| `CHAT_BLACKLIST_POLICY` | nem | `hard_block` |
-| `SMTP_*` | nem | fallback `json-dev` mód (logba) |
-| `PUBLIC_BASE_URL` | csak SMTP-hez | `http://127.0.0.1:3000` |
+- ✅ **Production** Nginx / Cloudflare / Apache reverse proxy mögött (egyetlen hop): helyes — a kliens valódi IP-jét megkapjuk.
+- ❌ **Direct expose** (proxy nélkül publikus port): hibás — bárki spoofolhat `X-Forwarded-For`-t, ezzel megkerülve a rate limitert vagy hamis IP-t auditolva.
+- ❌ **Több proxy láncolat** (pl. CDN → load balancer → app): a `1` kevés, állítsd a tényleges hop-számra vagy whitelist-re.
+- ⚠️ **Lokál fejlesztés**: localhoston a beállítás közömbös; HTTPS terminátor nélkül a `cookie.secure` (production módban) eldobja a süti-t — ezért dev-ben automatikusan `secure: false`.
 
 ---
 

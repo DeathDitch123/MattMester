@@ -1,10 +1,13 @@
 const mysql = require('mysql2/promise');
 
+// Why: env-alapú DB-credek lehetővé teszik, hogy a XAMPP-default (root / üres jelszó / localhost) felüljárható
+//      legyen production deployhoz, miközben a meglévő iskolai/lokál setup default-ből változatlan marad.
 const dbConfig = {
-    host: '127.0.0.1',
-    user: 'root',
-    password: '',
-    database: 'mattmester',
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'mattmester',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0

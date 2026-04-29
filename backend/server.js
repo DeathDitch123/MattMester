@@ -4,6 +4,7 @@ const session = require('express-session'); //?npm install express-session
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
@@ -22,6 +23,10 @@ envPaths.forEach((envPath) => {
     }
 });
 
+// Why: a NODE_ENV az egész fájl viselkedését eldönti (cookie.secure, sameSite, SESSION_SECRET fallback engedélyezése).
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PRODUCTION = NODE_ENV === 'production';
+
 //!Beállítások
 const app = express();
 const server = http.createServer(app);
@@ -30,15 +35,34 @@ const io = new Server(server);
 const ip = '127.0.0.1';
 const port = 3000;
 
-//?Session beállítása
-const sessionSecret = process.env.SESSION_SECRET || 'chu+)2_23iIa6sou&>#o79247r9Xbsibv%';
+//?Session secret feloldása
+// Why: production-ben a hardcoded fallback session-hijack vektor; dev-ben viszont a tesztek és helyi futás ne törjön, ha nincs .env.
+function resolveSessionSecret() {
+    let secret = process.env.SESSION_SECRET;
+    if (!secret) {
+        if (IS_PRODUCTION) {
+            console.error('[Server] SESSION_SECRET kötelező NODE_ENV=production esetén. Állítsd be az .env-ben (lásd .env.example) és indítsd újra.');
+            process.exit(1);
+        }
+        secret = crypto.randomBytes(32).toString('hex');
+        console.warn('[Server] SESSION_SECRET hiányzik — dev fallback random érték generálva. Production-ben kötelező a .env beállítás.');
+    }
+    return secret;
+}
+
+const sessionSecret = resolveSessionSecret();
 const sessionMiddleware = session({
     secret: sessionSecret,
     resave: false,
-    saveUninitialized: true,
+    // Why: GDPR + memória — minden látogatónak ne készüljön session-rekord, csak ha tényleg írunk bele (login után).
+    saveUninitialized: false,
     cookie: {
         maxAge: 1000 * 60 * 60 * 24, //1 nap időtartam
-        httpOnly: true, secure: false, sameSite: 'lax'
+        httpOnly: true,
+        // Why: secure cookie csak HTTPS mögött működik; dev-ben (http://localhost) ki kell kapcsolni, különben a böngésző eldobja.
+        secure: IS_PRODUCTION,
+        // Why: production-ben strict — CSRF védelem; dev-ben lax kell, hogy a localhost <-> 127.0.0.1 váltás és OAuth-szerű redirect ne dobja el.
+        sameSite: IS_PRODUCTION ? 'strict' : 'lax'
     }
 });
 
@@ -98,7 +122,41 @@ try {
     console.warn('[Server] CORS module not available, skipping CORS middleware');
 }
 
+// Why: helmet alap headerek (X-Frame-Options, X-Content-Type-Options, stb.) + minimális saját-asset CSP.
+//      A CSP csak a saját origin-ből engedi a script/style/img/connect forrásokat; Bootstrap és minden egyéb asset
+//      a frontend mappából (self) szolgáljuk ki, ezért nincs szükség külső host engedélyezésre. 'unsafe-inline'
+//      kifejezetten engedélyezve a meglévő inline JS/CSS miatt — későbbi nonce-os szigorítás külön issue.
+try {
+    const helmet = require('helmet');
+    app.use(helmet({
+        contentSecurityPolicy: {
+            useDefaults: true,
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                imgSrc: ["'self'", 'data:', 'blob:'],
+                // Why: Socket.IO ws:// (dev) és wss:// (production reverse proxy mögött) is ugyanazon az originen jön.
+                connectSrc: ["'self'", 'ws:', 'wss:'],
+                fontSrc: ["'self'", 'data:'],
+                objectSrc: ["'none'"],
+                frameAncestors: ["'self'"]
+            }
+        },
+        // Why: dev-ben (http://) a HSTS csak a böngésző gyorsítótárát piszkítaná. Production-ben a reverse proxy szintjén kapcsoljuk be.
+        hsts: IS_PRODUCTION,
+        crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: { policy: 'same-origin' }
+    }));
+    console.log('[Server] Helmet middleware loaded');
+} catch (helmetError) {
+    console.warn('[Server] Helmet module not available, skipping security headers:', helmetError.message);
+}
+
 app.use(express.json()); //?Middleware JSON
+// Why: trust proxy=1 csak akkor helyes, ha a backend egyetlen reverse proxy mögött (pl. Nginx, Cloudflare) fut.
+//      Direct expose esetén X-Forwarded-* spoofolható, ezért a rate limiter és session secure-cookie félrevezethető.
+//      A `readme.md` "Környezeti változók" szekciója részletezi a feltételeket.
 app.set('trust proxy', 1); //?Middleware Proxy
 
 const socketHub = createSocketHub(io);
