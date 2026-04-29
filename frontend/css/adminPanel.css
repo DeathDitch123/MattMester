@@ -2004,3 +2004,165 @@ i.bi.spin {
     .ws-status-pill .ws-pill-label { font-size: 0.78rem; }
 }
 
+/* ---- Tick chip kattinthato variant (button) ---- */
+button.tick-chip,
+.tick-chip-clickable {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(36, 48, 68, 0.95);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+    position: relative;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.tick-chip-clickable:hover {
+    border-color: rgba(212, 175, 55, 0.6);
+    background: rgba(54, 70, 100, 0.95);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(212, 175, 55, 0.16);
+}
+.tick-chip-clickable:active { transform: translateY(0); }
+.tick-chip-clickable:focus-visible {
+    outline: 2px solid rgba(212, 175, 55, 0.65);
+    outline-offset: 2px;
+}
+.tick-chip-arrow {
+    font-size: 1.1rem;
+    color: rgba(212, 175, 55, 0.55);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 160ms ease, transform 160ms ease, color 160ms ease;
+}
+.tick-chip-clickable:hover .tick-chip-arrow {
+    opacity: 1;
+    transform: translateX(0);
+    color: #d4af37;
+}
+
+/* ==========================================================================
+   Vezerlopult — kontraszt es spacing finomitas
+   Cel: a kartyak ne olvadjanak bele a sotetkek hatterbe; a chipek
+   es feliratok ne erjenek ossze; a WS pill labelje + ideje elkulonuljon.
+   ========================================================================== */
+
+/* Stat / content card — eros kontraszt a bg-dark felett, no washout */
+.stat-card,
+.content-card {
+    background: linear-gradient(135deg, rgba(36, 48, 68, 0.98) 0%, rgba(30, 41, 59, 0.92) 100%) !important;
+    border-color: rgba(148, 163, 184, 0.18) !important;
+    box-shadow: 0 4px 16px -8px rgba(0, 0, 0, 0.5);
+}
+.stat-card { padding: 1.35rem 1.5rem 1.4rem !important; }
+.stat-card .stat-hint { display: inline-block; margin-top: 0.55rem; }
+.stat-value { margin-bottom: 0.25rem !important; }
+.stat-label { margin-bottom: 0.1rem; }
+
+/* Tick band — sotetebb panel + erosebb keret hogy ne olvadjon */
+.tick-band {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.95), rgba(20, 28, 50, 0.92)) !important;
+    border-color: rgba(148, 163, 184, 0.22) !important;
+    padding: 0.95rem 1.15rem !important;
+    box-shadow: 0 4px 14px -8px rgba(0, 0, 0, 0.45);
+}
+.tick-band-header { margin-bottom: 0.7rem !important; padding-bottom: 0.6rem !important; gap: 0.75rem; }
+.tick-band-body  { gap: 0.55rem 0.75rem !important; }
+
+/* Tick chip — biztos kontraszt + nagyobb padding hogy ne erjenek ossze */
+.tick-chip {
+    background: rgba(36, 48, 68, 0.95) !important;
+    border-color: rgba(148, 163, 184, 0.2) !important;
+    padding: 0.4rem 0.85rem !important;
+    gap: 0.55rem !important;
+    line-height: 1.2;
+}
+.tick-chip-label { padding-right: 0.15rem; }
+.tick-chip-value { padding-left: 0.05rem; }
+
+/* Mini-stat — letisztult kontraszt + alul-felul levego */
+.mini-stat,
+button.mini-stat,
+.mini-stat-clickable {
+    background: linear-gradient(135deg, rgba(36, 48, 68, 0.95), rgba(30, 41, 59, 0.85)) !important;
+    border-color: rgba(148, 163, 184, 0.18) !important;
+    padding: 0.95rem 1.05rem !important;
+    gap: 0.25rem !important;
+}
+.mini-stat > i { margin-bottom: 0.35rem !important; }
+.mini-stat-value { margin-bottom: 0.1rem; }
+.mini-stat-label { margin-top: 0.05rem; }
+
+/* WS pill — kuloniteni a label-t es a tick idot, no overlap */
+.ws-status-pill {
+    min-width: 17rem;
+    padding-top: 0.4rem !important;
+    padding-bottom: 0.4rem !important;
+}
+.ws-status-pill .ws-pill-content { gap: 0.55rem; }
+.ws-status-pill .ws-pill-label  { padding-right: 0.15rem; white-space: nowrap; }
+.ws-status-pill .ws-pill-time {
+    margin-left: 0.55rem;
+    padding-left: 0.65rem;
+    border-left: 1px solid rgba(148, 163, 184, 0.28);
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+/* WS feed badge — a card-header-ben ne tapadjon a cimhez */
+.ws-feed-badge {
+    margin-left: 0.75rem;
+    padding: 0.3rem 0.65rem !important;
+    flex-shrink: 0;
+}
+
+/* Live-feed meta sav — eros elkulonites a kartyatol */
+.live-feed-meta {
+    background: rgba(15, 23, 42, 0.7) !important;
+    border-bottom-color: rgba(148, 163, 184, 0.22) !important;
+    padding: 0.55rem 1.1rem !important;
+}
+
+/* Live-feed sorok — kicsit nagyobb tavolsag az elemek kozott */
+.live-feed-row { gap: 0.7rem !important; padding: 0.6rem 1.1rem !important; }
+.live-feed-row .live-feed-time { min-width: 5.2em; }
+
+/* Section header — cim es action gombok kozott biztos hely */
+.section-header { gap: 1rem; flex-wrap: wrap; }
+.section-header-actions { gap: 0.6rem; flex-wrap: wrap; }
+
+/* Card header — cim es jobb oldali extra elem kozott no overlap */
+.card-header {
+    gap: 0.75rem;
+    align-items: center;
+}
+.card-header .card-title { margin-right: auto; flex-wrap: wrap; }
+.card-header .card-title .card-subtle-hint {
+    flex-basis: 100%;
+    margin: 0.2rem 0 0 1.85rem;
+}
+.card-header .card-subtle-hint { margin-top: 0.2rem; }
+
+/* Stat-card chess emblema — meretet csokkentve hogy ne tegye zsufoltta */
+.stat-card-chess .stat-card-chess-bg { width: 84px; height: 84px; right: -10px; bottom: -10px; }
+
+/* Stat hint pill jelleg — ne erjen kozvetlenul a label-hez */
+.stat-hint {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.55);
+    font-size: 0.72rem;
+}
+.stat-card-empty .stat-hint { background: rgba(15, 23, 42, 0.4); }
+
+/* Mobil — pill osszezsugorodik, de label es time nem fed */
+@media (max-width: 767.98px) {
+    .ws-status-pill { min-width: 0; }
+    .ws-status-pill .ws-pill-time { display: none; }
+    .section-header-actions { width: 100%; }
+    .ws-feed-badge { margin-left: 0; margin-top: 0.35rem; }
+    .card-header { flex-wrap: wrap; }
+}
+

@@ -260,13 +260,21 @@ const h = {
         </div>
     `,
 
-    tickChip: ({ icon, label, value, valueId, color = 'gold' }) => `
-        <div class="tick-chip">
-            <i class="bi ${icon} text-${color}"></i>
-            <span class="tick-chip-label">${label}</span>
-            <strong class="tick-chip-value"${valueId ? ` id="${valueId}"` : ''}>${value}</strong>
-        </div>
-    `
+    tickChip: ({ icon, label, value, valueId, color = 'gold', nav = null, hint = '' }) => {
+        const tag = nav ? 'button' : 'div';
+        const interactiveAttrs = nav
+            ? ` type="button" onclick="showSection('${nav}', event)" aria-label="${label} — ugrás a ${nav} szekcióra" title="${hint || `Részletek: ${label}`}"`
+            : '';
+        const cls = nav ? 'tick-chip tick-chip-clickable' : 'tick-chip';
+        return `
+            <${tag} class="${cls}"${interactiveAttrs}>
+                <i class="bi ${icon} text-${color}"></i>
+                <span class="tick-chip-label">${label}</span>
+                <strong class="tick-chip-value"${valueId ? ` id="${valueId}"` : ''}>${value}</strong>
+                ${nav ? '<i class="bi bi-arrow-right-short tick-chip-arrow" aria-hidden="true"></i>' : ''}
+            </${tag}>
+        `;
+    }
 };
 
 /* =============================================================
@@ -594,10 +602,10 @@ const SECTIONS = {
                 { icon: 'bi-trophy-fill',  value: inGameValue, valueId: 'mainInGame',
                   label: 'Aktív játszma', color: inGameEmpty ? 'secondary' : 'success',
                   hint: inGameEmpty
-                        ? '<span class="text-muted"><i class="bi bi-pause-circle me-1"></i>Nincs élő játszma</span>'
+                        ? '<span class="text-muted"><i class="bi bi-pause-circle me-1"></i>Nincs élő játszma — kattints a játszmák listájához</span>'
                         : '<span class="live-indicator text-success"><span class="live-dot"></span>Élőben most</span>',
                   hintClass: inGameEmpty ? 'text-muted' : 'text-success',
-                  interactive: inGameEmpty ? null : 'liveGames',
+                  interactive: 'games',
                   cardId: 'mainInGameCard',
                   emblem: 'chess', empty: inGameEmpty },
                 { icon: 'bi-journal-check',value: last24.auditEntries ?? 0, valueId: 'mainAuditCount',
@@ -618,14 +626,14 @@ const SECTIONS = {
                     <span class="tick-band-time">Frissítve: <span id="tickBandTime">${state.liveStatsAt ? formatRelative(state.liveStatsAt) : '—'}</span></span>
                 </div>
                 <div class="tick-band-body">
-                    ${h.tickChip({ icon: 'bi-wifi',          label: 'Online',         valueId: 'tickOnline',         value: stats.online?.totalUsers ?? 0,    color: 'success' })}
-                    ${h.tickChip({ icon: 'bi-window-stack',  label: 'Aktív tabok',    valueId: 'tickActiveTabs',     value: stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0, color: 'primary' })}
-                    ${h.tickChip({ icon: 'bi-shield-fill',   label: 'Adminok',        valueId: 'tickAdmins',         value: stats.online?.totalAdmins ?? 0,   color: 'gold' })}
-                    ${h.tickChip({ icon: 'bi-trophy-fill',   label: 'Játékban',       valueId: 'tickInGame',         value: stats.online?.inGame ?? 0,        color: inGameEmpty ? 'secondary' : 'success' })}
-                    ${h.tickChip({ icon: 'bi-search',        label: 'Matchmakingben', valueId: 'tickMatchmaking',    value: stats.online?.inMatchmaking ?? 0, color: 'primary' })}
-                    ${h.tickChip({ icon: 'bi-image',         label: 'Pending kép',    valueId: 'tickPendingImages',  value: stats.pending?.profileImages ?? 0, color: 'warning' })}
-                    ${h.tickChip({ icon: 'bi-person-plus',   label: 'Pending barát',  valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary' })}
-                    ${h.tickChip({ icon: 'bi-speedometer2',  label: 'Aktív rate esc.',valueId: 'tickRateEsc',        value: stats.rateLimit?.activeEscalations ?? 0, color: 'secondary' })}
+                    ${h.tickChip({ icon: 'bi-wifi',          label: 'Online',         valueId: 'tickOnline',         value: stats.online?.totalUsers ?? 0,    color: 'success', nav: 'users',              hint: 'Online felhasználók — ugrás a felhasználói listára' })}
+                    ${h.tickChip({ icon: 'bi-window-stack',  label: 'Aktív tabok',    valueId: 'tickActiveTabs',     value: stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0, color: 'primary', nav: 'users', hint: 'Nyitva tartott böngészőfülek — felhasználói lista' })}
+                    ${h.tickChip({ icon: 'bi-shield-fill',   label: 'Adminok',        valueId: 'tickAdmins',         value: stats.online?.totalAdmins ?? 0,   color: 'gold',    nav: 'superAdmin',         hint: 'Online admin felhasználók — super admin nézet' })}
+                    ${h.tickChip({ icon: 'bi-trophy-fill',   label: 'Játékban',       valueId: 'tickInGame',         value: stats.online?.inGame ?? 0,        color: inGameEmpty ? 'secondary' : 'success', nav: 'games', hint: 'Folyamatban lévő játszmák' })}
+                    ${h.tickChip({ icon: 'bi-search',        label: 'Matchmakingben', valueId: 'tickMatchmaking',    value: stats.online?.inMatchmaking ?? 0, color: 'primary', nav: 'games',              hint: 'Matchmakingben várakozó játékosok' })}
+                    ${h.tickChip({ icon: 'bi-image',         label: 'Pending kép',    valueId: 'tickPendingImages',  value: stats.pending?.profileImages ?? 0, color: 'warning', nav: 'profileImageReview', hint: 'Jóváhagyásra váró profilképek' })}
+                    ${h.tickChip({ icon: 'bi-person-plus',   label: 'Pending barát',  valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary', nav: 'friends',            hint: 'Függőben lévő barátkérelmek' })}
+                    ${h.tickChip({ icon: 'bi-speedometer2',  label: 'Aktív rate esc.',valueId: 'tickRateEsc',        value: stats.rateLimit?.activeEscalations ?? 0, color: 'secondary', nav: 'alerts',        hint: 'Rate limit szigorítások — riasztások' })}
                 </div>
             </div>
 
@@ -673,12 +681,12 @@ const SECTIONS = {
 
             <div class="row g-3 mt-2">
                 ${[
-                    { id: 'mini24Logins',         icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés',    value: last24.logins ?? 0,          color: 'primary',  nav: 'auditLog' },
+                    { id: 'mini24Logins',         icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés',    value: last24.logins ?? 0,          color: 'primary',  nav: 'security' },
                     { id: 'mini24Registrations',  icon: 'bi-person-plus-fill',   label: '24h regisztráció',     value: last24.registrations ?? 0,   color: 'success',  nav: 'users' },
                     { id: 'mini24Audit',          icon: 'bi-journal-text',       label: '24h audit',            value: last24.auditEntries ?? 0,    color: 'warning',  nav: 'auditLog' },
                     { id: 'mini24Critical',       icon: 'bi-exclamation-octagon',label: '24h kritikus',         value: last24.criticalAuditEntries ?? 0, color: 'danger', nav: 'auditLog' },
                     { id: 'mini24Alerts',         icon: 'bi-shield-fill-x',      label: '24h riasztás',         value: last24.alerts ?? 0,          color: 'warning',  nav: 'alerts' },
-                    { id: 'mini24Bans',           icon: 'bi-ban',                label: '24h új tiltás',        value: last24.newBans ?? 0,         color: 'danger',   nav: 'users' }
+                    { id: 'mini24Bans',           icon: 'bi-ban',                label: '24h új tiltás',        value: last24.newBans ?? 0,         color: 'danger',   nav: 'userBan' }
                 ].map(item => `
                     <div class="col-6 col-md-4 col-xl-2">
                         <button type="button" class="mini-stat mini-stat-clickable" onclick="showSection('${item.nav}', event)" aria-label="${item.label} — ugrás a ${item.nav} szekcióra">
