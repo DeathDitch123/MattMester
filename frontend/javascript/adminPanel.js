@@ -351,6 +351,18 @@ const state = {
     wsStale: false,               // true ha 15 mp-nel regebbi a tick
     manualRefreshLockUntil: 0,    // kezi frissites debounce timestamp
 
+    // 24h activity chart state (REST fetch /api/admin/stats/activity)
+    activityChart: {
+        status: 'idle',           // idle | loading | loaded | empty | error
+        loadedAt: null,           // Date — utolso sikeres fetch
+        labels: null,
+        datasets: null,
+        totals: null,
+        error: null,
+        chartInstance: null
+    },
+    activityRefreshIntervalId: null,
+
     // Real-time data buffers (WS-ből töltődnek)
     liveStats: null,              // admin:stats:tick legutolsó payload
     liveStatsAt: null,            // utolsó tick időpontja
@@ -433,25 +445,62 @@ function liveStatsOrFallback() {
 const auditList  = () => (state.liveAudit.length  ? state.liveAudit  : SAMPLE_AUDIT);
 const alertsList = () => (state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS);
 
-// Egy forras-igazsag: a feed-ekhez visszaadjuk az adatokat ÉS a forrast (live / demo / empty).
-// Igy a renderelo egyertelmuen tudja vizualisan elkuloniteni a mockot az elotol.
+// Egy forras-igazsag a dashboard live-feed-jehez: csak a valos WS bufferbol
+// veszunk adatot. Demo / SAMPLE adat NEM jelenik meg — ha nincs esemeny,
+// az ures allapot szovege egyertelmuen megmondja, miert nincs.
 function liveDataSource(kind) {
-    let result = { items: [], isLive: false, isEmpty: true, kind };
+    let result = { items: [], reason: 'no_data', kind };
     try {
         const buffer = kind === 'audit' ? state.liveAudit : (kind === 'alert' ? state.liveAlerts : []);
-        const sample = kind === 'audit' ? SAMPLE_AUDIT : (kind === 'alert' ? SAMPLE_ALERTS : []);
         if (buffer && buffer.length) {
-            result = { items: buffer, isLive: true, isEmpty: false, kind };
-        } else if (state.adminSocketConnected) {
-            // Csatlakozva vagyunk, de meg nem erkezett esemeny -> ures allapot (NEM mock).
-            result = { items: [], isLive: true, isEmpty: true, kind };
+            result = { items: buffer, reason: 'live', kind };
+        } else if (!state.adminToken) {
+            result = { items: [], reason: 'no_token', kind };
+        } else if (!state.adminSocketConnected) {
+            result = { items: [], reason: 'offline', kind };
         } else {
-            // Nincs WS - demo / fallback adat, vizualisan elkulonitve.
-            result = { items: sample, isLive: false, isEmpty: false, kind };
+            result = { items: [], reason: 'empty', kind };
         }
     } catch (err) {
         console.warn('liveDataSource hiba:', err);
-        result = { items: [], isLive: false, isEmpty: true, kind };
+        result = { items: [], reason: 'error', kind };
+    }
+    return result;
+}
+
+// Legutolso esemeny idopontja az audit + alert listakbol (a meta sav "Utolso: X" feliratahoz).
+function latestEventTime(auditItems, alertItems) {
+    let result = null;
+    try {
+        const candidates = [];
+        (auditItems || []).forEach((a) => { if (a?.occurredAt) candidates.push(new Date(a.occurredAt).getTime()); });
+        (alertItems || []).forEach((a) => { if (a?.occurredAt) candidates.push(new Date(a.occurredAt).getTime()); });
+        const valid = candidates.filter((n) => Number.isFinite(n));
+        if (valid.length) {
+            result = new Date(Math.max(...valid));
+        }
+    } catch (err) {
+        console.warn('latestEventTime hiba:', err);
+        result = null;
+    }
+    return result;
+}
+
+// Reason -> emberi szoveg + ikon, a feed ures allapota es hibajelzes szamara.
+function feedEmptyMessage(reason) {
+    let result = { icon: 'bi-inbox', title: 'Nincs adat', sub: '' };
+    if (reason === 'no_token') {
+        result = { icon: 'bi-shield-slash', title: 'Nincs admin token',
+                   sub: 'A bejövő események betöltéséhez aktív admin step-up token szükséges.' };
+    } else if (reason === 'offline') {
+        result = { icon: 'bi-plug', title: 'WS /admin offline',
+                   sub: 'A WebSocket kapcsolat megszakadt — kattints a fejléc pill-jén az újracsatlakozáshoz.' };
+    } else if (reason === 'empty') {
+        result = { icon: 'bi-inbox', title: 'Még nem érkezett esemény',
+                   sub: 'Az új audit / riasztás sorok automatikusan ide kerülnek, amint történik valami.' };
+    } else if (reason === 'error') {
+        result = { icon: 'bi-exclamation-triangle', title: 'Hiba a feed betöltésénél',
+                   sub: 'Ellenőrizd a böngésző konzolt a részletekért.' };
     }
     return result;
 }
@@ -551,6 +600,81 @@ function renderSidebar() {
 }
 
 /* =============================================================
+   8.5) Activity chart status helperek (UI render — egy forras-igazsag)
+   ============================================================= */
+const ACTIVITY_STATUS = Object.freeze({
+    idle:    { label: 'Inicializálás…',  variant: 'secondary', icon: 'bi-hourglass',         dotClass: 'ws-dot-idle',       spin: false },
+    loading: { label: 'Adatok betöltése…',variant: 'warning',  icon: 'bi-arrow-repeat',      dotClass: 'ws-dot-connecting', spin: true  },
+    loaded:  { label: 'Élő',              variant: 'success',  icon: 'bi-broadcast-pin',     dotClass: 'ws-dot-live',       spin: false },
+    empty:   { label: 'Nincs 24h adat',   variant: 'secondary',icon: 'bi-pause-circle',      dotClass: 'ws-dot-idle',       spin: false },
+    error:   { label: 'Hiba',             variant: 'danger',   icon: 'bi-exclamation-triangle', dotClass: 'ws-dot-down',    spin: false }
+});
+
+function chartStatusPill(chartState) {
+    const status = ACTIVITY_STATUS[chartState?.status] || ACTIVITY_STATUS.idle;
+    const time = chartState?.loadedAt ? `frissítve: ${formatRelative(chartState.loadedAt)}` : '';
+    const recordCount = (chartState?.totals?.records ?? 0);
+    const detail = chartState?.status === 'loaded'
+        ? `${recordCount} rekord${time ? ' · ' + time : ''}`
+        : (chartState?.status === 'error' ? (chartState?.error || 'Ismeretlen hiba') : '');
+    return `
+        <span class="chart-status-pill chart-status-${chartState?.status || 'idle'}" id="chartStatusPill" title="${status.label}">
+            <span class="ws-pill-dot ${status.dotClass}${status.spin ? ' ws-dot-spin' : ''}" aria-hidden="true"></span>
+            <span class="chart-status-label" id="chartStatusLabel">${status.label}</span>
+            ${detail ? `<span class="chart-status-detail" id="chartStatusDetail">· ${escapeHtml(detail)}</span>` : '<span class="chart-status-detail" id="chartStatusDetail"></span>'}
+        </span>
+    `;
+}
+
+function activityChartOverlay(chartState) {
+    let result = '';
+    const status = chartState?.status || 'idle';
+    if (status === 'loading' || status === 'idle') {
+        result = `
+            <div class="activity-chart-loading">
+                <i class="bi bi-arrow-repeat spin"></i>
+                <div>Aktivitási adatok betöltése…</div>
+            </div>
+        `;
+    } else if (status === 'empty') {
+        result = `
+            <div class="activity-chart-message">
+                <i class="bi bi-pause-circle"></i>
+                <div class="activity-chart-message-title">Nincs 24 órás aktivitási adat</div>
+                <div class="activity-chart-message-sub">Az utóbbi 24 órában nem rögzítettünk eseményt — amint történik valami, automatikusan megjelenik.</div>
+            </div>
+        `;
+    } else if (status === 'error') {
+        result = `
+            <div class="activity-chart-message activity-chart-message-error">
+                <i class="bi bi-exclamation-triangle"></i>
+                <div class="activity-chart-message-title">Hiba a 24h aktivitás betöltésénél</div>
+                <div class="activity-chart-message-sub">${escapeHtml(chartState?.error || 'Ismeretlen hiba')}</div>
+            </div>
+        `;
+    }
+    return result;
+}
+
+const ACTIVITY_DATASET_META = Object.freeze([
+    { key: 'logins',        label: 'Login',         color: '#d4af37', icon: 'bi-box-arrow-in-right' },
+    { key: 'registrations', label: 'Regisztráció',  color: '#10b981', icon: 'bi-person-plus-fill' },
+    { key: 'gamesStarted',  label: 'Új játszma',    color: '#3b82f6', icon: 'bi-trophy-fill' },
+    { key: 'auditEntries',  label: 'Audit',         color: '#8b5cf6', icon: 'bi-journal-text' },
+    { key: 'alerts',        label: 'Riasztás',      color: '#ef4444', icon: 'bi-exclamation-octagon-fill' }
+]);
+
+function renderChartTotals(totals) {
+    return ACTIVITY_DATASET_META.map((meta) => `
+        <span class="chart-total-chip" style="--chip-color: ${meta.color};">
+            <i class="bi ${meta.icon}"></i>
+            <span class="chart-total-label">${meta.label}</span>
+            <strong class="chart-total-value">${Number(totals?.[meta.key] || 0)}</strong>
+        </span>
+    `).join('');
+}
+
+/* =============================================================
    9) Szekció renderek
    ============================================================= */
 const SECTIONS = {
@@ -567,10 +691,12 @@ const SECTIONS = {
         const inGameValue = stats.online?.inGame ?? 0;
         const inGameEmpty = inGameValue <= 0;
         const feedHasContent = auditItems.length > 0 || alertItems.length > 0;
-        const feedIsLive = auditSrc.isLive && alertSrc.isLive;
-        const feedDemoBadge = (!auditSrc.isLive && auditSrc.items.length) || (!alertSrc.isLive && alertSrc.items.length)
-            ? `<span class="data-source-badge data-source-demo" title="Statikus minta — nincs élő WS adat"><i class="bi bi-flask"></i>Demo</span>`
-            : `<span class="data-source-badge data-source-live" title="Élő WS forrás"><i class="bi bi-broadcast"></i>Élő</span>`;
+        // A feed ures allapota a "rosszabbik" reason-bol jon (no_token > offline > empty)
+        const feedReason = auditSrc.reason === 'no_token' || alertSrc.reason === 'no_token' ? 'no_token'
+                         : auditSrc.reason === 'offline'  || alertSrc.reason === 'offline'  ? 'offline'
+                         : (feedHasContent ? 'live' : 'empty');
+        const feedEmpty = feedHasContent ? null : feedEmptyMessage(feedReason);
+        const chartStatus = state.activityChart || { status: 'idle' };
         return `
             ${h.header({
                 icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
@@ -639,21 +765,33 @@ const SECTIONS = {
 
             <div class="row g-4">
                 <div class="col-xl-7">
-                    ${h.card({
-                        title: 'Aktivitás — utolsó 24 óra',
-                        icon: 'bi-activity',
-                        headerExtra: `<span class="card-subtle-hint">Összesített trend (5 perces bin)</span>` +
-                                     h.btn({ label: 'Riport', size: 'sm', attrs: 'disabled title="Hamarosan elérhető"', classes: 'btn-soon' }),
-                        body: '<div style="position:relative;height:300px;"><canvas id="activityChart"></canvas></div>',
-                        classes: 'h-100 dashboard-equal-card'
-                    })}
+                    <div class="content-card h-100 dashboard-equal-card activity-chart-card">
+                        <div class="card-header">
+                            <h5 class="card-title">
+                                <i class="bi bi-activity me-2 text-gold"></i>Aktivitás — utolsó 24 óra
+                                <span class="card-subtle-hint d-block">Óránkénti bontás · login, regisztráció, új játszma, audit, riasztás</span>
+                            </h5>
+                            ${chartStatusPill(chartStatus)}
+                        </div>
+                        <div class="card-body activity-chart-body">
+                            <div class="activity-chart-wrap" id="activityChartWrap">
+                                <canvas id="activityChart"></canvas>
+                                <div class="activity-chart-overlay${chartStatus.status === 'loaded' ? ' d-none' : ''}" id="activityChartOverlay">
+                                    ${activityChartOverlay(chartStatus)}
+                                </div>
+                            </div>
+                            <div class="activity-chart-totals" id="activityChartTotals">
+                                ${chartStatus.totals ? renderChartTotals(chartStatus.totals) : '<span class="text-secondary small">A 24h összegzések a chart betöltése után jelennek meg.</span>'}
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 <div class="col-xl-5">
                     <div class="content-card h-100 live-feed-card dashboard-equal-card">
                         <div class="card-header">
                             <h5 class="card-title">
                                 <i class="bi bi-broadcast me-2 text-gold"></i>Élő admin tevékenység
-                                <span class="card-subtle-hint d-block">Élő események — utolsó 25 db</span>
+                                <span class="card-subtle-hint d-block">Élő WS események — utolsó 25 db</span>
                             </h5>
                             <span class="ws-feed-badge ws-feed-${wsStatus.key}" id="wsStatusBadge" title="${wsStatus.label}">
                                 <span class="ws-pill-dot ${wsStatus.dotClass}" aria-hidden="true"></span>
@@ -662,16 +800,20 @@ const SECTIONS = {
                         </div>
                         <div class="card-body p-0">
                             <div class="live-feed-meta">
-                                ${feedDemoBadge}
-                                <span class="live-feed-meta-count" id="liveFeedCount">${feedHasContent ? auditItems.length + alertItems.length : 0} esemény</span>
+                                <span class="live-feed-meta-count" id="liveFeedCount"><i class="bi bi-list-ul me-1"></i>${feedHasContent ? (auditItems.length + alertItems.length) : 0} esemény</span>
+                                <span class="live-feed-meta-time" id="liveFeedLastTime">
+                                    ${feedHasContent
+                                        ? `Utolsó: ${formatRelative(latestEventTime(auditItems, alertItems))}`
+                                        : (feedReason === 'live' || feedReason === 'empty' ? 'Még nincs esemény' : feedEmptyMessage(feedReason).title)}
+                                </span>
                             </div>
-                            <ul class="live-feed-list ${!feedIsLive && feedHasContent ? 'live-feed-demo' : ''}" id="dashboardLiveFeed" data-feed-state="${feedHasContent ? (feedIsLive ? 'live' : 'demo') : (state.adminSocketConnected ? 'live-empty' : 'offline-empty')}">
+                            <ul class="live-feed-list" id="dashboardLiveFeed" data-feed-state="${feedHasContent ? 'live' : feedReason}">
                                 ${feedHasContent
                                     ? auditItems.map(a => liveFeedRow('audit', a)).join('') + alertItems.map(a => liveFeedRow('alert', a)).join('')
                                     : `<li class="live-feed-empty">
-                                          <i class="bi ${state.adminSocketConnected ? 'bi-inbox' : 'bi-plug'}"></i>
-                                          <div class="live-feed-empty-title">${state.adminSocketConnected ? 'Még nem érkezett esemény' : 'Nincs élő WS kapcsolat'}</div>
-                                          <div class="live-feed-empty-sub">${state.adminSocketConnected ? 'Az új audit/alert sorok automatikusan ide kerülnek.' : 'A demo adatok elrejtve — csatlakozz az élő nézethez.'}</div>
+                                          <i class="bi ${feedEmpty.icon}"></i>
+                                          <div class="live-feed-empty-title">${feedEmpty.title}</div>
+                                          <div class="live-feed-empty-sub">${feedEmpty.sub}</div>
                                       </li>`}
                             </ul>
                         </div>
@@ -1523,9 +1665,17 @@ function showSection(sectionId, event, options = {}) {
     }
 
     if (sectionId === 'dashboard') {
-        initChart();
         applyWsStatusToDashboard();
         startWsRelativeTicker();
+        // 24h aktivitas chart: ha mar van adat, azonnal kirajzoljuk; ha nincs,
+        // toltjuk REST-en. Az auto-refresh a dashboard nyitvatartas alatt fut.
+        if (state.activityChart.status === 'loaded' || state.activityChart.status === 'empty') {
+            applyActivityChartStatus(state.activityChart);
+        } else {
+            applyActivityChartStatus({ status: state.adminToken ? 'loading' : 'error', error: state.adminToken ? null : 'Nincs admin token.' });
+            if (state.adminToken) loadActivityChart();
+        }
+        startActivityRefreshTimer();
         if (state.liveStatsAt) {
             setText('tickBandTime', formatRelative(state.liveStatsAt));
             rescheduleStaleWatchdog();
@@ -1991,8 +2141,6 @@ function prependLiveFeedRow(html) {
             // Ha eppen az "ures allapot" sor van benne, toroljuk
             const empty = feed.querySelector('.live-feed-empty');
             if (empty) empty.remove();
-            // Ha demo modban voltunk, valts elesre
-            feed.classList.remove('live-feed-demo');
             feed.dataset.feedState = 'live';
 
             feed.insertAdjacentHTML('afterbegin', html);
@@ -2002,17 +2150,11 @@ function prependLiveFeedRow(html) {
                 newRow.classList.add('live-feed-flash');
                 setTimeout(() => newRow.classList.remove('live-feed-flash'), 1200);
             }
+            const rowCount = feed.querySelectorAll('.live-feed-row').length;
             const counter = document.getElementById('liveFeedCount');
-            if (counter) counter.textContent = `${feed.querySelectorAll('.live-feed-row').length} esemény`;
-            // Demo badge -> Live badge
-            const meta = feed.parentElement?.querySelector('.live-feed-meta');
-            const badge = meta?.querySelector('.data-source-badge');
-            if (badge) {
-                badge.classList.remove('data-source-demo');
-                badge.classList.add('data-source-live');
-                badge.title = 'Élő WS forrás';
-                badge.innerHTML = '<i class="bi bi-broadcast"></i>Élő';
-            }
+            if (counter) counter.innerHTML = `<i class="bi bi-list-ul me-1"></i>${rowCount} esemény`;
+            const lastTime = document.getElementById('liveFeedLastTime');
+            if (lastTime) lastTime.textContent = 'Utolsó: épp most';
         }
     } catch (err) {
         console.warn('prependLiveFeedRow hiba:', err);
@@ -2133,6 +2275,20 @@ function startWsRelativeTicker() {
             if (tickTime && state.liveStatsAt) {
                 tickTime.textContent = formatRelative(state.liveStatsAt);
             }
+            // Live-feed: utolso esemeny relativ ideje
+            const lastTime = document.getElementById('liveFeedLastTime');
+            if (lastTime) {
+                const last = latestEventTime(state.liveAudit, state.liveAlerts);
+                if (last) lastTime.textContent = `Utolsó: ${formatRelative(last)}`;
+            }
+            // Activity chart pill detail (loaded allapotban frissul az ido)
+            if (state.activityChart.status === 'loaded') {
+                const detailEl = document.getElementById('chartStatusDetail');
+                if (detailEl && state.activityChart.loadedAt) {
+                    const recordCount = state.activityChart.totals?.records ?? 0;
+                    detailEl.textContent = `· ${recordCount} rekord · frissítve: ${formatRelative(state.activityChart.loadedAt)}`;
+                }
+            }
         }, 1000);
     } catch (err) {
         console.warn('startWsRelativeTicker hiba:', err);
@@ -2163,6 +2319,8 @@ function requestStatsTick() {
             showToast('Túl gyors — várj egy pillanatot.', 'info', 'bi-hourglass-split');
         } else {
             sock.emit('admin:stats:request');
+            // A 24h chart-ot is frissitjuk (REST), hogy a kezi gomb teljes egeszet jelentsen.
+            loadActivityChart({ silent: true });
             // Loading state: 2 mp-ig disabled + spin ikon
             state.manualRefreshLockUntil = Date.now() + 2000;
             if (refreshBtn) {
@@ -2313,49 +2471,243 @@ function logout() {
 /* =============================================================
    18) Activity chart
    ============================================================= */
+// initChart: csak a Chart.js peldanyt epiti fel a meglevo state alapjan
+// (loadActivityChart hivja amikor adat jott). Mock data NINCS — ha nincs adat,
+// az overlay magyarazza el miert.
 function initChart() {
-    const canvas = document.getElementById('activityChart');
-    if (!canvas || typeof Chart === 'undefined') return;
+    try {
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js nem elerheto.');
+        } else {
+            const canvas = document.getElementById('activityChart');
+            if (canvas) {
+                const existing = Chart.getChart(canvas);
+                if (existing) existing.destroy();
+                state.activityChart.chartInstance = null;
 
-    const existing = Chart.getChart(canvas);
-    if (existing) existing.destroy();
+                const labels = Array.isArray(state.activityChart.labels) ? state.activityChart.labels : [];
+                const datasetSource = state.activityChart.datasets || {};
+                const ctx = canvas.getContext('2d');
 
-    const ctx = canvas.getContext('2d');
-    const gradient = ctx.createLinearGradient(0, 0, 0, 300);
-    gradient.addColorStop(0, 'rgba(212, 175, 55, 0.4)');
-    gradient.addColorStop(1, 'rgba(212, 175, 55, 0.0)');
+                const datasets = ACTIVITY_DATASET_META.map((meta, idx) => {
+                    const data = Array.isArray(datasetSource[meta.key]) ? datasetSource[meta.key] : [];
+                    const dashed = idx >= 3; // audit es alerts vonal szaggatott (admin esemenyek)
+                    return {
+                        label: meta.label,
+                        data,
+                        borderColor: meta.color,
+                        backgroundColor: idx === 0 ? buildLineGradient(ctx, meta.color) : 'transparent',
+                        borderWidth: idx === 0 ? 2.5 : 2,
+                        borderDash: dashed ? [6, 4] : [],
+                        fill: idx === 0,
+                        tension: 0.35,
+                        pointBackgroundColor: meta.color,
+                        pointBorderColor: '#0f172a',
+                        pointBorderWidth: 1,
+                        pointRadius: 2.5,
+                        pointHoverRadius: 5
+                    };
+                });
 
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', 'Most'],
-            datasets: [
-                {
-                    label: 'Online játékosok',
-                    data: [2, 1, 4, 8, 12, 18, 14],
-                    borderColor: '#d4af37', backgroundColor: gradient,
-                    borderWidth: 3, fill: true, tension: 0.4,
-                    pointBackgroundColor: '#d4af37', pointBorderColor: '#fff',
-                    pointBorderWidth: 2, pointRadius: 4
-                },
-                {
-                    label: 'Indított játszmák',
-                    data: [1, 0, 2, 4, 6, 9, 7],
-                    borderColor: '#3b82f6', backgroundColor: 'transparent',
-                    borderWidth: 2, borderDash: [5, 5], tension: 0.4, pointRadius: 0
-                }
-            ]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { labels: { color: '#94a3b8', font: { family: 'Inter' } } } },
-            scales: {
-                y: { beginAtZero: true, grid: { color: 'rgba(51, 65, 85, 0.5)' }, ticks: { color: '#94a3b8', font: { family: 'Inter' }, precision: 0 } },
-                x: { grid: { display: false }, ticks: { color: '#94a3b8', font: { family: 'Inter' } } }
-            },
-            interaction: { intersect: false, mode: 'index' }
+                state.activityChart.chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                labels: {
+                                    color: '#cbd5e1',
+                                    font: { family: 'Inter', size: 11 },
+                                    boxWidth: 14,
+                                    padding: 12,
+                                    usePointStyle: true
+                                }
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                                titleColor: '#d4af37',
+                                bodyColor: '#e2e8f0',
+                                borderColor: 'rgba(212, 175, 55, 0.35)',
+                                borderWidth: 1,
+                                padding: 10,
+                                mode: 'index',
+                                intersect: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(51, 65, 85, 0.5)' },
+                                ticks: { color: '#94a3b8', font: { family: 'Inter' }, precision: 0 }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: {
+                                    color: '#94a3b8',
+                                    font: { family: 'Inter' },
+                                    maxRotation: 0,
+                                    autoSkip: true,
+                                    autoSkipPadding: 12
+                                }
+                            }
+                        },
+                        interaction: { intersect: false, mode: 'index' }
+                    }
+                });
+            }
         }
-    });
+    } catch (err) {
+        console.error('initChart hiba:', err);
+    }
+}
+
+function buildLineGradient(ctx, hex) {
+    let result = 'transparent';
+    try {
+        const grad = ctx.createLinearGradient(0, 0, 0, 280);
+        grad.addColorStop(0, hex + '55');
+        grad.addColorStop(1, hex + '00');
+        result = grad;
+    } catch (err) {
+        console.warn('buildLineGradient hiba:', err);
+        result = 'transparent';
+    }
+    return result;
+}
+
+async function loadActivityChart(options = {}) {
+    const silent = options.silent === true;
+    try {
+        if (!state.adminToken) {
+            applyActivityChartStatus({ status: 'error', error: 'Nincs admin token — a 24h aktivitás nem tölthető be.' });
+        } else {
+            if (!silent) applyActivityChartStatus({ status: 'loading' });
+            const headers = adminAuthHeaders({ Accept: 'application/json' });
+            const response = await fetch('/api/admin/stats/activity', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers
+            });
+            if (!response.ok) {
+                let bodyMessage = `HTTP ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body?.message) bodyMessage = body.message;
+                } catch (_) { /* nem JSON */ }
+                if (response.status === 401 || response.status === 403) {
+                    handleAdminAuthError('admin_token_required');
+                }
+                applyActivityChartStatus({ status: 'error', error: bodyMessage });
+            } else {
+                const json = await response.json();
+                if (!json?.success || !json?.data) {
+                    applyActivityChartStatus({ status: 'error', error: json?.message || 'Ismeretlen válasz.' });
+                } else {
+                    const totals = json.data.totals || {};
+                    const records = Number(totals.records || 0);
+                    state.activityChart.labels = json.data.labels || [];
+                    state.activityChart.datasets = json.data.datasets || {};
+                    state.activityChart.totals = totals;
+                    state.activityChart.loadedAt = new Date();
+                    state.activityChart.error = null;
+                    state.activityChart.status = records > 0 ? 'loaded' : 'empty';
+                    applyActivityChartStatus(state.activityChart);
+                }
+            }
+        }
+    } catch (err) {
+        console.error('loadActivityChart hiba:', err);
+        applyActivityChartStatus({ status: 'error', error: err?.message || 'Hálózati hiba.' });
+    }
+}
+
+function applyActivityChartStatus(next) {
+    try {
+        if (next && next !== state.activityChart) {
+            state.activityChart.status = next.status || state.activityChart.status;
+            if (next.error !== undefined) state.activityChart.error = next.error;
+            if (next.loadedAt) state.activityChart.loadedAt = next.loadedAt;
+        }
+        const status = state.activityChart.status;
+
+        const pill = document.getElementById('chartStatusPill');
+        const labelEl = document.getElementById('chartStatusLabel');
+        const detailEl = document.getElementById('chartStatusDetail');
+        const overlay = document.getElementById('activityChartOverlay');
+        const totalsEl = document.getElementById('activityChartTotals');
+
+        const meta = ACTIVITY_STATUS[status] || ACTIVITY_STATUS.idle;
+        if (pill) {
+            ['idle', 'loading', 'loaded', 'empty', 'error'].forEach((s) => pill.classList.remove(`chart-status-${s}`));
+            pill.classList.add(`chart-status-${status}`);
+            pill.title = meta.label;
+            const dot = pill.querySelector('.ws-pill-dot');
+            if (dot) {
+                ['ws-dot-idle', 'ws-dot-connecting', 'ws-dot-live', 'ws-dot-down'].forEach((c) => dot.classList.remove(c));
+                dot.classList.add(meta.dotClass);
+                dot.classList.toggle('ws-dot-spin', Boolean(meta.spin));
+            }
+        }
+        if (labelEl) labelEl.textContent = meta.label;
+        if (detailEl) {
+            const recordCount = state.activityChart.totals?.records ?? 0;
+            const time = state.activityChart.loadedAt ? `frissítve: ${formatRelative(state.activityChart.loadedAt)}` : '';
+            if (status === 'loaded') {
+                detailEl.textContent = `· ${recordCount} rekord${time ? ' · ' + time : ''}`;
+            } else if (status === 'error') {
+                detailEl.textContent = `· ${state.activityChart.error || ''}`;
+            } else if (status === 'empty') {
+                detailEl.textContent = time ? `· ${time}` : '';
+            } else {
+                detailEl.textContent = '';
+            }
+        }
+
+        if (overlay) {
+            if (status === 'loaded') {
+                overlay.classList.add('d-none');
+                overlay.innerHTML = '';
+            } else {
+                overlay.classList.remove('d-none');
+                overlay.innerHTML = activityChartOverlay(state.activityChart);
+            }
+        }
+
+        if (totalsEl) {
+            if (state.activityChart.totals && status !== 'idle' && status !== 'loading') {
+                totalsEl.innerHTML = renderChartTotals(state.activityChart.totals);
+            } else if (status === 'idle' || status === 'loading') {
+                totalsEl.innerHTML = '<span class="text-secondary small">A 24h összegzések a chart betöltése után jelennek meg.</span>';
+            } else if (status === 'error') {
+                totalsEl.innerHTML = `<span class="text-danger small"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(state.activityChart.error || 'Hiba a betöltésnél.')}</span>`;
+            }
+        }
+
+        if (status === 'loaded' || status === 'empty') {
+            initChart();
+        }
+    } catch (err) {
+        console.error('applyActivityChartStatus hiba:', err);
+    }
+}
+
+function startActivityRefreshTimer() {
+    try {
+        if (state.activityRefreshIntervalId) {
+            clearInterval(state.activityRefreshIntervalId);
+            state.activityRefreshIntervalId = null;
+        }
+        // 60 mp-enkent ujratoltjuk amig a dashboard nyitva van
+        state.activityRefreshIntervalId = setInterval(() => {
+            if (state.currentSectionId === 'dashboard' && state.adminToken) {
+                loadActivityChart({ silent: true });
+            }
+        }, 60000);
+    } catch (err) {
+        console.warn('startActivityRefreshTimer hiba:', err);
+    }
 }
 
 /* =============================================================

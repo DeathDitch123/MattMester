@@ -618,6 +618,84 @@ async function countRegistrationsSince(sinceDate) {
     return result;
 }
 
+// =====================================================================
+// 24h ovrenkenti idosor (dashboard activity chart)
+// Egyetlen forras-igazsag: minden datasetet ugyanazzal a binekkel adunk vissza
+// (DATE_FORMAT(t, '%Y-%m-%d %H:00:00')). A frontend a /stats/activity endpoint
+// JSON-jat kapja meg, a Chart.js innen tolti az X tengelyt es a sorokat.
+// =====================================================================
+
+async function _hourlyBucketCount(label, query, params) {
+    let result = [];
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(query, params);
+        result = (rows || []).map((row) => ({
+            hour: String(row.hour),
+            count: Number(row.cnt) || 0
+        }));
+    } catch (error) {
+        console.error(`${label} hiba:`, error.message);
+        throw new Error(`${label} lekerdezesi hiba.`);
+    }
+    return result;
+}
+
+async function getLoginsHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getLoginsHourly',
+        `SELECT DATE_FORMAT(occurred_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM user_logs
+         WHERE event_type = 'login' AND occurred_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getRegistrationsHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getRegistrationsHourly',
+        `SELECT DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM users
+         WHERE created_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getGamesStartedHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getGamesStartedHourly',
+        `SELECT DATE_FORMAT(start_time, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM games
+         WHERE start_time >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getAuditHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getAuditHourly',
+        `SELECT DATE_FORMAT(occurred_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM admin_audit_log
+         WHERE occurred_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getAlertsHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getAlertsHourly',
+        `SELECT DATE_FORMAT(occurred_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM admin_alert_log
+         WHERE occurred_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
 module.exports = {
     // tokens
     createAdminToken,
@@ -652,5 +730,11 @@ module.exports = {
     countPendingFriendRequests,
     countOngoingGames,
     countLoginsSince,
-    countRegistrationsSince
+    countRegistrationsSince,
+    // 24h hourly time-series (activity chart)
+    getLoginsHourly,
+    getRegistrationsHourly,
+    getGamesStartedHourly,
+    getAuditHourly,
+    getAlertsHourly
 };

@@ -639,4 +639,108 @@ router.get(
     }
 );
 
+// ---------------------------------------------------------------------------
+// /stats/activity — 24h ovrenkenti idosor a dashboard chart-jahoz.
+// 5 dataset egy kozos, 24-elemu labels tomb mellett (hour bins).
+// Egy forras-igazsag: a labels-t es a buckete-eket ugyanaz a hour-key alapjan
+// alignaljuk; az SQL-bol jovo Map kulcsot a JS oldalon mappeljuk a labels-re,
+// hogy a hianyzo orak 0-val jelenjenek meg (folytonos vonal).
+// ---------------------------------------------------------------------------
+function _formatBucketKey(date) {
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, '0');
+    const dd = String(date.getDate()).padStart(2, '0');
+    const hh = String(date.getHours()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:00:00`;
+}
+
+function _buildHourLabels(now, hours) {
+    const labels = [];
+    const keys = [];
+    const start = new Date(now.getTime() - (hours - 1) * 3600 * 1000);
+    start.setMinutes(0, 0, 0);
+    let cursor = new Date(start);
+    let safety = 0;
+    while (safety < hours) {
+        keys.push(_formatBucketKey(cursor));
+        labels.push(`${String(cursor.getHours()).padStart(2, '0')}:00`);
+        cursor = new Date(cursor.getTime() + 3600 * 1000);
+        safety += 1;
+    }
+    return { labels, keys };
+}
+
+function _alignBucketSeries(buckets, keys) {
+    const map = new Map();
+    (buckets || []).forEach((row) => {
+        if (row && row.hour) {
+            map.set(String(row.hour), Number(row.count) || 0);
+        }
+    });
+    return keys.map((key) => map.get(key) || 0);
+}
+
+router.get(
+    '/stats/activity',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        const HOURS = 24;
+        let statusCode = 200;
+        let payload = { success: false, data: null, message: 'Belso hiba az activity lekerdezesnel.' };
+        try {
+            const now = new Date();
+            const { labels, keys } = _buildHourLabels(now, HOURS);
+            const since = new Date(now.getTime() - HOURS * 3600 * 1000);
+
+            const [logins, registrations, gamesStarted, auditEntries, alerts] = await Promise.all([
+                adminRepo.getLoginsHourly(since).catch((err) => { console.warn('activity logins:', err.message); return []; }),
+                adminRepo.getRegistrationsHourly(since).catch((err) => { console.warn('activity regs:', err.message); return []; }),
+                adminRepo.getGamesStartedHourly(since).catch((err) => { console.warn('activity games:', err.message); return []; }),
+                adminRepo.getAuditHourly(since).catch((err) => { console.warn('activity audit:', err.message); return []; }),
+                adminRepo.getAlertsHourly(since).catch((err) => { console.warn('activity alerts:', err.message); return []; })
+            ]);
+
+            const datasets = {
+                logins:        _alignBucketSeries(logins, keys),
+                registrations: _alignBucketSeries(registrations, keys),
+                gamesStarted:  _alignBucketSeries(gamesStarted, keys),
+                auditEntries:  _alignBucketSeries(auditEntries, keys),
+                alerts:        _alignBucketSeries(alerts, keys)
+            };
+
+            const totalRecords = Object.values(datasets).reduce(
+                (acc, arr) => acc + arr.reduce((a, n) => a + n, 0),
+                0
+            );
+
+            payload = {
+                success: true,
+                data: {
+                    generatedAt: now.toISOString(),
+                    hours: HOURS,
+                    labels,
+                    datasets,
+                    totals: {
+                        logins:        datasets.logins.reduce((a, n) => a + n, 0),
+                        registrations: datasets.registrations.reduce((a, n) => a + n, 0),
+                        gamesStarted:  datasets.gamesStarted.reduce((a, n) => a + n, 0),
+                        auditEntries:  datasets.auditEntries.reduce((a, n) => a + n, 0),
+                        alerts:        datasets.alerts.reduce((a, n) => a + n, 0),
+                        records:       totalRecords
+                    }
+                }
+            };
+            response.locals.adminAudit.skip = true;
+        } catch (error) {
+            console.error('admin/stats/activity hiba:', error.message);
+            statusCode = 500;
+            payload = { success: false, data: null, message: error.message || payload.message };
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
 module.exports = router;

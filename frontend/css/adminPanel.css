@@ -2115,11 +2115,24 @@ button.mini-stat,
     flex-shrink: 0;
 }
 
-/* Live-feed meta sav — eros elkulonites a kartyatol */
+/* Live-feed meta sav — eros elkulonites a kartyatol, count + utolso ido */
 .live-feed-meta {
     background: rgba(15, 23, 42, 0.7) !important;
     border-bottom-color: rgba(148, 163, 184, 0.22) !important;
     padding: 0.55rem 1.1rem !important;
+    color: var(--text-secondary);
+}
+.live-feed-meta-count {
+    color: var(--text-light, #e2e8f0);
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+}
+.live-feed-meta-count i.bi { color: var(--accent-gold); }
+.live-feed-meta-time {
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+    font-variant-numeric: tabular-nums;
 }
 
 /* Live-feed sorok — kicsit nagyobb tavolsag az elemek kozott */
@@ -2164,5 +2177,144 @@ button.mini-stat,
     .section-header-actions { width: 100%; }
     .ws-feed-badge { margin-left: 0; margin-top: 0.35rem; }
     .card-header { flex-wrap: wrap; }
+}
+
+/* ==========================================================================
+   24h activity chart — REST-fetch alapu, status pill + overlay + osszegzo chip-ek
+   ========================================================================== */
+.activity-chart-card .card-body { padding: 1.1rem 1.25rem 1.25rem; }
+.activity-chart-body { display: flex; flex-direction: column; gap: 0.8rem; }
+.activity-chart-wrap {
+    position: relative;
+    height: 280px;
+}
+.activity-chart-wrap canvas { max-height: 100%; }
+
+.activity-chart-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 23, 42, 0.78);
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(2px);
+    z-index: 2;
+    text-align: center;
+    padding: 1rem;
+}
+.activity-chart-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+.activity-chart-loading i.bi { font-size: 1.6rem; color: var(--accent-gold); }
+
+.activity-chart-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--text-secondary);
+    max-width: 32rem;
+}
+.activity-chart-message i.bi { font-size: 1.8rem; color: var(--text-muted); }
+.activity-chart-message-title { color: var(--text-light, #e2e8f0); font-weight: 600; }
+.activity-chart-message-sub { font-size: 0.78rem; line-height: 1.4; }
+.activity-chart-message-error i.bi { color: #ef4444; }
+.activity-chart-message-error .activity-chart-message-title { color: #fca5a5; }
+
+/* Osszegzo chip-ek a chart alatt — egyszerre lathato a chart vonal + a teljes szam */
+.activity-chart-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    padding-top: 0.55rem;
+    border-top: 1px dashed rgba(148, 163, 184, 0.2);
+}
+.chart-total-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    background: rgba(36, 48, 68, 0.92);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    font-size: 0.74rem;
+    color: var(--text-secondary);
+}
+.chart-total-chip i.bi {
+    color: var(--chip-color, #d4af37);
+    font-size: 0.85rem;
+}
+.chart-total-chip .chart-total-label { color: var(--text-secondary); }
+.chart-total-chip .chart-total-value {
+    color: var(--text-primary);
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    margin-left: 0.1rem;
+}
+
+/* Chart status pill — a "Riport" gomb helyere */
+.chart-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    flex-shrink: 0;
+    margin-left: 0.5rem;
+    transition: background-color 200ms ease, border-color 200ms ease;
+}
+.chart-status-pill .chart-status-detail {
+    color: var(--text-secondary);
+    font-weight: 400;
+    white-space: nowrap;
+}
+.chart-status-pill.chart-status-loaded {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.chart-status-pill.chart-status-loading {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+.chart-status-pill.chart-status-empty,
+.chart-status-pill.chart-status-idle {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+.chart-status-pill.chart-status-error {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+
+/* Osztott animacio a status-pill dot-jara (loading kozben pulse) */
+.ws-pill-dot.ws-dot-spin {
+    animation: ws-pulse-slow 1.4s ease-out infinite;
+}
+
+/* Live-feed forras-badge offline (no_token / disconnected) variansa */
+.data-source-badge.data-source-offline {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* Loading ikon spin */
+.activity-chart-loading i.bi.spin,
+i.bi.spin {
+    animation: ws-spin 0.9s linear infinite;
+    display: inline-block;
 }
 
