@@ -122,10 +122,11 @@ try {
     console.warn('[Server] CORS module not available, skipping CORS middleware');
 }
 
-// Why: helmet alap headerek (X-Frame-Options, X-Content-Type-Options, stb.) + minimális saját-asset CSP.
-//      A CSP csak a saját origin-ből engedi a script/style/img/connect forrásokat; Bootstrap és minden egyéb asset
-//      a frontend mappából (self) szolgáljuk ki, ezért nincs szükség külső host engedélyezésre. 'unsafe-inline'
-//      kifejezetten engedélyezve a meglévő inline JS/CSS miatt — későbbi nonce-os szigorítás külön issue.
+// Why: helmet alap biztonsági headerek (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, stb.) +
+//      a meglévő frontend <meta CSP>-vel SZINKRON forrás-engedélyek. A böngésző a HTTP-header és a meta-tag CSP-t
+//      metszetként alkalmazza, ezért ugyanazokat a forrásokat kell engedni itt, mint amit a HTML-ek is engednek
+//      (cdn.jsdelivr.net Bootstrap/popper/chart.js, Google Fonts), különben a layout szétesik.
+//      'unsafe-inline' a meglévő inline script/style miatt; nonce-os szigorítás külön issue.
 try {
     const helmet = require('helmet');
     app.use(helmet({
@@ -133,20 +134,27 @@ try {
             useDefaults: true,
             directives: {
                 defaultSrc: ["'self'"],
-                scriptSrc: ["'self'", "'unsafe-inline'"],
-                styleSrc: ["'self'", "'unsafe-inline'"],
+                scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+                // Why: a meglévő frontend HTML-ek bőven használnak inline onclick=/onchange= handlereket.
+                //      A helmet useDefaults: true alapból 'none'-ra tenné a script-src-attr-t és blokkolná őket
+                //      (gombok, navigáció nem reagálna), ezért szinkronba hozzuk a script-src-rel.
+                scriptSrcAttr: ["'unsafe-inline'"],
+                styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
+                // Why: inline style="..." attribútumok is vannak; a meta CSP-vel összhangban engedjük.
+                styleSrcAttr: ["'unsafe-inline'"],
                 imgSrc: ["'self'", 'data:', 'blob:'],
-                // Why: Socket.IO ws:// (dev) és wss:// (production reverse proxy mögött) is ugyanazon az originen jön.
-                connectSrc: ["'self'", 'ws:', 'wss:'],
-                fontSrc: ["'self'", 'data:'],
+                // Why: Socket.IO ws:// / wss:// + cdn.jsdelivr.net a HTML meta CSP-kkel megegyezően.
+                connectSrc: ["'self'", 'ws:', 'wss:', 'https://cdn.jsdelivr.net'],
+                fontSrc: ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://fonts.gstatic.com'],
                 objectSrc: ["'none'"],
                 frameAncestors: ["'self'"]
             }
         },
         // Why: dev-ben (http://) a HSTS csak a böngésző gyorsítótárát piszkítaná. Production-ben a reverse proxy szintjén kapcsoljuk be.
         hsts: IS_PRODUCTION,
+        // Why: cross-origin asset-ek (jsdelivr Bootstrap, Google Fonts) miatt nem zárhatjuk le ezeket teljesen.
         crossOriginEmbedderPolicy: false,
-        crossOriginResourcePolicy: { policy: 'same-origin' }
+        crossOriginResourcePolicy: { policy: 'cross-origin' }
     }));
     console.log('[Server] Helmet middleware loaded');
 } catch (helmetError) {
