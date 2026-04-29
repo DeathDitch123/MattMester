@@ -16,13 +16,14 @@ Miért történt
 - Egy forrás-igazság (shared module) bevezetésével csökkenthető a drift és javítható a tesztelhetőség.
 
 Mit kell következőleg csinálni
-1. Synchronizáld a WS eseményneveket backend és frontend között (`admin:alert:suspicious` vs `admin:alert:suspicious_pattern`). Külön PR legyen.
-2. Készíts egy `/api/public/admin-constants` endpointot a backendben (opcionális), amely a frontend számára publikus konstansokat szolgáltatja (hibakódok, TTL-ek).
-3. Kövesd a javasolt fejlesztési workflowot: minden új admin mutáló műveletet auditolj és broadcastolj (HTTP 200 + WS `admin:audit:created`).
+1. ✅ WS eseménynevek szinkronizálva (`admin:alert:suspicious_pattern` mindkét oldalon).
+2. ✅ `/api/public/admin-constants` endpoint elérhető — TTL-ek, reason hosszok, UI timing, hibakódok egy forrásból.
+3. ☐ Frontend bekötése a `/api/public/admin-constants` válaszra (jelenleg hardcoded értékek + `constants.js` duplikáció).
+4. Kövesd a javasolt fejlesztési workflowot: minden új admin mutáló műveletet auditolj és broadcastolj (HTTP 200 + WS `admin:audit:created`); 1 függvény = max 1 return; minden async művelet try-catchben.
 
 Fájlok
-- Hozzáadott: `frontend/javascript/shared/adminAuthFlow.js`, `frontend/__tests__/adminTokenFlow.test.js`
-- Módosított: `frontend/javascript/adminPanel.js`, `frontend/html/adminPanel.html` (script tag), `backend/jest.config.js`, `backend/ADMIN_PANEL.md` (auth lifecycle rész)
+- Hozzáadott: `frontend/javascript/shared/adminAuthFlow.js`, `frontend/__tests__/adminTokenFlow.test.js`, `backend/api/routes/public.js`
+- Módosított: `frontend/javascript/adminPanel.js`, `frontend/html/adminPanel.html` (script tag), `backend/jest.config.js`, `backend/ADMIN_PANEL.md` (auth lifecycle rész), `backend/api/admin/alertingService.js` (WS event-name fix), `backend/api/api.js` (publicRoutes mount)
 
 Teszt és ellenőrzés
 - Frontend syntax: `node --check frontend/javascript/adminPanel.js` és `node --check frontend/javascript/shared/adminAuthFlow.js`

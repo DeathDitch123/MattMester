@@ -140,7 +140,7 @@ async function recordSuspiciousPattern({ ipAddress, userAgent, endpoint, userId,
         });
         result.alertId = inserted.insertId;
 
-        safeBroadcast('admin:alert:suspicious', {
+        safeBroadcast('admin:alert:suspicious_pattern', {
             alertId: result.alertId,
             occurredAt: new Date().toISOString(),
             ip: ipAddress,

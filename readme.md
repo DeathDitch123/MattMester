@@ -199,17 +199,16 @@ Az admin panel auth és token kezelése az **F1–F3 fázison** át van vezetve:
 
 ### Ismert nyitott kérdések
 
-- **WS event-name eltérés**: backend `admin:alert:suspicious` vs frontend `admin:alert:suspicious_pattern`. Szinkronizálás egy külön PR-ben.
-- **Backend konstansok expozíciója**: jelenleg hardcoded TTL-ek (15 min, 60s refresh window). Javaslat: kis `/api/public/admin-constants` endpoint.
+- ✅ **WS event-name eltérés**: backend most `admin:alert:suspicious_pattern` néven broadcastol (sync a frontenddel). [backend/api/admin/alertingService.js:143](backend/api/admin/alertingService.js#L143)
+- ✅ **Backend konstansok expozíciója**: `GET /api/public/admin-constants` endpoint elérhető — TTL-ek, reason hosszok, UI timing, és `ADMIN_ERROR_CODES` egy forrásból. [backend/api/routes/public.js](backend/api/routes/public.js)
 - **Dead backend exports**: `isAdmin` helper már nem használt (helyette `parseAdminToken` middleware). Deprecate + külön PR eltávolítás.
 
 ### Következő lépések
 
 1. Végigmenni az F4–F9 fázisokon (WebSocket, AlertingService, super-admin ops).
-2. WS event-name szinkronizálás.
-3. Backend konstansok expozíciója.
-4. Dead exportok takarítása.
-5. Frontend admin operációk (ban, unban, profile image review, stb.) — ezek az F4–F9 mögé kerülnek.
+2. Frontend bekötése a `/api/public/admin-constants` válaszára (jelenleg még hardcoded értékekből táplálkozik).
+3. Dead exportok takarítása.
+4. Frontend admin operációk (ban, unban, profile image review, stb.) — ezek az F4–F9 mögé kerülnek.
 
 További részletekért nézd meg az [ADMIN_PANEL.md](ADMIN_PANEL.md) és [ADMIN_AUTH_CHANGES.md](ADMIN_AUTH_CHANGES.md) fájlokat.
 

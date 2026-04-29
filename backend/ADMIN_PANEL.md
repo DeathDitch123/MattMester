@@ -276,7 +276,7 @@ Ez a szakasz részletezi a backend és a frontend közötti pontos viselkedési 
 
 - Implementációs megjegyzések
   - A frontend most `window.MattMesterAdminAuthFlow`-on keresztül érhető el a böngészőben és `module.exports` Node tesztekhez.
-  - A bevezetés során fontold meg a backend konstansok publikussá tételét (kis `/api/public/admin-constants` endpoint), hogy a frontend build-time vagy runtime egy forrásból olvassa a TTL-eket és kódneveket.
+  - ✅ **Backend konstansok publikus expozíciója**: a `GET /api/public/admin-constants` endpoint (`backend/api/routes/public.js`) visszaadja a token TTL-t, az elevate rate limit ablakot, reason min/max hosszokat, UI timing konstansokat és az `ADMIN_ERROR_CODES` mapet. A frontend ebből egy forrásból olvashatja a TTL-eket és kódneveket — a bekötés még TODO.
 
 ---
 

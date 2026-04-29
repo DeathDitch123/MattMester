@@ -93,8 +93,8 @@
 | 68 | **F9. Audit retention job (18 hónap, hard delete)** – napi 1× `setInterval` az `initDatabase` után. Saját audit entry minden futáshoz (`action='audit.retention.run'`, törölt sorok száma metadata-ban). Iskolai projekthez hard delete elég; JSONL archive opció a `🟢 Bónusz`-ban. | [backend/server.js](backend/server.js) | ☐ |
 | 69 | **F10. Admin frontend** – külön iteráció, akkor indul, ha az API + WS oldalon F1–F9 zöld. | [frontend/javascript/adminPanel.js](frontend/javascript/adminPanel.js) | ☐ |
 | 70 | **Frontend auth flow módosítások** – az új `frontend/javascript/shared/adminAuthFlow.js` DI factory (`createAdminAuthFlow`) helyez egy forrás-igazságot az admin token + refresh + auth error kezelésre. Frontend tesztek: `frontend/__tests__/adminTokenFlow.test.js` (9 teszt, 3 kötelező szcenárió). A frissítés betartja a \"1 function = max 1 return\" és \"try-catch minden async\"-t. | [frontend/javascript/shared/adminAuthFlow.js](frontend/javascript/shared/adminAuthFlow.js), [frontend/javascript/adminPanel.js](frontend/javascript/adminPanel.js), [frontend/__tests__/adminTokenFlow.test.js](frontend/__tests__/adminTokenFlow.test.js), [ADMIN_AUTH_CHANGES.md](ADMIN_AUTH_CHANGES.md) | ✅ |
-| 71 | **WS event-name szinkronizálás** – backend `admin:alert:suspicious` vs frontend `admin:alert:suspicious_pattern` eltérés. Szinkronizálás egy külön PR-ben javasolt. | [backend/api/admin/alertingService.js](backend/api/admin/alertingService.js), [frontend/javascript/adminPanel.js](frontend/javascript/adminPanel.js) | ☐ |
-| 72 | **Backend konstansok expozíciója** – javaslat: kis `/api/public/admin-constants` endpoint, amely a frontend számára közös TTL-eket, error kódokat, és egyéb admin-specifikus konstansokat szolgáltat. | [backend/api/routes/admin.js](backend/api/routes/admin.js) vagy új file | ☐ |
+| 71 | **WS event-name szinkronizálás** – backend most `admin:alert:suspicious_pattern` néven broadcastol, a frontend listenerrel megegyezően. | [backend/api/admin/alertingService.js:143](backend/api/admin/alertingService.js#L143), [frontend/javascript/adminPanel.js:1711](frontend/javascript/adminPanel.js#L1711) | ✅ |
+| 72 | **Backend konstansok expozíciója** – `GET /api/public/admin-constants` endpoint visszaadja a token TTL-t, reason hosszokat, UI timing konstansokat és az `ADMIN_ERROR_CODES` mapet egyetlen forrásból. | [backend/api/routes/public.js](backend/api/routes/public.js) | ✅ |
 | 73 | **Dead backend exportok takarítása** – `isAdmin` helper az [funtions.js](backend/api/funtions.js)-ben már nem használt (helyette `parseAdminToken` middleware). Deprecate megjegyzés + külön PR a törléshez. | [backend/api/funtions.js](backend/api/funtions.js) | ☐ |
 
 ### Részletes admin-panel backlog
@@ -110,9 +110,10 @@ Az alábbi bontás az [ADMIN_PANEL.md](ADMIN_PANEL.md) teljes tervét backlog-fo
 - ✅ Frontend `adminTokenFlow.test.js` (9 teszt, 3 kötelező szcenárió + 6 kiegészítő)
 - ✅ Backend tesztek zöldek (`adminAuthRoutes`, `adminMiddleware`, `adminAuditService`)
 - ✅ Dokumentáció: `ADMIN_PANEL.md` § 2.8 auth lifecycle, `ADMIN_AUTH_CHANGES.md` változásnapló
-- ☐ WS event-name szinkronizálás → külön PR
-- ☐ Backend konstansok expozíciója (`/api/public/admin-constants` endpoint) → javaslat
+- ✅ WS event-name szinkronizálás (backend `admin:alert:suspicious_pattern`)
+- ✅ Backend konstansok expozíciója (`GET /api/public/admin-constants`)
 - ☐ Dead backend exportok eltávolítása (`isAdmin`) → külön PR
+- ☐ Frontend bekötése a `/api/public/admin-constants` válaszra (jelenleg hardcoded értékekkel dolgozik)
 
 #### F1. Séma + token alapok
 
