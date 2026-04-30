@@ -429,6 +429,7 @@ const state = {
     userView: {
         userId: null,
         activeTab: 'target',      // 'target' | 'actor' | 'security'
+        refreshTimerId: null,     // egysegesitett 5 mp-es modal-frissito timer
         target:   { items: [], loading: false, error: null, loadedAt: null },
         actor:    { items: [], loading: false, error: null, loadedAt: null },
         security: { items: [], loading: false, error: null, loadedAt: null, filter: 'all' },
@@ -637,6 +638,57 @@ function renderUserStatusCell(user) {
     } catch (err) {
         console.warn('renderUserStatusCell hiba:', err);
         html = '—';
+    }
+    return html;
+}
+
+// Email verifikalt / nem verifikalt jelolo - kis pill, ikonnal + tooltip-pel.
+function renderEmailVerifiedBadge(user) {
+    let html = '';
+    try {
+        const verified = Boolean(user?.emailVerified);
+        const verifiedAt = user?.emailVerifiedAt ? new Date(user.emailVerifiedAt) : null;
+        const tooltip = verified
+            ? (verifiedAt && !Number.isNaN(verifiedAt.getTime())
+                ? `Email megerősítve: ${verifiedAt.toLocaleString('hu-HU')}`
+                : 'Email megerősítve')
+            : 'Az email cím nincs megerősítve.';
+        if (verified) {
+            html = `<span id="adminUserViewEmailVerified" class="email-verified-badge is-verified" title="${escapeHtml(tooltip)}">
+                        <i class="bi bi-patch-check-fill"></i>Megerősítve
+                    </span>`;
+        } else {
+            html = `<span id="adminUserViewEmailVerified" class="email-verified-badge is-unverified" title="${escapeHtml(tooltip)}">
+                        <i class="bi bi-exclamation-circle-fill"></i>Nem megerősítve
+                    </span>`;
+        }
+    } catch (err) {
+        console.warn('renderEmailVerifiedBadge hiba:', err);
+        html = '<span id="adminUserViewEmailVerified" class="email-verified-badge"></span>';
+    }
+    return html;
+}
+
+// Profilkep statusz pill (approved / pending / rejected / default / null).
+function renderProfileImageStatusBadge(user) {
+    let html = '';
+    try {
+        const status = String(user?.profileImageStatus || '').toLowerCase();
+        const labels = {
+            approved: { icon: 'bi-image-fill',          label: 'Profilkép: jóváhagyott', cls: 'is-approved' },
+            pending:  { icon: 'bi-hourglass-split',     label: 'Profilkép: jóváhagyásra vár', cls: 'is-pending' },
+            rejected: { icon: 'bi-image-alt',           label: 'Profilkép: elutasítva', cls: 'is-rejected' },
+            default:  { icon: 'bi-person-circle',       label: 'Profilkép: alapértelmezett', cls: 'is-default' }
+        };
+        const meta = labels[status] || labels.default;
+        const noUpload = !status;
+        const finalMeta = noUpload ? labels.default : meta;
+        html = `<span id="adminUserViewImageStatus" class="profile-image-status-badge ${finalMeta.cls}" title="${escapeHtml(finalMeta.label)}">
+                    <i class="bi ${finalMeta.icon}"></i>${escapeHtml(finalMeta.label.replace('Profilkép: ', ''))}
+                </span>`;
+    } catch (err) {
+        console.warn('renderProfileImageStatusBadge hiba:', err);
+        html = '<span id="adminUserViewImageStatus" class="profile-image-status-badge"></span>';
     }
     return html;
 }
@@ -3179,6 +3231,7 @@ function openAdminUserView(userId) {
         } else if (!modalEl || !window.bootstrap?.Modal) {
             showToast('A megtekintés modal nem elérhető.', 'danger', 'bi-x-circle');
         } else {
+            stopAdminUserViewRefresh();
             state.userView.userId = user.id;
             state.userView.activeTab = 'target';
             state.userView.target   = { items: [], loading: false, error: null, loadedAt: null };
@@ -3191,8 +3244,8 @@ function openAdminUserView(userId) {
             modal.show();
             loadAdminUserAuditTab('target');
             loadAdminUserPresence();
-            startAdminUserPresenceRefresh();
-            modalEl.addEventListener('hidden.bs.modal', stopAdminUserPresenceRefresh, { once: true });
+            startAdminUserViewRefresh();
+            modalEl.addEventListener('hidden.bs.modal', stopAdminUserViewRefresh, { once: true });
             opened = true;
         }
     } catch (err) {
@@ -3230,6 +3283,11 @@ function renderAdminUserViewModal(user) {
             if (roleBadge) roleBadge.outerHTML = `<span id="adminUserViewRole">${rolePill(user.role === 'admin' ? 'admin' : 'player')}</span>`;
             const statusBadge = document.getElementById('adminUserViewStatus');
             if (statusBadge) statusBadge.outerHTML = `<span id="adminUserViewStatus">${user.isBanned ? statusPill('banned') : statusPill('active')}</span>`;
+
+            const emailVerifiedEl = document.getElementById('adminUserViewEmailVerified');
+            if (emailVerifiedEl) emailVerifiedEl.outerHTML = renderEmailVerifiedBadge(user);
+            const imageStatusEl = document.getElementById('adminUserViewImageStatus');
+            if (imageStatusEl) imageStatusEl.outerHTML = renderProfileImageStatusBadge(user);
 
             // Tab gombok edit/ban onclick — modal-ba menjen
             const editBtn = document.getElementById('adminUserViewEditBtn');
@@ -3648,32 +3706,134 @@ function renderAdminUserViewPresence(data) {
     return rendered;
 }
 
-function startAdminUserPresenceRefresh() {
+// Egysegesitett 5 mp-es modal-frissito: presence + felhasznaloi alapadatok
+// (REST users/list silent refresh + re-render) + az aktiv audit/security tab.
+// Egy timer az egesz modalra; modal bezarasakor leall.
+const ADMIN_USER_VIEW_REFRESH_MS = 5000;
+
+async function refreshAdminUserViewModal() {
+    let refreshed = false;
+    try {
+        const userId = state.userView.userId;
+        const modalEl = document.getElementById('adminUserViewModal');
+        const modalOpen = Boolean(modalEl?.classList.contains('show'));
+        if (userId && modalOpen) {
+            // 1) presence
+            loadAdminUserPresence();
+            // 2) Az aktiv tab adatai (csendben, hogy ne villantsa a "loading"-ot)
+            const tab = state.userView.activeTab;
+            if (tab === 'security') {
+                refreshAdminUserSecurityActivitySilent();
+            } else if (tab === 'target' || tab === 'actor') {
+                refreshAdminUserAuditTabSilent(tab);
+            }
+            // 3) User alapadatok — REST users/list silent refresh, majd re-render
+            await loadAdminUsersList({ silent: true });
+            const updated = findAdminUserById(userId);
+            if (updated) {
+                renderAdminUserViewModal(updated);
+            }
+            refreshed = true;
+        }
+    } catch (err) {
+        console.warn('refreshAdminUserViewModal hiba:', err);
+    }
+    return refreshed;
+}
+
+// Csendes audit refresh — nem mutat "betoltodes" allapotot, csak frissiti az
+// items-et es egyetlen alkalommal renderelni, ha a felhasznalo meg ezt a tabot nezi.
+async function refreshAdminUserAuditTabSilent(tabKey) {
+    let success = false;
+    try {
+        const userId = state.userView.userId;
+        const slot = state.userView[tabKey];
+        if (!userId || !slot || !state.adminToken) {
+            // semmi
+        } else {
+            const params = new URLSearchParams();
+            params.set('limit', '100');
+            if (tabKey === 'target') {
+                params.set('targetType', 'user');
+                params.set('targetId', String(userId));
+            } else {
+                params.set('actorUserId', String(userId));
+            }
+            const headers = adminAuthHeaders({ Accept: 'application/json' });
+            const response = await fetch(`/api/admin/audit/search?${params.toString()}`, {
+                method: 'GET', credentials: 'same-origin', headers
+            });
+            if (response.ok) {
+                const json = await response.json();
+                const items = Array.isArray(json?.data) ? json.data : (Array.isArray(json?.data?.items) ? json.data.items : []);
+                slot.items = items;
+                slot.loadedAt = new Date();
+                if (state.userView.activeTab === tabKey) {
+                    renderAdminUserViewAuditList(tabKey);
+                }
+                success = true;
+            }
+        }
+    } catch (err) {
+        console.warn('refreshAdminUserAuditTabSilent hiba:', err);
+    }
+    return success;
+}
+
+async function refreshAdminUserSecurityActivitySilent() {
+    let success = false;
+    try {
+        const userId = state.userView.userId;
+        const slot = state.userView.security;
+        if (!userId || !slot || !state.adminToken) {
+            // semmi
+        } else {
+            const headers = adminAuthHeaders({ Accept: 'application/json' });
+            const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/security-activity?limit=150`, {
+                method: 'GET', credentials: 'same-origin', headers
+            });
+            if (response.ok) {
+                const json = await response.json();
+                slot.items = Array.isArray(json?.data) ? json.data : [];
+                slot.loadedAt = new Date();
+                if (state.userView.activeTab === 'security') {
+                    renderAdminUserViewSecurityList();
+                }
+                success = true;
+            }
+        }
+    } catch (err) {
+        console.warn('refreshAdminUserSecurityActivitySilent hiba:', err);
+    }
+    return success;
+}
+
+function startAdminUserViewRefresh() {
     let started = false;
     try {
-        stopAdminUserPresenceRefresh();
-        state.userView.presence.refreshTimerId = setInterval(() => {
-            if (state.userView.userId) {
-                loadAdminUserPresence();
-            }
-        }, 5000);
+        stopAdminUserViewRefresh();
+        state.userView.refreshTimerId = setInterval(refreshAdminUserViewModal, ADMIN_USER_VIEW_REFRESH_MS);
         started = true;
     } catch (err) {
-        console.warn('startAdminUserPresenceRefresh hiba:', err);
+        console.warn('startAdminUserViewRefresh hiba:', err);
     }
     return started;
 }
 
-function stopAdminUserPresenceRefresh() {
+function stopAdminUserViewRefresh() {
     let stopped = false;
     try {
-        if (state.userView.presence.refreshTimerId) {
+        if (state.userView.refreshTimerId) {
+            clearInterval(state.userView.refreshTimerId);
+            state.userView.refreshTimerId = null;
+        }
+        if (state.userView.presence && state.userView.presence.refreshTimerId) {
             clearInterval(state.userView.presence.refreshTimerId);
             state.userView.presence.refreshTimerId = null;
         }
         stopped = true;
     } catch (err) {
-        console.warn('stopAdminUserPresenceRefresh hiba:', err);
+        console.warn('stopAdminUserViewRefresh hiba:', err);
     }
     return stopped;
 }

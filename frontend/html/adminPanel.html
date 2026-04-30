@@ -111,10 +111,14 @@
                                     class="admin-user-view-avatar" alt="Profilkép" data-fallback="true">
                             </div>
                             <h4 class="admin-user-view-name" id="adminUserViewName">—</h4>
-                            <div class="admin-user-view-email text-secondary" id="adminUserViewEmail">—</div>
+                            <div class="admin-user-view-email-line">
+                                <span class="text-secondary" id="adminUserViewEmail">—</span>
+                                <span id="adminUserViewEmailVerified" class="email-verified-badge" title="Email státusz"></span>
+                            </div>
                             <div class="admin-user-view-badges mt-2">
                                 <span id="adminUserViewRole"></span>
                                 <span id="adminUserViewStatus"></span>
+                                <span id="adminUserViewImageStatus" class="profile-image-status-badge"></span>
                             </div>
                             <div class="admin-user-view-elo-trio" id="adminUserViewEloTrio">
                                 <div class="admin-user-view-elo-card" data-kind="classic">

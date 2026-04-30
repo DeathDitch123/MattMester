@@ -3105,3 +3105,91 @@ i.bi.spin {
     .admin-users-table-wrap { max-height: calc(100vh - 320px); }
     .admin-users-table { min-width: 540px; }
 }
+
+/* =============================================================
+   ADMIN — Email verified + profilkép státusz badge-ek a modalban
+   ============================================================= */
+.admin-user-view-email-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+.admin-user-view-email-line > span:first-child {
+    font-size: 0.85rem;
+    word-break: break-all;
+    line-height: 1.25;
+}
+
+.email-verified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.email-verified-badge i.bi { font-size: 0.85rem; }
+.email-verified-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.email-verified-badge.is-verified {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.4);
+}
+.email-verified-badge.is-unverified {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.profile-image-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+    text-transform: lowercase;
+}
+.profile-image-status-badge i.bi { font-size: 0.85rem; }
+.profile-image-status-badge.is-approved {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.10);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.profile-image-status-badge.is-pending {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.10);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+.profile-image-status-badge.is-rejected {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.10);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+.profile-image-status-badge.is-default {
+    color: var(--text-secondary);
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* A modal aside badges sora törje a sort, ha sok */
+.admin-user-view-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+}

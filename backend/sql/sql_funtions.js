@@ -687,12 +687,14 @@ async function getOnlineGamesCount() {
 async function getAllUsers() {
     const pool = getPool();
     const query = `
-        SELECT 
+        SELECT
             u.id,
             u.username,
             u.email,
             u.role,
             u.profile_image,
+            u.is_email_verified,
+            u.email_verified_at,
             u.elo,
             u.elo_MM,
             u.elo_bullet,
@@ -700,17 +702,24 @@ async function getAllUsers() {
             u.banned_until,
             u.last_active,
             u.created_at,
+            (
+                SELECT piu.status
+                FROM profile_image_uploads piu
+                WHERE piu.user_id = u.id
+                ORDER BY piu.upload_time DESC, piu.id DESC
+                LIMIT 1
+            ) AS profile_image_status,
             COALESCE(s.wins, 0) AS wins,
             COALESCE(s.losses, 0) AS losses,
             COALESCE(s.draws, 0) AS draws,
             COALESCE(s.abilities_used, 0) AS total_abilities,
             IFNULL(ROUND((s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 1), 0) AS win_rate_percent,
             (SELECT ip_address FROM user_logs WHERE user_id = u.id AND event_type = 'login' ORDER BY occurred_at DESC LIMIT 1) AS last_ip
-        FROM 
+        FROM
             users u
-        LEFT JOIN 
+        LEFT JOIN
             statistics s ON u.id = s.user_id
-        ORDER BY 
+        ORDER BY
             u.last_active DESC;
         `;
     try {
