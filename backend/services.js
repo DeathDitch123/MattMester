@@ -177,7 +177,7 @@ const leaderboardService = {
                 io.to('general-room').emit('leaderboard:update', leaderboardCache);
             }
 
-            console.log(`[Cache] Ranglista frissítve: ${new Date().toLocaleString()}`);
+            // console.log(`[Cache] Ranglista frissítve: ${new Date().toLocaleString()}`);
         } catch (error) {
             console.error('Error occurred while updating leaderboard cache:', error);   
         }
