@@ -568,6 +568,38 @@ router.get(
     }
 );
 
+// Presence-snapshotbol egy lookup map: userId -> { online, tabCount, socketCount, lastSeenAt, currentPage }
+function buildPresenceMap(socketHub) {
+    const presenceMap = new Map();
+    try {
+        const snapshot = socketHub && typeof socketHub.getPresenceSnapshot === 'function'
+            ? socketHub.getPresenceSnapshot()
+            : null;
+        const clients = Array.isArray(snapshot?.clients) ? snapshot.clients : [];
+        for (const client of clients) {
+            if (client?.userId) {
+                const tabs = Array.isArray(client.tabs) ? client.tabs : [];
+                const lastSeenTs = tabs.reduce((max, tab) => {
+                    const ts = tab?.lastSeenAt ? new Date(tab.lastSeenAt).getTime() : 0;
+                    return ts > max ? ts : max;
+                }, client.lastSeenAt ? new Date(client.lastSeenAt).getTime() : 0);
+                const primaryPage = tabs.length ? String(tabs[0]?.page || '') : '';
+                presenceMap.set(Number(client.userId), {
+                    online: true,
+                    tabCount: tabs.length || Number(client.tabCount || 0),
+                    socketCount: Number(client.socketCount || 0),
+                    lastSeenAt: lastSeenTs ? new Date(lastSeenTs).toISOString() : (client.lastSeenAt || null),
+                    currentPage: primaryPage,
+                    pages: tabs.map((tab) => String(tab?.page || '')).filter(Boolean)
+                });
+            }
+        }
+    } catch (error) {
+        console.warn('buildPresenceMap hiba:', error.message);
+    }
+    return presenceMap;
+}
+
 router.get(
     '/users/list',
     adminLimiterChain,
@@ -579,35 +611,131 @@ router.get(
         let payload = { success: false, data: [], message: 'Belso hiba a user lista lekerdezese soran.' };
         try {
             const users = await sql.getAllUsers();
+            const socketHub = request.app?.locals?.socketHub;
+            const presenceMap = buildPresenceMap(socketHub);
             payload = {
                 success: true,
                 message: `${(users || []).length} felhasznalo.`,
-                data: (users || []).map((user) => ({
-                    id: user.id,
-                    username: user.username,
-                    email: user.email,
-                    role: user.role,
-                    profileImage: user.profile_image,
-                    isBanned: Boolean(user.is_banned),
-                    bannedUntil: user.banned_until,
-                    elo: user.elo,
-                    eloMM: user.elo_MM,
-                    eloBullet: user.elo_bullet,
-                    wins: user.wins,
-                    losses: user.losses,
-                    draws: user.draws,
-                    winRate: Number(user.win_rate_percent || 0),
-                    totalAbilities: Number(user.total_abilities || 0),
-                    lastIp: user.last_ip || null,
-                    lastActive: user.last_active,
-                    createdAt: user.created_at
-                }))
+                data: (users || []).map((user) => {
+                    const presence = presenceMap.get(Number(user.id)) || null;
+                    return {
+                        id: user.id,
+                        username: user.username,
+                        email: user.email,
+                        role: user.role,
+                        profileImage: user.profile_image,
+                        isBanned: Boolean(user.is_banned),
+                        bannedUntil: user.banned_until,
+                        elo: user.elo,
+                        eloMM: user.elo_MM,
+                        eloBullet: user.elo_bullet,
+                        wins: user.wins,
+                        losses: user.losses,
+                        draws: user.draws,
+                        winRate: Number(user.win_rate_percent || 0),
+                        totalAbilities: Number(user.total_abilities || 0),
+                        lastIp: user.last_ip || null,
+                        lastActive: user.last_active,
+                        createdAt: user.created_at,
+                        online: Boolean(presence?.online),
+                        presenceTabCount: presence?.tabCount || 0,
+                        presenceSocketCount: presence?.socketCount || 0,
+                        presenceLastSeenAt: presence?.lastSeenAt || null,
+                        presenceCurrentPage: presence?.currentPage || null
+                    };
+                })
             };
             response.locals.adminAudit.skip = true;
         } catch (error) {
             console.error('admin/users/list hiba:', error.message);
             statusCode = 500;
             payload = { success: false, data: [], message: error.message || payload.message };
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// Egy konkret user biztonsagi naploja (a sajat profile oldalon latott /api/security/activity).
+router.get(
+    '/users/:id/security-activity',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, data: [], message: 'Belso hiba a biztonsagi naplo lekerdezese soran.' };
+        try {
+            const userId = Number(request.params.id);
+            const limit = Math.min(Math.max(Number(request.query.limit) || 150, 1), 500);
+            if (!Number.isFinite(userId) || userId <= 0) {
+                statusCode = 400;
+                payload = { success: false, data: [], message: 'Ervenytelen userId.' };
+            } else {
+                const items = await sql.getUserSecurityActivity(userId, limit);
+                payload = {
+                    success: true,
+                    message: `${(items || []).length} bejegyzes.`,
+                    data: items || []
+                };
+                response.locals.adminAudit.skip = true;
+            }
+        } catch (error) {
+            console.error('admin/users/:id/security-activity hiba:', error.message);
+            statusCode = 500;
+            payload = { success: false, data: [], message: error.message || payload.message };
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// Egy konkret user reszletes presence-e (online tabok, lapok, last seen).
+router.get(
+    '/users/:id/presence',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, data: null, message: 'Belso hiba a presence lekerdezese soran.' };
+        try {
+            const userId = Number(request.params.id);
+            if (!Number.isFinite(userId) || userId <= 0) {
+                statusCode = 400;
+                payload = { success: false, data: null, message: 'Ervenytelen userId.' };
+            } else {
+                const socketHub = request.app?.locals?.socketHub;
+                const snapshot = socketHub && typeof socketHub.getPresenceSnapshot === 'function'
+                    ? socketHub.getPresenceSnapshot()
+                    : null;
+                const clients = Array.isArray(snapshot?.clients) ? snapshot.clients : [];
+                const record = clients.find((c) => Number(c?.userId) === userId) || null;
+                payload = {
+                    success: true,
+                    data: record ? {
+                        online: true,
+                        userId: record.userId,
+                        username: record.username,
+                        role: record.role,
+                        socketCount: Number(record.socketCount || 0),
+                        tabCount: Number(record.tabCount || 0),
+                        firstSeenAt: record.firstSeenAt || null,
+                        lastSeenAt: record.lastSeenAt || null,
+                        tabs: Array.isArray(record.tabs) ? record.tabs.map((tab) => ({
+                            tabId: tab.tabId,
+                            page: tab.page,
+                            connectedAt: tab.connectedAt,
+                            lastSeenAt: tab.lastSeenAt
+                        })) : []
+                    } : { online: false }
+                };
+                response.locals.adminAudit.skip = true;
+            }
+        } catch (error) {
+            console.error('admin/users/:id/presence hiba:', error.message);
+            statusCode = 500;
+            payload = { success: false, data: null, message: error.message || payload.message };
         }
         return response.status(statusCode).json(payload);
     }

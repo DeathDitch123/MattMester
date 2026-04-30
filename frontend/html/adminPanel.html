@@ -116,9 +116,19 @@
                                 <span id="adminUserViewRole"></span>
                                 <span id="adminUserViewStatus"></span>
                             </div>
-                            <div class="admin-user-view-elo">
-                                <div class="text-gold display-6 fw-bold lh-1" id="adminUserViewElo">0</div>
-                                <small class="text-secondary">ELO értékelés</small>
+                            <div class="admin-user-view-elo-trio" id="adminUserViewEloTrio">
+                                <div class="admin-user-view-elo-card" data-kind="classic">
+                                    <div class="admin-user-view-elo-num" id="adminUserViewEloClassic">0</div>
+                                    <small>Klasszikus</small>
+                                </div>
+                                <div class="admin-user-view-elo-card is-primary" data-kind="mm">
+                                    <div class="admin-user-view-elo-num" id="adminUserViewEloMM">0</div>
+                                    <small>MattMester</small>
+                                </div>
+                                <div class="admin-user-view-elo-card" data-kind="bullet">
+                                    <div class="admin-user-view-elo-num" id="adminUserViewEloBullet">0</div>
+                                    <small>Bullet</small>
+                                </div>
                             </div>
                             <hr class="border-secondary my-3">
                             <div class="admin-user-view-stats">
@@ -127,6 +137,18 @@
                                 <div><div class="h5 text-warning mb-0" id="adminUserViewDraws">0</div><small class="text-secondary">Döntetlen</small></div>
                                 <div><div class="h5 text-gold mb-0"    id="adminUserViewWinRate">0%</div><small class="text-secondary">Győzelmi arány</small></div>
                             </div>
+
+                            <!-- Presence panel -->
+                            <div class="admin-user-view-presence" id="adminUserViewPresence">
+                                <div class="admin-user-view-presence-head">
+                                    <span class="user-presence" id="adminUserViewPresenceBadge">
+                                        <span class="user-presence-dot"></span><span id="adminUserViewPresenceLabel">Offline</span>
+                                    </span>
+                                    <span class="text-secondary small" id="adminUserViewPresenceMeta">—</span>
+                                </div>
+                                <ul class="admin-user-view-presence-tabs" id="adminUserViewPresenceTabs"></ul>
+                            </div>
+
                             <hr class="border-secondary my-3">
                             <ul class="admin-user-view-meta-list">
                                 <li><span class="text-secondary">Utolsó aktivitás</span><span class="text-white" id="adminUserViewLastActive">—</span></li>
@@ -136,7 +158,7 @@
                         </aside>
 
                         <section class="admin-user-view-main">
-                            <div class="admin-user-view-tabs" role="tablist" aria-label="Audit napló szűrő">
+                            <div class="admin-user-view-tabs" role="tablist" aria-label="Naplók szűrése">
                                 <button type="button" class="admin-user-view-tab is-active" data-tab="target"
                                     onclick="switchAdminUserViewTab('target')" role="tab">
                                     <i class="bi bi-person-bounding-box me-1"></i>Vele történt
@@ -145,7 +167,11 @@
                                     onclick="switchAdminUserViewTab('actor')" role="tab">
                                     <i class="bi bi-shield-fill-exclamation me-1"></i>Ő végezte
                                 </button>
-                                <span class="admin-user-view-tabs-hint text-secondary small ms-auto">
+                                <button type="button" class="admin-user-view-tab" data-tab="security"
+                                    onclick="switchAdminUserViewTab('security')" role="tab">
+                                    <i class="bi bi-shield-lock me-1"></i>Biztonsági napló
+                                </button>
+                                <span class="admin-user-view-tabs-hint text-secondary small ms-auto" id="adminUserViewTabsHint">
                                     <i class="bi bi-info-circle me-1"></i>Audit napló — utolsó 100
                                 </span>
                             </div>
@@ -159,6 +185,21 @@
                             </div>
                             <div class="admin-user-view-tab-pane d-none" data-tab="actor">
                                 <ul class="admin-user-view-audit-list">
+                                    <li class="admin-user-view-empty">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        <div>Válts a fülre a betöltéshez.</div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="admin-user-view-tab-pane d-none" data-tab="security">
+                                <div class="admin-user-view-security-filter" role="group" aria-label="Biztonsági napló szűrése">
+                                    <button type="button" class="admin-user-view-sec-filter is-active" data-sec-filter="all"      onclick="setAdminUserViewSecurityFilter('all')">Összes</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="auth"     onclick="setAdminUserViewSecurityFilter('auth')">Munkamenet</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="security" onclick="setAdminUserViewSecurityFilter('security')">Biztonság</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="profile"  onclick="setAdminUserViewSecurityFilter('profile')">Profil</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="social"   onclick="setAdminUserViewSecurityFilter('social')">Szociális</button>
+                                </div>
+                                <ul class="admin-user-view-security-list">
                                     <li class="admin-user-view-empty">
                                         <i class="bi bi-hourglass-split"></i>
                                         <div>Válts a fülre a betöltéshez.</div>

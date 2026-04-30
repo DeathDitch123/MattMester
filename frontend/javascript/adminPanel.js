@@ -428,9 +428,11 @@ const state = {
     // User-megtekintés modal állapota
     userView: {
         userId: null,
-        activeTab: 'target',      // 'target' = vele történt, 'actor' = ő végezte
-        target: { items: [], loading: false, error: null, loadedAt: null },
-        actor:  { items: [], loading: false, error: null, loadedAt: null }
+        activeTab: 'target',      // 'target' | 'actor' | 'security'
+        target:   { items: [], loading: false, error: null, loadedAt: null },
+        actor:    { items: [], loading: false, error: null, loadedAt: null },
+        security: { items: [], loading: false, error: null, loadedAt: null, filter: 'all' },
+        presence: { online: false, tabs: [], loadedAt: null, refreshTimerId: null }
     },
 
     // Section navigation
@@ -606,13 +608,60 @@ function buildUserSignature(user) {
                 user.isBanned ? '1' : '0',
                 user.bannedUntil || '',
                 user.lastActive || '',
-                user.profileImage || ''
+                user.profileImage || '',
+                user.online ? '1' : '0',
+                user.presenceTabCount || 0,
+                user.presenceCurrentPage || ''
             ].join('|');
         }
     } catch (err) {
         console.warn('buildUserSignature hiba:', err);
     }
     return signature;
+}
+
+// Egy user "Állapot" cellaja: online/offline + tiltott jelzes.
+function renderUserStatusCell(user) {
+    let html = '';
+    try {
+        const banned = Boolean(user?.isBanned);
+        const online = Boolean(user?.online);
+        const tabCount = Number(user?.presenceTabCount || 0);
+        const onlineHtml = online
+            ? `<span class="user-presence user-presence-online" title="Online · ${tabCount} aktív tab">
+                  <span class="user-presence-dot"></span>Online${tabCount > 1 ? ` <span class="user-presence-tabs">${tabCount}</span>` : ''}
+               </span>`
+            : `<span class="user-presence user-presence-offline" title="Offline"><span class="user-presence-dot"></span>Offline</span>`;
+        const bannedHtml = banned ? `<span class="badge badge-status-banned ms-1">Tiltott</span>` : '';
+        html = `<div class="user-status-cell">${onlineHtml}${bannedHtml}</div>`;
+    } catch (err) {
+        console.warn('renderUserStatusCell hiba:', err);
+        html = '—';
+    }
+    return html;
+}
+
+// 3 ELO ertek tomor "trio" megjelenitese (Klasszikus / MattMester / Bullet).
+function renderEloTrio(user) {
+    let html = '';
+    try {
+        const elo = Number(user?.elo || 0);
+        const eloMM = Number(user?.eloMM || 0);
+        const eloBullet = Number(user?.eloBullet || 0);
+        html = `
+            <div class="elo-trio" title="Klasszikus / MattMester / Bullet">
+                <span class="elo-trio-item" data-kind="classic"   title="Klasszikus">${elo}</span>
+                <span class="elo-trio-sep">/</span>
+                <span class="elo-trio-item is-primary" data-kind="mm" title="MattMester">${eloMM}</span>
+                <span class="elo-trio-sep">/</span>
+                <span class="elo-trio-item" data-kind="bullet"    title="Bullet">${eloBullet}</span>
+            </div>
+        `;
+    } catch (err) {
+        console.warn('renderEloTrio hiba:', err);
+        html = '—';
+    }
+    return html;
 }
 
 // Aktuális szűrt + rendezett user lista (a teljes state.users.list-ből).
@@ -632,8 +681,10 @@ function getFilteredAdminUsers() {
                 || (u.email && u.email.toLowerCase().includes(search));
             const matchesRole = !role || u.role === role;
             const matchesStatus = !status
-                || (status === 'active' && !u.isBanned)
-                || (status === 'banned' && u.isBanned);
+                || (status === 'active'  && !u.isBanned)
+                || (status === 'banned'  &&  u.isBanned)
+                || (status === 'online'  &&  u.online)
+                || (status === 'offline' && !u.online);
             return matchesSearch && matchesRole && matchesStatus;
         });
 
@@ -1081,9 +1132,11 @@ const SECTIONS = {
                     </select>
                     <select id="adminStatusFilter" name="adminStatusFilter" class="form-select form-select-sm"
                         onchange="onAdminUsersFilterChange()">
-                        <option value="" ${f.status === '' ? 'selected' : ''}>Minden állapot</option>
-                        <option value="active" ${f.status === 'active' ? 'selected' : ''}>Aktív</option>
-                        <option value="banned" ${f.status === 'banned' ? 'selected' : ''}>Tiltott</option>
+                        <option value=""        ${f.status === ''        ? 'selected' : ''}>Minden állapot</option>
+                        <option value="online"  ${f.status === 'online'  ? 'selected' : ''}>● Online</option>
+                        <option value="offline" ${f.status === 'offline' ? 'selected' : ''}>○ Offline</option>
+                        <option value="active"  ${f.status === 'active'  ? 'selected' : ''}>Nem tiltott</option>
+                        <option value="banned"  ${f.status === 'banned'  ? 'selected' : ''}>Tiltott</option>
                     </select>
                     <select id="adminOrderBy" name="adminOrderBy" class="form-select form-select-sm"
                         onchange="onAdminUsersFilterChange()">
@@ -1102,7 +1155,7 @@ const SECTIONS = {
                     <thead>
                         <tr>
                             <th class="col-user">Felhasználó</th>
-                            <th class="col-elo">ELO</th>
+                            <th class="col-elo">ELO (K / MM / B)</th>
                             <th class="col-role">Szerepkör</th>
                             <th class="col-status">Állapot</th>
                             <th class="col-active">Utolsó aktivitás</th>
@@ -1117,9 +1170,9 @@ const SECTIONS = {
                     </tbody>
                 </table>
                 <div class="admin-users-sentinel" id="adminUsersSentinel" aria-hidden="true"></div>
-                <div class="admin-users-footer" id="adminUsersFooter">
-                    <span id="adminUsersFooterText" class="text-secondary small">—</span>
-                </div>
+            </div>
+            <div class="admin-users-footer" id="adminUsersFooter">
+                <span id="adminUsersFooterText" class="text-secondary small">—</span>
             </div>
         </div>
     `;
@@ -2733,7 +2786,6 @@ function renderAdminUserRow(user) {
         if (user) {
             const signature = buildUserSignature(user);
             const banned = Boolean(user.isBanned);
-            const elo = Number(user.elo || 0);
             const display = h.user({
                 name: user.username || '—',
                 email: user.email || '',
@@ -2741,11 +2793,12 @@ function renderAdminUserRow(user) {
                 profile_image: user.profileImage,
                 struck: banned
             });
-            const eloCell = `<span class="fw-semibold ${elo > 0 ? 'text-gold' : 'text-secondary'}">${elo}</span>`;
+            const eloCell = renderEloTrio(user);
             const roleCell = rolePill(user.role === 'admin' ? 'admin' : 'player');
-            const statusCell = banned ? statusPill('banned') : statusPill('active');
-            const lastActiveCell = user.lastActive
-                ? `<span class="text-secondary" title="${escapeHtml(new Date(user.lastActive).toLocaleString('hu-HU'))}">${escapeHtml(formatRelative(user.lastActive))}</span>`
+            const statusCell = renderUserStatusCell(user);
+            const lastActiveSource = user.online ? (user.presenceLastSeenAt || user.lastActive) : user.lastActive;
+            const lastActiveCell = lastActiveSource
+                ? `<span class="${user.online ? 'text-success fw-semibold' : 'text-secondary'}" title="${escapeHtml(new Date(lastActiveSource).toLocaleString('hu-HU'))}">${escapeHtml(user.online ? 'Most' : formatRelative(lastActiveSource))}</span>`
                 : '<span class="text-muted">—</span>';
             const joinedCell = `<span class="text-secondary">${escapeHtml(formatDateOnly(user.createdAt))}</span>`;
 
@@ -2762,7 +2815,7 @@ function renderAdminUserRow(user) {
                   ];
 
             html = `
-                <tr class="admin-user-row" data-user-id="${user.id}" data-signature="${escapeHtml(signature)}">
+                <tr class="admin-user-row${user.online ? ' is-online' : ''}" data-user-id="${user.id}" data-signature="${escapeHtml(signature)}">
                     <td>${display}</td>
                     <td>${eloCell}</td>
                     <td>${roleCell}</td>
@@ -2841,8 +2894,9 @@ function renderAdminUsersTable(options = {}) {
             } else if (total === 0) {
                 tbody.innerHTML = renderAdminUsersEmptyRow('empty');
             } else {
-                // Diff-render: scroll poz mentése (a page tényleges scroll-ja)
-                const scrollY = window.scrollY;
+                // Diff-render: a saját scroll-konténer (wrap) scrollTop-jat őrizzük meg.
+                const wrapScrollTop = wrap ? wrap.scrollTop : 0;
+                const pageScrollY = window.scrollY;
 
                 // Meglévő sorok index userId -> tr
                 const existingRows = new Map();
@@ -2884,10 +2938,12 @@ function renderAdminUsersTable(options = {}) {
                 tbody.replaceChildren(fragment);
                 state.users.rowSignatures = newSignatures;
 
-                // scroll poz visszaállítás (a tbody.replaceChildren NEM dob,
-                // de ha hossz változott, a layout shift visszaadhatja a scrollt)
-                if (Math.abs(window.scrollY - scrollY) > 1) {
-                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                // scroll poz visszaállítás — wrap scrollTop ÉS window scroll külön
+                if (wrap && Math.abs(wrap.scrollTop - wrapScrollTop) > 1) {
+                    wrap.scrollTop = wrapScrollTop;
+                }
+                if (Math.abs(window.scrollY - pageScrollY) > 1) {
+                    window.scrollTo({ top: pageScrollY, behavior: 'instant' });
                 }
             }
 
@@ -2939,12 +2995,15 @@ function updateAdminUsersMeta(total, visibleCount) {
 }
 
 // IntersectionObserver — a sentinel láthatóvá válásakor +50 sor renderelve.
+// A scroll-konténer a .admin-users-table-wrap (saját max-height + overflow), így
+// az observer root-ja is ez kell legyen.
 function ensureAdminUsersObserver() {
     try {
         const sentinel = document.getElementById('adminUsersSentinel');
-        if (!sentinel) {
+        const root = document.getElementById('adminUsersTableWrap');
+        if (!sentinel || !root) {
             // Nem aktív section
-        } else if (state.users.observer && state.users.observer.__sentinel === sentinel) {
+        } else if (state.users.observer && state.users.observer.__sentinel === sentinel && state.users.observer.__root === root) {
             // Már be van kötve ehhez a sentinelhez
         } else {
             if (state.users.observer) {
@@ -2960,9 +3019,10 @@ function ensureAdminUsersObserver() {
                         }
                     }
                 });
-            }, { rootMargin: '300px 0px' });
+            }, { root, rootMargin: '300px 0px' });
             observer.observe(sentinel);
             observer.__sentinel = sentinel;
+            observer.__root = root;
             state.users.observer = observer;
         }
     } catch (err) {
@@ -3121,12 +3181,18 @@ function openAdminUserView(userId) {
         } else {
             state.userView.userId = user.id;
             state.userView.activeTab = 'target';
-            state.userView.target = { items: [], loading: false, error: null, loadedAt: null };
-            state.userView.actor  = { items: [], loading: false, error: null, loadedAt: null };
+            state.userView.target   = { items: [], loading: false, error: null, loadedAt: null };
+            state.userView.actor    = { items: [], loading: false, error: null, loadedAt: null };
+            state.userView.security = { items: [], loading: false, error: null, loadedAt: null, filter: 'all' };
+            state.userView.presence = { online: false, tabs: [], loadedAt: null, refreshTimerId: null };
             renderAdminUserViewModal(user);
+            updateAdminUserViewTabsHint('target');
             const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
             modal.show();
             loadAdminUserAuditTab('target');
+            loadAdminUserPresence();
+            startAdminUserPresenceRefresh();
+            modalEl.addEventListener('hidden.bs.modal', stopAdminUserPresenceRefresh, { once: true });
             opened = true;
         }
     } catch (err) {
@@ -3148,7 +3214,9 @@ function renderAdminUserViewModal(user) {
             }
             setText('adminUserViewName', user.username || '—');
             setText('adminUserViewEmail', user.email || '—');
-            setText('adminUserViewElo', String(Number(user.elo || 0)));
+            setText('adminUserViewEloClassic', String(Number(user.elo || 0)));
+            setText('adminUserViewEloMM',      String(Number(user.eloMM || 0)));
+            setText('adminUserViewEloBullet',  String(Number(user.eloBullet || 0)));
             setText('adminUserViewWins', String(Number(user.wins || 0)));
             setText('adminUserViewLosses', String(Number(user.losses || 0)));
             setText('adminUserViewDraws', String(Number(user.draws || 0)));
@@ -3188,7 +3256,7 @@ function closeAdminUserViewModal() {
 // Tab váltás
 function switchAdminUserViewTab(tabKey) {
     try {
-        if (tabKey === 'target' || tabKey === 'actor') {
+        if (tabKey === 'target' || tabKey === 'actor' || tabKey === 'security') {
             state.userView.activeTab = tabKey;
             document.querySelectorAll('.admin-user-view-tab').forEach((btn) => {
                 const isActive = btn.dataset.tab === tabKey;
@@ -3198,10 +3266,18 @@ function switchAdminUserViewTab(tabKey) {
                 const isActive = pane.dataset.tab === tabKey;
                 pane.classList.toggle('d-none', !isActive);
             });
+            updateAdminUserViewTabsHint(tabKey);
             // Lazy load: ha még nincs adat ezen a tabon, betöltjük.
             const slot = state.userView[tabKey];
             if (slot && !slot.loadedAt && !slot.loading) {
-                loadAdminUserAuditTab(tabKey);
+                if (tabKey === 'security') {
+                    loadAdminUserSecurityActivity();
+                } else {
+                    loadAdminUserAuditTab(tabKey);
+                }
+            } else if (tabKey === 'security') {
+                // Már be volt töltve — de a filter alapján újrarenderelünk a legutóbbi fülre váltáskor.
+                renderAdminUserViewSecurityList();
             }
         }
     } catch (err) {
@@ -3328,6 +3404,278 @@ function renderAdminUserAuditEntry(entry) {
         html = '';
     }
     return html;
+}
+
+// Tab fejléc hint szövegének frissítése (jobb felső kis info)
+function updateAdminUserViewTabsHint(tabKey) {
+    let updated = false;
+    try {
+        const hintEl = document.getElementById('adminUserViewTabsHint');
+        if (hintEl) {
+            const messages = {
+                target:   '<i class="bi bi-info-circle me-1"></i>Audit napló — utolsó 100',
+                actor:    '<i class="bi bi-info-circle me-1"></i>Admin műveletek — utolsó 100',
+                security: '<i class="bi bi-shield-lock me-1"></i>A felhasználó saját biztonsági naplója (max 150)'
+            };
+            hintEl.innerHTML = messages[tabKey] || messages.target;
+            updated = true;
+        }
+    } catch (err) {
+        console.warn('updateAdminUserViewTabsHint hiba:', err);
+    }
+    return updated;
+}
+
+/* ---------- Security activity (a user által saját profilján is látható log) ---------- */
+
+const ADMIN_USER_VIEW_SECURITY_FILTERS = new Set(['all', 'auth', 'security', 'profile', 'social']);
+
+async function loadAdminUserSecurityActivity() {
+    let success = false;
+    try {
+        const userId = state.userView.userId;
+        const slot = state.userView.security;
+        if (!userId || !slot) {
+            // nincs mit
+        } else if (!state.adminToken) {
+            slot.error = 'Nincs admin token.';
+            renderAdminUserViewSecurityList();
+        } else {
+            slot.loading = true;
+            slot.error = null;
+            renderAdminUserViewSecurityList();
+            const headers = adminAuthHeaders({ Accept: 'application/json' });
+            const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/security-activity?limit=150`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers
+            });
+            if (!response.ok) {
+                let bodyMessage = `HTTP ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body?.message) bodyMessage = body.message;
+                } catch (_) {}
+                if (response.status === 401 || response.status === 403) {
+                    handleAdminAuthError('admin_token_required');
+                }
+                slot.error = bodyMessage;
+                slot.loading = false;
+                renderAdminUserViewSecurityList();
+            } else {
+                const json = await response.json();
+                slot.items = Array.isArray(json?.data) ? json.data : [];
+                slot.loadedAt = new Date();
+                slot.loading = false;
+                renderAdminUserViewSecurityList();
+                success = true;
+            }
+        }
+    } catch (err) {
+        console.error('loadAdminUserSecurityActivity hiba:', err);
+        const slot = state.userView.security;
+        if (slot) {
+            slot.error = err?.message || 'Hálózati hiba.';
+            slot.loading = false;
+            renderAdminUserViewSecurityList();
+        }
+    }
+    return success;
+}
+
+function setAdminUserViewSecurityFilter(filter) {
+    let applied = false;
+    try {
+        if (ADMIN_USER_VIEW_SECURITY_FILTERS.has(filter)) {
+            state.userView.security.filter = filter;
+            document.querySelectorAll('.admin-user-view-sec-filter').forEach((btn) => {
+                btn.classList.toggle('is-active', btn.dataset.secFilter === filter);
+            });
+            renderAdminUserViewSecurityList();
+            applied = true;
+        }
+    } catch (err) {
+        console.warn('setAdminUserViewSecurityFilter hiba:', err);
+    }
+    return applied;
+}
+
+function renderAdminUserViewSecurityList() {
+    let rendered = false;
+    try {
+        const container = document.querySelector('.admin-user-view-tab-pane[data-tab="security"] .admin-user-view-security-list');
+        if (container) {
+            const slot = state.userView.security;
+            if (slot.loading) {
+                container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-arrow-repeat spin"></i><div>Biztonsági napló betöltése…</div></li>`;
+            } else if (slot.error) {
+                container.innerHTML = `<li class="admin-user-view-empty admin-user-view-empty-error"><i class="bi bi-exclamation-triangle"></i><div>${escapeHtml(slot.error)}</div></li>`;
+            } else {
+                const filter = slot.filter || 'all';
+                const items = filter === 'all'
+                    ? slot.items
+                    : slot.items.filter((item) => String(item?.eventCategory || '').toLowerCase() === filter);
+                if (!items.length) {
+                    container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-inbox"></i><div>Nincs találat ehhez a szűrőhöz.</div></li>`;
+                } else {
+                    container.innerHTML = items.map(renderAdminUserSecurityEntry).join('');
+                }
+            }
+            rendered = true;
+        }
+    } catch (err) {
+        console.warn('renderAdminUserViewSecurityList hiba:', err);
+    }
+    return rendered;
+}
+
+function renderAdminUserSecurityEntry(entry) {
+    let html = '';
+    try {
+        if (entry) {
+            const sev = entry.severity || 'info';
+            const time = entry.occurredAt
+                ? `${formatDateOnly(entry.occurredAt)} ${formatAuditTime(entry.occurredAt)}`
+                : '—';
+            const ok = entry.success === false ? 'fail' : (entry.success === true ? 'ok' : 'na');
+            const okIcon = ok === 'ok' ? 'bi-check-circle-fill text-success'
+                         : ok === 'fail' ? 'bi-x-circle-fill text-danger'
+                         : 'bi-dash-circle text-muted';
+            const eventLabel = entry.eventType || entry.message || '—';
+            const category = entry.eventCategory || 'all';
+            const ip = entry.ipAddress || '—';
+            const ua = entry.userAgent ? entry.userAgent.split(')')[0].split('(').pop() : '';
+            html = `
+                <li class="admin-user-view-security-row sev-${sev}">
+                    <div class="admin-user-view-security-meta">
+                        <span class="admin-user-view-security-time">${escapeHtml(time)}</span>
+                        <span class="admin-user-view-security-cat" data-cat="${escapeHtml(category)}">${escapeHtml(category)}</span>
+                    </div>
+                    <div class="admin-user-view-security-body">
+                        <div class="admin-user-view-security-event">
+                            <i class="bi ${okIcon} me-1"></i>${escapeHtml(eventLabel)}
+                        </div>
+                        ${entry.message && entry.message !== eventLabel ? `<div class="admin-user-view-security-msg text-secondary small">${escapeHtml(entry.message)}</div>` : ''}
+                        <div class="admin-user-view-security-tech text-secondary small">
+                            <span><i class="bi bi-globe me-1"></i><span class="font-monospace">${escapeHtml(ip)}</span></span>
+                            ${ua ? `<span class="ms-2"><i class="bi bi-browser-chrome me-1"></i>${escapeHtml(ua)}</span>` : ''}
+                        </div>
+                    </div>
+                </li>
+            `;
+        }
+    } catch (err) {
+        console.warn('renderAdminUserSecurityEntry hiba:', err);
+        html = '';
+    }
+    return html;
+}
+
+/* ---------- Presence panel ---------- */
+
+async function loadAdminUserPresence() {
+    let success = false;
+    try {
+        const userId = state.userView.userId;
+        if (!userId) {
+            // nincs mit
+        } else if (!state.adminToken) {
+            renderAdminUserViewPresence({ online: false, tabs: [] });
+        } else {
+            const headers = adminAuthHeaders({ Accept: 'application/json' });
+            const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/presence`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers
+            });
+            if (response.ok) {
+                const json = await response.json();
+                const data = json?.data || { online: false };
+                state.userView.presence.online = Boolean(data.online);
+                state.userView.presence.tabs = Array.isArray(data.tabs) ? data.tabs : [];
+                state.userView.presence.loadedAt = new Date();
+                renderAdminUserViewPresence(data);
+                success = true;
+            } else {
+                renderAdminUserViewPresence({ online: false, tabs: [] });
+            }
+        }
+    } catch (err) {
+        console.warn('loadAdminUserPresence hiba:', err);
+        renderAdminUserViewPresence({ online: false, tabs: [] });
+    }
+    return success;
+}
+
+function renderAdminUserViewPresence(data) {
+    let rendered = false;
+    try {
+        const panel = document.getElementById('adminUserViewPresence');
+        const badge = document.getElementById('adminUserViewPresenceBadge');
+        const label = document.getElementById('adminUserViewPresenceLabel');
+        const meta  = document.getElementById('adminUserViewPresenceMeta');
+        const tabsList = document.getElementById('adminUserViewPresenceTabs');
+        if (panel && badge && label && meta && tabsList) {
+            const online = Boolean(data?.online);
+            panel.dataset.state = online ? 'online' : 'offline';
+            badge.classList.toggle('user-presence-online', online);
+            badge.classList.toggle('user-presence-offline', !online);
+            if (online) {
+                label.textContent = 'Online';
+                const tabCount = Number(data.tabCount || data.tabs?.length || 0);
+                const sockets = Number(data.socketCount || 0);
+                meta.textContent = `${tabCount} tab · ${sockets} socket${data.lastSeenAt ? ` · utolsó: ${formatRelative(data.lastSeenAt)}` : ''}`;
+                const tabs = Array.isArray(data.tabs) ? data.tabs : [];
+                tabsList.innerHTML = tabs.length === 0
+                    ? `<li class="admin-user-view-presence-empty">Nincs aktív tab.</li>`
+                    : tabs.map((tab) => `
+                        <li class="admin-user-view-presence-tab">
+                            <i class="bi bi-window"></i>
+                            <span class="admin-user-view-presence-page">${escapeHtml(tab.page || '/')}</span>
+                            <span class="admin-user-view-presence-time text-secondary">${escapeHtml(tab.lastSeenAt ? formatRelative(tab.lastSeenAt) : '—')}</span>
+                        </li>
+                    `).join('');
+            } else {
+                label.textContent = 'Offline';
+                meta.textContent = '—';
+                tabsList.innerHTML = '';
+            }
+            rendered = true;
+        }
+    } catch (err) {
+        console.warn('renderAdminUserViewPresence hiba:', err);
+    }
+    return rendered;
+}
+
+function startAdminUserPresenceRefresh() {
+    let started = false;
+    try {
+        stopAdminUserPresenceRefresh();
+        state.userView.presence.refreshTimerId = setInterval(() => {
+            if (state.userView.userId) {
+                loadAdminUserPresence();
+            }
+        }, 5000);
+        started = true;
+    } catch (err) {
+        console.warn('startAdminUserPresenceRefresh hiba:', err);
+    }
+    return started;
+}
+
+function stopAdminUserPresenceRefresh() {
+    let stopped = false;
+    try {
+        if (state.userView.presence.refreshTimerId) {
+            clearInterval(state.userView.presence.refreshTimerId);
+            state.userView.presence.refreshTimerId = null;
+        }
+        stopped = true;
+    } catch (err) {
+        console.warn('stopAdminUserPresenceRefresh hiba:', err);
+    }
+    return stopped;
 }
 
 /* =============================================================
