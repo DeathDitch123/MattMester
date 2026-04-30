@@ -403,6 +403,36 @@ const state = {
     liveAudit: [],                // admin:audit:created események (legújabb elöl)
     liveAlerts: [],               // admin:alert:* események (legújabb elöl)
 
+    // Felhasználók szekció (Lista) - REST + szűrés + lazy loading
+    users: {
+        list: [],                 // teljes user lista (REST /api/admin/users/list)
+        loadedAt: null,           // utolsó sikeres fetch ideje
+        loading: false,           // épp folyik egy fetch?
+        error: null,              // hibatext, ha a legutóbbi fetch elhasalt
+        filters: {
+            search: '',           // szöveg keresés (név/email)
+            role: '',             // '', 'player', 'admin'
+            status: '',           // '', 'active', 'banned'
+            orderBy: 'lastActive' // 'lastActive', 'username', 'elo', 'createdAt'
+        },
+        visibleCount: 50,         // hány sor van renderelve a listából (lazy load)
+        observer: null,           // IntersectionObserver
+        searchDebounceId: null,   // debounce setTimeout id
+        rowSignatures: new Map()  // userId -> signature string (diff-flashhez)
+    },
+
+    // Kiválasztott user — szerkesztés / tiltás prefillhez
+    selectedUserId: null,
+    selectedUser: null,
+
+    // User-megtekintés modal állapota
+    userView: {
+        userId: null,
+        activeTab: 'target',      // 'target' = vele történt, 'actor' = ő végezte
+        target: { items: [], loading: false, error: null, loadedAt: null },
+        actor:  { items: [], loading: false, error: null, loadedAt: null }
+    },
+
     // Section navigation
     currentSectionId: null
 };
@@ -542,6 +572,152 @@ function feedEmptyMessage(reason) {
 const formatAuditTime = (iso) => {
     try { return formatHM(iso); } catch (_) { return iso || '—'; }
 };
+
+const formatDateOnly = (iso) => {
+    let out = '—';
+    try {
+        if (iso) {
+            const d = iso instanceof Date ? iso : new Date(iso);
+            if (!Number.isNaN(d.getTime())) {
+                out = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}.`;
+            }
+        }
+    } catch (err) {
+        console.warn('formatDateOnly hiba:', err);
+    }
+    return out;
+};
+
+/* =============================================================
+   6.5) Felhasználói lista — szűrés + lazy loading + REST
+   ============================================================= */
+const ADMIN_USERS_PAGE_SIZE = 50;
+
+// Egy felhasználó "signature"-je: rövid string ami akkor változik, ha vmi
+// vizuálisan releváns mezője módosult. Diff-flash-hoz használjuk.
+function buildUserSignature(user) {
+    let signature = '';
+    try {
+        if (user) {
+            signature = [
+                user.username, user.email, user.role,
+                user.elo, user.eloMM, user.eloBullet,
+                user.wins, user.losses, user.draws,
+                user.isBanned ? '1' : '0',
+                user.bannedUntil || '',
+                user.lastActive || '',
+                user.profileImage || ''
+            ].join('|');
+        }
+    } catch (err) {
+        console.warn('buildUserSignature hiba:', err);
+    }
+    return signature;
+}
+
+// Aktuális szűrt + rendezett user lista (a teljes state.users.list-ből).
+function getFilteredAdminUsers() {
+    let result = [];
+    try {
+        const filters = state.users.filters;
+        const search = (filters.search || '').trim().toLowerCase();
+        const role = filters.role || '';
+        const status = filters.status || '';
+        const orderBy = filters.orderBy || 'lastActive';
+        const list = Array.isArray(state.users.list) ? state.users.list : [];
+
+        const filtered = list.filter((u) => {
+            const matchesSearch = !search
+                || (u.username && u.username.toLowerCase().includes(search))
+                || (u.email && u.email.toLowerCase().includes(search));
+            const matchesRole = !role || u.role === role;
+            const matchesStatus = !status
+                || (status === 'active' && !u.isBanned)
+                || (status === 'banned' && u.isBanned);
+            return matchesSearch && matchesRole && matchesStatus;
+        });
+
+        const sorted = filtered.slice().sort((a, b) => {
+            let cmp = 0;
+            if (orderBy === 'username') {
+                cmp = String(a.username || '').localeCompare(String(b.username || ''), 'hu');
+            } else if (orderBy === 'elo') {
+                cmp = Number(b.elo || 0) - Number(a.elo || 0);
+            } else if (orderBy === 'createdAt') {
+                cmp = new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+            } else {
+                // 'lastActive' (default)
+                cmp = new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime();
+            }
+            return cmp;
+        });
+
+        result = sorted;
+    } catch (err) {
+        console.error('getFilteredAdminUsers hiba:', err);
+        result = [];
+    }
+    return result;
+}
+
+// REST fetch — try-catch wrap. silent=true esetén nem mutat loading állapotot
+// (pl. periodikus refresh stats:tick-re).
+async function loadAdminUsersList(options = {}) {
+    const silent = options.silent === true;
+    let success = false;
+    try {
+        if (!state.adminToken) {
+            state.users.error = 'Nincs admin token — a felhasználói lista nem tölthető be.';
+            state.users.loading = false;
+            renderAdminUsersTable({ reason: 'no_token' });
+        } else {
+            if (!silent) {
+                state.users.loading = true;
+                renderAdminUsersTable({ reason: 'loading' });
+            }
+            const headers = adminAuthHeaders({ Accept: 'application/json' });
+            const response = await fetch('/api/admin/users/list', {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers
+            });
+
+            if (!response.ok) {
+                let bodyMessage = `HTTP ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body?.message) bodyMessage = body.message;
+                } catch (_) { /* nem JSON */ }
+                if (response.status === 401 || response.status === 403) {
+                    handleAdminAuthError('admin_token_required');
+                }
+                state.users.error = bodyMessage;
+                state.users.loading = false;
+                renderAdminUsersTable({ reason: 'error' });
+            } else {
+                const json = await response.json();
+                if (!json?.success || !Array.isArray(json.data)) {
+                    state.users.error = json?.message || 'Ismeretlen válasz a szervertől.';
+                    state.users.loading = false;
+                    renderAdminUsersTable({ reason: 'error' });
+                } else {
+                    state.users.list = json.data;
+                    state.users.loadedAt = new Date();
+                    state.users.error = null;
+                    state.users.loading = false;
+                    renderAdminUsersTable({ reason: silent ? 'refresh' : 'loaded' });
+                    success = true;
+                }
+            }
+        }
+    } catch (err) {
+        console.error('loadAdminUsersList hiba:', err);
+        state.users.error = err?.message || 'Hálózati hiba.';
+        state.users.loading = false;
+        renderAdminUsersTable({ reason: 'error' });
+    }
+    return success;
+}
 
 /* =============================================================
    7) Navigációs fa
@@ -860,78 +1036,125 @@ const SECTIONS = {
     },
 
     /* ---------- Felhasználók > Lista ---------- */
-    users: () => `
+    users: () => {
+        const f = state.users.filters;
+        return `
         ${h.header({
             icon: 'bi-people-fill', title: 'Felhasználói lista',
-            subtitle: 'Az összes regisztrált játékos kezelése',
-            actions: [
-                { label: 'Exportálás', icon: 'bi-download', onclick: 'exportUsers()' },
-                { label: 'Új felhasználó', icon: 'bi-plus-lg', variant: 'gold',
-                  attrs: 'data-bs-toggle="modal" data-bs-target="#addUserModal"' }
-            ]
+            subtitle: 'Élő lista — szűrés, keresés és gyors műveletek'
         })}
-        ${h.table({
-            headerExtra: `
-                <div class="filter-bar">
-                    <input id="adminUserSearchInput" name="adminUserSearchInput" type="text"
-                        class="form-control form-control-sm" placeholder="Keresés...">
-                    <select id="adminRoleFilter" name="adminRoleFilter" class="form-select form-select-sm">
-                        <option value="">Minden szerepkör</option>
-                        <option value="player">Játékos</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                    <select id="adminStatusFilter" name="adminStatusFilter" class="form-select form-select-sm">
-                        <option value="">Minden állapot</option>
-                        <option value="active">Aktív</option>
-                        <option value="banned">Tiltott</option>
-                    </select>
-                    <select id="adminOrderBy" name="adminOrderBy" class="form-select form-select-sm">
-                        <option value="">Rendezés</option>
-                        <option value="username">Név</option>
-                        <option value="elo">ELO</option>
-                    </select>
+
+        <div class="content-card admin-users-card">
+            <div class="card-header admin-users-card-header">
+                <div class="admin-users-card-headline">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-people-fill me-2 text-gold"></i>Felhasználók
+                        <span class="admin-users-meta" id="adminUsersMeta">
+                            <span class="admin-users-meta-count" id="adminUsersCount">0</span>
+                            <span class="admin-users-meta-sep">·</span>
+                            <span class="admin-users-meta-time" id="adminUsersUpdatedAt">betöltés…</span>
+                        </span>
+                    </h5>
+                    <div class="admin-users-card-actions">
+                        ${h.btn({ label: 'Új felhasználó', icon: 'bi-plus-lg', variant: 'gold', size: 'sm',
+                                  attrs: 'data-bs-toggle="modal" data-bs-target="#addUserModal"' })}
+                    </div>
                 </div>
-            `,
-            headers: ['Felhasználó', 'ELO', 'Szerepkör', 'Állapot', 'Utolsó aktivitás', 'Csatlakozott', ''],
-            rows: SAMPLE.users.map((u, idx) => [
-                h.user({ name: u.name, email: u.email, struck: u.struck }),
-                `<span class="fw-semibold ${u.elo > 0 ? 'text-gold' : 'text-secondary'}">${u.elo}</span>`,
-                rolePill(u.role), statusPill(u.status),
-                `<span class="text-secondary">${u.last}</span>`,
-                `<span class="text-secondary">${u.joined}</span>`,
-                h.actions(u.status === 'banned'
-                    ? [
-                        { icon: 'bi-eye',          variant: 'light',   title: 'Megtekintés', onclick: `viewUser(${idx + 1})` },
-                        { icon: 'bi-check-circle', variant: 'success', title: 'Tiltás feloldása' }
-                    ]
-                    : [
-                        { icon: 'bi-eye',    variant: 'light',  title: 'Megtekintés', onclick: `viewUser(${idx + 1})` },
-                        { icon: 'bi-pencil', variant: 'gold',   title: 'Szerkesztés', onclick: "showSection('userDetail')" },
-                        { icon: 'bi-ban',    variant: 'danger', title: 'Tiltás (kritikus)', onclick: `openCriticalAction('users.ban', '${u.name}')` }
-                    ])
-            ])
-        })}
-    `,
+                <div class="admin-users-filter-bar">
+                    <div class="admin-users-search">
+                        <i class="bi bi-search"></i>
+                        <label for="adminUserSearchInput" class="visually-hidden">Felhasználó keresése</label>
+                        <input id="adminUserSearchInput" name="adminUserSearchInput" type="search"
+                            class="form-control form-control-sm" placeholder="Keresés név vagy e-mail alapján…"
+                            value="${escapeHtml(f.search)}" autocomplete="off"
+                            oninput="onAdminUsersFilterInput(event)">
+                        <button type="button" class="admin-users-search-clear ${f.search ? '' : 'd-none'}"
+                            id="adminUsersSearchClear" onclick="clearAdminUsersSearch()" aria-label="Keresés törlése">
+                            <i class="bi bi-x-circle-fill"></i>
+                        </button>
+                    </div>
+                    <select id="adminRoleFilter" name="adminRoleFilter" class="form-select form-select-sm"
+                        onchange="onAdminUsersFilterChange()">
+                        <option value="" ${f.role === '' ? 'selected' : ''}>Minden szerepkör</option>
+                        <option value="player" ${f.role === 'player' ? 'selected' : ''}>Játékos</option>
+                        <option value="admin"  ${f.role === 'admin'  ? 'selected' : ''}>Admin</option>
+                    </select>
+                    <select id="adminStatusFilter" name="adminStatusFilter" class="form-select form-select-sm"
+                        onchange="onAdminUsersFilterChange()">
+                        <option value="" ${f.status === '' ? 'selected' : ''}>Minden állapot</option>
+                        <option value="active" ${f.status === 'active' ? 'selected' : ''}>Aktív</option>
+                        <option value="banned" ${f.status === 'banned' ? 'selected' : ''}>Tiltott</option>
+                    </select>
+                    <select id="adminOrderBy" name="adminOrderBy" class="form-select form-select-sm"
+                        onchange="onAdminUsersFilterChange()">
+                        <option value="lastActive" ${f.orderBy === 'lastActive' ? 'selected' : ''}>Utolsó aktivitás</option>
+                        <option value="username"   ${f.orderBy === 'username'   ? 'selected' : ''}>Név (A–Z)</option>
+                        <option value="elo"        ${f.orderBy === 'elo'        ? 'selected' : ''}>ELO (csökkenő)</option>
+                        <option value="createdAt"  ${f.orderBy === 'createdAt'  ? 'selected' : ''}>Csatlakozás (legújabb)</option>
+                    </select>
+                    ${h.btn({ label: '', icon: 'bi-arrow-clockwise', variant: 'outline-light', size: 'sm',
+                              attrs: 'id="adminUsersRefreshBtn" title="Lista frissítése" aria-label="Felhasználói lista frissítése"',
+                              onclick: 'refreshAdminUsersList()' })}
+                </div>
+            </div>
+            <div class="admin-users-table-wrap" id="adminUsersTableWrap">
+                <table class="table admin-users-table" id="adminUsersTable">
+                    <thead>
+                        <tr>
+                            <th class="col-user">Felhasználó</th>
+                            <th class="col-elo">ELO</th>
+                            <th class="col-role">Szerepkör</th>
+                            <th class="col-status">Állapot</th>
+                            <th class="col-active">Utolsó aktivitás</th>
+                            <th class="col-joined">Csatlakozott</th>
+                            <th class="col-actions text-end">Műveletek</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminUsersTbody" aria-live="polite">
+                        <tr class="admin-users-empty-row">
+                            <td colspan="7" class="text-center text-secondary py-4">Felhasználói lista betöltése…</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <div class="admin-users-sentinel" id="adminUsersSentinel" aria-hidden="true"></div>
+                <div class="admin-users-footer" id="adminUsersFooter">
+                    <span id="adminUsersFooterText" class="text-secondary small">—</span>
+                </div>
+            </div>
+        </div>
+    `;
+    },
 
     /* ---------- Felhasználók > Részletek és szerkesztés ---------- */
-    userDetail: () => `
+    userDetail: () => {
+        const u = state.selectedUser;
+        const hasUser = Boolean(u);
+        const username = hasUser ? (u.username || '—') : '—';
+        const email = hasUser ? (u.email || '—') : '—';
+        const elo = hasUser ? Number(u.elo || 0) : 0;
+        const role = hasUser && u.role === 'admin' ? 'admin' : 'player';
+        const wins = hasUser ? Number(u.wins || 0) : 0;
+        const losses = hasUser ? Number(u.losses || 0) : 0;
+        const draws = hasUser ? Number(u.draws || 0) : 0;
+        return `
         ${h.header({
             icon: 'bi-person-vcard', title: 'Részletek és szerkesztés',
-            subtitle: 'Egy kiválasztott profil teljes munkaablakja',
+            subtitle: hasUser ? `${username} — kiválasztott profil` : 'Egy kiválasztott profil teljes munkaablakja',
             actions: [{ label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }]
         })}
 
-        <div class="content-card user-picker mb-4">
-            <div class="d-flex flex-wrap align-items-center gap-3 p-3">
-                <i class="bi bi-search text-secondary"></i>
-                <input type="text" class="form-control form-control-sm" style="max-width:320px;"
-                    placeholder="Felhasználó kiválasztása név vagy e-mail alapján...">
-                <span class="text-secondary small ms-auto">Aktív profil:
-                    <strong class="text-white">Magnus Carlsen</strong>
-                </span>
+        ${hasUser ? '' : `
+            <div class="content-card admin-empty-pick mb-4">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-person-bounding-box admin-empty-pick-icon"></i>
+                    <h5 class="text-white mt-3">Nincs kiválasztott felhasználó</h5>
+                    <p class="text-secondary mb-3">A szerkesztéshez válassz egy felhasználót a listából.</p>
+                    ${h.btn({ label: 'Felhasználói lista', icon: 'bi-list-ul', variant: 'gold', onclick: "showSection('users')" })}
+                </div>
             </div>
-        </div>
+        `}
 
+        ${hasUser ? `
         <div class="row g-4">
             <div class="col-lg-4">
                 ${h.card({
@@ -939,12 +1162,17 @@ const SECTIONS = {
                     body: `
                         <div class="text-center">
                             <img id="userDetailProfileImage"
-                                class="rounded-circle border border-3 border-gold mb-3" alt="Profil" style="width:120px;height:120px;object-fit:cover;" data-fallback="true">
-                            <h4 class="text-white mb-1">Magnus Carlsen</h4>
-                            <small class="text-secondary d-block mb-3">magnus@chess.hu</small>
-                            ${rolePill('admin')}
+                                class="rounded-circle border border-3 border-gold mb-3" alt="Profil"
+                                style="width:120px;height:120px;object-fit:cover;"
+                                data-fallback="true"
+                                data-username="${escapeHtml(u.username || '')}"
+                                data-profile-image="${escapeHtml(u.profileImage || '')}">
+                            <h4 class="text-white mb-1">${escapeHtml(username)}</h4>
+                            <small class="text-secondary d-block mb-3">${escapeHtml(email)}</small>
+                            ${rolePill(role)}
+                            ${u.isBanned ? ` ${statusPill('banned')}` : ''}
                             <hr class="border-secondary">
-                            <div class="text-gold display-5 fw-bold lh-1">2847</div>
+                            <div class="text-gold display-5 fw-bold lh-1">${elo}</div>
                             <small class="text-secondary">ELO értékelés</small>
                         </div>
                     `
@@ -953,9 +1181,9 @@ const SECTIONS = {
                     <div class="card-header"><h5 class="card-title"><i class="bi bi-bar-chart-fill me-2 text-gold"></i>Statisztika</h5></div>
                     <div class="card-body">
                         <div class="row g-3 text-center">
-                            <div class="col-4"><div class="h4 text-success mb-0">142</div><small class="text-secondary">Győzelem</small></div>
-                            <div class="col-4"><div class="h4 text-danger mb-0">38</div><small class="text-secondary">Vereség</small></div>
-                            <div class="col-4"><div class="h4 text-warning mb-0">7</div><small class="text-secondary">Döntetlen</small></div>
+                            <div class="col-4"><div class="h4 text-success mb-0">${wins}</div><small class="text-secondary">Győzelem</small></div>
+                            <div class="col-4"><div class="h4 text-danger mb-0">${losses}</div><small class="text-secondary">Vereség</small></div>
+                            <div class="col-4"><div class="h4 text-warning mb-0">${draws}</div><small class="text-secondary">Döntetlen</small></div>
                         </div>
                     </div>
                 </div>
@@ -965,11 +1193,14 @@ const SECTIONS = {
                     title: 'Alapadatok szerkesztése', icon: 'bi-pencil-square',
                     body: h.form({
                         fields: [
-                            { id: 'editUsername',    label: 'Felhasználónév', value: 'MagnusCarlsen' },
-                            { id: 'editEmail',       label: 'E-mail',         value: 'magnus@chess.hu', type: 'email' },
-                            { id: 'editDisplayName', label: 'Megjelenített név', value: 'Magnus Carlsen' },
+                            { id: 'editUsername',    label: 'Felhasználónév', value: u.username || '' },
+                            { id: 'editEmail',       label: 'E-mail',         value: u.email || '', type: 'email' },
                             { id: 'editRole',        label: 'Szerepkör', type: 'select',
-                              options: [{ value: 'player', label: 'Játékos' }, { value: 'admin', label: 'Admin', selected: true }] },
+                              options: [
+                                  { value: 'player', label: 'Játékos', selected: role === 'player' },
+                                  { value: 'admin',  label: 'Admin',   selected: role === 'admin' }
+                              ] },
+                            { id: 'editElo', label: 'ELO', type: 'number', value: String(elo) },
                             { id: 'editReason',      label: 'Indok (kötelező — min. 10 char)', col: 12, type: 'textarea',
                               placeholder: 'Miért módosítod ezeket az adatokat? Naplózásra kerül.' }
                         ],
@@ -991,47 +1222,66 @@ const SECTIONS = {
                         </div>
                         <div class="danger-action">
                             <div>
-                                <div class="fw-semibold text-white">ELO manuális módosítása</div>
-                                <small class="text-secondary">Csak indokolt esetben — minden módosítás naplózódik.</small>
-                            </div>
-                            <div class="d-flex gap-2 align-items-center">
-                                <input type="number" class="form-control form-control-sm" value="2847" style="width:100px;">
-                                ${h.btn({ label: 'Mentés', size: 'sm' })}
-                            </div>
-                        </div>
-                        <div class="danger-action">
-                            <div>
                                 <div class="fw-semibold text-white">Felhasználó tiltása <span class="badge bg-danger ms-1">kritikus</span></div>
                                 <small class="text-secondary">30 char indok + jelszó megerősítés szükséges.</small>
                             </div>
-                            ${h.btn({ label: 'Tiltás kezelése', icon: 'bi-ban', variant: 'outline-danger', size: 'sm', onclick: "openCriticalAction('users.ban', 'Magnus Carlsen')" })}
+                            ${h.btn({ label: 'Tiltás kezelése', icon: 'bi-ban', variant: 'outline-danger', size: 'sm',
+                                      onclick: `banAdminUser(${u.id})` })}
                         </div>
                     </div>
                 </div>
             </div>
         </div>
-    `,
+        ` : ''}
+    `;
+    },
 
     /* ---------- Felhasználók > Tiltások ---------- */
-    userBan: () => `
+    userBan: () => {
+        const u = state.selectedUser;
+        const hasUser = Boolean(u);
+        const targetLabel = hasUser ? (u.username || `#${u.id}`) : 'kiválasztott felhasználó';
+        const allUsers = Array.isArray(state.users.list) ? state.users.list : [];
+        const banList = allUsers.filter((x) => x.isBanned);
+
+        return `
         ${h.header({
             icon: 'bi-slash-circle', title: 'Tiltások',
-            subtitle: 'Új tiltás létrehozása és aktív tiltások kezelése'
+            subtitle: hasUser
+                ? `${targetLabel} — előre kiválasztva tiltáshoz`
+                : 'Új tiltás létrehozása és aktív tiltások kezelése',
+            actions: hasUser
+                ? [{ label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }]
+                : []
         })}
         <div class="row g-4 mb-4">
             <div class="col-lg-5">
                 ${h.card({
-                    title: 'Új tiltás', icon: 'bi-plus-circle',
+                    title: hasUser ? `Új tiltás — ${escapeHtml(targetLabel)}` : 'Új tiltás',
+                    icon: 'bi-plus-circle',
                     headerExtra: h.badge('kritikus művelet', 'danger'),
                     body: `
                         <div class="alert alert-warning bg-warning bg-opacity-10 border-warning small mb-3">
                             <i class="bi bi-info-circle-fill me-1"></i>
                             A tiltás kritikus művelet — min. <strong>30 karakter indok</strong> és <strong>jelszó megerősítés</strong> szükséges.
                         </div>
+                        ${hasUser ? `
+                            <div class="ban-target-card mb-3">
+                                ${h.user({ name: u.username, email: u.email, profile_image: u.profileImage, username: u.username })}
+                                <div class="ban-target-meta">
+                                    ${rolePill(u.role === 'admin' ? 'admin' : 'player')}
+                                    ${u.isBanned ? statusPill('banned') : statusPill('active')}
+                                </div>
+                            </div>
+                        ` : `
+                            <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Nincs kiválasztott felhasználó — válassz egyet a
+                                <a href="#" class="text-gold" onclick="showSection('users', event)">listából</a>.
+                            </div>
+                        `}
                         ${h.form({
                             fields: [
-                                { id: 'banUserSelect', label: 'Felhasználó', col: 12, type: 'select',
-                                    options: ['SakkMester99', 'ChatSpammer', 'RookRider'] },
                                 { id: 'banType', label: 'Típus', col: 6, type: 'select',
                                     options: ['Ideiglenes', 'Végleges', 'Csak chat'] },
                                 { id: 'banDuration', label: 'Időtartam (óra)', col: 6, type: 'number', value: '24' },
@@ -1039,7 +1289,7 @@ const SECTIONS = {
                                     placeholder: 'Részletes indok — naplózásra kerül.' }
                             ],
                             submit: { label: 'Tiltás alkalmazása', icon: 'bi-shield-fill-check', variant: 'danger',
-                                      onclick: "openCriticalAction('users.ban', 'kiválasztott felhasználó')" }
+                                      onclick: `openCriticalAction('users.ban', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')` }
                         })}
                     `
                 })}
@@ -1047,28 +1297,31 @@ const SECTIONS = {
             <div class="col-lg-7">
                 ${h.card({
                     title: 'Aktív tiltások', icon: 'bi-list-check', noBodyPadding: true,
+                    headerExtra: `<span class="text-secondary small">${banList.length} bejegyzés</span>`,
                     body: `
                         <table class="table mb-0">
-                            <thead><tr><th>Felhasználó</th><th>Típus</th><th>Lejár</th><th class="text-end">Művelet</th></tr></thead>
+                            <thead><tr><th>Felhasználó</th><th>Lejár</th><th class="text-end">Művelet</th></tr></thead>
                             <tbody>
-                                ${[
-                                    { name: 'Anish Giri',  type: ['Végleges',  'danger'],  expires: 'Soha', expClass: 'text-danger' },
-                                    { name: 'ChatSpammer', type: ['Ideiglenes','warning'], expires: '2026-05-04 14:32' }
-                                ].map(b => `
-                                    <tr>
-                                        <td>${h.user({ name: b.name })}</td>
-                                        <td>${h.badge(b.type[0], b.type[1])}</td>
-                                        <td><span class="${b.expClass || ''}">${b.expires}</span></td>
-                                        <td class="text-end">${h.iconBtn({ icon: 'bi-check-circle', variant: 'success', title: 'Feloldás' })}</td>
-                                    </tr>
-                                `).join('')}
+                                ${banList.length === 0
+                                    ? `<tr><td colspan="3" class="text-center text-secondary py-4">Nincs aktív tiltás.</td></tr>`
+                                    : banList.map(b => `
+                                        <tr>
+                                            <td>${h.user({ name: b.username, email: b.email, profile_image: b.profileImage, username: b.username, struck: true })}</td>
+                                            <td><span class="${b.bannedUntil ? '' : 'text-danger'}">${b.bannedUntil ? escapeHtml(new Date(b.bannedUntil).toLocaleString('hu-HU')) : 'Soha'}</span></td>
+                                            <td class="text-end">
+                                                ${h.iconBtn({ icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${b.id})` })}
+                                                ${h.iconBtn({ icon: 'bi-check-circle', variant: 'success', title: 'Feloldás (kritikus)', onclick: `openCriticalAction('users.unban', '${escapeHtml(b.username || '').replace(/'/g, "\\\\'")}')` })}
+                                            </td>
+                                        </tr>
+                                    `).join('')}
                             </tbody>
                         </table>
                     `
                 })}
             </div>
         </div>
-    `,
+    `;
+    },
 
     /* ---------- Moderáció > Chat ---------- */
     chats: () => {
@@ -1706,6 +1959,27 @@ function showSection(sectionId, event, options = {}) {
     if (sectionId === 'profileImageReview') {
         window.MattMesterAdminProfileImages?.refresh?.();
     }
+    if (sectionId === 'users') {
+        // Reset visibleCount csak akkor, ha üres a lista — különben a user
+        // által addig lazy-loadolt mennyiséget visszaállítjuk minimumra.
+        if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
+            state.users.visibleCount = ADMIN_USERS_PAGE_SIZE;
+            renderAdminUsersTable({ reason: 'loading' });
+            loadAdminUsersList({ silent: false });
+        } else {
+            // Cache-elt adat — azonnal renderelünk, majd csendben frissítünk.
+            renderAdminUsersTable({ reason: 'loaded' });
+            loadAdminUsersList({ silent: true });
+        }
+    }
+    if (sectionId === 'userDetail' && state.selectedUser) {
+        applyUserDetailAvatar();
+    }
+    if (sectionId === 'userBan') {
+        if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
+            loadAdminUsersList({ silent: true });
+        }
+    }
 
     if (window.innerWidth < 992) {
         const sidebar = document.getElementById('sidebar');
@@ -2079,6 +2353,9 @@ function connectAdminSocket() {
 function onLiveStatsUpdate() {
     if (state.currentSectionId === 'dashboard') {
         applyDashboardLiveStats();
+    } else if (state.currentSectionId === 'users') {
+        // A users szekció a stats:tick ütemére csendben újratölti a listát.
+        maybeRefreshAdminUsersOnTick();
     }
     // egyéb szekciók: amikor a user oda navigál, friss adat lesz
 }
@@ -2446,33 +2723,616 @@ function executeCriticalAction() {
 }
 
 /* =============================================================
-   17) Háttér műveletek (logout, export, modal)
+   16.5) Admin Felhasználók — szűrés, lazy loading, render, modal
    ============================================================= */
-function exportUsers() {
-    try {
-        showToast('Az export még nincs bekötve, ez csak shell gomb.', 'info', 'bi-cone-striped');
-    } catch (error) {
-        console.error('exportUsers hiba:', error);
-    }
-}
 
-function viewUser(userId) {
-    let shown = false;
+// Egy user row HTML-je. signature alapján a renderelő villantja, ha változott.
+function renderAdminUserRow(user) {
+    let html = '';
     try {
-        const modalEl = document.getElementById('userModal');
-        if (modalEl && window.bootstrap?.Modal) {
-            new window.bootstrap.Modal(modalEl).show();
-            shown = true;
-        } else {
-            showToast(`A felhasználó nézet még csak shell (id: ${userId}).`, 'info', 'bi-cone-striped');
+        if (user) {
+            const signature = buildUserSignature(user);
+            const banned = Boolean(user.isBanned);
+            const elo = Number(user.elo || 0);
+            const display = h.user({
+                name: user.username || '—',
+                email: user.email || '',
+                username: user.username,
+                profile_image: user.profileImage,
+                struck: banned
+            });
+            const eloCell = `<span class="fw-semibold ${elo > 0 ? 'text-gold' : 'text-secondary'}">${elo}</span>`;
+            const roleCell = rolePill(user.role === 'admin' ? 'admin' : 'player');
+            const statusCell = banned ? statusPill('banned') : statusPill('active');
+            const lastActiveCell = user.lastActive
+                ? `<span class="text-secondary" title="${escapeHtml(new Date(user.lastActive).toLocaleString('hu-HU'))}">${escapeHtml(formatRelative(user.lastActive))}</span>`
+                : '<span class="text-muted">—</span>';
+            const joinedCell = `<span class="text-secondary">${escapeHtml(formatDateOnly(user.createdAt))}</span>`;
+
+            const actionItems = banned
+                ? [
+                    { icon: 'bi-eye',          variant: 'light',   title: 'Megtekintés',       onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-pencil',       variant: 'gold',    title: 'Szerkesztés',       onclick: `editAdminUser(${user.id})` },
+                    { icon: 'bi-check-circle', variant: 'success', title: 'Tiltás kezelése',   onclick: `banAdminUser(${user.id})` }
+                  ]
+                : [
+                    { icon: 'bi-eye',    variant: 'light',  title: 'Megtekintés',       onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-pencil', variant: 'gold',   title: 'Szerkesztés',       onclick: `editAdminUser(${user.id})` },
+                    { icon: 'bi-ban',    variant: 'danger', title: 'Tiltás (kritikus)', onclick: `banAdminUser(${user.id})` }
+                  ];
+
+            html = `
+                <tr class="admin-user-row" data-user-id="${user.id}" data-signature="${escapeHtml(signature)}">
+                    <td>${display}</td>
+                    <td>${eloCell}</td>
+                    <td>${roleCell}</td>
+                    <td>${statusCell}</td>
+                    <td>${lastActiveCell}</td>
+                    <td>${joinedCell}</td>
+                    <td class="text-end">${h.actions(actionItems)}</td>
+                </tr>
+            `;
         }
-    } catch (error) {
-        console.error('viewUser hiba:', error);
-        showToast('A felhasználó nézet nem elérhető.', 'danger', 'bi-exclamation-triangle-fill');
+    } catch (err) {
+        console.error('renderAdminUserRow hiba:', err);
+        html = '';
     }
-
-    return shown;
+    return html;
 }
+
+// Üres állapot HTML — reason alapján más szöveg.
+function renderAdminUsersEmptyRow(reason) {
+    let html = '';
+    try {
+        const messages = {
+            no_token: { icon: 'bi-shield-slash', title: 'Nincs admin token',            sub: 'A lista betöltéséhez aktív admin step-up token szükséges.' },
+            loading:  { icon: 'bi-arrow-repeat', title: 'Felhasználói lista betöltése…', sub: '' },
+            error:    { icon: 'bi-exclamation-triangle', title: 'Hiba a lista betöltésénél', sub: state.users.error || 'Ismeretlen hiba.' },
+            empty:    { icon: 'bi-inbox',        title: 'Nincs találat',                sub: 'Próbáld törölni vagy módosítani a szűrőket.' }
+        };
+        const m = messages[reason] || messages.empty;
+        html = `
+            <tr class="admin-users-empty-row admin-users-empty-${reason || 'empty'}">
+                <td colspan="7" class="text-center py-5">
+                    <i class="bi ${m.icon} admin-users-empty-icon ${reason === 'loading' ? 'spin' : ''}"></i>
+                    <div class="admin-users-empty-title">${escapeHtml(m.title)}</div>
+                    ${m.sub ? `<div class="admin-users-empty-sub">${escapeHtml(m.sub)}</div>` : ''}
+                </td>
+            </tr>
+        `;
+    } catch (err) {
+        console.error('renderAdminUsersEmptyRow hiba:', err);
+        html = '<tr><td colspan="7" class="text-center py-4">Hiba.</td></tr>';
+    }
+    return html;
+}
+
+// Fő render: scroll-poz megőrzés + diff-flash + lazy load. reason: 'loaded',
+// 'refresh', 'loading', 'error', 'no_token', 'filter', 'lazy'.
+function renderAdminUsersTable(options = {}) {
+    let rendered = false;
+    try {
+        const tbody = document.getElementById('adminUsersTbody');
+        const wrap = document.getElementById('adminUsersTableWrap');
+        if (!tbody) {
+            // Nem aktív section, csak state-et frissítünk.
+            rendered = false;
+        } else {
+            const reason = options.reason || 'refresh';
+            const list = getFilteredAdminUsers();
+            const total = list.length;
+            const visibleCount = Math.min(state.users.visibleCount, total);
+            const visible = list.slice(0, visibleCount);
+
+            // Meta + footer frissítés
+            updateAdminUsersMeta(total, visibleCount);
+
+            // Hibajelzés / üres állapot
+            const noToken = !state.adminToken || reason === 'no_token';
+            const errored = reason === 'error';
+            const loading = reason === 'loading' && state.users.list.length === 0;
+
+            if (noToken) {
+                tbody.innerHTML = renderAdminUsersEmptyRow('no_token');
+            } else if (errored && state.users.list.length === 0) {
+                tbody.innerHTML = renderAdminUsersEmptyRow('error');
+            } else if (loading) {
+                tbody.innerHTML = renderAdminUsersEmptyRow('loading');
+            } else if (total === 0) {
+                tbody.innerHTML = renderAdminUsersEmptyRow('empty');
+            } else {
+                // Diff-render: scroll poz mentése (a page tényleges scroll-ja)
+                const scrollY = window.scrollY;
+
+                // Meglévő sorok index userId -> tr
+                const existingRows = new Map();
+                tbody.querySelectorAll('tr.admin-user-row').forEach((tr) => {
+                    const id = tr.getAttribute('data-user-id');
+                    if (id) existingRows.set(String(id), tr);
+                });
+
+                // Új sorrend felépítése — meglévő sort csak akkor cseréljük,
+                // ha a signature változott (akkor flash).
+                const fragment = document.createDocumentFragment();
+                const newSignatures = new Map();
+                visible.forEach((user) => {
+                    const idStr = String(user.id);
+                    const newSig = buildUserSignature(user);
+                    newSignatures.set(idStr, newSig);
+                    const existing = existingRows.get(idStr);
+                    const prevSig = existing?.getAttribute('data-signature');
+                    if (existing && prevSig === newSig) {
+                        // Változatlan — visszahelyezzük az új pozícióba.
+                        fragment.appendChild(existing);
+                    } else {
+                        const wrapper = document.createElement('tbody');
+                        wrapper.innerHTML = renderAdminUserRow(user);
+                        const newTr = wrapper.querySelector('tr');
+                        if (newTr) {
+                            if (existing && prevSig !== newSig) {
+                                newTr.classList.add('admin-user-row-flash');
+                                setTimeout(() => newTr.classList.remove('admin-user-row-flash'), 1100);
+                            } else if (!existing && reason === 'refresh') {
+                                newTr.classList.add('admin-user-row-flash-new');
+                                setTimeout(() => newTr.classList.remove('admin-user-row-flash-new'), 1400);
+                            }
+                            fragment.appendChild(newTr);
+                        }
+                    }
+                });
+
+                tbody.replaceChildren(fragment);
+                state.users.rowSignatures = newSignatures;
+
+                // scroll poz visszaállítás (a tbody.replaceChildren NEM dob,
+                // de ha hossz változott, a layout shift visszaadhatja a scrollt)
+                if (Math.abs(window.scrollY - scrollY) > 1) {
+                    window.scrollTo({ top: scrollY, behavior: 'instant' });
+                }
+            }
+
+            // IntersectionObserver setup (csak egyszer, az aktív tbody-ra)
+            ensureAdminUsersObserver();
+
+            // wrap-en data-state, CSS hookhoz
+            if (wrap) {
+                wrap.dataset.state = noToken ? 'no_token' : (errored ? 'error' : (total === 0 ? 'empty' : 'loaded'));
+            }
+            rendered = true;
+        }
+    } catch (err) {
+        console.error('renderAdminUsersTable hiba:', err);
+        rendered = false;
+    }
+    return rendered;
+}
+
+function updateAdminUsersMeta(total, visibleCount) {
+    try {
+        const countEl = document.getElementById('adminUsersCount');
+        const timeEl = document.getElementById('adminUsersUpdatedAt');
+        const footerEl = document.getElementById('adminUsersFooterText');
+        if (countEl) countEl.textContent = `${total} felhasználó`;
+        if (timeEl) {
+            if (state.users.loading) {
+                timeEl.textContent = 'frissítés…';
+            } else if (state.users.error) {
+                timeEl.textContent = 'hiba';
+            } else if (state.users.loadedAt) {
+                timeEl.textContent = `frissítve: ${formatRelative(state.users.loadedAt)}`;
+            } else {
+                timeEl.textContent = '—';
+            }
+        }
+        if (footerEl) {
+            if (total === 0) {
+                footerEl.textContent = '—';
+            } else if (visibleCount >= total) {
+                footerEl.textContent = `Mind a ${total} felhasználó megjelenítve.`;
+            } else {
+                footerEl.textContent = `${visibleCount} / ${total} felhasználó megjelenítve — görgess lefelé a továbbiakhoz.`;
+            }
+        }
+    } catch (err) {
+        console.warn('updateAdminUsersMeta hiba:', err);
+    }
+}
+
+// IntersectionObserver — a sentinel láthatóvá válásakor +50 sor renderelve.
+function ensureAdminUsersObserver() {
+    try {
+        const sentinel = document.getElementById('adminUsersSentinel');
+        if (!sentinel) {
+            // Nem aktív section
+        } else if (state.users.observer && state.users.observer.__sentinel === sentinel) {
+            // Már be van kötve ehhez a sentinelhez
+        } else {
+            if (state.users.observer) {
+                try { state.users.observer.disconnect(); } catch (_) {}
+            }
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach((entry) => {
+                    if (entry.isIntersecting) {
+                        const total = getFilteredAdminUsers().length;
+                        if (state.users.visibleCount < total) {
+                            state.users.visibleCount = Math.min(total, state.users.visibleCount + ADMIN_USERS_PAGE_SIZE);
+                            renderAdminUsersTable({ reason: 'lazy' });
+                        }
+                    }
+                });
+            }, { rootMargin: '300px 0px' });
+            observer.observe(sentinel);
+            observer.__sentinel = sentinel;
+            state.users.observer = observer;
+        }
+    } catch (err) {
+        console.warn('ensureAdminUsersObserver hiba:', err);
+    }
+}
+
+// Search input — debounce, hogy gyors gépelés esetén ne reszeljen minden chart.
+function onAdminUsersFilterInput(event) {
+    try {
+        const value = event?.target?.value ?? '';
+        state.users.filters.search = value;
+        const clearBtn = document.getElementById('adminUsersSearchClear');
+        if (clearBtn) clearBtn.classList.toggle('d-none', !value);
+        if (state.users.searchDebounceId) clearTimeout(state.users.searchDebounceId);
+        state.users.searchDebounceId = setTimeout(() => {
+            state.users.visibleCount = ADMIN_USERS_PAGE_SIZE;
+            renderAdminUsersTable({ reason: 'filter' });
+        }, 180);
+    } catch (err) {
+        console.warn('onAdminUsersFilterInput hiba:', err);
+    }
+}
+
+function clearAdminUsersSearch() {
+    try {
+        const input = document.getElementById('adminUserSearchInput');
+        if (input) input.value = '';
+        state.users.filters.search = '';
+        const clearBtn = document.getElementById('adminUsersSearchClear');
+        if (clearBtn) clearBtn.classList.add('d-none');
+        state.users.visibleCount = ADMIN_USERS_PAGE_SIZE;
+        renderAdminUsersTable({ reason: 'filter' });
+    } catch (err) {
+        console.warn('clearAdminUsersSearch hiba:', err);
+    }
+}
+
+// Role / Status / OrderBy select változás — azonnal újrarenderel.
+function onAdminUsersFilterChange() {
+    try {
+        const role = document.getElementById('adminRoleFilter')?.value ?? '';
+        const status = document.getElementById('adminStatusFilter')?.value ?? '';
+        const orderBy = document.getElementById('adminOrderBy')?.value ?? 'lastActive';
+        state.users.filters.role = role;
+        state.users.filters.status = status;
+        state.users.filters.orderBy = orderBy;
+        state.users.visibleCount = ADMIN_USERS_PAGE_SIZE;
+        renderAdminUsersTable({ reason: 'filter' });
+    } catch (err) {
+        console.warn('onAdminUsersFilterChange hiba:', err);
+    }
+}
+
+// Kézi frissítés gomb
+function refreshAdminUsersList() {
+    try {
+        const btn = document.getElementById('adminUsersRefreshBtn');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('btn-loading');
+            const icon = btn.querySelector('i.bi');
+            if (icon) icon.classList.add('spin');
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.classList.remove('btn-loading');
+                if (icon) icon.classList.remove('spin');
+            }, 1200);
+        }
+        loadAdminUsersList({ silent: true });
+    } catch (err) {
+        console.warn('refreshAdminUsersList hiba:', err);
+    }
+}
+
+// stats:tick triggerelt csendes refresh — csak ha a users section aktív
+function maybeRefreshAdminUsersOnTick() {
+    try {
+        if (state.currentSectionId === 'users' && state.adminToken && !state.users.loading) {
+            loadAdminUsersList({ silent: true });
+        }
+    } catch (err) {
+        console.warn('maybeRefreshAdminUsersOnTick hiba:', err);
+    }
+}
+
+// Egy user keresése a state.users.list-ből
+function findAdminUserById(userId) {
+    let result = null;
+    try {
+        const numericId = Number(userId);
+        if (Number.isFinite(numericId)) {
+            const list = Array.isArray(state.users.list) ? state.users.list : [];
+            result = list.find((u) => Number(u.id) === numericId) || null;
+        }
+    } catch (err) {
+        console.warn('findAdminUserById hiba:', err);
+        result = null;
+    }
+    return result;
+}
+
+// Kiválaszt egy usert szerkesztés / tiltás céljára. nav: cél section.
+function selectAdminUser(userId, nav) {
+    let ok = false;
+    try {
+        const user = findAdminUserById(userId);
+        if (user) {
+            state.selectedUserId = user.id;
+            state.selectedUser = user;
+            if (nav) showSection(nav);
+            ok = true;
+        } else {
+            showToast('A felhasználó nem található a betöltött listában.', 'warning', 'bi-exclamation-triangle');
+        }
+    } catch (err) {
+        console.error('selectAdminUser hiba:', err);
+    }
+    return ok;
+}
+
+function editAdminUser(userId) {
+    return selectAdminUser(userId, 'userDetail');
+}
+
+function banAdminUser(userId) {
+    return selectAdminUser(userId, 'userBan');
+}
+
+function applyUserDetailAvatar() {
+    try {
+        const avatar = document.getElementById('userDetailProfileImage');
+        const u = state.selectedUser;
+        if (avatar && u && window.MattMesterProfileImage) {
+            window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
+                source: { username: u.username, profile_image: u.profileImage },
+                size: 120
+            });
+        }
+    } catch (err) {
+        console.warn('applyUserDetailAvatar hiba:', err);
+    }
+}
+
+/* ---------- Admin User View Modal (két-tabos audit log) ---------- */
+
+function openAdminUserView(userId) {
+    let opened = false;
+    try {
+        const user = findAdminUserById(userId);
+        const modalEl = document.getElementById('adminUserViewModal');
+        if (!user) {
+            showToast('A felhasználó nem található.', 'warning', 'bi-exclamation-triangle');
+        } else if (!modalEl || !window.bootstrap?.Modal) {
+            showToast('A megtekintés modal nem elérhető.', 'danger', 'bi-x-circle');
+        } else {
+            state.userView.userId = user.id;
+            state.userView.activeTab = 'target';
+            state.userView.target = { items: [], loading: false, error: null, loadedAt: null };
+            state.userView.actor  = { items: [], loading: false, error: null, loadedAt: null };
+            renderAdminUserViewModal(user);
+            const modal = window.bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.show();
+            loadAdminUserAuditTab('target');
+            opened = true;
+        }
+    } catch (err) {
+        console.error('openAdminUserView hiba:', err);
+        showToast('Hiba a megtekintés megnyitásakor.', 'danger', 'bi-x-circle');
+    }
+    return opened;
+}
+
+function renderAdminUserViewModal(user) {
+    try {
+        if (user) {
+            const avatarEl = document.getElementById('adminUserViewAvatar');
+            if (avatarEl && window.MattMesterProfileImage) {
+                window.MattMesterProfileImage.applyProfileImagePresentation(avatarEl, {
+                    source: { username: user.username, profile_image: user.profileImage },
+                    size: 96
+                });
+            }
+            setText('adminUserViewName', user.username || '—');
+            setText('adminUserViewEmail', user.email || '—');
+            setText('adminUserViewElo', String(Number(user.elo || 0)));
+            setText('adminUserViewWins', String(Number(user.wins || 0)));
+            setText('adminUserViewLosses', String(Number(user.losses || 0)));
+            setText('adminUserViewDraws', String(Number(user.draws || 0)));
+            setText('adminUserViewWinRate', `${Number(user.winRate || 0).toFixed(1)}%`);
+            setText('adminUserViewLastActive', user.lastActive ? formatRelative(user.lastActive) : '—');
+            setText('adminUserViewJoined', formatDateOnly(user.createdAt));
+            setText('adminUserViewLastIp', user.lastIp || '—');
+            setText('adminUserViewId', `#${user.id}`);
+
+            const roleBadge = document.getElementById('adminUserViewRole');
+            if (roleBadge) roleBadge.outerHTML = `<span id="adminUserViewRole">${rolePill(user.role === 'admin' ? 'admin' : 'player')}</span>`;
+            const statusBadge = document.getElementById('adminUserViewStatus');
+            if (statusBadge) statusBadge.outerHTML = `<span id="adminUserViewStatus">${user.isBanned ? statusPill('banned') : statusPill('active')}</span>`;
+
+            // Tab gombok edit/ban onclick — modal-ba menjen
+            const editBtn = document.getElementById('adminUserViewEditBtn');
+            if (editBtn) editBtn.onclick = () => { closeAdminUserViewModal(); editAdminUser(user.id); };
+            const banBtn = document.getElementById('adminUserViewBanBtn');
+            if (banBtn) banBtn.onclick = () => { closeAdminUserViewModal(); banAdminUser(user.id); };
+        }
+    } catch (err) {
+        console.error('renderAdminUserViewModal hiba:', err);
+    }
+}
+
+function closeAdminUserViewModal() {
+    try {
+        const modalEl = document.getElementById('adminUserViewModal');
+        if (modalEl && window.bootstrap?.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        }
+    } catch (err) {
+        console.warn('closeAdminUserViewModal hiba:', err);
+    }
+}
+
+// Tab váltás
+function switchAdminUserViewTab(tabKey) {
+    try {
+        if (tabKey === 'target' || tabKey === 'actor') {
+            state.userView.activeTab = tabKey;
+            document.querySelectorAll('.admin-user-view-tab').forEach((btn) => {
+                const isActive = btn.dataset.tab === tabKey;
+                btn.classList.toggle('is-active', isActive);
+            });
+            document.querySelectorAll('.admin-user-view-tab-pane').forEach((pane) => {
+                const isActive = pane.dataset.tab === tabKey;
+                pane.classList.toggle('d-none', !isActive);
+            });
+            // Lazy load: ha még nincs adat ezen a tabon, betöltjük.
+            const slot = state.userView[tabKey];
+            if (slot && !slot.loadedAt && !slot.loading) {
+                loadAdminUserAuditTab(tabKey);
+            }
+        }
+    } catch (err) {
+        console.warn('switchAdminUserViewTab hiba:', err);
+    }
+}
+
+// /api/admin/audit/search lekérés a megfelelő szűréssel
+async function loadAdminUserAuditTab(tabKey) {
+    let success = false;
+    try {
+        const userId = state.userView.userId;
+        const slot = state.userView[tabKey];
+        if (!userId || !slot) {
+            // nincs mit
+        } else if (!state.adminToken) {
+            slot.error = 'Nincs admin token.';
+            renderAdminUserViewAuditList(tabKey);
+        } else {
+            slot.loading = true;
+            slot.error = null;
+            renderAdminUserViewAuditList(tabKey);
+
+            const params = new URLSearchParams();
+            params.set('limit', '100');
+            if (tabKey === 'target') {
+                params.set('targetType', 'user');
+                params.set('targetId', String(userId));
+            } else {
+                params.set('actorUserId', String(userId));
+            }
+            const headers = adminAuthHeaders({ Accept: 'application/json' });
+            const response = await fetch(`/api/admin/audit/search?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers
+            });
+            if (!response.ok) {
+                let bodyMessage = `HTTP ${response.status}`;
+                try {
+                    const body = await response.json();
+                    if (body?.message) bodyMessage = body.message;
+                } catch (_) {}
+                if (response.status === 401 || response.status === 403) {
+                    handleAdminAuthError('admin_token_required');
+                }
+                slot.error = bodyMessage;
+                slot.loading = false;
+                renderAdminUserViewAuditList(tabKey);
+            } else {
+                const json = await response.json();
+                const items = Array.isArray(json?.data) ? json.data : (Array.isArray(json?.data?.items) ? json.data.items : []);
+                slot.items = items;
+                slot.loadedAt = new Date();
+                slot.loading = false;
+                renderAdminUserViewAuditList(tabKey);
+                success = true;
+            }
+        }
+    } catch (err) {
+        console.error('loadAdminUserAuditTab hiba:', err);
+        const slot = state.userView[tabKey];
+        if (slot) {
+            slot.error = err?.message || 'Hálózati hiba.';
+            slot.loading = false;
+            renderAdminUserViewAuditList(tabKey);
+        }
+    }
+    return success;
+}
+
+function renderAdminUserViewAuditList(tabKey) {
+    try {
+        const container = document.querySelector(`.admin-user-view-tab-pane[data-tab="${tabKey}"] .admin-user-view-audit-list`);
+        if (container) {
+            const slot = state.userView[tabKey];
+            if (slot.loading) {
+                container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-arrow-repeat spin"></i><div>Naplóbejegyzések betöltése…</div></li>`;
+            } else if (slot.error) {
+                container.innerHTML = `<li class="admin-user-view-empty admin-user-view-empty-error"><i class="bi bi-exclamation-triangle"></i><div>${escapeHtml(slot.error)}</div></li>`;
+            } else if (!slot.items.length) {
+                const emptyMsg = tabKey === 'target'
+                    ? 'Még nincs naplóbejegyzés erről a felhasználóról.'
+                    : 'Ez a felhasználó még nem hajtott végre admin műveletet.';
+                container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-inbox"></i><div>${emptyMsg}</div></li>`;
+            } else {
+                container.innerHTML = slot.items.map(renderAdminUserAuditEntry).join('');
+            }
+        }
+    } catch (err) {
+        console.warn('renderAdminUserViewAuditList hiba:', err);
+    }
+}
+
+function renderAdminUserAuditEntry(entry) {
+    let html = '';
+    try {
+        if (entry) {
+            const sev = entry.severity || 'info';
+            const time = formatAuditTime(entry.occurredAt);
+            const action = entry.action || '—';
+            const actor = entry.actor?.username || entry.actor?.id || '—';
+            const target = entry.target?.label || entry.target?.id || '—';
+            const reason = entry.reason ? escapeHtml(entry.reason) : '';
+            html = `
+                <li class="admin-user-view-audit-row sev-${sev}">
+                    <div class="admin-user-view-audit-meta">
+                        <span class="admin-user-view-audit-time">${escapeHtml(time)}</span>
+                        ${severityPill(sev)}
+                    </div>
+                    <div class="admin-user-view-audit-body">
+                        <div class="admin-user-view-audit-action">${escapeHtml(action)}</div>
+                        <div class="admin-user-view-audit-targets">
+                            <span class="text-muted">actor:</span> <span class="text-white">${escapeHtml(actor)}</span>
+                            <span class="text-muted ms-2">target:</span> <span class="text-white">${escapeHtml(target)}</span>
+                        </div>
+                        ${reason ? `<div class="admin-user-view-audit-reason"><i class="bi bi-chat-left-quote"></i>${reason}</div>` : ''}
+                    </div>
+                </li>
+            `;
+        }
+    } catch (err) {
+        console.warn('renderAdminUserAuditEntry hiba:', err);
+        html = '';
+    }
+    return html;
+}
+
+/* =============================================================
+   17) Háttér műveletek (logout, modal)
+   ============================================================= */
 
 function logout() {
     let redirected = false;

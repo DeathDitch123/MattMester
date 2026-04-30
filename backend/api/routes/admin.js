@@ -587,6 +587,7 @@ router.get(
                     username: user.username,
                     email: user.email,
                     role: user.role,
+                    profileImage: user.profile_image,
                     isBanned: Boolean(user.is_banned),
                     bannedUntil: user.banned_until,
                     elo: user.elo,
@@ -595,6 +596,9 @@ router.get(
                     wins: user.wins,
                     losses: user.losses,
                     draws: user.draws,
+                    winRate: Number(user.win_rate_percent || 0),
+                    totalAbilities: Number(user.total_abilities || 0),
+                    lastIp: user.last_ip || null,
                     lastActive: user.last_active,
                     createdAt: user.created_at
                 }))

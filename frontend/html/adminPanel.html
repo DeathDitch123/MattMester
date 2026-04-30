@@ -92,69 +92,90 @@
         <div class="admin-footer-text">&copy; 2026 MattMester &middot; Admin Vezérlőpult</div>
     </footer>
 
-    <!-- User Details Modal -->
-    <div class="modal fade" id="userModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
+    <!-- Admin User View Modal — megtekintés audit log-okkal -->
+    <div class="modal fade admin-user-view-modal" id="adminUserViewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Felhasználó részletei</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title">
+                        <i class="bi bi-person-vcard me-2 text-gold"></i>Felhasználó részletei
+                        <span class="admin-user-view-id text-secondary small ms-2" id="adminUserViewId">#—</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-4 text-center mb-3">
-                            <img id="modalUserDetailAvatar"
-                                src="/profile_pictures/default.png"
-                                class="rounded-circle mb-3 border border-3 border-gold" alt="Profil">
-                            <h4 class="mb-1">Magnus Carlsen</h4>
-                            <span class="badge badge-role-admin">Adminisztrátor</span>
-                            <div class="mt-3">
-                                <div class="text-gold display-6 fw-bold">2847</div>
+                    <div class="admin-user-view-grid">
+                        <aside class="admin-user-view-aside">
+                            <div class="admin-user-view-avatar-wrap">
+                                <img id="adminUserViewAvatar" src="/profile_pictures/default.png"
+                                    class="admin-user-view-avatar" alt="Profilkép" data-fallback="true">
+                            </div>
+                            <h4 class="admin-user-view-name" id="adminUserViewName">—</h4>
+                            <div class="admin-user-view-email text-secondary" id="adminUserViewEmail">—</div>
+                            <div class="admin-user-view-badges mt-2">
+                                <span id="adminUserViewRole"></span>
+                                <span id="adminUserViewStatus"></span>
+                            </div>
+                            <div class="admin-user-view-elo">
+                                <div class="text-gold display-6 fw-bold lh-1" id="adminUserViewElo">0</div>
                                 <small class="text-secondary">ELO értékelés</small>
                             </div>
-                        </div>
-                        <div class="col-md-8">
-                            <div class="row g-3">
-                                <div class="col-6">
-                                    <label class="text-secondary small">E-mail</label>
-                                    <div class="text-white">magnus@chess.com</div>
-                                </div>
-                                <div class="col-6">
-                                    <label class="text-secondary small">Csatlakozott</label>
-                                    <div class="text-white">2023.01.15.</div>
-                                </div>
-                                <div class="col-6">
-                                    <label class="text-secondary small">Utolsó aktivitás</label>
-                                    <div class="text-white">2 perce</div>
-                                </div>
-                                <div class="col-6">
-                                    <label class="text-secondary small">Állapot</label>
-                                    <div class="text-success"><i class="bi bi-check-circle-fill me-1"></i>Aktív</div>
-                                </div>
+                            <hr class="border-secondary my-3">
+                            <div class="admin-user-view-stats">
+                                <div><div class="h5 text-success mb-0" id="adminUserViewWins">0</div><small class="text-secondary">Győzelem</small></div>
+                                <div><div class="h5 text-danger mb-0"  id="adminUserViewLosses">0</div><small class="text-secondary">Vereség</small></div>
+                                <div><div class="h5 text-warning mb-0" id="adminUserViewDraws">0</div><small class="text-secondary">Döntetlen</small></div>
+                                <div><div class="h5 text-gold mb-0"    id="adminUserViewWinRate">0%</div><small class="text-secondary">Győzelmi arány</small></div>
                             </div>
-                            <hr class="border-secondary my-4">
-                            <h6 class="text-gold mb-3">Statisztikák</h6>
-                            <div class="row text-center">
-                                <div class="col-4">
-                                    <div class="h4 text-success mb-0">1 234</div>
-                                    <small class="text-secondary">Győzelem</small>
-                                </div>
-                                <div class="col-4">
-                                    <div class="h4 text-danger mb-0">456</div>
-                                    <small class="text-secondary">Vereség</small>
-                                </div>
-                                <div class="col-4">
-                                    <div class="h4 text-warning mb-0">89</div>
-                                    <small class="text-secondary">Döntetlen</small>
-                                </div>
+                            <hr class="border-secondary my-3">
+                            <ul class="admin-user-view-meta-list">
+                                <li><span class="text-secondary">Utolsó aktivitás</span><span class="text-white" id="adminUserViewLastActive">—</span></li>
+                                <li><span class="text-secondary">Csatlakozott</span><span class="text-white" id="adminUserViewJoined">—</span></li>
+                                <li><span class="text-secondary">Utolsó IP</span><span class="text-white font-monospace" id="adminUserViewLastIp">—</span></li>
+                            </ul>
+                        </aside>
+
+                        <section class="admin-user-view-main">
+                            <div class="admin-user-view-tabs" role="tablist" aria-label="Audit napló szűrő">
+                                <button type="button" class="admin-user-view-tab is-active" data-tab="target"
+                                    onclick="switchAdminUserViewTab('target')" role="tab">
+                                    <i class="bi bi-person-bounding-box me-1"></i>Vele történt
+                                </button>
+                                <button type="button" class="admin-user-view-tab" data-tab="actor"
+                                    onclick="switchAdminUserViewTab('actor')" role="tab">
+                                    <i class="bi bi-shield-fill-exclamation me-1"></i>Ő végezte
+                                </button>
+                                <span class="admin-user-view-tabs-hint text-secondary small ms-auto">
+                                    <i class="bi bi-info-circle me-1"></i>Audit napló — utolsó 100
+                                </span>
                             </div>
-                        </div>
+                            <div class="admin-user-view-tab-pane" data-tab="target">
+                                <ul class="admin-user-view-audit-list">
+                                    <li class="admin-user-view-empty">
+                                        <i class="bi bi-arrow-repeat spin"></i>
+                                        <div>Naplóbejegyzések betöltése…</div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="admin-user-view-tab-pane d-none" data-tab="actor">
+                                <ul class="admin-user-view-audit-list">
+                                    <li class="admin-user-view-empty">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        <div>Válts a fülre a betöltéshez.</div>
+                                    </li>
+                                </ul>
+                            </div>
+                        </section>
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer admin-user-view-footer">
                     <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Bezárás</button>
-                    <button type="button" class="btn btn-outline-warning">Jelszó visszaállítás</button>
-                    <button type="button" class="btn btn-gold">Profil szerkesztése</button>
+                    <button type="button" class="btn btn-outline-danger" id="adminUserViewBanBtn">
+                        <i class="bi bi-ban me-1"></i>Tiltás
+                    </button>
+                    <button type="button" class="btn btn-gold" id="adminUserViewEditBtn">
+                        <i class="bi bi-pencil me-1"></i>Szerkesztés
+                    </button>
                 </div>
             </div>
         </div>
