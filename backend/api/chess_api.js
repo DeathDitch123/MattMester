@@ -16,6 +16,7 @@ const { botLepesValaszt, botKepessegValaszt, nehezsegiSzintInfo, osszesNehezsegi
 const { eloSzamit, KEZDO_ELO } = require('../chess/elo.js');
 const { requireVerifiedEmail } = require('./funtions.js');
 const { abilityAktival, getKliensConfig, ABILITY_CONFIG } = require('../chess/abilities.js');
+const { isValidMode, getMode, listClient: listModesClient, DEFAULT_MODE } = require('../chess/modes.js');
 
 function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -30,6 +31,46 @@ function findGameOrThrow(paramId) {
         throw e;
     }
     return jatek;
+}
+
+// Authorization helper: a kérő be van jelentkezve ÉS résztvevője a játéknak.
+// Visszaadja a játékos színét a játékban ('white' | 'black'). Hot-seat módban
+// (mindkét szín ugyanaz az userId) a koronLevo szerinti aktív színt adja vissza.
+// Throw-ol 401-gyel ha nincs session, 403-mal ha nem résztvevő.
+function requireParticipant(req, jatek) {
+    const userId = req.session?.userId || null;
+    if (!userId) {
+        const e = new Error('Bejelentkezés szükséges.');
+        e.statusCode = 401;
+        throw e;
+    }
+    const whiteId = jatek.jatekosok.white.userId;
+    const blackId = jatek.jatekosok.black.userId;
+    let szin = null;
+    if (whiteId === blackId && whiteId === userId) {
+        szin = jatek.koronLevo; // hot-seat: aktív szín
+    } else if (whiteId === userId) {
+        szin = 'white';
+    } else if (blackId === userId) {
+        szin = 'black';
+    }
+    if (!szin) {
+        const e = new Error('Nem vagy résztvevője ennek a játéknak.');
+        e.statusCode = 403;
+        throw e;
+    }
+    return szin;
+}
+
+// PvP játékokat REST-tel NEM szabad módosítani (lépés/feladás/reset/törlés) —
+// a frontend a socket-eseményeket használja, a REST egy bypass lenne ami megkerüli
+// a per-játékos validációt és a broadcast/cleanup logikát.
+function rejectIfPvp(jatek) {
+    if (jatek.pvpAktiv) {
+        const e = new Error('PvP játékot REST-tel nem lehet módosítani — használd a socket eseményeket.');
+        e.statusCode = 400;
+        throw e;
+    }
 }
 
 // ────────────────────────────────────────────
@@ -60,57 +101,34 @@ router.get('/user-elo', async (req, res) => {
 });
 
 // ────────────────────────────────────────────
-// POST /api/chess/new — Új játék indítása (PvP / lokális)
+// GET /api/chess/modes — Elérhető játékmódok listája
 // ────────────────────────────────────────────
-router.post('/new', requireVerifiedEmail, async (req, res) => {
-    try {
-        const { gameId, jatek } = jatekLetrehoz();
-
-        // Session-ből user ID (ha be van jelentkezve)
-        const userId = req.session?.userId || null;
-
-        // Játékos hozzárendelés (egyelőre mindkét oldalt ugyanaz a user játssza — később: matchmaking)
-        jatek.jatekosok.white.userId = userId;
-        jatek.jatekosok.black.userId = userId;
-
-        // Tábla inicializálás
-        const allapot = jatekUjraIndit(jatek);
-
-        // DB mentés (ha van bejelentkezett user)
-        if (userId) {
-            try {
-                const dbGameId = await chessSql.jatekMentDb(userId, userId);
-                jatek.dbGameId = dbGameId;
-            } catch (dbErr) {
-                console.error('Chess DB játék mentési hiba:', dbErr);
-            }
-        }
-
-        return res.status(200).json({
-            gameId,
-            allapot
-        });
-    } catch (err) {
-        console.error('Chess new game hiba:', err);
-        return res.status(500).json({ error: 'Nem sikerült új játékot indítani.' });
-    }
+router.get('/modes', (req, res) => {
+    return res.status(200).json({ modes: listModesClient(), defaultMode: DEFAULT_MODE });
 });
 
 // ────────────────────────────────────────────
 // POST /api/chess/new-bot — Új játék robot ellen
+// Body: { difficulty: 1-8, mode?: string, ranked?: boolean }
 // ────────────────────────────────────────────
 router.post('/new-bot', requireVerifiedEmail, async (req, res) => {
     let statusCode = 200;
     let responseBody = null;
     try {
-        const { difficulty } = req.body;
+        const { difficulty, mode: modeKey, ranked } = req.body || {};
         const nehezseg = parseInt(difficulty, 10);
 
         if (!nehezseg || nehezseg < 1 || nehezseg > 8) {
             statusCode = 400;
             responseBody = { error: 'Érvénytelen nehézségi szint (1-8).' };
+        } else if (modeKey && !isValidMode(modeKey)) {
+            statusCode = 400;
+            responseBody = { error: 'Érvénytelen játékmód.' };
         } else {
-            const { gameId, jatek } = jatekLetrehoz();
+            const { gameId, jatek } = jatekLetrehoz({
+                mode: modeKey || DEFAULT_MODE,
+                ranked: ranked !== false
+            });
             const userId = req.session?.userId || null;
             const botInfo = nehezsegiSzintInfo(nehezseg);
 
@@ -128,7 +146,7 @@ router.post('/new-bot', requireVerifiedEmail, async (req, res) => {
             // DB mentés
             if (userId) {
                 try {
-                    const dbGameId = await chessSql.jatekMentDb(userId, userId); // bot-nak nincs userId
+                    const dbGameId = await chessSql.jatekMentDb(userId, userId, jatek.mode);
                     jatek.dbGameId = dbGameId;
                 } catch (dbErr) {
                     console.error('Chess DB bot játék mentési hiba:', dbErr);
@@ -161,6 +179,7 @@ router.get('/:id/state', (req, res) => {
     let payload;
     try {
         const jatek = findGameOrThrow(req.params.id);
+        requireParticipant(req, jatek);
         payload = jatekAllapotKliens(jatek);
         if (jatek.idoVegeUzenet) {
             payload.uzenet = jatek.idoVegeUzenet;
@@ -181,6 +200,7 @@ router.get('/:id/moves/:x/:y', (req, res) => {
     let payload;
     try {
         const jatek = findGameOrThrow(req.params.id);
+        requireParticipant(req, jatek);
         const x = parseInt(req.params.x, 10);
         const y = parseInt(req.params.y, 10);
 
@@ -205,13 +225,19 @@ router.get('/:id/moves/:x/:y', (req, res) => {
 // ────────────────────────────────────────────
 // POST /api/chess/:id/move — Lépés végrehajtás
 // ────────────────────────────────────────────
-router.post('/:id/move', async (req, res) => {
+router.post('/:id/move', requireVerifiedEmail, async (req, res) => {
     try {
         const jatek = findGameOrThrow(req.params.id);
+        rejectIfPvp(jatek);                       // PvP socket-szel megy
+        const sajatSzin = requireParticipant(req, jatek);
 
         if (jatek.botAktiv && jatek.koronLevo === jatek.botSzin) {
             // Bot játékban: nem lehet a bot helyett lépni
             return res.status(400).json({ error: 'Nem a te köröd.' });
+        }
+        // Csak a saját körünkben léphetünk (a bábu-szín check is kivédené, de korai reject)
+        if (jatek.koronLevo !== sajatSzin) {
+            return res.status(400).json({ error: 'Nem te jössz.' });
         }
 
         const { fromX, fromY, toX, toY, promotion } = req.body;
@@ -317,8 +343,15 @@ async function eloFrissitJatekVegen(jatek, uzenet) {
         const jatekosId = jatek.jatekosok[jatekosSzin].userId;
         if (!jatekosId) return null;
 
+        // Ranked toggle / mode ELO oszlop check — casual módban nem frissítünk.
+        const mode = getMode(jatek.mode);
+        if (!jatek.ranked || !mode || !mode.eloColumn) {
+            return null;
+        }
+        const eloOszlop = mode.eloColumn;
+
         const botInfo = nehezsegiSzintInfo(jatek.nehezseg);
-        const jatekosElo = await chessSql.eloLekerdezDb(jatekosId);
+        const jatekosElo = await chessSql.eloLekerdezDb(jatekosId, eloOszlop);
         if (jatekosElo === null) return null;
 
         // Meccsszám lekérdezés (K-faktor)
@@ -352,9 +385,9 @@ async function eloFrissitJatekVegen(jatek, uzenet) {
         }
 
         const { ujElo, valtozas } = eloSzamit(jatekosElo, botInfo.elo, eredmeny, meccsek);
-        await chessSql.eloFrissitDb(jatekosId, ujElo);
+        await chessSql.eloFrissitDb(jatekosId, ujElo, eloOszlop);
 
-        console.log(`[ELO] User #${jatekosId}: ${jatekosElo} → ${ujElo} (${valtozas >= 0 ? '+' : ''}${valtozas}) vs Bot(${botInfo.nev})`);
+        console.log(`[ELO][${jatek.mode}/${eloOszlop}] User #${jatekosId}: ${jatekosElo} → ${ujElo} (${valtozas >= 0 ? '+' : ''}${valtozas}) vs Bot(${botInfo.nev})`);
         return {
             eloBefore: jatekosElo,
             eloAfter: ujElo,
@@ -381,31 +414,13 @@ router.get('/abilities', (req, res) => {
 router.post('/:id/ability', requireVerifiedEmail, async (req, res) => {
     try {
         const jatek = findGameOrThrow(req.params.id);
+        rejectIfPvp(jatek);                       // PvP socket-en (chess:ability)
+        const szin = requireParticipant(req, jatek);
+
         const { key, params } = req.body || {};
         if (!key) return res.status(400).json({ error: 'Hiányzó képesség (key).' });
 
-        // A session-ből vesszük az userId-t és megkeressük a játékban a hozzá
-        // tartozó színt. Bot meccsnél: user=white, bot=black (userId=null).
-        // Hot-seat (lokális) meccsnél: mindkét oldal ugyanaz az userId →
-        // ilyenkor a koronLevo szerinti aktív színt használjuk, hogy mindkét
-        // játékos tudjon képességet aktiválni a saját körében.
-        const userId = req.session?.userId || null;
-        const whiteId = jatek.jatekosok.white.userId;
-        const blackId = jatek.jatekosok.black.userId;
-
-        let szin = null;
-        if (whiteId === blackId && whiteId === userId) {
-            szin = jatek.koronLevo;             // hot-seat: aktív szín
-        } else if (whiteId === userId) {
-            szin = 'white';
-        } else if (blackId === userId) {
-            szin = 'black';
-        }
-
-        if (!szin) {
-            return res.status(403).json({ error: 'Nem vagy résztvevője ennek a játéknak.' });
-        }
-
+        const userId = req.session.userId;        // requireParticipant garantálja
         const eredmeny = abilityAktival(jatek, szin, key, params);
         if (!eredmeny.success) {
             return res.status(400).json({ error: eredmeny.error });
@@ -441,6 +456,8 @@ router.post('/:id/reset', (req, res) => {
     let payload;
     try {
         const jatek = findGameOrThrow(req.params.id);
+        rejectIfPvp(jatek);
+        requireParticipant(req, jatek);
         payload = { allapot: jatekUjraIndit(jatek) };
     } catch (err) {
         statusCode = err.statusCode || 500;
@@ -457,6 +474,8 @@ router.post('/:id/surrender', async (req, res) => {
     let payload;
     try {
         const jatek = findGameOrThrow(req.params.id);
+        rejectIfPvp(jatek);              // PvP feladás socket-en (chess:surrender)
+        requireParticipant(req, jatek);
 
         if (jatek.vege) {
             payload = { message: 'Játék már véget ért.', uzenet: 'Feladtad a játékot.' };
@@ -508,6 +527,8 @@ router.delete('/:id', async (req, res) => {
     let payload;
     try {
         const jatek = findGameOrThrow(req.params.id);
+        rejectIfPvp(jatek);              // PvP törlés a disconnect/surrender flow-on át
+        requireParticipant(req, jatek);
         const gameId = parseInt(req.params.id, 10);
 
         if (jatek.dbGameId) {

@@ -43,13 +43,14 @@ async function createTables() {
     const queries = [
         `CREATE TABLE IF NOT EXISTS users (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            username VARCHAR(50) BINARY UNIQUE NOT NULL, 
+            username VARCHAR(50) BINARY UNIQUE NOT NULL,
             password_hash VARCHAR(255) NOT NULL,
             email VARCHAR(100) UNIQUE,
             profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
             elo INT DEFAULT 800,
-            elo_MM INT DEFAULT 800,
-            elo_bullet INT DEFAULT 800,
+            elo_mattmester INT DEFAULT 800,
+            elo_classical INT DEFAULT 800,
+            elo_blitz INT DEFAULT 800,
             role ENUM('player', 'admin') DEFAULT 'player',
             is_banned BOOLEAN DEFAULT FALSE,
             ban_reason VARCHAR(255),
@@ -66,8 +67,8 @@ async function createTables() {
             INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_email_verified, email_verified_at)
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP);
+        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_mattmester, elo_classical, elo_blitz, role, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP);
         `,
 
         `ALTER TABLE users
@@ -275,6 +276,60 @@ async function createTables() {
     }
 }
 
+// ────────────────────────────────────────────
+// Migrációk régi adatbázisokhoz — minden ALTER hibatűréssel fut.
+// Új deployment esetén ezek vagy no-op-ok, vagy gyengén ártatlanok.
+// ────────────────────────────────────────────
+async function runMigrations() {
+    // Régi `elo_MM` oszlop átnevezése `elo_classical`-re (ha létezik még).
+    const renames = [
+        ['elo_MM',     'elo_classical'],
+        ['elo_bullet', 'elo_blitz']
+    ];
+    for (const [oldName, newName] of renames) {
+        try {
+            // INFORMATION_SCHEMA check, hogy csak akkor renameljünk, ha tényleg ez van.
+            const [rows] = await pool.execute(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = ?`,
+                [oldName]
+            );
+            if (rows.length > 0) {
+                await pool.execute(`ALTER TABLE users CHANGE \`${oldName}\` \`${newName}\` INT DEFAULT 800`);
+                console.log(`[Migration] users.${oldName} → users.${newName} sikeres.`);
+            }
+        } catch (err) {
+            console.warn(`[Migration] users rename ${oldName}→${newName} kihagyva: ${err.message}`);
+        }
+    }
+
+    // Új oszlopok hozzáadása ha még nem léteznek (régi DB-knél a CREATE TABLE
+    // IF NOT EXISTS nem ad új oszlopot, mert a tábla már megvolt).
+    const newColumns = [
+        ['elo_mattmester', 'INT DEFAULT 800'],
+        ['elo_classical',  'INT DEFAULT 800'],
+        ['elo_blitz',      'INT DEFAULT 800']
+    ];
+    for (const [colName, colDef] of newColumns) {
+        try {
+            const [rows] = await pool.execute(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = ?`,
+                [colName]
+            );
+            if (rows.length === 0) {
+                await pool.execute(`ALTER TABLE users ADD COLUMN \`${colName}\` ${colDef}`);
+                // Egyszer-induló UPDATE: a meglévő `elo` érték másolódik az új oszlopba,
+                // hogy meglévő user-ek ne 800-on induljanak az új mode-okon.
+                await pool.execute(`UPDATE users SET \`${colName}\` = elo WHERE \`${colName}\` = 800 AND elo <> 800`);
+                console.log(`[Migration] users.${colName} hozzáadva.`);
+            }
+        } catch (err) {
+            console.warn(`[Migration] users.${colName} hozzáadás kihagyva: ${err.message}`);
+        }
+    }
+}
+
 async function initDatabase() {
     try {
         await ensureDatabaseExists();
@@ -284,6 +339,7 @@ async function initDatabase() {
         conn.release();
 
         await createTables();
+        await runMigrations();
         console.log('Database initialized successfully.');
     } catch (err) {
         console.error('Failed to initialize database:', err);

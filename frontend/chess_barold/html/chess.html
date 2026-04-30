@@ -21,8 +21,22 @@
             <h2 class="mode-title">Mattmester</h2>
             <p class="mode-subtitle">Válassz játékmódot</p>
 
-            <!-- 1. LÉPÉS: Mód választás -->
-            <div id="mode-step1" class="mode-step">
+            <!-- 1. LÉPÉS: Játékmód (5 mód) — dinamikusan a /api/chess/modes-ból -->
+            <div id="mode-step-modes" class="mode-step">
+                <div id="mode-list" class="mode-list">
+                    <!-- gombok dinamikus generálással -->
+                </div>
+            </div>
+
+            <!-- 2. LÉPÉS: Bot vs Játékos + Ranked toggle -->
+            <div id="mode-step-opponent" class="mode-step hidden">
+                <p class="mode-subtitle"><span id="selected-mode-label">Mód</span></p>
+                <div class="ranked-toggle-row">
+                    <label class="ranked-toggle">
+                        <input type="checkbox" id="ranked-toggle-input" checked>
+                        <span class="ranked-toggle-label">Ranked (ELO frissül)</span>
+                    </label>
+                </div>
                 <button class="mode-btn" id="mode-bot">
                     <span class="mode-icon">🤖</span>
                     <span class="mode-label">Robot ellen</span>
@@ -31,16 +45,17 @@
                     <span class="mode-icon">👥</span>
                     <span class="mode-label">Játékos ellen</span>
                 </button>
+                <button class="mode-back-btn" id="mode-back-modes">← Vissza</button>
             </div>
 
-            <!-- 2. LÉPÉS: Nehézség választás (bot) -->
+            <!-- 3. LÉPÉS: Nehézség választás (bot) -->
             <div id="mode-step2" class="mode-step hidden">
                 <p class="mode-subtitle">Robot nehézség</p>
                 <div id="difficulty-list" class="difficulty-list"></div>
                 <button class="mode-back-btn" id="mode-back">← Vissza</button>
             </div>
 
-            <!-- 3. LÉPÉS: PvP almenü -->
+            <!-- 3b. LÉPÉS: PvP almenü -->
             <div id="mode-step-pvp" class="mode-step hidden">
                 <p class="mode-subtitle">Játékos ellen</p>
                 <button class="mode-btn" id="pvp-friend">

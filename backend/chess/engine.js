@@ -12,6 +12,7 @@
 const { mezoKeres, jatekAllapotKliens, abilitiesAlapallapot } = require('./state.js');
 const { jatekAllapotEllenor, szabLepKeres, pozicioHash } = require('./logika.js');
 const { idoFut, idoLeall } = require('./timer.js');
+const { getMode } = require('./modes.js');
 const chessSql = require('./chess_sql_functions.js');
 const {
     pontHozzaad,
@@ -39,9 +40,15 @@ function jatekUjraIndit(jatek) {
     jatek.lepesTortenet = [];
     jatek.pozicioTortenet = [];
     jatek.eloValtozas = null;
-    jatek.jatekosok.white.ido = 600;
-    jatek.jatekosok.black.ido = 600;
-    jatek.abilities = abilitiesAlapallapot();
+
+    // Mode-alapú induló idő (null = végtelen)
+    const mode = getMode(jatek.mode);
+    const idoStart = mode ? mode.ido : 600;
+    jatek.jatekosok.white.ido = idoStart;
+    jatek.jatekosok.black.ido = idoStart;
+
+    // Képességeket csak akkor inicializáljuk ha a mód engedi.
+    jatek.abilities = jatek.abilitiesEnabled ? abilitiesAlapallapot() : null;
 
     // Tábla generálása 8x8
     for (let y = 0; y < 8; y++) {

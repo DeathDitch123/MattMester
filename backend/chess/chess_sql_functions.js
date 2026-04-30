@@ -9,6 +9,7 @@
 // ============================================================
 
 const { getPool } = require('../sql/database.js');
+const { isValidEloColumn } = require('./modes.js');
 
 // ────────────────────────────────────────────
 // GAMES tábla
@@ -16,13 +17,16 @@ const { getPool } = require('../sql/database.js');
 
 /**
  * Új játékot ment az adatbázisba.
+ * @param {number} whitePlayerId
+ * @param {number} blackPlayerId
+ * @param {string} [mode] — game-mode kulcs (a games.time_control oszlopba kerül)
  * Visszaadja az insertált sor ID-ját (games.id).
  */
-async function jatekMentDb(whitePlayerId, blackPlayerId) {
+async function jatekMentDb(whitePlayerId, blackPlayerId, mode) {
     const pool = getPool();
-    const query = `INSERT INTO games (white_player_id, black_player_id, status)
-                   VALUES (?, ?, 'ongoing')`;
-    const [result] = await pool.execute(query, [whitePlayerId, blackPlayerId]);
+    const query = `INSERT INTO games (white_player_id, black_player_id, status, time_control)
+                   VALUES (?, ?, 'ongoing', ?)`;
+    const [result] = await pool.execute(query, [whitePlayerId, blackPlayerId, mode || 'mattmester_10p']);
     return result.insertId;
 }
 
@@ -135,24 +139,35 @@ async function dontetlenMentDb(userId) {
 // ────────────────────────────────────────────
 
 /**
- * Játékos ELO értékének frissítése.
+ * Játékos ELO értékének frissítése. Az `oszlop` paraméter WHITELIST-elt —
+ * SQL injection ellen védve. Default: 'elo' (legacy).
  * @param {number} userId
- * @param {number} ujElo - az új ELO érték
+ * @param {number} ujElo
+ * @param {string} [oszlop='elo'] — 'elo' | 'elo_mattmester' | 'elo_classical' | 'elo_blitz'
  */
-async function eloFrissitDb(userId, ujElo) {
+async function eloFrissitDb(userId, ujElo, oszlop = 'elo') {
+    if (!isValidEloColumn(oszlop)) {
+        throw new Error(`Érvénytelen ELO oszlop: ${oszlop}`);
+    }
     const pool = getPool();
-    const query = `UPDATE users SET elo = ? WHERE id = ?`;
+    // Backtick-elve a whitelist-elt oszlopnév — biztonságos.
+    const query = `UPDATE users SET \`${oszlop}\` = ? WHERE id = ?`;
     await pool.execute(query, [ujElo, userId]);
 }
 
 /**
- * Játékos aktuális ELO-jának lekérdezése.
+ * Játékos aktuális ELO-jának lekérdezése. Az `oszlop` paraméter WHITELIST-elt.
+ * @param {number} userId
+ * @param {string} [oszlop='elo']
  */
-async function eloLekerdezDb(userId) {
+async function eloLekerdezDb(userId, oszlop = 'elo') {
+    if (!isValidEloColumn(oszlop)) {
+        throw new Error(`Érvénytelen ELO oszlop: ${oszlop}`);
+    }
     const pool = getPool();
-    const query = `SELECT elo FROM users WHERE id = ?`;
+    const query = `SELECT \`${oszlop}\` AS v FROM users WHERE id = ?`;
     const [rows] = await pool.execute(query, [userId]);
-    return rows[0] ? rows[0].elo : null;
+    return rows[0] ? rows[0].v : null;
 }
 
 /**

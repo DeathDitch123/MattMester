@@ -1115,3 +1115,72 @@ body
     color: #ffd966;
 }
 
+/* ============================================================
+   MODE-LISTA (5 játékmód választó)
+   ============================================================ */
+.mode-list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.mode-list .mode-card {
+    background: #2f2f2f;
+    border: 1px solid #444;
+    border-radius: 6px;
+    padding: 12px 14px;
+    color: #eee;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.15s, border-color 0.15s;
+}
+.mode-list .mode-card:hover {
+    background: #3a3a3a;
+    border-color: #d4a73a;
+}
+.mode-list .mode-card .mc-name {
+    display: block;
+    font-weight: 700;
+    font-size: 1.05em;
+    margin-bottom: 4px;
+}
+.mode-list .mode-card .mc-meta {
+    display: flex;
+    gap: 8px;
+    font-size: 0.82em;
+    color: #aaa;
+    flex-wrap: wrap;
+}
+.mode-list .mode-card .mc-meta .mc-tag {
+    padding: 2px 6px;
+    background: #1d1d1d;
+    border-radius: 3px;
+}
+.mode-list .mode-card .mc-meta .mc-tag.mc-tag-abilities { color: #d4a73a; }
+.mode-list .mode-card .mc-meta .mc-tag.mc-tag-time      { color: #8fd08f; }
+
+/* Ranked toggle */
+.ranked-toggle-row {
+    display: flex;
+    justify-content: center;
+    margin: 8px 0 14px;
+}
+.ranked-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    color: #ccc;
+    font-size: 0.9em;
+}
+.ranked-toggle input { width: 16px; height: 16px; cursor: pointer; }
+.ranked-toggle .ranked-toggle-label { color: #ddd; }
+
+/* Végtelen óra megjelenítés */
+.clock.infinity {
+    color: #d4a73a;
+    font-size: 1.3em;
+    font-weight: 700;
+}
+

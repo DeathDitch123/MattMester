@@ -66,8 +66,9 @@ function ellenkezoSzin(szin) {
  * @returns {{ success: boolean, error?: string, allapotValtozas?: object }}
  */
 function abilityAktival(jatek, szin, key, params) {
-    if (jatek.vege)        return { success: false, error: 'A játék véget ért.' };
-    if (!jatek.abilities)  return { success: false, error: 'Képességek nincsenek inicializálva.' };
+    if (jatek.vege)              return { success: false, error: 'A játék véget ért.' };
+    if (!jatek.abilitiesEnabled) return { success: false, error: 'Ezen a módon nincs képesség.' };
+    if (!jatek.abilities)        return { success: false, error: 'Képességek nincsenek inicializálva.' };
 
     const config = ABILITY_CONFIG[key];
     if (!config) return { success: false, error: 'Ismeretlen képesség.' };

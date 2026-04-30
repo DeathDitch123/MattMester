@@ -151,8 +151,47 @@ document.addEventListener('DOMContentLoaded', () => {
         await refreshFriendsList(FRIEND_FILTER_DEFAULT);
         await refreshSecurityActivity();
         await loadAbilitiesUsage();
+        await loadEloByMode();
     });
 });
+
+async function loadEloByMode() {
+    const grid = document.getElementById('elo-by-mode-grid');
+    if (!grid) return;
+    try {
+        const res = await fetch('/api/profile/elo-by-mode');
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            grid.innerHTML = '<div class="col-12 text-secondary text-center py-3">Nem sikerült betölteni az ELO értékeket.</div>';
+            return;
+        }
+        const e = data.elo || {};
+        const modes = [
+            { key: 'mattmester', name: 'Mattmester',  icon: 'sparkles' },
+            { key: 'classical',  name: 'Klasszikus',  icon: 'crown' },
+            { key: 'blitz',      name: 'Blitz',       icon: 'zap' }
+        ];
+        grid.innerHTML = modes.map(m => `
+            <div class="col-md-4">
+                <div class="ability-card d-flex align-items-center gap-3">
+                    <div class="ability-icon">
+                        <i data-lucide="${escapeHtmlAttr(m.icon)}"></i>
+                    </div>
+                    <div>
+                        <h6 class="mb-1 text-white">${escapeHtml(m.name)}</h6>
+                        <small class="text-secondary">ELO: <strong>${Number(e[m.key]) || 800}</strong></small>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+        }
+    } catch (err) {
+        console.error('[profile] elo-by-mode hiba:', err);
+        grid.innerHTML = '<div class="col-12 text-secondary text-center py-3">Hiba a betöltés közben.</div>';
+    }
+}
 
 async function loadAbilitiesUsage() {
     const grid = document.getElementById('abilities-usage-grid');
