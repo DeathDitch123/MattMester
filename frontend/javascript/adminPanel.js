@@ -88,15 +88,19 @@ const setTextWithFlash = (id, value) => {
    2) HTML render helperek (h.*)
    ============================================================= */
 const h = {
-    header: ({ icon, title, subtitle, actions = [] }) => `
+    header: ({ icon, title, subtitle, actions = [], liveStatus = true }) => {
+        const liveActions = liveStatus ? buildWsLiveActions() : [];
+        const allActions = [...liveActions, ...actions];
+        return `
         <header class="section-header">
             <div class="section-header-text">
                 <h2 class="section-title"><i class="bi ${icon} me-2 text-gold"></i>${title}</h2>
                 ${subtitle ? `<p class="section-subtitle">${subtitle}</p>` : ''}
             </div>
-            ${actions.length ? `<div class="section-header-actions">${actions.map(h.btn).join('')}</div>` : ''}
+            ${allActions.length ? `<div class="section-header-actions">${allActions.map(h.btn).join('')}</div>` : ''}
         </header>
-    `,
+    `;
+    },
 
     stats: (items) => {
         const xlCol = { 1: 12, 2: 6, 3: 4, 4: 3 }[items.length] || 3;
@@ -331,6 +335,36 @@ const WS_STATUS = Object.freeze({
     disconnected: { key: 'disconnected', label: 'Megszakadt — újrapróbálom', short: 'Offline',      variant: 'danger',    icon: 'bi-plug',                 dotClass: 'ws-dot-down',       spin: false }
 });
 const WS_STATUS_VARIANTS = ['success', 'warning', 'danger', 'secondary'];
+
+// Az Élő-WS/admin pill + kézi frissítés gomb két "action" item-je. Minden
+// section-header automatikusan kapja (h.header), így bárhol látható és
+// funkcionális, ahogyan a Vezérlőpulton is.
+function buildWsLiveActions() {
+    const wsStatus = WS_STATUS[state.wsStatus] || WS_STATUS.no_token;
+    const tickText = state.liveStatsAt ? `tick: ${formatRelative(state.liveStatsAt)}` : 'nincs tick';
+    return [
+        {
+            label: `<span class="ws-pill-content">
+                        <span class="ws-pill-dot ${wsStatus.dotClass}" aria-hidden="true"></span>
+                        <span class="ws-pill-label" id="wsStatusLabel">${wsStatus.label}</span>
+                        <span class="ws-pill-time" id="wsStatusTime">${tickText}</span>
+                    </span>`,
+            variant: `outline-${wsStatus.variant}`,
+            size: 'sm',
+            attrs: `id="wsStatusBtn" data-ws-status="${wsStatus.key}" title="WS /admin kapcsolat állapota — kattintásra újracsatlakozás" aria-label="WebSocket kapcsolat állapota: ${wsStatus.label}"`,
+            icon: wsStatus.icon,
+            classes: `ws-status-pill ws-status-${wsStatus.key}${wsStatus.spin ? ' ws-status-spin' : ''}`,
+            onclick: 'reconnectAdminSocket()'
+        },
+        {
+            label: 'Kézi frissítés',
+            icon: 'bi-arrow-clockwise',
+            size: 'sm',
+            attrs: 'id="manualRefreshBtn"',
+            onclick: 'requestStatsTick()'
+        }
+    ];
+}
 
 /* =============================================================
    4) Globális modul state (ADMIN_PANEL.md §2.6 — memóriában)
@@ -700,24 +734,7 @@ const SECTIONS = {
         return `
             ${h.header({
                 icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
-                subtitle: 'A projekt fő mutatói egy pillantásra',
-                actions: [
-                    {
-                        label: `<span class="ws-pill-content">
-                                    <span class="ws-pill-dot ${wsStatus.dotClass}" aria-hidden="true"></span>
-                                    <span class="ws-pill-label" id="wsStatusLabel">${wsStatus.label}</span>
-                                    <span class="ws-pill-time" id="wsStatusTime">${state.liveStatsAt ? 'tick: ' + formatRelative(state.liveStatsAt) : 'nincs tick'}</span>
-                                </span>`,
-                        variant: `outline-${wsStatus.variant}`,
-                        size: 'sm',
-                        attrs: `id="wsStatusBtn" data-ws-status="${wsStatus.key}" title="WS /admin kapcsolat állapota — kattintásra újracsatlakozás" aria-label="WebSocket kapcsolat állapota: ${wsStatus.label}"`,
-                        icon: wsStatus.icon,
-                        classes: `ws-status-pill ws-status-${wsStatus.key}${wsStatus.spin ? ' ws-status-spin' : ''}`,
-                        onclick: 'reconnectAdminSocket()'
-                    },
-                    { label: 'Kézi frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
-                      attrs: 'id="manualRefreshBtn"', onclick: 'requestStatsTick()' }
-                ]
+                subtitle: 'A projekt fő mutatói egy pillantásra'
             })}
 
             ${h.stats([
@@ -1664,9 +1681,15 @@ function showSection(sectionId, event, options = {}) {
         }
     }
 
+    // A WS pill + kézi frissítés gomb minden szekció fejlécében jelen van,
+    // ezért a status sync + ticker minden section render után fut.
+    applyWsStatusToDashboard();
+    startWsRelativeTicker();
+    if (state.liveStatsAt) {
+        rescheduleStaleWatchdog();
+    }
+
     if (sectionId === 'dashboard') {
-        applyWsStatusToDashboard();
-        startWsRelativeTicker();
         // 24h aktivitas chart: ha mar van adat, azonnal kirajzoljuk; ha nincs,
         // toltjuk REST-en. Az auto-refresh a dashboard nyitvatartas alatt fut.
         if (state.activityChart.status === 'loaded' || state.activityChart.status === 'empty') {
@@ -1678,7 +1701,6 @@ function showSection(sectionId, event, options = {}) {
         startActivityRefreshTimer();
         if (state.liveStatsAt) {
             setText('tickBandTime', formatRelative(state.liveStatsAt));
-            rescheduleStaleWatchdog();
         }
     }
     if (sectionId === 'profileImageReview') {
