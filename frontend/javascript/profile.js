@@ -3550,6 +3550,28 @@ async function submitProfileSettingsChanges() {
             const result = await parseJson(response);
             if (!response.ok || !result.success) {
                 handleEmailNotVerifiedCta(result);
+                if (result?.code === 'PASSWORD_SAME_AS_OLD') {
+                    const sameAsOldMessage = 'Az új jelszó nem lehet ugyanaz, mint a jelenlegi jelszó!';
+                    applyInputFeedback(
+                        elements.newPasswordInput,
+                        elements.newPasswordFeedback,
+                        'error',
+                        sameAsOldMessage
+                    );
+                    applyInputFeedback(
+                        elements.confirmPasswordInput,
+                        elements.confirmPasswordFeedback,
+                        'error',
+                        'Adj meg egy másik jelszót.'
+                    );
+                    if (elements.confirmModal) {
+                        const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
+                        modal.hide();
+                    }
+                    if (elements.newPasswordInput) {
+                        elements.newPasswordInput.focus();
+                    }
+                }
                 throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
             }
 

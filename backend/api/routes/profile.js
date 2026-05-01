@@ -164,6 +164,16 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
             throw new Error('A jelenlegi jelszó hibás.');
         }
 
+        if (hasPasswordChanged) {
+            const isSameAsOld = await bcrypt.compare(newPassword, currentAuthUser.password_hash);
+            if (isSameAsOld) {
+                statusCode = 400;
+                const sameError = new Error('Az új jelszó nem egyezhet meg a jelenlegivel.');
+                sameError.appCode = 'PASSWORD_SAME_AS_OLD';
+                throw sameError;
+            }
+        }
+
         if (!hasUsernameChanged && !hasEmailChanged && !hasPasswordChanged) {
             statusCode = 400;
             throw new Error('Nincs változás, nincs mit menteni.');
@@ -274,7 +284,11 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
         console.error('Profile settings hiba:', error);
         if (statusCode === 200) statusCode = 500;
         if (error?.code === 'ER_DUP_ENTRY' || error.message?.includes('foglalt')) statusCode = 409;
-        payload = { success: false, message: error.message || 'Szerverhiba a profil beállítások mentése közben.' };
+        payload = {
+            success: false,
+            code: error?.appCode,
+            message: error.message || 'Szerverhiba a profil beállítások mentése közben.'
+        };
     }
     return response.status(statusCode).json(payload);
 });
