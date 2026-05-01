@@ -10,6 +10,9 @@
 // ============================================================
 
 const { mezoKeres, jatekAllapotKliens, abilitiesAlapallapot } = require('./state.js');
+
+let _pieceIdGen = 0;
+function genPieceId() { return ++_pieceIdGen; }
 const { jatekAllapotEllenor, szabLepKeres, pozicioHash } = require('./logika.js');
 const { idoFut, idoLeall } = require('./timer.js');
 const { getMode } = require('./modes.js');
@@ -75,10 +78,10 @@ function alapfelallasHelyez(jatek) {
     const sorrend = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"];
 
     for (let x = 0; x < 8; x++) {
-        mezoKeres(jatek, x, 1).piece = { type: "pawn", color: "black", hasMoved: false };
-        mezoKeres(jatek, x, 6).piece = { type: "pawn", color: "white", hasMoved: false };
-        mezoKeres(jatek, x, 0).piece = { type: sorrend[x], color: "black", hasMoved: false };
-        mezoKeres(jatek, x, 7).piece = { type: sorrend[x], color: "white", hasMoved: false };
+        mezoKeres(jatek, x, 1).piece = { type: "pawn", color: "black", hasMoved: false, id: genPieceId() };
+        mezoKeres(jatek, x, 6).piece = { type: "pawn", color: "white", hasMoved: false, id: genPieceId() };
+        mezoKeres(jatek, x, 0).piece = { type: sorrend[x], color: "black", hasMoved: false, id: genPieceId() };
+        mezoKeres(jatek, x, 7).piece = { type: sorrend[x], color: "white", hasMoved: false, id: genPieceId() };
     }
 
     jatek.tabla.forEach(m => { if (m.piece) m.piece.square = m; });

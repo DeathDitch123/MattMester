@@ -25,7 +25,7 @@ function abilitiesAlapallapot() {
         cooldowns: { white: {}, black: {} },   // ability key -> hátralévő körök
         effects: {
             frozenPieces:    [],   // [{ x, y, ofColor, untilMoveOf }]
-            shieldedPieces:  [],   // [{ x, y, ofColor, untilMoveOf }]
+            shieldedPieces:  [],   // [{ pieceId, ofColor, movesLeft }]
             blockedUntilMs:  { white: null, black: null }, // board_hide
             pausedUntilMs:   { white: null, black: null }, // time_pause
             pendingTimeSteal:{ white: 0, black: 0 }        // hátralévő használatok
@@ -121,6 +121,23 @@ function mezoKeres(jatek, x, y) {
     return jatek.tabla[y * 8 + x];
 }
 
+// Pajzsos bábuk aktuális pozícióit keresi meg a táblán (pieceId → {x, y}).
+// A frontend pozíció alapján jeleníti meg, ezért a szerializáláskor feloldjuk.
+function shieldedPiecesKliens(jatek) {
+    if (!jatek.abilities) return [];
+    const piecePos = new Map();
+    for (const m of jatek.tabla) {
+        if (m.piece && m.piece.id != null) piecePos.set(m.piece.id, { x: m.x, y: m.y });
+    }
+    return jatek.abilities.effects.shieldedPieces
+        .map(s => {
+            const pos = piecePos.get(s.pieceId);
+            if (!pos) return null;
+            return { x: pos.x, y: pos.y, ofColor: s.ofColor, movesLeft: s.movesLeft };
+        })
+        .filter(Boolean);
+}
+
 /**
  * Az aktuális játékállapotot kliens-biztonságos JSON-ná alakítja.
  * Ezt kapja a frontend — CSAK ennyi információt, semmivel sem többet.
@@ -178,7 +195,7 @@ function jatekAllapotKliens(jatek) {
             },
             effects: {
                 frozenPieces:    jatek.abilities.effects.frozenPieces.map(f => ({ ...f })),
-                shieldedPieces:  jatek.abilities.effects.shieldedPieces.map(s => ({ ...s })),
+                shieldedPieces:  shieldedPiecesKliens(jatek),
                 blockedUntilMs:  { ...jatek.abilities.effects.blockedUntilMs },
                 pausedUntilMs:   { ...jatek.abilities.effects.pausedUntilMs },
                 pendingTimeSteal:{ ...jatek.abilities.effects.pendingTimeSteal }

@@ -111,7 +111,7 @@ router.get('/modes', (req, res) => {
 // POST /api/chess/new-bot — Új játék robot ellen
 // Body: { difficulty: 1-8, mode?: string, ranked?: boolean }
 // ────────────────────────────────────────────
-router.post('/new-bot', requireVerifiedEmail, async (req, res) => {
+router.post('/new-bot', async (req, res) => {
     let statusCode = 200;
     let responseBody = null;
     try {

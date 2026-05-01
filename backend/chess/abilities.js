@@ -244,8 +244,7 @@ function applySwap(jatek, szin, params) {
     // EXPLOIT FIX #3 — shield/freeze pozíció-rekordok átkötése a két mező között.
     // (Freeze itt csak akkor érintett, ha valamilyen okból ott van — a fenti check
     //  már elutasítja a jegelt mezőről induló swap-et, de a defenzív kötés ártalmatlan.)
-    swapPositionRecords(jatek.abilities.effects.shieldedPieces, a, b);
-    swapPositionRecords(jatek.abilities.effects.frozenPieces,   a, b);
+    swapPositionRecords(jatek.abilities.effects.frozenPieces, a, b);
 
     // Utolsó lépés frissítés (animációhoz / kiemeléshez), en passant törlés
     jatek.utolsoLepes = {
@@ -290,16 +289,17 @@ function applyShield(jatek, szin, params) {
         return { success: false, error: 'Királyra nem tehető pajzs (matt különben nem lenne lehetséges).' };
     }
 
-    if (jatek.abilities.effects.shieldedPieces.some(s => s.x === mezo.x && s.y === mezo.y)) {
+    const pieceId = mezo.piece.id;
+    if (jatek.abilities.effects.shieldedPieces.some(s => s.pieceId === pieceId)) {
         return { success: false, error: 'Ez a bábu már védett.' };
     }
 
-    // A pajzs a védett szín következő körének VÉGÉIG tart (1 körre védi).
+    // A pajzs 3 lépésig véd (a védett szín 3 saját lépése után jár le).
+    // pieceId-vel követjük a bábut, nem a mezőjét — így a pajzs a mozgással együtt jár.
     jatek.abilities.effects.shieldedPieces.push({
-        x: mezo.x,
-        y: mezo.y,
+        pieceId,
         ofColor: mezo.piece.color,
-        untilMoveOf: mezo.piece.color
+        movesLeft: 3
     });
 
     return { success: true };
@@ -344,7 +344,9 @@ function isMezoFagyott(jatek, x, y) {
  */
 function isMezoVedett(jatek, x, y) {
     if (!jatek.abilities) return false;
-    return jatek.abilities.effects.shieldedPieces.some(s => s.x === x && s.y === y);
+    const mezo = mezoKeres(jatek, x, y);
+    if (!mezo || !mezo.piece || !mezo.piece.id) return false;
+    return jatek.abilities.effects.shieldedPieces.some(s => s.pieceId === mezo.piece.id);
 }
 
 /**
@@ -400,10 +402,10 @@ function cooldownTickAndCleanup(jatek, lepoSzin, ujSzin) {
         return f.untilMoveOf !== lepoSzin;
     });
 
-    // 3. Lejárt pajzs-effektek (ugyanaz a szabály — a védett szín lépett egyet).
-    jatek.abilities.effects.shieldedPieces = jatek.abilities.effects.shieldedPieces.filter(s => {
-        return s.untilMoveOf !== lepoSzin;
-    });
+    // 3. Pajzs-effektek frissítése: ha a védett szín lépett, movesLeft -1; ha 0, töröljük.
+    jatek.abilities.effects.shieldedPieces = jatek.abilities.effects.shieldedPieces
+        .map(s => s.ofColor === lepoSzin ? { ...s, movesLeft: s.movesLeft - 1 } : s)
+        .filter(s => s.movesLeft > 0);
 
     // 4. Board_hide pending → ténylegesen aktiválás az ellenfél új körének elején.
     //    Az ujSzin kapja meg a blokkot, ha az ő blockedUntilMs-je -1 (pending).
