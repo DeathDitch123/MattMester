@@ -640,13 +640,7 @@ router.get('/auth/reset-password/verify', passwordResetTokenLimiter, async (requ
             throw new Error('A jelszó-visszaállító link lejárt. Kérj új emailt a bejelentkezési oldalon.');
         }
 
-        // Ne engedjük beállítani ugyanazt a jelszót újként.
-        const isSameAsOld = await bcrypt.compare(newPassword, user.password_hash);
-        if (isSameAsOld) {
-            statusCode = 400;
-            payload.code = 'PASSWORD_SAME_AS_OLD';
-            throw new Error('Az új jelszó nem egyezhet meg a régivel.');
-        }
+        // (A jelszó-azonosság ellenőrzését a POST végponton végezzük el, mert ott érkezik az új jelszó.)
 
         payload = {
             success: true,
@@ -730,6 +724,14 @@ router.post('/auth/reset-password', passwordResetTokenLimiter, async (request, r
             });
             payload.code = 'TOKEN_EXPIRED';
             throw new Error('A jelszó-visszaállító link lejárt. Kérj új emailt a bejelentkezési oldalon.');
+        }
+
+        // Ellenőrizzük, hogy az új jelszó nem egyezik-e meg a jelenleg tárolt jelszóval.
+        const isSameAsOld = await bcrypt.compare(newPassword, user.password_hash);
+        if (isSameAsOld) {
+            statusCode = 400;
+            payload.code = 'PASSWORD_SAME_AS_OLD';
+            throw new Error('Az új jelszó nem egyezhet meg a régivel.');
         }
 
         const passwordHash = await bcrypt.hash(newPassword, 10);
