@@ -926,6 +926,15 @@ function createSocketHub(io) {
                 updatedBy
             });
         },
+        // Általános célú user-emit a `user-room:${userId}` szobába.
+        // Akkor használd, amikor egy konkrét felhasználónak kell egy ad-hoc
+        // socket eseményt küldeni (pl. admin által módosított profil push).
+        emitToUser(targetUserId, eventName, payload) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized || !eventName) return false;
+            io.to(`user-room:${normalized}`).emit(String(eventName), payload || {});
+            return true;
+        },
         pushNotification(targetUserId, notification) {
             const payload = {
                 ...notification,

@@ -171,13 +171,14 @@ const socketHub = createSocketHub(io);
 app.locals.socketHub = socketHub;
 
 // Admin panel - /admin socket namespace + service binderek (ADMIN_PANEL.md F4)
-const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter } = require('./api/admin/socketNamespace.js');
+const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter, createAdminUserDisconnector } = require('./api/admin/socketNamespace.js');
 const adminAuditService = require('./api/admin/auditService.js');
 const adminAlertingService = require('./api/admin/alertingService.js');
 const adminNamespace = createAdminNamespace(io);
 const adminSocketHub = {
     broadcastAdmin: createAdminBroadcaster(adminNamespace),
     emitToAdminUser: createAdminUserEmitter(adminNamespace),
+    disconnectAllForAdminUser: createAdminUserDisconnector(adminNamespace),
     namespace: adminNamespace
 };
 app.locals.adminSocketHub = adminSocketHub;

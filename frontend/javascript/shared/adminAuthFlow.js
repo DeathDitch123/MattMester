@@ -37,6 +37,17 @@ function createAdminAuthFlow(deps) {
                 }
                 if (typeof redirect === 'function') redirect('/');
                 handled = true;
+            } else if (code === 'ADMIN_NOT_ADMIN') {
+                // DB szerint mar nincs admin jogosultsag (egy masik admin levehette,
+                // vagy be lett tiltva). Tisztitas + redirect, NINCS elevate-modal:
+                // ujra elevate-elni nem szabad, mert ugyse engedne be.
+                if (typeof clearAdminToken === 'function') clearAdminToken();
+                if (typeof updateTokenPill === 'function') updateTokenPill();
+                if (typeof showToast === 'function') {
+                    showToast('Az admin jogosultságod visszavonásra került — visszairányítunk a főoldalra.', 'danger', 'bi-shield-fill-x');
+                }
+                if (typeof redirect === 'function') redirect('/');
+                handled = true;
             } else if (
                 code === 'ADMIN_TOKEN_INVALID' ||
                 code === 'ADMIN_TOKEN_EXPIRED' ||

@@ -564,6 +564,200 @@ async function updateUserProfileSettings(userId, updates) {
     }
 }
 
+// Admin által végzett user-mező módosítás. Két táblát érint:
+//   - users: username, email, role, is_email_verified, email_verified_at, elo, elo_MM, elo_bullet
+//   - statistics: wins, losses, draws, abilities_used (külön tábla, nincs FK kaszkád UPDATE-re)
+// Tranzakcióban: előbb FOR UPDATE snapshot a JOIN-on, majd csak a változott mezőkre UPDATE.
+// Visszaadja a { before, after, changedKeys } objektumot az audit log-hoz.
+async function adminUpdateUserCore(userId, changes = {}) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const trimStr = (v) => String(v).trim();
+    const allowedRoles = new Set(['player', 'admin']);
+    const clampInt = (max) => (v) => {
+        const n = Math.trunc(Number(v));
+        if (!Number.isFinite(n) || n < 0) return 0;
+        return Math.min(n, max);
+    };
+    const ELO_MAX = 9999;
+    const STAT_MAX = 1_000_000;
+
+    try {
+        await connection.beginTransaction();
+
+        const [userRows] = await connection.execute(
+            `SELECT id, username, email, role, is_email_verified,
+                    elo, elo_MM, elo_bullet
+             FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+            [userId]
+        );
+        if (!userRows.length) {
+            await connection.rollback();
+            const error = new Error('A felhasznalo nem talalhato.');
+            error.code = 'USER_NOT_FOUND';
+            throw error;
+        }
+
+        // statistics sor lehet hogy nincs — biztos ami biztos létrehozzuk üresen, hogy a FOR UPDATE
+        // egy létező sort lockoljon. (INSERT IGNORE — ha van, nem ír felül.)
+        await connection.execute(
+            'INSERT IGNORE INTO statistics (user_id, wins, losses, draws, abilities_used) VALUES (?, 0, 0, 0, 0)',
+            [userId]
+        );
+        const [statRows] = await connection.execute(
+            'SELECT wins, losses, draws, abilities_used FROM statistics WHERE user_id = ? LIMIT 1 FOR UPDATE',
+            [userId]
+        );
+        const statRow = statRows[0] || { wins: 0, losses: 0, draws: 0, abilities_used: 0 };
+
+        const before = {
+            username: userRows[0].username,
+            email: userRows[0].email,
+            role: userRows[0].role,
+            emailVerified: Boolean(userRows[0].is_email_verified),
+            elo: Number(userRows[0].elo) || 0,
+            eloMM: Number(userRows[0].elo_MM) || 0,
+            eloBullet: Number(userRows[0].elo_bullet) || 0,
+            wins: Number(statRow.wins) || 0,
+            losses: Number(statRow.losses) || 0,
+            draws: Number(statRow.draws) || 0,
+            totalAbilities: Number(statRow.abilities_used) || 0
+        };
+
+        // ---- users tábla mezői ----
+        const userFields = [];
+        const userParams = [];
+        const changedKeys = [];
+
+        const setUserIf = (key, column, raw, transform = (x) => x) => {
+            if (raw === undefined) return;
+            const next = transform(raw);
+            if (next === before[key]) return;
+            userFields.push(`${column} = ?`);
+            userParams.push(next);
+            changedKeys.push(key);
+        };
+
+        if (typeof changes.username === 'string') {
+            const trimmed = trimStr(changes.username);
+            if (trimmed.length < 3 || trimmed.length > 50) {
+                await connection.rollback();
+                throw new Error('A felhasznalonevnek 3 es 50 karakter kozott kell lennie.');
+            }
+            setUserIf('username', 'username', trimmed);
+        }
+
+        if (typeof changes.email === 'string') {
+            const trimmed = trimStr(changes.email).toLowerCase();
+            if (trimmed.length < 3 || trimmed.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+                await connection.rollback();
+                throw new Error('Ervenytelen e-mail cim.');
+            }
+            setUserIf('email', 'email', trimmed);
+        }
+
+        if (typeof changes.role === 'string') {
+            const trimmed = trimStr(changes.role);
+            if (!allowedRoles.has(trimmed)) {
+                await connection.rollback();
+                throw new Error('Ervenytelen szerepkor.');
+            }
+            setUserIf('role', 'role', trimmed);
+        }
+
+        if (changes.emailVerified !== undefined) {
+            const next = Boolean(changes.emailVerified);
+            if (next !== before.emailVerified) {
+                userFields.push('is_email_verified = ?');
+                userParams.push(next ? 1 : 0);
+                if (next) {
+                    userFields.push('email_verified_at = NOW()');
+                } else {
+                    userFields.push('email_verified_at = NULL');
+                }
+                changedKeys.push('emailVerified');
+            }
+        }
+
+        setUserIf('elo',       'elo',        changes.elo,       clampInt(ELO_MAX));
+        setUserIf('eloMM',     'elo_MM',     changes.eloMM,     clampInt(ELO_MAX));
+        setUserIf('eloBullet', 'elo_bullet', changes.eloBullet, clampInt(ELO_MAX));
+
+        // ---- statistics tábla mezői ----
+        const statFields = [];
+        const statParams = [];
+        const setStatIf = (key, column, raw) => {
+            if (raw === undefined) return;
+            const next = clampInt(STAT_MAX)(raw);
+            if (next === before[key]) return;
+            statFields.push(`${column} = ?`);
+            statParams.push(next);
+            changedKeys.push(key);
+        };
+        setStatIf('wins',           'wins',           changes.wins);
+        setStatIf('losses',         'losses',         changes.losses);
+        setStatIf('draws',          'draws',          changes.draws);
+        setStatIf('totalAbilities', 'abilities_used', changes.totalAbilities);
+
+        if (userFields.length === 0 && statFields.length === 0) {
+            await connection.commit();
+            return { changed: false, before, after: { ...before }, changedKeys: [] };
+        }
+
+        try {
+            if (userFields.length > 0) {
+                userParams.push(userId);
+                await connection.execute(
+                    `UPDATE users SET ${userFields.join(', ')} WHERE id = ?`,
+                    userParams
+                );
+            }
+            if (statFields.length > 0) {
+                statParams.push(userId);
+                await connection.execute(
+                    `UPDATE statistics SET ${statFields.join(', ')} WHERE user_id = ?`,
+                    statParams
+                );
+            }
+        } catch (error) {
+            await connection.rollback();
+            if (error?.code === 'ER_DUP_ENTRY') {
+                if (String(error.sqlMessage || '').includes('username')) {
+                    throw new Error('A felhasznalonev mar foglalt.');
+                }
+                if (String(error.sqlMessage || '').includes('email')) {
+                    throw new Error('Az e-mail cim mar foglalt.');
+                }
+                throw new Error('Duplikalt adat — a modositas nem menthető.');
+            }
+            throw error;
+        }
+
+        const after = { ...before };
+        for (const key of changedKeys) {
+            if (key === 'emailVerified') {
+                after.emailVerified = Boolean(changes.emailVerified);
+            } else if (key === 'username' || key === 'role') {
+                after[key] = trimStr(changes[key]);
+            } else if (key === 'email') {
+                after.email = trimStr(changes.email).toLowerCase();
+            } else if (key === 'elo' || key === 'eloMM' || key === 'eloBullet') {
+                after[key] = clampInt(ELO_MAX)(changes[key]);
+            } else if (key === 'wins' || key === 'losses' || key === 'draws' || key === 'totalAbilities') {
+                after[key] = clampInt(STAT_MAX)(changes[key]);
+            }
+        }
+
+        await connection.commit();
+        return { changed: changedKeys.length > 0, before, after, changedKeys };
+    } catch (error) {
+        try { await connection.rollback(); } catch (_) {}
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 async function insertUserLog(userId, logData) {
     const pool = getPool();
     const metadata = logData.metadata || null;
@@ -3615,6 +3809,7 @@ module.exports = {
     getPublicPlayerProfileById,
     getUserAuthById,
     updateUserProfileSettings,
+    adminUpdateUserCore,
     insertUserLog,
     getUserSecurityActivity,
     getTotalUsers,

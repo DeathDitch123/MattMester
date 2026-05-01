@@ -48,7 +48,16 @@ async function adminHandshake(socket, next) {
             return next(new Error('Admin token lejart vagy ervenytelen.'));
         }
 
+        // Folytonos jogosultsag-ellenorzes: DB szerint admin-e meg + nincs ban.
         const dbUser = await adminRepo.getUserForAdminAuth(sessionUserId);
+        const dbRole = String(dbUser?.role || '').toLowerCase();
+        if (!dbUser || dbRole !== 'admin' || dbUser.is_banned) {
+            try { await tokenService.revokeAllForUser(sessionUserId); } catch (_) {}
+            return next(new Error(dbUser?.is_banned
+                ? 'A fiokod tiltas alatt all.'
+                : 'Mar nincs admin jogosultsagod.'));
+        }
+
         socket.data.adminAuth = {
             userId: sessionUserId,
             username: dbUser?.username || session.username || '',
@@ -179,9 +188,37 @@ function createAdminUserEmitter(adminNamespace) {
     };
 }
 
+// Egy konkret felhasznalo MINDEN admin namespace socketjet erőből szakítja le.
+// Hasznalat: admin jog elvonas / ban utan, hogy a tovabbi WS aktivitas se folytatodjon.
+// Lebontas elott emit egy `admin:force-logout` eventet is, hogy a frontend
+// tisztan tisztitsa a tokent es navigaljon el.
+function createAdminUserDisconnector(adminNamespace) {
+    return async function disconnectAllForAdminUser(userId, reason = 'role_revoked') {
+        let disconnected = 0;
+        try {
+            if (!adminNamespace || !userId) return 0;
+            const room = adminUserRoom(userId);
+            const sockets = await adminNamespace.in(room).fetchSockets();
+            for (const s of sockets) {
+                try {
+                    s.emit('admin:force-logout', { reason, at: new Date().toISOString() });
+                } catch (_) {}
+                try {
+                    s.disconnect(true);
+                    disconnected += 1;
+                } catch (_) {}
+            }
+        } catch (error) {
+            console.warn('disconnectAllForAdminUser hiba:', error.message);
+        }
+        return disconnected;
+    };
+}
+
 module.exports = {
     createAdminNamespace,
     createAdminBroadcaster,
     createAdminUserEmitter,
+    createAdminUserDisconnector,
     ADMIN_ROOM
 };

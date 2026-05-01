@@ -88,20 +88,51 @@ async function parseAdminToken(request, response, next) {
                         ipAddress, userAgent, endpoint, userId: sessionUserId
                     });
                 } else {
-                    // Megnezzuk, hogy a session-beli super flag still igaz-e DB szerint.
+                    // Folytonos jogosultsag-ellenorzes: DB-bol nezzuk az aktualis role-t es a ban
+                    // statust. A session.role cache lehet, hogy mar nem aktualis (egy masik admin
+                    // levehette idozben). Ha a DB szerint mar nem admin / be van tiltva,
+                    // azonnal invalidaljuk az osszes admin tokenjet es kiraktjuk.
                     const dbUser = await adminRepo.getUserForAdminAuth(sessionUserId);
-                    const isSuperAdmin = Boolean(dbUser && dbUser.is_super_admin);
+                    const dbRole = String(dbUser?.role || '').toLowerCase();
+                    const isBanned = Boolean(dbUser?.is_banned);
 
-                    request.adminAuth = {
-                        tokenId: verified.tokenId,
-                        userId: sessionUserId,
-                        username: dbUser?.username || request.session?.username || '',
-                        isSuperAdmin,
-                        expiresAt: verified.expiresAt,
-                        ipAddress,
-                        userAgent
-                    };
-                    proceed = true;
+                    if (!dbUser || dbRole !== 'admin' || isBanned) {
+                        try {
+                            await tokenService.revokeAllForUser(sessionUserId);
+                        } catch (revokeErr) {
+                            console.warn('parseAdminToken: tokenrevoke hiba:', revokeErr.message);
+                        }
+                        // Session role kierositese is, hogy a kovetkezo elevate-rol is elbukjon.
+                        try {
+                            if (request.session) {
+                                request.session.role = dbRole || 'player';
+                            }
+                        } catch (_) {}
+
+                        errorPayload = {
+                            statusCode: 403,
+                            code: ADMIN_ERROR_CODES.NOT_ADMIN,
+                            message: isBanned
+                                ? 'A fiokod tiltas alatt all — admin muveletek nem engedelyezettek.'
+                                : 'Mar nincs admin jogosultsagod. Lepj be ujra.'
+                        };
+                        await alertingService.recordUnauthorized({
+                            ipAddress, userAgent, endpoint,
+                            reason: isBanned ? 'banned' : 'not_admin_in_db',
+                            userId: sessionUserId
+                        });
+                    } else {
+                        request.adminAuth = {
+                            tokenId: verified.tokenId,
+                            userId: sessionUserId,
+                            username: dbUser?.username || request.session?.username || '',
+                            isSuperAdmin: Boolean(dbUser.is_super_admin),
+                            expiresAt: verified.expiresAt,
+                            ipAddress,
+                            userAgent
+                        };
+                        proceed = true;
+                    }
                 }
             }
         }

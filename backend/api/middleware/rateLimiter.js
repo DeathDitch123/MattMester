@@ -11,6 +11,7 @@ function createRateLimiter(options = {}) {
         message = 'Túl sok kérés. Próbáld újra később.',
         skipSuccessfulRequests = false,
         keyGenerator,
+        skip,
         code = ''
     } = options;
 
@@ -31,6 +32,10 @@ function createRateLimiter(options = {}) {
 
     if (typeof keyGenerator === 'function') {
         limiterConfig.keyGenerator = keyGenerator;
+    }
+
+    if (typeof skip === 'function') {
+        limiterConfig.skip = skip;
     }
 
     return rateLimit(limiterConfig);

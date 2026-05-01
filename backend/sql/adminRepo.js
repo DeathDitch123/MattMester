@@ -413,6 +413,21 @@ async function getActiveRateEscalation(scope, scopeValue) {
     return result;
 }
 
+async function deleteRateEscalationsForScope(scope, scopeValue) {
+    let affected = 0;
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `DELETE FROM admin_rate_escalations WHERE scope = ? AND scope_value = ?`,
+            [scope, String(scopeValue)]
+        );
+        affected = result.affectedRows || 0;
+    } catch (error) {
+        console.error('deleteRateEscalationsForScope hiba:', error.message);
+    }
+    return affected;
+}
+
 async function deleteExpiredRateEscalations() {
     let affected = 0;
     try {
@@ -452,7 +467,7 @@ async function getUserForAdminAuth(userId) {
     try {
         const pool = getPool();
         const [rows] = await pool.execute(
-            `SELECT id, username, password_hash, role, is_super_admin
+            `SELECT id, username, password_hash, role, is_super_admin, is_banned, banned_until
              FROM users
              WHERE id = ?
              LIMIT 1`,
@@ -719,6 +734,7 @@ module.exports = {
     upsertRateEscalation,
     getActiveRateEscalation,
     deleteExpiredRateEscalations,
+    deleteRateEscalationsForScope,
     countActiveRateEscalations,
     // users (admin)
     getUserForAdminAuth,

@@ -574,6 +574,16 @@ function bindNotificationCenterEvents() {
     if (!notificationCenterState.bound) {
         const { list, modal, markAllBtn } = getNotificationCenterElements();
 
+        // Admin által módosult profil — friss adatok lehúzása, hogy a felület
+        // (Security & Activity History, ELO/wins/losses, e-mail, stb.) azonnal
+        // tükrözze az új állapotot, ne csak az értesítés.
+        window.addEventListener('mattmester:user:profile:adminEdit', () => {
+            runSafelyAsync('userProfileAdminEditRefresh', async () => {
+                try { await refreshSecurityActivity(); } catch (_) {}
+                try { await refreshAuthUi('admin-profile-edit'); } catch (_) {}
+            });
+        });
+
         window.addEventListener('mattmester:notification:push', (event) => {
             runSafely('notificationPushCollect', () => {
                 const notification = normalizeNotificationItem(event?.detail || {});

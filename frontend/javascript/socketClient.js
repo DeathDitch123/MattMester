@@ -824,6 +824,23 @@
             }
         });
 
+        socket.on('user:profile:adminEdit', (payload = {}) => {
+            // Admin által módosult a profil — továbbítjuk az oldalaknak,
+            // hogy a Security & Activity History és a session-info azonnal frissüljön.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:user:profile:adminEdit', {
+                    detail: {
+                        changedKeys: Array.isArray(payload?.changedKeys) ? payload.changedKeys : [],
+                        after: payload?.after || null,
+                        reason: payload?.reason || null,
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (forwardErr) {
+                console.warn('[socketClient] user:profile:adminEdit forward hiba:', forwardErr.message);
+            }
+        });
+
         socket.on('stats:public', (stats) => {
             // Publikus statisztika mentése + custom event továbbítás.
             socketState.statsPublic = stats || null;

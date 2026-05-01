@@ -160,6 +160,18 @@ router.post(
             // Az erintett user osszes admin tokenje is invalidalva.
             await tokenService.revokeAllForUser(targetUserId);
 
+            // Force-disconnect: a celzott admin nyitott /admin WS kapcsolatait
+            // erőből bontjuk + force-logout eventet kuldunk a frontendnek, hogy
+            // tisztitsa a helyi tokent es navigaljon el.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.disconnectAllForAdminUser === 'function') {
+                    await adminSocketHub.disconnectAllForAdminUser(targetUserId, 'admin_role_revoked');
+                }
+            } catch (kickErr) {
+                console.warn('admin/admins/revoke disconnect hiba:', kickErr.message);
+            }
+
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.ADMIN_REVOKE;
             response.locals.adminAudit.severity = 'critical';
             response.locals.adminAudit.targetType = 'user';

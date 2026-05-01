@@ -2680,6 +2680,72 @@ function connectAdminSocket() {
                 state.adminSocketConnected = true;
                 setWsStatus('connected');
                 try { sock.emit('admin:presence:hello'); } catch (_) {}
+                // Replay: friss kapcsolódás után le kell húzni a 24h-os audit naplóból
+                // az eddig történt eseményeket, hogy az "Élő admin tevékenység" panel
+                // ne maradjon üresen, csak mert nem ez az admin volt online a
+                // korábbi mutáló kéréseknél.
+                try {
+                    const sinceEventId = state.liveAudit.length
+                        ? Number(state.liveAudit[0]?.eventId) || 0
+                        : 0;
+                    sock.emit('admin:replay:request', { sinceEventId });
+                } catch (_) {}
+            });
+
+            sock.on('admin:replay:batch', (payload = {}) => {
+                try {
+                    const events = Array.isArray(payload.events) ? payload.events : [];
+                    if (!events.length) return;
+                    // A backend ascending ID-ben küld; a state.liveAudit "legújabb elöl" konvenciójú,
+                    // ezért fordított sorrendben push-oljuk a végére, majd vágunk MAX_LIVE_BUFFER-re.
+                    const known = new Set(state.liveAudit.map((e) => e.eventId).filter((x) => x));
+                    for (const ev of events) {
+                        if (!ev || known.has(ev.eventId)) continue;
+                        state.liveAudit.unshift(ev);
+                    }
+                    if (state.liveAudit.length > MAX_LIVE_BUFFER) {
+                        state.liveAudit.length = MAX_LIVE_BUFFER;
+                    }
+                    // Szinkronban van — ha a dashboard nyitva van, frissítjük a feed-et
+                    if (state.currentSectionId === 'dashboard') {
+                        // re-render a szekciót, hogy a feed és a chip-ek is frissüljenek
+                        showSection('dashboard', null, { silent: true });
+                    } else if (state.currentSectionId === 'auditLog') {
+                        showSection('auditLog', null, { silent: true });
+                    }
+                } catch (err) {
+                    console.warn('admin:replay:batch hiba:', err);
+                }
+            });
+
+            sock.on('admin:replay:error', (payload = {}) => {
+                console.warn('admin:replay:error:', payload?.message || payload?.code);
+            });
+
+            // Server-oldali kemeny kileptetes: revoke / ban / role-down miatt
+            // a backend a sajat oldalan mar levalasztott. Tisztitsuk ki a klienst is.
+            sock.on('admin:force-logout', (payload = {}) => {
+                try {
+                    const reason = String(payload?.reason || 'admin_session_terminated');
+                    console.warn('[admin-ws] force-logout:', reason);
+                    // Helyi token tisztitas + token pill nullazas
+                    if (typeof clearAdminToken === 'function') clearAdminToken();
+                    if (typeof updateTokenPill === 'function') updateTokenPill();
+                    // WS bontas (a backend ugyis disconnect-tel folytatja, de redundans biztositas)
+                    try { sock.disconnect(); } catch (_) {}
+                    state.adminSocket = null;
+                    state.adminSocketConnected = false;
+                    setWsStatus('no_token');
+                    if (typeof showToast === 'function') {
+                        const msg = reason === 'admin_role_revoked'
+                            ? 'Az admin jogosultságod visszavonásra került.'
+                            : 'Az admin munkamenet lezárult.';
+                        showToast(msg, 'danger', 'bi-shield-fill-x');
+                    }
+                    setTimeout(() => { window.location.href = '/'; }, 800);
+                } catch (err) {
+                    console.warn('admin:force-logout handler hiba:', err);
+                }
             });
 
             sock.on('disconnect', () => {
@@ -3570,7 +3636,9 @@ function applyAdminUserDetailFormValues(values) {
     return updated;
 }
 
-function saveAdminUserDetailChanges() {
+async function saveAdminUserDetailChanges() {
+    const saveBtn = document.getElementById('adminUserDetailSaveBtn');
+    const originalLabel = saveBtn ? saveBtn.innerHTML : '';
     try {
         const user = state.selectedUser;
         if (!user) {
@@ -3591,24 +3659,99 @@ function saveAdminUserDetailChanges() {
         }
 
         const values = collectAdminUserDetailFormValues();
+        const initial = adminUserDetailFormState.initial || {};
 
-        const updated = applyAdminUserDetailFormValues(values);
-        if (!updated) {
-            showToast('Nem sikerült a módosítások előkészítése.', 'danger', 'bi-x-circle');
-            return false;
+        // Csak a tényleg megváltozott mezőket küldjük el — kisebb felület + tisztább audit log.
+        const payload = { reason: values.reason };
+        const fieldMap = [
+            ['username', 'username'],
+            ['email', 'email'],
+            ['role', 'role'],
+            ['emailVerified', 'emailVerified'],
+            ['elo', 'eloClassic'],
+            ['eloMM', 'eloMM'],
+            ['eloBullet', 'eloBullet'],
+            ['wins', 'wins'],
+            ['losses', 'losses'],
+            ['draws', 'draws'],
+            ['totalAbilities', 'abilitiesUsed']
+        ];
+        for (const [apiKey, formKey] of fieldMap) {
+            const next = formKey === 'abilitiesUsed' ? values.abilitiesUsed : values[formKey === 'eloClassic' ? 'elo' : formKey];
+            const initialKey = ({
+                username: 'username', email: 'email', role: 'role', emailVerified: 'emailVerified',
+                eloClassic: 'eloClassic', eloMM: 'eloMM', eloBullet: 'eloBullet',
+                wins: 'wins', losses: 'losses', draws: 'draws', abilitiesUsed: 'abilitiesUsed'
+            })[formKey];
+            if (next !== initial[initialKey]) payload[apiKey] = next;
         }
 
-        renderAdminUsersTable({ reason: 'refresh' });
-        if (state.currentSectionId === 'userDetail') {
-            showSection('userDetail', null, { silent: true });
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Mentés...';
         }
-        setAdminUserDetailImageMessage('success', 'A frontend módosítások összegzése elkészült. A végleges mentés/logolás backend oldalon köthető majd hozzá.');
-        showToast('A módosítási csomag előkészítve.', 'success', 'bi-check2-circle');
+
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}/edit`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify(payload)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.success) {
+            const code = result?.code || '';
+            if (code && getAdminAuthFlow().handleAdminAuthError(code)) {
+                return false;
+            }
+            throw new Error(result?.message || 'A mentés sikertelen.');
+        }
+
+        // Backend válasz alapján szinkronizáljuk a globális state-et és minden felületet.
+        const after = result.data?.after || {};
+        applyAdminUserPartialUpdate(user.id, {
+            username: after.username,
+            email: after.email,
+            role: after.role,
+            emailVerified: after.emailVerified,
+            elo: after.elo,
+            eloMM: after.eloMM,
+            eloBullet: after.eloBullet,
+            wins: after.wins,
+            losses: after.losses,
+            draws: after.draws,
+            totalAbilities: after.totalAbilities,
+            // Email csere esetén a verified flag is változhatott (admin által)
+            emailVerifiedAt: after.emailVerified ? (state.selectedUser?.emailVerifiedAt || new Date().toISOString()) : null
+        });
+
+        // Friss user lista + audit lista letöltése — minden admin felület naprakész
+        try { loadAdminUsersList({ silent: true }); } catch (_) {}
+        // Ha a "Részletek megtekintése" modal éppen ezen a useren van nyitva,
+        // frissítsük a benne lévő audit + security tabok tartalmát is
+        try {
+            if (state.userView?.userId && Number(state.userView.userId) === Number(user.id)) {
+                if (typeof loadAdminUserAuditTab === 'function') {
+                    loadAdminUserAuditTab('target');
+                    loadAdminUserAuditTab('actor');
+                }
+                if (typeof loadAdminUserSecurityActivity === 'function') {
+                    loadAdminUserSecurityActivity();
+                }
+            }
+        } catch (_) {}
+
+        showToast(result.message || 'Mentés sikeres.', 'success', 'bi-check2-circle');
         return true;
     } catch (err) {
         console.warn('saveAdminUserDetailChanges hiba:', err);
-        showToast('A mentés előkészítése sikertelen.', 'danger', 'bi-x-circle');
+        showToast(err?.message || 'A mentés sikertelen.', 'danger', 'bi-x-circle');
         return false;
+    } finally {
+        if (saveBtn) {
+            saveBtn.innerHTML = originalLabel || '<i class="bi bi-check2-circle me-1"></i>Mentés';
+            // a disabled állapotot a következő validateAdminUserDetailForm() helyreteszi
+            try { validateAdminUserDetailForm(); } catch (_) {}
+        }
     }
 }
 

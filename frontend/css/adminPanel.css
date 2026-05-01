@@ -1146,6 +1146,23 @@ body::before {
     cursor: not-allowed;
 }
 
+/* ---------- A userDetail szekciók vízszintesen középre kerülnek ---------- */
+/* Max szélesség nagy monitorokon, hogy a kártyák ne nyúljanak szét. */
+.admin-user-detail-shell {
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 100%;
+}
+
+/* A header (Részletek és szerkesztés cím) is kerüljön ugyanabba a sávba,
+   hogy a tartalom tetején lévő szöveg ne lógjon ki balra. */
+#adminSections .section-header {
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 .admin-user-detail-hero-body {
     display: flex;
     flex-direction: column;
