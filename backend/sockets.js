@@ -1052,7 +1052,34 @@ function createSocketHub(io) {
         // Kapcsolat megszűnésekor / cleanup után valós idejű értesítés küldése
         // az érintett felhasználóknak. A frontend erre frissíti a chat listát
         // és eltünteti az aktív beszélgetést.
-        notifyConversationDeleted
+        notifyConversationDeleted,
+        async disconnectUser(targetUserId, reason) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            const at = new Date().toISOString();
+            io.to(`user-room:${normalized}`).emit('user:force-logout', {
+                reason: String(reason || 'admin_revoke_sessions'),
+                at
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
+        },
+        async banUser(targetUserId, reason) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            io.to(`user-room:${normalized}`).emit('user:banned', {
+                reason: String(reason || ''),
+                at: new Date().toISOString()
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
+        }
     };
 }
 

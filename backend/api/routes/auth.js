@@ -77,6 +77,13 @@ router.post('/login', authLoginLimiter, async (request, response) => {
             throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
         }
 
+        if (user.is_banned) {
+            statusCode = 403;
+            const banErr = new Error('A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: mattmester.support@gmail.com');
+            banErr.code = 'account_banned';
+            throw banErr;
+        }
+
         request.session.userId = user.id;
         request.session.username = user.username;
         request.session.role = user.role;
@@ -122,6 +129,7 @@ router.post('/login', authLoginLimiter, async (request, response) => {
         console.error('Login hiba:', error);
         if (statusCode === 200) statusCode = 500;
         payload.message = error.message;
+        if (error.code) payload.code = error.code;
     }
     return response.status(statusCode).json(payload);
 });
@@ -152,6 +160,10 @@ const logoutHandler = async (request, response) => {
         console.error('Logout hiba:', error);
         statusCode = 500;
         payload = { success: false, message: error.message };
+    }
+    const isGet = request.method === 'GET';
+    if (isGet) {
+        return response.redirect('/');
     }
     return response.status(statusCode).json(payload);
 };

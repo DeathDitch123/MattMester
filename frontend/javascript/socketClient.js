@@ -824,6 +824,27 @@
             }
         });
 
+        socket.on('user:force-logout', (payload = {}) => {
+            try {
+                const reason = String(payload?.reason || 'admin_revoke_sessions');
+                console.warn('[socketClient] user:force-logout:', reason);
+                try { socket.disconnect(); } catch (_) { }
+                window.location.href = '/api/logout';
+            } catch (err) {
+                console.warn('[socketClient] user:force-logout handler hiba:', err);
+                window.location.href = '/api/logout';
+            }
+        });
+
+        socket.on('user:banned', () => {
+            try {
+                try { socket.disconnect(); } catch (_) { }
+                window.location.href = '/html/ban.html';
+            } catch (_) {
+                window.location.href = '/html/ban.html';
+            }
+        });
+
         socket.on('user:profile:adminEdit', (payload = {}) => {
             // Admin által módosult a profil — továbbítjuk az oldalaknak,
             // hogy a Security & Activity History és a session-info azonnal frissüljön.

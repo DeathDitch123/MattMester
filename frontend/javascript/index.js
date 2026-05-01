@@ -529,6 +529,14 @@ function bindLoginForm() {
                     const result = await parseJson(response);
 
                     if (!response.ok) {
+                        if (result.code === 'account_banned') {
+                            showFormMessage(
+                                messageElement, 'danger',
+                                'A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20fellebbez%C3%A9s%20%E2%80%94%20MattMester" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                true
+                            );
+                            return;
+                        }
                         throw new Error(result.message || 'Sikertelen bejelentkezes.');
                     }
 
@@ -879,13 +887,17 @@ function clearFormMessage(messageElement) {
     messageElement.textContent = '';
 }
 
-function showFormMessage(messageElement, type, message) {
+function showFormMessage(messageElement, type, message, asHtml = false) {
     if (!messageElement) {
         return;
     }
 
     messageElement.className = `mt-3 text-center alert alert-${type}`;
-    messageElement.textContent = message;
+    if (asHtml) {
+        messageElement.innerHTML = message;
+    } else {
+        messageElement.textContent = message;
+    }
 }
 
 function showModalById(modalId) {

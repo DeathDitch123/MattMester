@@ -3889,5 +3889,23 @@ module.exports = {
     getUserBasicById,
     findUserByUsernameForAdmin,
     getUserIdsByRole,
-    getAllActiveUserIds
+    getAllActiveUserIds,
+    banUser,
+    unbanUser
 };
+
+async function banUser(userId, reason, bannedUntil) {
+    const pool = getPool();
+    await pool.execute(
+        'UPDATE users SET is_banned = TRUE, ban_reason = ?, banned_until = ? WHERE id = ?',
+        [reason || null, bannedUntil || null, userId]
+    );
+}
+
+async function unbanUser(userId) {
+    const pool = getPool();
+    await pool.execute(
+        'UPDATE users SET is_banned = FALSE, ban_reason = NULL, banned_until = NULL WHERE id = ?',
+        [userId]
+    );
+}

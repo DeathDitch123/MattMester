@@ -29,6 +29,7 @@ CREATE TABLE
 
 -- Admin felhasználó beszúrása (ha még nem létezik) - a jelszó "chu+)2_23iIa6sou&>#o79247r9Xbsibv%" (bcrypt hash: $2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq)
 -- Admin user mindig is_super_admin=TRUE jelöléssel jön létre - ő az egyetlen super-admin a seedben.
+-- Contanct email: mattmester.support@gmail.com | jelszó: j?q&u5.OmV0QEa)KBpH.);8C9l)
 INSERT INTO
     users (
         username,

@@ -42,11 +42,11 @@ const formatRelative = (date) => {
         if (date) {
             const d = date instanceof Date ? date : new Date(date);
             const diffSec = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
-            if (diffSec < 5)         result = 'Épp most';
-            else if (diffSec < 60)   result = `${diffSec} mp-e`;
+            if (diffSec < 5) result = 'Épp most';
+            else if (diffSec < 60) result = `${diffSec} mp-e`;
             else if (diffSec < 3600) result = `${Math.floor(diffSec / 60)} perce`;
             else if (diffSec < 86400) result = `${Math.floor(diffSec / 3600)} órája`;
-            else                     result = `${Math.floor(diffSec / 86400)} napja`;
+            else result = `${Math.floor(diffSec / 86400)} napja`;
         }
     } catch (err) {
         console.warn('formatRelative hiba:', err);
@@ -285,15 +285,15 @@ const h = {
    3) Severity / alert helperek
    ============================================================= */
 const SEVERITY = {
-    info:     { label: 'Info',     icon: 'bi-info-circle-fill',          cls: 'sev-info' },
-    warning:  { label: 'Warning',  icon: 'bi-exclamation-triangle-fill', cls: 'sev-warning' },
-    critical: { label: 'Critical', icon: 'bi-exclamation-octagon-fill',  cls: 'sev-critical' }
+    info: { label: 'Info', icon: 'bi-info-circle-fill', cls: 'sev-info' },
+    warning: { label: 'Warning', icon: 'bi-exclamation-triangle-fill', cls: 'sev-warning' },
+    critical: { label: 'Critical', icon: 'bi-exclamation-octagon-fill', cls: 'sev-critical' }
 };
 const ALERT_KIND = {
-    unauthorized:       { label: 'Jogosulatlan próba',    icon: 'bi-shield-fill-x' },
-    rate_escalated:     { label: 'Rate limit szigorítás', icon: 'bi-speedometer2' },
-    token_invalid:      { label: 'Token hiba',            icon: 'bi-key-fill' },
-    suspicious_pattern: { label: 'Gyanús minta',          icon: 'bi-bug-fill' }
+    unauthorized: { label: 'Jogosulatlan próba', icon: 'bi-shield-fill-x' },
+    rate_escalated: { label: 'Rate limit szigorítás', icon: 'bi-speedometer2' },
+    token_invalid: { label: 'Token hiba', icon: 'bi-key-fill' },
+    suspicious_pattern: { label: 'Gyanús minta', icon: 'bi-bug-fill' }
 };
 const severityPill = (key) => {
     const s = SEVERITY[key] || SEVERITY.info;
@@ -305,34 +305,34 @@ const alertKindLabel = (key) => {
 };
 
 const STATUS_BADGE = {
-    active:   { label: 'Aktív',       cls: 'badge-status-active' },
-    banned:   { label: 'Tiltott',     cls: 'badge-status-banned' },
-    pending:  { label: 'Függő',       cls: 'badge-status-pending' },
-    live:     { label: 'Folyamatban', cls: 'bg-success' },
-    finished: { label: 'Befejezett',  cls: 'bg-secondary' }
+    active: { label: 'Aktív', cls: 'badge-status-active' },
+    banned: { label: 'Tiltott', cls: 'badge-status-banned' },
+    pending: { label: 'Függő', cls: 'badge-status-pending' },
+    live: { label: 'Folyamatban', cls: 'bg-success' },
+    finished: { label: 'Befejezett', cls: 'bg-secondary' }
 };
 const ROLE_BADGE = {
-    admin:  { label: 'Admin',   cls: 'badge-role-admin' },
+    admin: { label: 'Admin', cls: 'badge-role-admin' },
     player: { label: 'Játékos', cls: 'badge-role-player' }
 };
 const RISK_BADGE = {
-    low:    { label: 'Alacsony', cls: 'bg-success' },
-    medium: { label: 'Közepes',  cls: 'bg-warning text-dark' },
-    high:   { label: 'Magas',    cls: 'bg-danger' }
+    low: { label: 'Alacsony', cls: 'bg-success' },
+    medium: { label: 'Közepes', cls: 'bg-warning text-dark' },
+    high: { label: 'Magas', cls: 'bg-danger' }
 };
 const statusPill = (key) => `<span class="badge ${STATUS_BADGE[key].cls}">${STATUS_BADGE[key].label}</span>`;
-const rolePill   = (key) => `<span class="badge ${ROLE_BADGE[key].cls}">${ROLE_BADGE[key].label}</span>`;
-const riskPill   = (key) => `<span class="badge ${RISK_BADGE[key].cls}">${RISK_BADGE[key].label}</span>`;
+const rolePill = (key) => `<span class="badge ${ROLE_BADGE[key].cls}">${ROLE_BADGE[key].label}</span>`;
+const riskPill = (key) => `<span class="badge ${RISK_BADGE[key].cls}">${RISK_BADGE[key].label}</span>`;
 
 /* =============================================================
    3.5) WS allapot - egy forras-igazsag a fejlec pill, feed badge,
         tick-band, kezi frissites gomb szamara.
    ============================================================= */
 const WS_STATUS = Object.freeze({
-    no_token:     { key: 'no_token',     label: 'Nincs admin token',         short: 'Nincs token',  variant: 'secondary', icon: 'bi-shield-slash',         dotClass: 'ws-dot-idle',       spin: false },
-    connecting:   { key: 'connecting',   label: 'Csatlakozás…',              short: 'Csatlakozás…', variant: 'warning',   icon: 'bi-arrow-repeat',         dotClass: 'ws-dot-connecting', spin: true  },
-    connected:    { key: 'connected',    label: 'Élő — WS /admin',           short: 'Élő',          variant: 'success',   icon: 'bi-broadcast-pin',        dotClass: 'ws-dot-live',       spin: false },
-    disconnected: { key: 'disconnected', label: 'Megszakadt — újrapróbálom', short: 'Offline',      variant: 'danger',    icon: 'bi-plug',                 dotClass: 'ws-dot-down',       spin: false }
+    no_token: { key: 'no_token', label: 'Nincs admin token', short: 'Nincs token', variant: 'secondary', icon: 'bi-shield-slash', dotClass: 'ws-dot-idle', spin: false },
+    connecting: { key: 'connecting', label: 'Csatlakozás…', short: 'Csatlakozás…', variant: 'warning', icon: 'bi-arrow-repeat', dotClass: 'ws-dot-connecting', spin: true },
+    connected: { key: 'connected', label: 'Élő — WS /admin', short: 'Élő', variant: 'success', icon: 'bi-broadcast-pin', dotClass: 'ws-dot-live', spin: false },
+    disconnected: { key: 'disconnected', label: 'Megszakadt — újrapróbálom', short: 'Offline', variant: 'danger', icon: 'bi-plug', dotClass: 'ws-dot-down', spin: false }
 });
 const WS_STATUS_VARIANTS = ['success', 'warning', 'danger', 'secondary'];
 
@@ -430,8 +430,8 @@ const state = {
         userId: null,
         activeTab: 'target',      // 'target' | 'actor' | 'security'
         refreshTimerId: null,     // egysegesitett 5 mp-es modal-frissito timer
-        target:   { items: [], loading: false, error: null, loadedAt: null },
-        actor:    { items: [], loading: false, error: null, loadedAt: null },
+        target: { items: [], loading: false, error: null, loadedAt: null },
+        actor: { items: [], loading: false, error: null, loadedAt: null },
         security: { items: [], loading: false, error: null, loadedAt: null, filter: 'all' },
         presence: { online: false, tabs: [], loadedAt: null, refreshTimerId: null }
     },
@@ -447,54 +447,64 @@ const MAX_LIVE_BUFFER = 50;
    ============================================================= */
 const SAMPLE = {
     users: [
-        { username: 'MagnusCarlsen',  name: 'Magnus Carlsen',  email: 'magnus@chess.hu', elo: 2847, role: 'admin',  status: 'active', last: '2 perce', joined: '2024-01-15', profile_image: '/profile_pictures/default.png' },
+        { username: 'MagnusCarlsen', name: 'Magnus Carlsen', email: 'magnus@chess.hu', elo: 2847, role: 'admin', status: 'active', last: '2 perce', joined: '2024-01-15', profile_image: '/profile_pictures/default.png' },
         { username: 'HikaruNakamura', name: 'Hikaru Nakamura', email: 'hikaru@chess.hu', elo: 2768, role: 'player', status: 'active', last: '5 órája', joined: '2024-02-20', profile_image: '/profile_pictures/default.png' },
-        { username: 'AnishGiri',      name: 'Anish Giri',      email: 'anish@chess.hu',  elo: 0,    role: 'player', status: 'banned', last: '—',        joined: '2024-03-10', struck: true, profile_image: '/profile_pictures/default.png' }
+        { username: 'AnishGiri', name: 'Anish Giri', email: 'anish@chess.hu', elo: 0, role: 'player', status: 'banned', last: '—', joined: '2024-03-10', struck: true, profile_image: '/profile_pictures/default.png' }
     ],
     games: [
-        { id: '#4932', white: 'Carlsen (2847)',  black: 'Nakamura (2768)', status: 'live',     winner: '—',          moves: 24, time: '10+0' },
-        { id: '#4931', white: 'Firouzja (2785)', black: 'Ding (2812)',     status: 'finished', winner: 'Ding Liren', moves: 67, time: '3+2' },
-        { id: '#4930', white: 'SakkMester99',    black: 'RookRider',       status: 'live',     winner: '—',          moves: 8,  time: '5+0' }
+        { id: '#4932', white: 'Carlsen (2847)', black: 'Nakamura (2768)', status: 'live', winner: '—', moves: 24, time: '10+0' },
+        { id: '#4931', white: 'Firouzja (2785)', black: 'Ding (2812)', status: 'finished', winner: 'Ding Liren', moves: 67, time: '3+2' },
+        { id: '#4930', white: 'SakkMester99', black: 'RookRider', status: 'live', winner: '—', moves: 8, time: '5+0' }
     ],
     logins: [
-        { user: 'Magnus Carlsen',  ip: '192.168.1.10',   location: 'Budapest, HU', device: 'Chrome / Windows', deviceIcon: 'bi-browser-chrome', time: 'Most',     risk: 'low' },
-        { user: 'Hikaru Nakamura', ip: '127.0.0.1',      location: 'localhost',    device: 'Firefox / Linux',  deviceIcon: 'bi-browser-firefox',time: '5 perce',  risk: 'low' },
-        { user: 'SakkMester99',    ip: '192.168.1.42',   location: 'Budapest, HU', device: 'Safari / macOS',   deviceIcon: 'bi-browser-safari', time: '12 perce', risk: 'medium' }
+        { user: 'Magnus Carlsen', ip: '192.168.1.10', location: 'Budapest, HU', device: 'Chrome / Windows', deviceIcon: 'bi-browser-chrome', time: 'Most', risk: 'low' },
+        { user: 'Hikaru Nakamura', ip: '127.0.0.1', location: 'localhost', device: 'Firefox / Linux', deviceIcon: 'bi-browser-firefox', time: '5 perce', risk: 'low' },
+        { user: 'SakkMester99', ip: '192.168.1.42', location: 'Budapest, HU', device: 'Safari / macOS', deviceIcon: 'bi-browser-safari', time: '12 perce', risk: 'medium' }
     ]
 };
 
 const SAMPLE_AUDIT = [
-    { eventId: 12345, occurredAt: new Date(Date.now() - 60000).toISOString(),
-      actor: { username: 'admin' }, action: 'users.ban', severity: 'critical',
-      target: { type: 'user', id: 47, label: 'spammer42' },
-      reason: 'Reklámspam a játék-chat csatornán; harmadik figyelmeztetés.',
-      diff: { before: { is_banned: false }, after: { is_banned: true } } },
-    { eventId: 12344, occurredAt: new Date(Date.now() - 180000).toISOString(),
-      actor: { username: 'admin' }, action: 'users.edit_profile', severity: 'info',
-      target: { type: 'user', id: 12, label: 'SakkMester99' },
-      reason: 'ELO korrekció helytelen pontozás miatt.',
-      diff: { before: { elo: 1500 }, after: { elo: 1450 } } },
-    { eventId: 12343, occurredAt: new Date(Date.now() - 360000).toISOString(),
-      actor: { username: 'modBéla' }, action: 'profile_image.review', severity: 'info',
-      target: { type: 'profile_image', id: 88, label: 'RookRider' },
-      reason: 'Megfelelő profilkép, jóváhagyva.',
-      diff: { before: { status: 'pending' }, after: { status: 'approved' } } }
+    {
+        eventId: 12345, occurredAt: new Date(Date.now() - 60000).toISOString(),
+        actor: { username: 'admin' }, action: 'users.ban', severity: 'critical',
+        target: { type: 'user', id: 47, label: 'spammer42' },
+        reason: 'Reklámspam a játék-chat csatornán; harmadik figyelmeztetés.',
+        diff: { before: { is_banned: false }, after: { is_banned: true } }
+    },
+    {
+        eventId: 12344, occurredAt: new Date(Date.now() - 180000).toISOString(),
+        actor: { username: 'admin' }, action: 'users.edit_profile', severity: 'info',
+        target: { type: 'user', id: 12, label: 'SakkMester99' },
+        reason: 'ELO korrekció helytelen pontozás miatt.',
+        diff: { before: { elo: 1500 }, after: { elo: 1450 } }
+    },
+    {
+        eventId: 12343, occurredAt: new Date(Date.now() - 360000).toISOString(),
+        actor: { username: 'modBéla' }, action: 'profile_image.review', severity: 'info',
+        target: { type: 'profile_image', id: 88, label: 'RookRider' },
+        reason: 'Megfelelő profilkép, jóváhagyva.',
+        diff: { before: { status: 'pending' }, after: { status: 'approved' } }
+    }
 ];
 
 const SAMPLE_ALERTS = [
-    { alertId: 882, occurredAt: new Date(Date.now() - 90000).toISOString(),
-      kind: 'unauthorized', severity: 'warning',
-      ip: '203.0.113.55', userId: null, endpoint: 'GET /api/admin/users',
-      detail: { reason: 'no_session' } },
-    { alertId: 881, occurredAt: new Date(Date.now() - 240000).toISOString(),
-      kind: 'token_invalid', severity: 'warning',
-      ip: '127.0.0.1', userId: 12, endpoint: 'POST /api/admin/users/ban',
-      detail: { reason: 'token_expired' } }
+    {
+        alertId: 882, occurredAt: new Date(Date.now() - 90000).toISOString(),
+        kind: 'unauthorized', severity: 'warning',
+        ip: '203.0.113.55', userId: null, endpoint: 'GET /api/admin/users',
+        detail: { reason: 'no_session' }
+    },
+    {
+        alertId: 881, occurredAt: new Date(Date.now() - 240000).toISOString(),
+        kind: 'token_invalid', severity: 'warning',
+        ip: '127.0.0.1', userId: 12, endpoint: 'POST /api/admin/users/ban',
+        detail: { reason: 'token_expired' }
+    }
 ];
 
 const SAMPLE_ADMINS = [
-    { id: 1, name: 'Nagymester Admin', email: 'admin@mattmester.hu', isSuper: true,  joined: '2024-01-01', lastSeen: 'Most' },
-    { id: 8, name: 'ModeratorBéla',    email: 'bela@mattmester.hu',  isSuper: false, joined: '2024-08-12', lastSeen: '15 perce' }
+    { id: 1, name: 'Nagymester Admin', email: 'admin@mattmester.hu', isSuper: true, joined: '2024-01-01', lastSeen: 'Most' },
+    { id: 8, name: 'ModeratorBéla', email: 'bela@mattmester.hu', isSuper: false, joined: '2024-08-12', lastSeen: '15 perce' }
 ];
 
 /* =============================================================
@@ -502,14 +512,14 @@ const SAMPLE_ADMINS = [
    ============================================================= */
 function liveStatsOrFallback() {
     return state.liveStats || {
-        online:    { totalUsers: 0, totalAdmins: 0, inGame: 0, inMatchmaking: 0, activeTabs: 0, totalTabs: 0, totalSockets: 0 },
-        pending:   { profileImages: 0, friendRequests: 0 },
-        last24h:   { logins: 0, registrations: 0, auditEntries: 0, criticalAuditEntries: 0, alerts: 0, newBans: 0 },
+        online: { totalUsers: 0, totalAdmins: 0, inGame: 0, inMatchmaking: 0, activeTabs: 0, totalTabs: 0, totalSockets: 0 },
+        pending: { profileImages: 0, friendRequests: 0 },
+        last24h: { logins: 0, registrations: 0, auditEntries: 0, criticalAuditEntries: 0, alerts: 0, newBans: 0 },
         rateLimit: { activeEscalations: 0 }
     };
 }
 
-const auditList  = () => (state.liveAudit.length  ? state.liveAudit  : SAMPLE_AUDIT);
+const auditList = () => (state.liveAudit.length ? state.liveAudit : SAMPLE_AUDIT);
 const alertsList = () => (state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS);
 
 // Egy forras-igazsag a dashboard live-feed-jehez: csak a valos WS bufferbol
@@ -557,17 +567,25 @@ function latestEventTime(auditItems, alertItems) {
 function feedEmptyMessage(reason) {
     let result = { icon: 'bi-inbox', title: 'Nincs adat', sub: '' };
     if (reason === 'no_token') {
-        result = { icon: 'bi-shield-slash', title: 'Nincs admin token',
-                   sub: 'A bejövő események betöltéséhez aktív admin step-up token szükséges.' };
+        result = {
+            icon: 'bi-shield-slash', title: 'Nincs admin token',
+            sub: 'A bejövő események betöltéséhez aktív admin step-up token szükséges.'
+        };
     } else if (reason === 'offline') {
-        result = { icon: 'bi-plug', title: 'WS /admin offline',
-                   sub: 'A WebSocket kapcsolat megszakadt — kattints a fejléc pill-jén az újracsatlakozáshoz.' };
+        result = {
+            icon: 'bi-plug', title: 'WS /admin offline',
+            sub: 'A WebSocket kapcsolat megszakadt — kattints a fejléc pill-jén az újracsatlakozáshoz.'
+        };
     } else if (reason === 'empty') {
-        result = { icon: 'bi-inbox', title: 'Még nem érkezett esemény',
-                   sub: 'Az új audit / riasztás sorok automatikusan ide kerülnek, amint történik valami.' };
+        result = {
+            icon: 'bi-inbox', title: 'Még nem érkezett esemény',
+            sub: 'Az új audit / riasztás sorok automatikusan ide kerülnek, amint történik valami.'
+        };
     } else if (reason === 'error') {
-        result = { icon: 'bi-exclamation-triangle', title: 'Hiba a feed betöltésénél',
-                   sub: 'Ellenőrizd a böngésző konzolt a részletekért.' };
+        result = {
+            icon: 'bi-exclamation-triangle', title: 'Hiba a feed betöltésénél',
+            sub: 'Ellenőrizd a böngésző konzolt a részletekért.'
+        };
     }
     return result;
 }
@@ -678,10 +696,10 @@ function renderProfileImageStatusBadge(user) {
     try {
         const status = String(user?.profileImageStatus || '').toLowerCase();
         const labels = {
-            approved: { icon: 'bi-image-fill',          label: 'Profilkép: jóváhagyott', cls: 'is-approved' },
-            pending:  { icon: 'bi-hourglass-split',     label: 'Profilkép: jóváhagyásra vár', cls: 'is-pending' },
-            rejected: { icon: 'bi-image-alt',           label: 'Profilkép: elutasítva', cls: 'is-rejected' },
-            default:  { icon: 'bi-person-circle',       label: 'Profilkép: alapértelmezett', cls: 'is-default' }
+            approved: { icon: 'bi-image-fill', label: 'Profilkép: jóváhagyott', cls: 'is-approved' },
+            pending: { icon: 'bi-hourglass-split', label: 'Profilkép: jóváhagyásra vár', cls: 'is-pending' },
+            rejected: { icon: 'bi-image-alt', label: 'Profilkép: elutasítva', cls: 'is-rejected' },
+            default: { icon: 'bi-person-circle', label: 'Profilkép: alapértelmezett', cls: 'is-default' }
         };
         const meta = labels[status] || labels.default;
         const noUpload = !status;
@@ -751,9 +769,9 @@ function renderProfileImageStatusBadgeInline(user) {
         const status = String(user?.profileImageStatus || '').toLowerCase();
         const labels = {
             approved: { icon: 'bi-image-fill', label: 'Jóváhagyott', cls: 'is-approved', tip: 'Profilkép: jóváhagyott' },
-            pending:  { icon: 'bi-hourglass-split', label: 'Függő', cls: 'is-pending', tip: 'Profilkép: jóváhagyásra vár' },
+            pending: { icon: 'bi-hourglass-split', label: 'Függő', cls: 'is-pending', tip: 'Profilkép: jóváhagyásra vár' },
             rejected: { icon: 'bi-image-alt', label: 'Elutasított', cls: 'is-rejected', tip: 'Profilkép: elutasítva' },
-            default:  { icon: 'bi-person-circle', label: 'Alapértelmezett', cls: 'is-default', tip: 'Profilkép: alapértelmezett' }
+            default: { icon: 'bi-person-circle', label: 'Alapértelmezett', cls: 'is-default', tip: 'Profilkép: alapértelmezett' }
         };
         const meta = labels[status] || labels.default;
         html = `<span class="profile-image-status-badge ${meta.cls}" title="${escapeHtml(meta.tip)}">
@@ -802,9 +820,9 @@ function getFilteredAdminUsers() {
                 || (u.email && u.email.toLowerCase().includes(search));
             const matchesRole = !role || u.role === role;
             const matchesStatus = !status
-                || (status === 'active'  && !u.isBanned)
-                || (status === 'banned'  &&  u.isBanned)
-                || (status === 'online'  &&  u.online)
+                || (status === 'active' && !u.isBanned)
+                || (status === 'banned' && u.isBanned)
+                || (status === 'online' && u.online)
                 || (status === 'offline' && !u.online);
             return matchesSearch && matchesRole && matchesStatus;
         });
@@ -906,25 +924,25 @@ const NAV_TREE = [
     {
         id: 'group-users', label: 'Felhasználók', icon: 'bi-people-fill', open: true,
         items: [
-            { id: 'users',      label: 'Lista',                    icon: 'bi-list-ul' },
+            { id: 'users', label: 'Lista', icon: 'bi-list-ul' },
             { id: 'userDetail', label: 'Részletek és szerkesztés', icon: 'bi-person-vcard' },
-            { id: 'userBan',    label: 'Tiltások',                 icon: 'bi-slash-circle' }
+            { id: 'userBan', label: 'Tiltások', icon: 'bi-slash-circle' }
         ]
     },
 
     {
         id: 'group-moderation', label: 'Moderáció', icon: 'bi-shield-exclamation',
         items: [
-            { id: 'chats',              label: 'Chat moderálás', icon: 'bi-chat-dots-fill' },
-            { id: 'profileImageReview', label: 'Profilképek',    icon: 'bi-image' },
-            { id: 'moderationReports',  label: 'Bejelentések',   icon: 'bi-flag-fill' }
+            { id: 'chats', label: 'Chat moderálás', icon: 'bi-chat-dots-fill' },
+            { id: 'profileImageReview', label: 'Profilképek', icon: 'bi-image' },
+            { id: 'moderationReports', label: 'Bejelentések', icon: 'bi-flag-fill' }
         ]
     },
 
     {
         id: 'group-gameplay', label: 'Játékok', icon: 'bi-knight-fill',
         items: [
-            { id: 'games',     label: 'Játszmák',   icon: 'bi-list-task' },
+            { id: 'games', label: 'Játszmák', icon: 'bi-list-task' },
             { id: 'abilities', label: 'Képességek', icon: 'bi-magic' }
         ]
     },
@@ -933,15 +951,15 @@ const NAV_TREE = [
         id: 'group-logs', label: 'Naplók', icon: 'bi-journal-text',
         items: [
             { id: 'security', label: 'Bejelentkezések', icon: 'bi-shield-check' },
-            { id: 'auditLog', label: 'Audit napló',     icon: 'bi-journal-check' },
-            { id: 'alerts',   label: 'Riasztások',      icon: 'bi-exclamation-octagon-fill' }
+            { id: 'auditLog', label: 'Audit napló', icon: 'bi-journal-check' },
+            { id: 'alerts', label: 'Riasztások', icon: 'bi-exclamation-octagon-fill' }
         ]
     },
 
-    { id: 'superAdmin', label: 'Super admin',           icon: 'bi-stars',         leaf: true },
-    { id: 'friends',    label: 'Közösségi kapcsolatok', icon: 'bi-people',        leaf: true },
-    { id: 'tests',      label: 'Tesztek',               icon: 'bi-clipboard2-check', leaf: true },
-    { id: 'settings',   label: 'Beállítások',           icon: 'bi-gear-fill',     leaf: true }
+    { id: 'superAdmin', label: 'Super admin', icon: 'bi-stars', leaf: true },
+    { id: 'friends', label: 'Közösségi kapcsolatok', icon: 'bi-people', leaf: true },
+    { id: 'tests', label: 'Tesztek', icon: 'bi-clipboard2-check', leaf: true },
+    { id: 'settings', label: 'Beállítások', icon: 'bi-gear-fill', leaf: true }
 ];
 
 const DEFAULT_SECTION = 'dashboard';
@@ -991,11 +1009,11 @@ function renderSidebar() {
    8.5) Activity chart status helperek (UI render — egy forras-igazsag)
    ============================================================= */
 const ACTIVITY_STATUS = Object.freeze({
-    idle:    { label: 'Inicializálás…',  variant: 'secondary', icon: 'bi-hourglass',         dotClass: 'ws-dot-idle',       spin: false },
-    loading: { label: 'Adatok betöltése…',variant: 'warning',  icon: 'bi-arrow-repeat',      dotClass: 'ws-dot-connecting', spin: true  },
-    loaded:  { label: 'Élő',              variant: 'success',  icon: 'bi-broadcast-pin',     dotClass: 'ws-dot-live',       spin: false },
-    empty:   { label: 'Nincs 24h adat',   variant: 'secondary',icon: 'bi-pause-circle',      dotClass: 'ws-dot-idle',       spin: false },
-    error:   { label: 'Hiba',             variant: 'danger',   icon: 'bi-exclamation-triangle', dotClass: 'ws-dot-down',    spin: false }
+    idle: { label: 'Inicializálás…', variant: 'secondary', icon: 'bi-hourglass', dotClass: 'ws-dot-idle', spin: false },
+    loading: { label: 'Adatok betöltése…', variant: 'warning', icon: 'bi-arrow-repeat', dotClass: 'ws-dot-connecting', spin: true },
+    loaded: { label: 'Élő', variant: 'success', icon: 'bi-broadcast-pin', dotClass: 'ws-dot-live', spin: false },
+    empty: { label: 'Nincs 24h adat', variant: 'secondary', icon: 'bi-pause-circle', dotClass: 'ws-dot-idle', spin: false },
+    error: { label: 'Hiba', variant: 'danger', icon: 'bi-exclamation-triangle', dotClass: 'ws-dot-down', spin: false }
 });
 
 function chartStatusPill(chartState) {
@@ -1045,11 +1063,11 @@ function activityChartOverlay(chartState) {
 }
 
 const ACTIVITY_DATASET_META = Object.freeze([
-    { key: 'logins',        label: 'Login',         color: '#d4af37', icon: 'bi-box-arrow-in-right' },
-    { key: 'registrations', label: 'Regisztráció',  color: '#10b981', icon: 'bi-person-plus-fill' },
-    { key: 'gamesStarted',  label: 'Új játszma',    color: '#3b82f6', icon: 'bi-trophy-fill' },
-    { key: 'auditEntries',  label: 'Audit',         color: '#8b5cf6', icon: 'bi-journal-text' },
-    { key: 'alerts',        label: 'Riasztás',      color: '#ef4444', icon: 'bi-exclamation-octagon-fill' }
+    { key: 'logins', label: 'Login', color: '#d4af37', icon: 'bi-box-arrow-in-right' },
+    { key: 'registrations', label: 'Regisztráció', color: '#10b981', icon: 'bi-person-plus-fill' },
+    { key: 'gamesStarted', label: 'Új játszma', color: '#3b82f6', icon: 'bi-trophy-fill' },
+    { key: 'auditEntries', label: 'Audit', color: '#8b5cf6', icon: 'bi-journal-text' },
+    { key: 'alerts', label: 'Riasztás', color: '#ef4444', icon: 'bi-exclamation-octagon-fill' }
 ]);
 
 function renderChartTotals(totals) {
@@ -1081,39 +1099,47 @@ const SECTIONS = {
         const feedHasContent = auditItems.length > 0 || alertItems.length > 0;
         // A feed ures allapota a "rosszabbik" reason-bol jon (no_token > offline > empty)
         const feedReason = auditSrc.reason === 'no_token' || alertSrc.reason === 'no_token' ? 'no_token'
-                         : auditSrc.reason === 'offline'  || alertSrc.reason === 'offline'  ? 'offline'
-                         : (feedHasContent ? 'live' : 'empty');
+            : auditSrc.reason === 'offline' || alertSrc.reason === 'offline' ? 'offline'
+                : (feedHasContent ? 'live' : 'empty');
         const feedEmpty = feedHasContent ? null : feedEmptyMessage(feedReason);
         const chartStatus = state.activityChart || { status: 'idle' };
         return `
             ${h.header({
-                icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
-                subtitle: 'A projekt fő mutatói egy pillantásra'
-            })}
+            icon: 'bi-grid-1x2-fill', title: 'Vezérlőpult',
+            subtitle: 'A projekt fő mutatói egy pillantásra'
+        })}
 
             ${h.stats([
-                { icon: 'bi-people-fill',  value: stats.online?.totalUsers ?? 0, valueId: 'mainOnlineTotal',
-                  label: 'Online felhasználó', color: 'primary',
-                  hint: `<span id="mainOnlineHint">${stats.online?.totalAdmins ?? 0} admin · ${stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0} aktív tab</span>`,
-                  hintClass: 'text-success', interactive: 'users', cardId: 'mainOnlineCard' },
-                { icon: 'bi-trophy-fill',  value: inGameValue, valueId: 'mainInGame',
-                  label: 'Aktív játszma', color: inGameEmpty ? 'secondary' : 'success',
-                  hint: inGameEmpty
-                        ? '<span class="text-muted"><i class="bi bi-pause-circle me-1"></i>Nincs élő játszma — kattints a játszmák listájához</span>'
-                        : '<span class="live-indicator text-success"><span class="live-dot"></span>Élőben most</span>',
-                  hintClass: inGameEmpty ? 'text-muted' : 'text-success',
-                  interactive: 'games',
-                  cardId: 'mainInGameCard',
-                  emblem: 'chess', empty: inGameEmpty },
-                { icon: 'bi-journal-check',value: last24.auditEntries ?? 0, valueId: 'mainAuditCount',
-                  label: '24h audit bejegyzés', color: 'warning',
-                  hint: `<span id="mainAuditCriticalHint">${last24.criticalAuditEntries ?? 0} kritikus művelet</span>`,
-                  hintClass: 'text-warning', interactive: 'auditLog', cardId: 'mainAuditCard' },
-                { icon: 'bi-exclamation-octagon-fill', value: last24.alerts ?? 0, valueId: 'mainAlertCount',
-                  label: '24h riasztás', color: 'danger',
-                  hint: `<span id="mainNewBansHint">${last24.newBans ?? 0} új tiltás</span>`,
-                  hintClass: 'text-danger', interactive: 'alerts', cardId: 'mainAlertCard' }
-            ])}
+            {
+                icon: 'bi-people-fill', value: stats.online?.totalUsers ?? 0, valueId: 'mainOnlineTotal',
+                label: 'Online felhasználó', color: 'primary',
+                hint: `<span id="mainOnlineHint">${stats.online?.totalAdmins ?? 0} admin · ${stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0} aktív tab</span>`,
+                hintClass: 'text-success', interactive: 'users', cardId: 'mainOnlineCard'
+            },
+            {
+                icon: 'bi-trophy-fill', value: inGameValue, valueId: 'mainInGame',
+                label: 'Aktív játszma', color: inGameEmpty ? 'secondary' : 'success',
+                hint: inGameEmpty
+                    ? '<span class="text-muted"><i class="bi bi-pause-circle me-1"></i>Nincs élő játszma — kattints a játszmák listájához</span>'
+                    : '<span class="live-indicator text-success"><span class="live-dot"></span>Élőben most</span>',
+                hintClass: inGameEmpty ? 'text-muted' : 'text-success',
+                interactive: 'games',
+                cardId: 'mainInGameCard',
+                emblem: 'chess', empty: inGameEmpty
+            },
+            {
+                icon: 'bi-journal-check', value: last24.auditEntries ?? 0, valueId: 'mainAuditCount',
+                label: '24h audit bejegyzés', color: 'warning',
+                hint: `<span id="mainAuditCriticalHint">${last24.criticalAuditEntries ?? 0} kritikus művelet</span>`,
+                hintClass: 'text-warning', interactive: 'auditLog', cardId: 'mainAuditCard'
+            },
+            {
+                icon: 'bi-exclamation-octagon-fill', value: last24.alerts ?? 0, valueId: 'mainAlertCount',
+                label: '24h riasztás', color: 'danger',
+                hint: `<span id="mainNewBansHint">${last24.newBans ?? 0} új tiltás</span>`,
+                hintClass: 'text-danger', interactive: 'alerts', cardId: 'mainAlertCard'
+            }
+        ])}
 
             <div class="tick-band mb-4" id="tickBand" data-ws-status="${wsStatus.key}">
                 <div class="tick-band-header">
@@ -1123,14 +1149,14 @@ const SECTIONS = {
                     <span class="tick-band-time">Frissítve: <span id="tickBandTime">${state.liveStatsAt ? formatRelative(state.liveStatsAt) : '—'}</span></span>
                 </div>
                 <div class="tick-band-body">
-                    ${h.tickChip({ icon: 'bi-wifi',          label: 'Online',         valueId: 'tickOnline',         value: stats.online?.totalUsers ?? 0,    color: 'success', nav: 'users',              hint: 'Online felhasználók — ugrás a felhasználói listára' })}
-                    ${h.tickChip({ icon: 'bi-window-stack',  label: 'Aktív tabok',    valueId: 'tickActiveTabs',     value: stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0, color: 'primary', nav: 'users', hint: 'Nyitva tartott böngészőfülek — felhasználói lista' })}
-                    ${h.tickChip({ icon: 'bi-shield-fill',   label: 'Adminok',        valueId: 'tickAdmins',         value: stats.online?.totalAdmins ?? 0,   color: 'gold',    nav: 'superAdmin',         hint: 'Online admin felhasználók — super admin nézet' })}
-                    ${h.tickChip({ icon: 'bi-trophy-fill',   label: 'Játékban',       valueId: 'tickInGame',         value: stats.online?.inGame ?? 0,        color: inGameEmpty ? 'secondary' : 'success', nav: 'games', hint: 'Folyamatban lévő játszmák' })}
-                    ${h.tickChip({ icon: 'bi-search',        label: 'Matchmakingben', valueId: 'tickMatchmaking',    value: stats.online?.inMatchmaking ?? 0, color: 'primary', nav: 'games',              hint: 'Matchmakingben várakozó játékosok' })}
-                    ${h.tickChip({ icon: 'bi-image',         label: 'Pending kép',    valueId: 'tickPendingImages',  value: stats.pending?.profileImages ?? 0, color: 'warning', nav: 'profileImageReview', hint: 'Jóváhagyásra váró profilképek' })}
-                    ${h.tickChip({ icon: 'bi-person-plus',   label: 'Pending barát',  valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary', nav: 'friends',            hint: 'Függőben lévő barátkérelmek' })}
-                    ${h.tickChip({ icon: 'bi-speedometer2',  label: 'Aktív rate esc.',valueId: 'tickRateEsc',        value: stats.rateLimit?.activeEscalations ?? 0, color: 'secondary', nav: 'alerts',        hint: 'Rate limit szigorítások — riasztások' })}
+                    ${h.tickChip({ icon: 'bi-wifi', label: 'Online', valueId: 'tickOnline', value: stats.online?.totalUsers ?? 0, color: 'success', nav: 'users', hint: 'Online felhasználók — ugrás a felhasználói listára' })}
+                    ${h.tickChip({ icon: 'bi-window-stack', label: 'Aktív tabok', valueId: 'tickActiveTabs', value: stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0, color: 'primary', nav: 'users', hint: 'Nyitva tartott böngészőfülek — felhasználói lista' })}
+                    ${h.tickChip({ icon: 'bi-shield-fill', label: 'Adminok', valueId: 'tickAdmins', value: stats.online?.totalAdmins ?? 0, color: 'gold', nav: 'superAdmin', hint: 'Online admin felhasználók — super admin nézet' })}
+                    ${h.tickChip({ icon: 'bi-trophy-fill', label: 'Játékban', valueId: 'tickInGame', value: stats.online?.inGame ?? 0, color: inGameEmpty ? 'secondary' : 'success', nav: 'games', hint: 'Folyamatban lévő játszmák' })}
+                    ${h.tickChip({ icon: 'bi-search', label: 'Matchmakingben', valueId: 'tickMatchmaking', value: stats.online?.inMatchmaking ?? 0, color: 'primary', nav: 'games', hint: 'Matchmakingben várakozó játékosok' })}
+                    ${h.tickChip({ icon: 'bi-image', label: 'Pending kép', valueId: 'tickPendingImages', value: stats.pending?.profileImages ?? 0, color: 'warning', nav: 'profileImageReview', hint: 'Jóváhagyásra váró profilképek' })}
+                    ${h.tickChip({ icon: 'bi-person-plus', label: 'Pending barát', valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary', nav: 'friends', hint: 'Függőben lévő barátkérelmek' })}
+                    ${h.tickChip({ icon: 'bi-speedometer2', label: 'Aktív rate esc.', valueId: 'tickRateEsc', value: stats.rateLimit?.activeEscalations ?? 0, color: 'secondary', nav: 'alerts', hint: 'Rate limit szigorítások — riasztások' })}
                 </div>
             </div>
 
@@ -1174,14 +1200,14 @@ const SECTIONS = {
                                 <span class="live-feed-meta-count" id="liveFeedCount"><i class="bi bi-list-ul me-1"></i>${feedHasContent ? (auditItems.length + alertItems.length) : 0} esemény</span>
                                 <span class="live-feed-meta-time" id="liveFeedLastTime">
                                     ${feedHasContent
-                                        ? `Utolsó: ${formatRelative(latestEventTime(auditItems, alertItems))}`
-                                        : (feedReason === 'live' || feedReason === 'empty' ? 'Még nincs esemény' : feedEmptyMessage(feedReason).title)}
+                ? `Utolsó: ${formatRelative(latestEventTime(auditItems, alertItems))}`
+                : (feedReason === 'live' || feedReason === 'empty' ? 'Még nincs esemény' : feedEmptyMessage(feedReason).title)}
                                 </span>
                             </div>
                             <ul class="live-feed-list" id="dashboardLiveFeed" data-feed-state="${feedHasContent ? 'live' : feedReason}">
                                 ${feedHasContent
-                                    ? auditItems.map(a => liveFeedRow('audit', a)).join('') + alertItems.map(a => liveFeedRow('alert', a)).join('')
-                                    : `<li class="live-feed-empty">
+                ? auditItems.map(a => liveFeedRow('audit', a)).join('') + alertItems.map(a => liveFeedRow('alert', a)).join('')
+                : `<li class="live-feed-empty">
                                           <i class="bi ${feedEmpty.icon}"></i>
                                           <div class="live-feed-empty-title">${feedEmpty.title}</div>
                                           <div class="live-feed-empty-sub">${feedEmpty.sub}</div>
@@ -1194,13 +1220,13 @@ const SECTIONS = {
 
             <div class="row g-3 mt-2">
                 ${[
-                    { id: 'mini24Logins',         icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés',    value: last24.logins ?? 0,          color: 'primary',  nav: 'security' },
-                    { id: 'mini24Registrations',  icon: 'bi-person-plus-fill',   label: '24h regisztráció',     value: last24.registrations ?? 0,   color: 'success',  nav: 'users' },
-                    { id: 'mini24Audit',          icon: 'bi-journal-text',       label: '24h audit',            value: last24.auditEntries ?? 0,    color: 'warning',  nav: 'auditLog' },
-                    { id: 'mini24Critical',       icon: 'bi-exclamation-octagon',label: '24h kritikus',         value: last24.criticalAuditEntries ?? 0, color: 'danger', nav: 'auditLog' },
-                    { id: 'mini24Alerts',         icon: 'bi-shield-fill-x',      label: '24h riasztás',         value: last24.alerts ?? 0,          color: 'warning',  nav: 'alerts' },
-                    { id: 'mini24Bans',           icon: 'bi-ban',                label: '24h új tiltás',        value: last24.newBans ?? 0,         color: 'danger',   nav: 'userBan' }
-                ].map(item => `
+                { id: 'mini24Logins', icon: 'bi-box-arrow-in-right', label: '24h bejelentkezés', value: last24.logins ?? 0, color: 'primary', nav: 'security' },
+                { id: 'mini24Registrations', icon: 'bi-person-plus-fill', label: '24h regisztráció', value: last24.registrations ?? 0, color: 'success', nav: 'users' },
+                { id: 'mini24Audit', icon: 'bi-journal-text', label: '24h audit', value: last24.auditEntries ?? 0, color: 'warning', nav: 'auditLog' },
+                { id: 'mini24Critical', icon: 'bi-exclamation-octagon', label: '24h kritikus', value: last24.criticalAuditEntries ?? 0, color: 'danger', nav: 'auditLog' },
+                { id: 'mini24Alerts', icon: 'bi-shield-fill-x', label: '24h riasztás', value: last24.alerts ?? 0, color: 'warning', nav: 'alerts' },
+                { id: 'mini24Bans', icon: 'bi-ban', label: '24h új tiltás', value: last24.newBans ?? 0, color: 'danger', nav: 'userBan' }
+            ].map(item => `
                     <div class="col-6 col-md-4 col-xl-2">
                         <button type="button" class="mini-stat mini-stat-clickable" onclick="showSection('${item.nav}', event)" aria-label="${item.label} — ugrás a ${item.nav} szekcióra">
                             <i class="bi ${item.icon} text-${item.color}"></i>
@@ -1234,8 +1260,10 @@ const SECTIONS = {
                         </span>
                     </h5>
                     <div class="admin-users-card-actions">
-                        ${h.btn({ label: 'Új felhasználó', icon: 'bi-plus-lg', variant: 'gold', size: 'sm',
-                                  attrs: 'data-bs-toggle="modal" data-bs-target="#addUserModal"' })}
+                        ${h.btn({
+            label: 'Új felhasználó', icon: 'bi-plus-lg', variant: 'gold', size: 'sm',
+            attrs: 'data-bs-toggle="modal" data-bs-target="#addUserModal"'
+        })}
                     </div>
                 </div>
                 <div class="admin-users-filter-bar">
@@ -1255,26 +1283,28 @@ const SECTIONS = {
                         onchange="onAdminUsersFilterChange()">
                         <option value="" ${f.role === '' ? 'selected' : ''}>Minden szerepkör</option>
                         <option value="player" ${f.role === 'player' ? 'selected' : ''}>Játékos</option>
-                        <option value="admin"  ${f.role === 'admin'  ? 'selected' : ''}>Admin</option>
+                        <option value="admin"  ${f.role === 'admin' ? 'selected' : ''}>Admin</option>
                     </select>
                     <select id="adminStatusFilter" name="adminStatusFilter" class="form-select form-select-sm"
                         onchange="onAdminUsersFilterChange()">
-                        <option value=""        ${f.status === ''        ? 'selected' : ''}>Minden állapot</option>
-                        <option value="online"  ${f.status === 'online'  ? 'selected' : ''}>● Online</option>
+                        <option value=""        ${f.status === '' ? 'selected' : ''}>Minden állapot</option>
+                        <option value="online"  ${f.status === 'online' ? 'selected' : ''}>● Online</option>
                         <option value="offline" ${f.status === 'offline' ? 'selected' : ''}>○ Offline</option>
-                        <option value="active"  ${f.status === 'active'  ? 'selected' : ''}>Nem tiltott</option>
-                        <option value="banned"  ${f.status === 'banned'  ? 'selected' : ''}>Tiltott</option>
+                        <option value="active"  ${f.status === 'active' ? 'selected' : ''}>Nem tiltott</option>
+                        <option value="banned"  ${f.status === 'banned' ? 'selected' : ''}>Tiltott</option>
                     </select>
                     <select id="adminOrderBy" name="adminOrderBy" class="form-select form-select-sm"
                         onchange="onAdminUsersFilterChange()">
                         <option value="lastActive" ${f.orderBy === 'lastActive' ? 'selected' : ''}>Utolsó aktivitás</option>
-                        <option value="username"   ${f.orderBy === 'username'   ? 'selected' : ''}>Név (A–Z)</option>
-                        <option value="elo"        ${f.orderBy === 'elo'        ? 'selected' : ''}>ELO (csökkenő)</option>
-                        <option value="createdAt"  ${f.orderBy === 'createdAt'  ? 'selected' : ''}>Csatlakozás (legújabb)</option>
+                        <option value="username"   ${f.orderBy === 'username' ? 'selected' : ''}>Név (A–Z)</option>
+                        <option value="elo"        ${f.orderBy === 'elo' ? 'selected' : ''}>ELO (csökkenő)</option>
+                        <option value="createdAt"  ${f.orderBy === 'createdAt' ? 'selected' : ''}>Csatlakozás (legújabb)</option>
                     </select>
-                    ${h.btn({ label: '', icon: 'bi-arrow-clockwise', variant: 'outline-light', size: 'sm',
-                              attrs: 'id="adminUsersRefreshBtn" title="Lista frissítése" aria-label="Felhasználói lista frissítése"',
-                              onclick: 'refreshAdminUsersList()' })}
+                    ${h.btn({
+            label: '', icon: 'bi-arrow-clockwise', variant: 'outline-light', size: 'sm',
+            attrs: 'id="adminUsersRefreshBtn" title="Lista frissítése" aria-label="Felhasználói lista frissítése"',
+            onclick: 'refreshAdminUsersList()'
+        })}
                 </div>
             </div>
             <div class="admin-users-table-wrap" id="adminUsersTableWrap">
@@ -1598,18 +1628,27 @@ const SECTIONS = {
                                 <div class="fw-semibold text-white">Jelszó visszaállítás</div>
                                 <small class="text-secondary">A felhasználó e-mailjére küldünk egy egyszer használatos linket.</small>
                             </div>
-                            ${!u.emailVerified 
-                              ? `<button type="button" class="btn btn-outline-warning btn-sm" disabled title="Email cím nincs megerősítve"><i class="bi bi-send-fill me-1"></i>Link küldése</button>`
-                              : h.btn({ label: 'Link küldése', icon: 'bi-send-fill', variant: 'outline-warning', size: 'sm', onclick: `adminSendPasswordReset(${u.id})` })
-                            }
+                            ${!u.emailVerified
+                    ? `<button type="button" class="btn btn-outline-warning btn-sm" disabled title="Email cím nincs megerősítve"><i class="bi bi-send-fill me-1"></i>Link küldése</button>`
+                    : h.btn({ label: 'Link küldése', icon: 'bi-send-fill', variant: 'outline-warning', size: 'sm', onclick: `adminSendPasswordReset(${u.id})` })
+                }
                         </div>
                         <div class="danger-action">
                             <div>
                                 <div class="fw-semibold text-white">Felhasználó tiltása <span class="badge bg-danger ms-1">kritikus</span></div>
                                 <small class="text-secondary">30 char indok + jelszó megerősítés szükséges.</small>
                             </div>
-                            ${h.btn({ label: 'Tiltás kezelése', icon: 'bi-ban', variant: 'outline-danger', size: 'sm',
-                                      onclick: `banAdminUser(${u.id})` })}
+                            ${h.btn({
+                    label: 'Tiltás kezelése', icon: 'bi-ban', variant: 'outline-danger', size: 'sm',
+                    onclick: `banAdminUser(${u.id})`
+                })}
+                        </div>
+                        <div class="danger-action">
+                            <div>
+                                <div class="fw-semibold text-white">Munkamenetek megszakítása</div>
+                                <small class="text-secondary">Kijelentkezteti a felhasználót az összes eszközéről és érvényteleníti a tokenjeit.</small>
+                            </div>
+                            ${h.btn({ label: 'Kijelentkeztetés', icon: 'bi-box-arrow-right', variant: 'outline-warning', size: 'sm', onclick: `adminRevokeUserSessions(${u.id}, event)` })}
                         </div>
                     </div>
                 </div>
@@ -1640,10 +1679,10 @@ const SECTIONS = {
         <div class="row g-4 mb-4">
             <div class="col-lg-5">
                 ${h.card({
-                    title: hasUser ? `Új tiltás — ${escapeHtml(targetLabel)}` : 'Új tiltás',
-                    icon: 'bi-plus-circle',
-                    headerExtra: h.badge('kritikus művelet', 'danger'),
-                    body: `
+            title: hasUser ? `Új tiltás — ${escapeHtml(targetLabel)}` : 'Új tiltás',
+            icon: 'bi-plus-circle',
+            headerExtra: h.badge('kritikus művelet', 'danger'),
+            body: `
                         <div class="alert alert-warning bg-warning bg-opacity-10 border-warning small mb-3">
                             <i class="bi bi-info-circle-fill me-1"></i>
                             A tiltás kritikus művelet — min. <strong>30 karakter indok</strong> és <strong>jelszó megerősítés</strong> szükséges.
@@ -1664,43 +1703,49 @@ const SECTIONS = {
                             </div>
                         `}
                         ${h.form({
-                            fields: [
-                                { id: 'banType', label: 'Típus', col: 6, type: 'select',
-                                    options: ['Ideiglenes', 'Végleges', 'Csak chat'] },
-                                { id: 'banDuration', label: 'Időtartam (óra)', col: 6, type: 'number', value: '24' },
-                                { id: 'banReason', label: 'Indok (min. 30 char)', col: 12, type: 'textarea',
-                                    placeholder: 'Részletes indok — naplózásra kerül.' }
-                            ],
-                            submit: { label: 'Tiltás alkalmazása', icon: 'bi-shield-fill-check', variant: 'danger',
-                                      onclick: `openCriticalAction('users.ban', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')` }
-                        })}
+                fields: [
+                    {
+                        id: 'banType', label: 'Típus', col: 6, type: 'select',
+                        options: ['Ideiglenes', 'Végleges', 'Csak chat']
+                    },
+                    { id: 'banDuration', label: 'Időtartam (óra)', col: 6, type: 'number', value: '24' },
+                    {
+                        id: 'banReason', label: 'Indok (min. 30 char)', col: 12, type: 'textarea',
+                        placeholder: 'Részletes indok — naplózásra kerül.'
+                    }
+                ],
+                submit: {
+                    label: 'Tiltás alkalmazása', icon: 'bi-shield-fill-check', variant: 'danger',
+                    onclick: `openCriticalAction('users.ban', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')`
+                }
+            })}
                     `
-                })}
+        })}
             </div>
             <div class="col-lg-7">
                 ${h.card({
-                    title: 'Aktív tiltások', icon: 'bi-list-check', noBodyPadding: true,
-                    headerExtra: `<span class="text-secondary small">${banList.length} bejegyzés</span>`,
-                    body: `
+            title: 'Aktív tiltások', icon: 'bi-list-check', noBodyPadding: true,
+            headerExtra: `<span class="text-secondary small">${banList.length} bejegyzés</span>`,
+            body: `
                         <table class="table mb-0">
                             <thead><tr><th>Felhasználó</th><th>Lejár</th><th class="text-end">Művelet</th></tr></thead>
                             <tbody>
                                 ${banList.length === 0
-                                    ? `<tr><td colspan="3" class="text-center text-secondary py-4">Nincs aktív tiltás.</td></tr>`
-                                    : banList.map(b => `
+                    ? `<tr><td colspan="3" class="text-center text-secondary py-4">Nincs aktív tiltás.</td></tr>`
+                    : banList.map(b => `
                                         <tr>
                                             <td>${h.user({ name: b.username, email: b.email, profile_image: b.profileImage, username: b.username, struck: true })}</td>
                                             <td><span class="${b.bannedUntil ? '' : 'text-danger'}">${b.bannedUntil ? escapeHtml(new Date(b.bannedUntil).toLocaleString('hu-HU')) : 'Soha'}</span></td>
                                             <td class="text-end">
                                                 ${h.iconBtn({ icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${b.id})` })}
-                                                ${h.iconBtn({ icon: 'bi-check-circle', variant: 'success', title: 'Feloldás (kritikus)', onclick: `openCriticalAction('users.unban', '${escapeHtml(b.username || '').replace(/'/g, "\\\\'")}')` })}
+                                                ${h.iconBtn({ icon: 'bi-check-circle', variant: 'success', title: 'Feloldás (kritikus)', onclick: `openCriticalAction('users.unban', '${escapeHtml(b.username || '').replace(/'/g, "\\\\'")}', ${b.id})` })}
                                             </td>
                                         </tr>
                                     `).join('')}
                             </tbody>
                         </table>
                     `
-                })}
+        })}
             </div>
         </div>
     `;
@@ -1709,20 +1754,24 @@ const SECTIONS = {
     /* ---------- Moderáció > Chat ---------- */
     chats: () => {
         const messages = [
-            { priority: ['Magas', 'danger'], game: '#4921', user: 'AgresszívJatekos99',
-              text: '„Te aztán teljes kezdő vagy, töröld ki a játékot!!!"', time: '2 perce' },
-            { priority: ['Közepes', 'warning'], game: '#4918', user: 'ChatSpammer',
-              text: '[Ismétlődő üzenet: „siess" × 15]', time: '15 perce' }
+            {
+                priority: ['Magas', 'danger'], game: '#4921', user: 'AgresszívJatekos99',
+                text: '„Te aztán teljes kezdő vagy, töröld ki a játékot!!!"', time: '2 perce'
+            },
+            {
+                priority: ['Közepes', 'warning'], game: '#4918', user: 'ChatSpammer',
+                text: '[Ismétlődő üzenet: „siess" × 15]', time: '15 perce'
+            }
         ];
         return `
             ${h.header({
-                icon: 'bi-chat-dots-fill', title: 'Chat moderálás',
-                subtitle: 'Megjelölt és bejelentett üzenetek áttekintése'
-            })}
+            icon: 'bi-chat-dots-fill', title: 'Chat moderálás',
+            subtitle: 'Megjelölt és bejelentett üzenetek áttekintése'
+        })}
             ${h.card({
-                title: `Megjelölt üzenetek (${messages.length})`, icon: 'bi-exclamation-triangle-fill',
-                noBodyPadding: true,
-                body: `<div class="moderation-list">
+            title: `Megjelölt üzenetek (${messages.length})`, icon: 'bi-exclamation-triangle-fill',
+            noBodyPadding: true,
+            body: `<div class="moderation-list">
                     ${messages.map(m => `
                         <article class="moderation-item">
                             <header class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
@@ -1738,27 +1787,31 @@ const SECTIONS = {
                             <blockquote class="moderation-quote">${m.text}</blockquote>
                             <div class="d-flex justify-content-end gap-2">
                                 ${h.btn({ label: 'Engedélyezés', variant: 'outline-success', size: 'sm' })}
-                                ${h.btn({ label: 'Némítás',      variant: 'outline-warning', size: 'sm' })}
-                                ${h.btn({ label: 'Törlés', variant: 'outline-danger', size: 'sm',
-                                          onclick: "openCriticalAction('chat.delete', '" + m.user + "')" })}
+                                ${h.btn({ label: 'Némítás', variant: 'outline-warning', size: 'sm' })}
+                                ${h.btn({
+                label: 'Törlés', variant: 'outline-danger', size: 'sm',
+                onclick: "openCriticalAction('chat.delete', '" + m.user + "')"
+            })}
                             </div>
                         </article>
                     `).join('')}
                 </div>`
-            })}
+        })}
         `;
     },
 
     /* ---------- Moderáció > Profilképek ---------- */
     profileImageReview: () => `
         ${h.header({
-            icon: 'bi-image', title: 'Függő profilképek',
-            subtitle: 'Új profilképek jóváhagyása vagy elutasítása',
-            actions: [{ label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
-                attrs: 'id="profileImageReviewRefresh"' }]
-        })}
+        icon: 'bi-image', title: 'Függő profilképek',
+        subtitle: 'Új profilképek jóváhagyása vagy elutasítása',
+        actions: [{
+            label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
+            attrs: 'id="profileImageReviewRefresh"'
+        }]
+    })}
         ${h.card({
-            body: `
+        body: `
                 <p class="text-secondary mb-3">A függő profilképeket csak a feltöltő látja. Jóváhagyás után globálisan láthatóvá válnak; elutasítás esetén a publikus kép visszaáll az alapértelmezettre.</p>
                 <div id="profileImageReviewMessage" class="alert d-none" role="alert"></div>
                 <div class="table-responsive">
@@ -1777,95 +1830,99 @@ const SECTIONS = {
                     </table>
                 </div>
             `
-        })}
+    })}
     `,
 
     /* ---------- Moderáció > Bejelentések ---------- */
     moderationReports: () => `
         ${h.header({
-            icon: 'bi-flag-fill', title: 'Bejelentések',
-            subtitle: 'Felhasználók által beküldött visszajelzések',
-            actions: [
-                { label: 'Összes',  variant: 'outline-secondary', size: 'sm', classes: 'active' },
-                { label: 'Nyitott', variant: 'outline-secondary', size: 'sm' },
-                { label: 'Lezárt',  variant: 'outline-secondary', size: 'sm' }
-            ]
-        })}
+        icon: 'bi-flag-fill', title: 'Bejelentések',
+        subtitle: 'Felhasználók által beküldött visszajelzések',
+        actions: [
+            { label: 'Összes', variant: 'outline-secondary', size: 'sm', classes: 'active' },
+            { label: 'Nyitott', variant: 'outline-secondary', size: 'sm' },
+            { label: 'Lezárt', variant: 'outline-secondary', size: 'sm' }
+        ]
+    })}
         ${h.table({
-            headers: ['Bejelentő', 'Bejelentett', 'Kategória', 'Üzenet', 'Állapot', ''],
-            rows: [
-                { reporter: 'FairPlayer',   target: 'AgresszívJatekos99', cat: ['Toxikusság', 'danger'],     msg: 'Sértegető megjegyzések a chat-ben.', status: ['Nyitott', 'warning'] },
-                { reporter: 'SakkMester99', target: 'CheaterX',           cat: ['Csalás gyanú', 'danger'],   msg: 'Engine használat gyanúja.',          status: ['Vizsgálat alatt', 'warning'] },
-                { reporter: 'RookRider',    target: 'SpamKing',           cat: ['Spam', 'warning'],          msg: 'Reklám linkek küldése privátban.',  status: ['Lezárva', 'success'] }
-            ].map(r => [
-                `<span class="text-white">${r.reporter}</span>`,
-                `<span class="text-white">${r.target}</span>`,
-                h.badge(r.cat[0], r.cat[1]),
-                `<span class="text-secondary">${r.msg}</span>`,
-                h.badge(r.status[0], r.status[1]),
-                `<div class="text-end">${h.btn({ label: 'Megnyitás', size: 'sm' })}</div>`
-            ])
-        })}
+        headers: ['Bejelentő', 'Bejelentett', 'Kategória', 'Üzenet', 'Állapot', ''],
+        rows: [
+            { reporter: 'FairPlayer', target: 'AgresszívJatekos99', cat: ['Toxikusság', 'danger'], msg: 'Sértegető megjegyzések a chat-ben.', status: ['Nyitott', 'warning'] },
+            { reporter: 'SakkMester99', target: 'CheaterX', cat: ['Csalás gyanú', 'danger'], msg: 'Engine használat gyanúja.', status: ['Vizsgálat alatt', 'warning'] },
+            { reporter: 'RookRider', target: 'SpamKing', cat: ['Spam', 'warning'], msg: 'Reklám linkek küldése privátban.', status: ['Lezárva', 'success'] }
+        ].map(r => [
+            `<span class="text-white">${r.reporter}</span>`,
+            `<span class="text-white">${r.target}</span>`,
+            h.badge(r.cat[0], r.cat[1]),
+            `<span class="text-secondary">${r.msg}</span>`,
+            h.badge(r.status[0], r.status[1]),
+            `<div class="text-end">${h.btn({ label: 'Megnyitás', size: 'sm' })}</div>`
+        ])
+    })}
     `,
 
     /* ---------- Játékok > Játszmák ---------- */
     games: () => `
-        ${h.header({ icon: 'bi-knight-fill', title: 'Játszmák',
-            subtitle: 'Lefutott és folyamatban lévő játszmák' })}
+        ${h.header({
+        icon: 'bi-knight-fill', title: 'Játszmák',
+        subtitle: 'Lefutott és folyamatban lévő játszmák'
+    })}
         ${h.stats([
-            { icon: 'bi-play-circle-fill', value: SAMPLE.games.filter(g => g.status === 'live').length,     label: 'Folyamatban',  color: 'success' },
-            { icon: 'bi-trophy-fill',      value: SAMPLE.games.filter(g => g.status === 'finished').length, label: 'Befejezett',   color: 'warning' },
-            { icon: 'bi-x-circle-fill',    value: '2',                                                      label: 'Megszakított', color: 'danger' }
-        ])}
+        { icon: 'bi-play-circle-fill', value: SAMPLE.games.filter(g => g.status === 'live').length, label: 'Folyamatban', color: 'success' },
+        { icon: 'bi-trophy-fill', value: SAMPLE.games.filter(g => g.status === 'finished').length, label: 'Befejezett', color: 'warning' },
+        { icon: 'bi-x-circle-fill', value: '2', label: 'Megszakított', color: 'danger' }
+    ])}
         ${h.table({
-            title: 'Játszmák listája',
-            headerExtra: `<div class="btn-group btn-group-sm">
+        title: 'Játszmák listája',
+        headerExtra: `<div class="btn-group btn-group-sm">
                 <button type="button" class="btn btn-outline-secondary active">Összes</button>
                 <button type="button" class="btn btn-outline-secondary">Élő</button>
                 <button type="button" class="btn btn-outline-secondary">Befejezett</button>
             </div>`,
-            headers: ['Azonosító', 'Világos', 'Sötét', 'Állapot', 'Győztes', 'Lépések', 'Időkontroll', ''],
-            rows: SAMPLE.games.map(g => [
-                `<span class="font-monospace text-gold">${g.id}</span>`,
-                `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle text-light"></i><span>${g.white}</span></div>`,
-                `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle-fill text-dark border rounded-circle"></i><span>${g.black}</span></div>`,
-                statusPill(g.status),
-                g.winner === '—' ? '<span class="text-secondary">—</span>' : `<span class="text-success">${g.winner}</span>`,
-                g.moves, g.time,
-                h.actions(g.status === 'live'
-                    ? [{ icon: 'bi-eye', variant: 'gold', title: 'Nézés' }, { icon: 'bi-stop-circle', variant: 'danger', title: 'Leállítás' }]
-                    : [{ icon: 'bi-eye', variant: 'gold', title: 'Nézés' }, { icon: 'bi-download', variant: 'secondary', title: 'PGN letöltés' }])
-            ])
-        })}
+        headers: ['Azonosító', 'Világos', 'Sötét', 'Állapot', 'Győztes', 'Lépések', 'Időkontroll', ''],
+        rows: SAMPLE.games.map(g => [
+            `<span class="font-monospace text-gold">${g.id}</span>`,
+            `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle text-light"></i><span>${g.white}</span></div>`,
+            `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle-fill text-dark border rounded-circle"></i><span>${g.black}</span></div>`,
+            statusPill(g.status),
+            g.winner === '—' ? '<span class="text-secondary">—</span>' : `<span class="text-success">${g.winner}</span>`,
+            g.moves, g.time,
+            h.actions(g.status === 'live'
+                ? [{ icon: 'bi-eye', variant: 'gold', title: 'Nézés' }, { icon: 'bi-stop-circle', variant: 'danger', title: 'Leállítás' }]
+                : [{ icon: 'bi-eye', variant: 'gold', title: 'Nézés' }, { icon: 'bi-download', variant: 'secondary', title: 'PGN letöltés' }])
+        ])
+    })}
     `,
 
     /* ---------- Játékok > Képességek ---------- */
     abilities: () => `
-        ${h.header({ icon: 'bi-magic', title: 'Képességek / Erősítők',
-            subtitle: 'Speciális játékos képességek kezelése',
-            actions: [{ label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold' }] })}
+        ${h.header({
+        icon: 'bi-magic', title: 'Képességek / Erősítők',
+        subtitle: 'Speciális játékos képességek kezelése',
+        actions: [{ label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold' }]
+    })}
         <div class="row g-4">
             ${[
-                { name: 'Időutazás',         desc: '+30 másodperc hozzáadása az óra idejéhez játszmánként egyszer.', uses: '1 234' },
-                { name: 'Gyalogválasztás',   desc: 'Egy gyalog azonnali előléptetése bármilyen figurára.',           uses: '892' },
-                { name: 'Csere visszavonás', desc: 'Az utolsó lépés visszavonása az ellenfél jóváhagyásával.',       uses: '445' }
-            ].map(a => `
+            { name: 'Időutazás', desc: '+30 másodperc hozzáadása az óra idejéhez játszmánként egyszer.', uses: '1 234' },
+            { name: 'Gyalogválasztás', desc: 'Egy gyalog azonnali előléptetése bármilyen figurára.', uses: '892' },
+            { name: 'Csere visszavonás', desc: 'Az utolsó lépés visszavonása az ellenfél jóváhagyásával.', uses: '445' }
+        ].map(a => `
                 <div class="col-md-6 col-lg-4">
                     ${h.card({
-                        title: a.name,
-                        headerExtra: h.badge('Aktív', 'success'),
-                        classes: 'h-100',
-                        body: `
+            title: a.name,
+            headerExtra: h.badge('Aktív', 'success'),
+            classes: 'h-100',
+            body: `
                             <p class="text-secondary mb-3">${a.desc}</p>
                             <div class="d-flex justify-content-between align-items-center">
                                 <small class="text-muted">${a.uses} használat</small>
                                 <div class="btn-group">
                                     ${h.iconBtn({ icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés' })}
-                                    ${h.iconBtn({ icon: 'bi-trash',  variant: 'danger', title: 'Törlés' })}
+                                    ${h.iconBtn({ icon: 'bi-trash', variant: 'danger', title: 'Törlés' })}
                                 </div>
                             </div>
                         `
-                    })}
+        })}
                 </div>
             `).join('')}
         </div>
@@ -1873,20 +1930,22 @@ const SECTIONS = {
 
     /* ---------- Naplók > Bejelentkezések ---------- */
     security: () => `
-        ${h.header({ icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
-            subtitle: 'Sikeres és sikertelen bejelentkezési kísérletek',
-            actions: [{ label: 'Napló export', icon: 'bi-download', size: 'sm' }] })}
+        ${h.header({
+        icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
+        subtitle: 'Sikeres és sikertelen bejelentkezési kísérletek',
+        actions: [{ label: 'Napló export', icon: 'bi-download', size: 'sm' }]
+    })}
         ${h.table({
-            headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
-            rows: SAMPLE.logins.map(l => [
-                `<span class="fw-semibold text-white">${l.user}</span>`,
-                `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${l.ip}</span>`,
-                `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${l.location}</span>`,
-                `<span class="text-secondary"><i class="bi ${l.deviceIcon} me-1"></i>${l.device}</span>`,
-                `<span class="text-secondary">${l.time}</span>`,
-                riskPill(l.risk)
-            ])
-        })}
+        headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
+        rows: SAMPLE.logins.map(l => [
+            `<span class="fw-semibold text-white">${l.user}</span>`,
+            `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${l.ip}</span>`,
+            `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${l.location}</span>`,
+            `<span class="text-secondary"><i class="bi ${l.deviceIcon} me-1"></i>${l.device}</span>`,
+            `<span class="text-secondary">${l.time}</span>`,
+            riskPill(l.risk)
+        ])
+    })}
     `,
 
     /* ---------- Naplók > Audit napló ---------- */
@@ -1898,17 +1957,19 @@ const SECTIONS = {
             critical: list.filter(a => a.severity === 'critical').length
         };
         return `
-            ${h.header({ icon: 'bi-journal-check', title: 'Audit napló',
-                subtitle: 'Admin műveletek append-only nyomvonala — kötelező indok, before/after diff',
-                actions: [{ label: 'Audit export', icon: 'bi-download', size: 'sm' }] })}
+            ${h.header({
+            icon: 'bi-journal-check', title: 'Audit napló',
+            subtitle: 'Admin műveletek append-only nyomvonala — kötelező indok, before/after diff',
+            actions: [{ label: 'Audit export', icon: 'bi-download', size: 'sm' }]
+        })}
 
             <div class="row g-3 mb-4">
                 ${[
-                    { icon: 'bi-info-circle-fill',          label: 'Info',     value: counts.info,     color: 'primary' },
-                    { icon: 'bi-exclamation-triangle-fill', label: 'Warning',  value: counts.warning,  color: 'warning' },
-                    { icon: 'bi-exclamation-octagon-fill',  label: 'Critical', value: counts.critical, color: 'danger' },
-                    { icon: 'bi-clock-history',             label: 'Listázott', value: list.length,    color: 'success' }
-                ].map(item => `
+                { icon: 'bi-info-circle-fill', label: 'Info', value: counts.info, color: 'primary' },
+                { icon: 'bi-exclamation-triangle-fill', label: 'Warning', value: counts.warning, color: 'warning' },
+                { icon: 'bi-exclamation-octagon-fill', label: 'Critical', value: counts.critical, color: 'danger' },
+                { icon: 'bi-clock-history', label: 'Listázott', value: list.length, color: 'success' }
+            ].map(item => `
                     <div class="col-6 col-md-3">
                         <div class="mini-stat">
                             <i class="bi ${item.icon} text-${item.color}"></i>
@@ -1943,17 +2004,19 @@ const SECTIONS = {
         const byKind = {};
         Object.keys(ALERT_KIND).forEach(k => byKind[k] = list.filter(a => a.kind === k).length);
         return `
-            ${h.header({ icon: 'bi-exclamation-octagon-fill', title: 'Riasztások',
-                subtitle: 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
-                actions: [{ label: 'Mind elolvasva', icon: 'bi-check-all', size: 'sm' }] })}
+            ${h.header({
+            icon: 'bi-exclamation-octagon-fill', title: 'Riasztások',
+            subtitle: 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
+            actions: [{ label: 'Mind elolvasva', icon: 'bi-check-all', size: 'sm' }]
+        })}
 
             <div class="row g-3 mb-4">
                 ${[
-                    { icon: 'bi-shield-fill-x', label: 'Unauthorized',       value: byKind.unauthorized || 0,       color: 'warning' },
-                    { icon: 'bi-key-fill',      label: 'Token hiba',         value: byKind.token_invalid || 0,      color: 'warning' },
-                    { icon: 'bi-speedometer2',  label: 'Rate escalated',     value: byKind.rate_escalated || 0,     color: 'warning' },
-                    { icon: 'bi-bug-fill',      label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger'  }
-                ].map(item => `
+                { icon: 'bi-shield-fill-x', label: 'Unauthorized', value: byKind.unauthorized || 0, color: 'warning' },
+                { icon: 'bi-key-fill', label: 'Token hiba', value: byKind.token_invalid || 0, color: 'warning' },
+                { icon: 'bi-speedometer2', label: 'Rate escalated', value: byKind.rate_escalated || 0, color: 'warning' },
+                { icon: 'bi-bug-fill', label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger' }
+            ].map(item => `
                     <div class="col-6 col-md-3">
                         <div class="mini-stat">
                             <i class="bi ${item.icon} text-${item.color}"></i>
@@ -1973,10 +2036,14 @@ const SECTIONS = {
 
     /* ---------- Super admin ---------- */
     superAdmin: () => `
-        ${h.header({ icon: 'bi-stars', title: 'Super admin',
-            subtitle: 'Admin szerepkörök kiosztása és visszavonása',
-            actions: [{ label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold',
-                onclick: "openCriticalAction('admin.grant', 'új admin')" }] })}
+        ${h.header({
+        icon: 'bi-stars', title: 'Super admin',
+        subtitle: 'Admin szerepkörök kiosztása és visszavonása',
+        actions: [{
+            label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold',
+            onclick: "openCriticalAction('admin.grant', 'új admin')"
+        }]
+    })}
 
         <div class="alert alert-warning bg-warning bg-opacity-10 border-warning d-flex align-items-start gap-2">
             <i class="bi bi-info-circle-fill text-warning mt-1"></i>
@@ -1988,58 +2055,62 @@ const SECTIONS = {
         </div>
 
         ${h.table({
-            title: 'Admin felhasználók', icon: 'bi-shield-fill',
-            headers: ['Admin', 'Szint', 'Csatlakozott', 'Utoljára aktív', 'Műveletek'],
-            rows: SAMPLE_ADMINS.map(a => [
-                h.user({ name: a.name, email: a.email }),
-                a.isSuper
-                    ? `<span class="super-pill"><i class="bi bi-stars"></i>Super admin</span>`
-                    : rolePill('admin'),
-                `<span class="text-secondary">${a.joined}</span>`,
-                `<span class="text-secondary">${a.lastSeen}</span>`,
-                `<div class="d-inline-flex gap-2">
+        title: 'Admin felhasználók', icon: 'bi-shield-fill',
+        headers: ['Admin', 'Szint', 'Csatlakozott', 'Utoljára aktív', 'Műveletek'],
+        rows: SAMPLE_ADMINS.map(a => [
+            h.user({ name: a.name, email: a.email }),
+            a.isSuper
+                ? `<span class="super-pill"><i class="bi bi-stars"></i>Super admin</span>`
+                : rolePill('admin'),
+            `<span class="text-secondary">${a.joined}</span>`,
+            `<span class="text-secondary">${a.lastSeen}</span>`,
+            `<div class="d-inline-flex gap-2">
                     ${h.btn({ label: 'Részletek', icon: 'bi-eye', variant: 'outline-light', size: 'sm' })}
                     ${a.isSuper
-                        ? h.btn({ label: 'Saját super lock', icon: 'bi-lock-fill', variant: 'outline-secondary', size: 'sm', attrs: 'disabled' })
-                        : h.btn({ label: 'Revoke', icon: 'bi-shield-fill-x', variant: 'outline-danger', size: 'sm',
-                                  onclick: `openCriticalAction('admin.revoke', '${a.name}')` })
-                    }
+                ? h.btn({ label: 'Saját super lock', icon: 'bi-lock-fill', variant: 'outline-secondary', size: 'sm', attrs: 'disabled' })
+                : h.btn({
+                    label: 'Revoke', icon: 'bi-shield-fill-x', variant: 'outline-danger', size: 'sm',
+                    onclick: `openCriticalAction('admin.revoke', '${a.name}')`
+                })
+            }
                 </div>`
-            ])
-        })}
+        ])
+    })}
     `,
 
     /* ---------- Közösségi ---------- */
     friends: () => `
-        ${h.header({ icon: 'bi-people', title: 'Közösségi kapcsolatok',
-            subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen' })}
+        ${h.header({
+        icon: 'bi-people', title: 'Közösségi kapcsolatok',
+        subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen'
+    })}
         ${h.stats([
-            { icon: 'bi-diagram-3-fill', value: '142', label: 'Összes barátság', color: 'primary' },
-            { icon: 'bi-person-plus',    value: '8',   label: 'Függő kérelem',   color: 'warning' },
-            { icon: 'bi-person-x-fill',  value: '5',   label: 'Aktív blokkolás', color: 'danger' }
-        ])}
+        { icon: 'bi-diagram-3-fill', value: '142', label: 'Összes barátság', color: 'primary' },
+        { icon: 'bi-person-plus', value: '8', label: 'Függő kérelem', color: 'warning' },
+        { icon: 'bi-person-x-fill', value: '5', label: 'Aktív blokkolás', color: 'danger' }
+    ])}
         <div class="row g-4">
             <div class="col-lg-7">
                 ${h.card({
-                    title: 'Függő barátkérelmek', icon: 'bi-person-plus-fill', noBodyPadding: true,
-                    body: `<table class="table mb-0"><thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end"></th></tr></thead><tbody>
+        title: 'Függő barátkérelmek', icon: 'bi-person-plus-fill', noBodyPadding: true,
+        body: `<table class="table mb-0"><thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end"></th></tr></thead><tbody>
                         ${[
-                            { from: 'SakkMester99',   to: 'RookRider',       when: '2 órája' },
-                            { from: 'FairPlayer',     to: 'Magnus Carlsen',  when: '1 napja' }
-                        ].map(r => `<tr><td><span class="text-white">${r.from}</span></td><td><span class="text-white">${r.to}</span></td><td><span class="text-secondary">${r.when}</span></td><td class="text-end">${h.btn({ label: 'Részletek', size: 'sm' })}</td></tr>`).join('')}
+                { from: 'SakkMester99', to: 'RookRider', when: '2 órája' },
+                { from: 'FairPlayer', to: 'Magnus Carlsen', when: '1 napja' }
+            ].map(r => `<tr><td><span class="text-white">${r.from}</span></td><td><span class="text-white">${r.to}</span></td><td><span class="text-secondary">${r.when}</span></td><td class="text-end">${h.btn({ label: 'Részletek', size: 'sm' })}</td></tr>`).join('')}
                     </tbody></table>`
-                })}
+    })}
             </div>
             <div class="col-lg-5">
                 ${h.card({
-                    title: 'Aktív blokkolások', icon: 'bi-person-x-fill', noBodyPadding: true,
-                    body: `<table class="table mb-0"><thead><tr><th>Blokkoló</th><th>Blokkolt</th><th class="text-end"></th></tr></thead><tbody>
+        title: 'Aktív blokkolások', icon: 'bi-person-x-fill', noBodyPadding: true,
+        body: `<table class="table mb-0"><thead><tr><th>Blokkoló</th><th>Blokkolt</th><th class="text-end"></th></tr></thead><tbody>
                         ${[
-                            { who: 'FairPlayer',   whom: 'ToxikusZoli' },
-                            { who: 'SakkMester99', whom: 'SpamKing' }
-                        ].map(b => `<tr><td><span class="text-white">${b.who}</span></td><td><span class="text-white">${b.whom}</span></td><td class="text-end">${h.btn({ label: 'Feloldás', variant: 'outline-success', size: 'sm' })}</td></tr>`).join('')}
+                { who: 'FairPlayer', whom: 'ToxikusZoli' },
+                { who: 'SakkMester99', whom: 'SpamKing' }
+            ].map(b => `<tr><td><span class="text-white">${b.who}</span></td><td><span class="text-white">${b.whom}</span></td><td class="text-end">${h.btn({ label: 'Feloldás', variant: 'outline-success', size: 'sm' })}</td></tr>`).join('')}
                     </tbody></table>`
-                })}
+    })}
             </div>
         </div>
     `,
@@ -2047,13 +2118,13 @@ const SECTIONS = {
     /* ---------- Tesztek (formaterv — placeholder) ---------- */
     tests: () => `
         ${h.header({
-            icon: 'bi-clipboard2-check', title: 'Tesztek',
-            subtitle: 'Frontend és backend tesztek áttekintése — eredmények és lefedettség',
-            actions: [
-                { label: 'Összes futtatása', icon: 'bi-play-fill', variant: 'gold', size: 'sm', attrs: 'disabled' },
-                { label: 'Frissítés',        icon: 'bi-arrow-clockwise', size: 'sm', attrs: 'disabled' }
-            ]
-        })}
+        icon: 'bi-clipboard2-check', title: 'Tesztek',
+        subtitle: 'Frontend és backend tesztek áttekintése — eredmények és lefedettség',
+        actions: [
+            { label: 'Összes futtatása', icon: 'bi-play-fill', variant: 'gold', size: 'sm', attrs: 'disabled' },
+            { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', attrs: 'disabled' }
+        ]
+    })}
 
         <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-4">
             <i class="bi bi-info-circle-fill me-1"></i>
@@ -2062,17 +2133,17 @@ const SECTIONS = {
         </div>
 
         ${h.stats([
-            { icon: 'bi-check-circle-fill', value: '<span class="text-secondary">—</span>', label: 'Sikeres', color: 'success' },
-            { icon: 'bi-x-circle-fill',     value: '<span class="text-secondary">—</span>', label: 'Sikertelen', color: 'danger' },
-            { icon: 'bi-skip-forward-fill', value: '<span class="text-secondary">—</span>', label: 'Kihagyott', color: 'warning' },
-            { icon: 'bi-stopwatch',         value: '<span class="text-secondary">—</span>', label: 'Futási idő', color: 'primary' }
-        ])}
+        { icon: 'bi-check-circle-fill', value: '<span class="text-secondary">—</span>', label: 'Sikeres', color: 'success' },
+        { icon: 'bi-x-circle-fill', value: '<span class="text-secondary">—</span>', label: 'Sikertelen', color: 'danger' },
+        { icon: 'bi-skip-forward-fill', value: '<span class="text-secondary">—</span>', label: 'Kihagyott', color: 'warning' },
+        { icon: 'bi-stopwatch', value: '<span class="text-secondary">—</span>', label: 'Futási idő', color: 'primary' }
+    ])}
 
         <div class="row g-4">
             <div class="col-lg-7">
                 ${h.card({
-                    title: 'Tesztek listája', icon: 'bi-list-check',
-                    headerExtra: `
+        title: 'Tesztek listája', icon: 'bi-list-check',
+        headerExtra: `
                         <div class="filter-bar">
                             <select class="form-select form-select-sm" disabled>
                                 <option>Minden suite</option>
@@ -2090,51 +2161,50 @@ const SECTIONS = {
                             </select>
                         </div>
                     `,
-                    noBodyPadding: true,
-                    body: `<div class="test-list">
+        noBodyPadding: true,
+        body: `<div class="test-list">
                         ${[
-                            { suite: 'Unit',        name: 'permissions.js — SUPER_ONLY halmaz integritása',     status: 'pending' },
-                            { suite: 'Unit',        name: 'AuditLogService.record — redaction allowlist',     status: 'pending' },
-                            { suite: 'Unit',        name: 'parseAdminToken — hash egyeztetés + lejárat',      status: 'pending' },
-                            { suite: 'Unit',        name: 'requireReasonOnMutate — char limitek',              status: 'pending' },
-                            { suite: 'Integration', name: 'Login → elevate → admin endpoint → 200',           status: 'pending' },
-                            { suite: 'Integration', name: 'Player elevate → 403',                              status: 'pending' },
-                            { suite: 'Integration', name: 'Critical action confirmPassword nélkül → 400',     status: 'pending' },
-                            { suite: 'Auth bypass', name: 'Admin endpoint admin token nélkül → 401',           status: 'pending' },
-                            { suite: 'Auth bypass', name: 'WS /admin player session-nel → connect_error',     status: 'pending' },
-                            { suite: 'Rate limit',  name: '10× rossz token egy IP-ről → 11. már 429',         status: 'pending' },
-                            { suite: 'Real-time',   name: '2 socket-kliens → audit:created 500ms-en belül',   status: 'pending' }
-                        ].map(t => `
+                { suite: 'Unit', name: 'permissions.js — SUPER_ONLY halmaz integritása', status: 'pending' },
+                { suite: 'Unit', name: 'AuditLogService.record — redaction allowlist', status: 'pending' },
+                { suite: 'Unit', name: 'parseAdminToken — hash egyeztetés + lejárat', status: 'pending' },
+                { suite: 'Unit', name: 'requireReasonOnMutate — char limitek', status: 'pending' },
+                { suite: 'Integration', name: 'Login → elevate → admin endpoint → 200', status: 'pending' },
+                { suite: 'Integration', name: 'Player elevate → 403', status: 'pending' },
+                { suite: 'Integration', name: 'Critical action confirmPassword nélkül → 400', status: 'pending' },
+                { suite: 'Auth bypass', name: 'Admin endpoint admin token nélkül → 401', status: 'pending' },
+                { suite: 'Auth bypass', name: 'WS /admin player session-nel → connect_error', status: 'pending' },
+                { suite: 'Rate limit', name: '10× rossz token egy IP-ről → 11. már 429', status: 'pending' },
+                { suite: 'Real-time', name: '2 socket-kliens → audit:created 500ms-en belül', status: 'pending' }
+            ].map(t => `
                             <div class="test-row test-${t.status}">
                                 <div class="test-status-dot"></div>
                                 <span class="test-suite">${t.suite}</span>
                                 <span class="test-name">${t.name}</span>
-                                <span class="test-status-label">${
-                                    t.status === 'pass' ? 'PASS' :
-                                    t.status === 'fail' ? 'FAIL' :
-                                    t.status === 'skip' ? 'SKIP' : 'függő'
-                                }</span>
+                                <span class="test-status-label">${t.status === 'pass' ? 'PASS' :
+                    t.status === 'fail' ? 'FAIL' :
+                        t.status === 'skip' ? 'SKIP' : 'függő'
+                }</span>
                                 <span class="test-duration">—</span>
                             </div>
                         `).join('')}
                     </div>`
-                })}
+    })}
             </div>
             <div class="col-lg-5">
                 ${h.card({
-                    title: 'Eredmények log', icon: 'bi-terminal-fill',
-                    body: `
+        title: 'Eredmények log', icon: 'bi-terminal-fill',
+        body: `
                         <pre class="json-block" style="max-height:280px;overflow:auto;">$ npm test
 [ ... ide kerül a tesztek kimenete élőben streamelve ... ]
 
 A teszt-runner integráció a következő iterációban
 kerül bekötésre. Helyettesítő nézet: lista bal oldalt.</pre>
                     `
-                })}
+    })}
 
                 ${h.card({
-                    title: 'Lefedettség', icon: 'bi-pie-chart-fill', classes: 'mt-4',
-                    body: `
+        title: 'Lefedettség', icon: 'bi-pie-chart-fill', classes: 'mt-4',
+        body: `
                         <div class="coverage-row">
                             <span class="coverage-label">Statements</span>
                             <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
@@ -2164,30 +2234,36 @@ kerül bekötésre. Helyettesítő nézet: lista bal oldalt.</pre>
                             <span class="coverage-value">—</span>
                         </div>
                     `
-                })}
+    })}
             </div>
         </div>
     `,
 
     /* ---------- Beállítások ---------- */
     settings: () => `
-        ${h.header({ icon: 'bi-gear-fill', title: 'Beállítások',
-            subtitle: 'Általános platform paraméterek' })}
+        ${h.header({
+        icon: 'bi-gear-fill', title: 'Beállítások',
+        subtitle: 'Általános platform paraméterek'
+    })}
         ${h.card({
-            body: h.form({
-                fields: [
-                    { id: 'settingsSiteName',     label: 'Oldal neve',         value: 'MattMester' },
-                    { id: 'settingsSupportEmail', label: 'Support e-mail',     value: 'support@mattmester.hu', type: 'email' },
-                    { id: 'settingsLanguage',     label: 'Alapértelmezett nyelv', type: 'select',
-                        options: [{ value: 'hu', label: 'Magyar', selected: true }, { value: 'en', label: 'English' }] },
-                    { id: 'settingsTimezone',     label: 'Időzóna', type: 'select',
-                        options: [{ value: 'Europe/Budapest', label: 'Europe/Budapest', selected: true }, 'UTC'] },
-                    { id: 'settingsRegistration', label: 'Regisztráció engedélyezve', type: 'switch', value: true },
-                    { id: 'settingsMaintenance',  label: 'Karbantartási mód',         type: 'switch', value: false }
-                ],
-                submit: { label: 'Beállítások mentése', icon: 'bi-check2', variant: 'gold' }
-            })
-        })}
+        body: h.form({
+            fields: [
+                { id: 'settingsSiteName', label: 'Oldal neve', value: 'MattMester' },
+                { id: 'settingsSupportEmail', label: 'Support e-mail', value: 'support@mattmester.hu', type: 'email' },
+                {
+                    id: 'settingsLanguage', label: 'Alapértelmezett nyelv', type: 'select',
+                    options: [{ value: 'hu', label: 'Magyar', selected: true }, { value: 'en', label: 'English' }]
+                },
+                {
+                    id: 'settingsTimezone', label: 'Időzóna', type: 'select',
+                    options: [{ value: 'Europe/Budapest', label: 'Europe/Budapest', selected: true }, 'UTC']
+                },
+                { id: 'settingsRegistration', label: 'Regisztráció engedélyezve', type: 'switch', value: true },
+                { id: 'settingsMaintenance', label: 'Karbantartási mód', type: 'switch', value: false }
+            ],
+            submit: { label: 'Beállítások mentése', icon: 'bi-check2', variant: 'gold' }
+        })
+    })}
     `
 };
 
@@ -2260,9 +2336,9 @@ function renderAlertRow(a) {
                 </div>
                 <div class="alert-row-detail">${formatJSON(a.detail)}</div>
                 <div class="alert-row-actions">
-                    ${h.btn({ label: 'IP tiltás',     icon: 'bi-ban',          variant: 'outline-danger',  size: 'sm' })}
-                    ${h.btn({ label: 'Audit nyitás',  icon: 'bi-journal-text', variant: 'outline-gold',    size: 'sm', onclick: "showSection('auditLog')" })}
-                    ${h.btn({ label: 'Elutasít',      icon: 'bi-x-circle',     variant: 'outline-secondary', size: 'sm' })}
+                    ${h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm' })}
+                    ${h.btn({ label: 'Audit nyitás', icon: 'bi-journal-text', variant: 'outline-gold', size: 'sm', onclick: "showSection('auditLog')" })}
+                    ${h.btn({ label: 'Elutasít', icon: 'bi-x-circle', variant: 'outline-secondary', size: 'sm' })}
                 </div>
             </div>
         </article>
@@ -2533,7 +2609,7 @@ function clearAdminToken() {
     state.elevated = false;
     requestController.cancelAll?.();
     if (state.adminSocket) {
-        try { state.adminSocket.disconnect(); } catch (_) {}
+        try { state.adminSocket.disconnect(); } catch (_) { }
         state.adminSocket = null;
         state.adminSocketConnected = false;
         applyWsStatusToDashboard();
@@ -2639,11 +2715,11 @@ function updateTokenPill() {
     countdown.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 
     pill.classList.remove('healthy', 'warning', 'expiring', 'expired');
-    if (!state.adminToken)            pill.classList.add('expired');
-    else if (left === 0)              pill.classList.add('expired');
-    else if (left <= 60)              pill.classList.add('expiring');
-    else if (left <= 300)             pill.classList.add('warning');
-    else                              pill.classList.add('healthy');
+    if (!state.adminToken) pill.classList.add('expired');
+    else if (left === 0) pill.classList.add('expired');
+    else if (left <= 60) pill.classList.add('expiring');
+    else if (left <= 300) pill.classList.add('warning');
+    else pill.classList.add('healthy');
 
     const totalCap = 15 * 60;
     const pct = (left / totalCap) * 100;
@@ -2664,7 +2740,7 @@ function connectAdminSocket() {
             setWsStatus('no_token');
         } else {
             if (state.adminSocket) {
-                try { state.adminSocket.disconnect(); } catch (_) {}
+                try { state.adminSocket.disconnect(); } catch (_) { }
                 state.adminSocket = null;
             }
 
@@ -2679,7 +2755,7 @@ function connectAdminSocket() {
             sock.on('connect', () => {
                 state.adminSocketConnected = true;
                 setWsStatus('connected');
-                try { sock.emit('admin:presence:hello'); } catch (_) {}
+                try { sock.emit('admin:presence:hello'); } catch (_) { }
                 // Replay: friss kapcsolódás után le kell húzni a 24h-os audit naplóból
                 // az eddig történt eseményeket, hogy az "Élő admin tevékenység" panel
                 // ne maradjon üresen, csak mert nem ez az admin volt online a
@@ -2689,7 +2765,7 @@ function connectAdminSocket() {
                         ? Number(state.liveAudit[0]?.eventId) || 0
                         : 0;
                     sock.emit('admin:replay:request', { sinceEventId });
-                } catch (_) {}
+                } catch (_) { }
             });
 
             sock.on('admin:replay:batch', (payload = {}) => {
@@ -2732,7 +2808,7 @@ function connectAdminSocket() {
                     if (typeof clearAdminToken === 'function') clearAdminToken();
                     if (typeof updateTokenPill === 'function') updateTokenPill();
                     // WS bontas (a backend ugyis disconnect-tel folytatja, de redundans biztositas)
-                    try { sock.disconnect(); } catch (_) {}
+                    try { sock.disconnect(); } catch (_) { }
                     state.adminSocket = null;
                     state.adminSocketConnected = false;
                     setWsStatus('no_token');
@@ -2833,19 +2909,19 @@ function applyDashboardLiveStats() {
         const last24 = stats.last24h || {};
         const inGameValue = stats.online?.inGame ?? 0;
 
-        setTextWithFlash('tickOnline',         stats.online?.totalUsers     ?? 0);
-        setTextWithFlash('tickActiveTabs',     stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0);
-        setTextWithFlash('tickAdmins',         stats.online?.totalAdmins    ?? 0);
-        setTextWithFlash('tickInGame',         inGameValue);
-        setTextWithFlash('tickMatchmaking',    stats.online?.inMatchmaking  ?? 0);
-        setTextWithFlash('tickPendingImages',  stats.pending?.profileImages ?? 0);
+        setTextWithFlash('tickOnline', stats.online?.totalUsers ?? 0);
+        setTextWithFlash('tickActiveTabs', stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0);
+        setTextWithFlash('tickAdmins', stats.online?.totalAdmins ?? 0);
+        setTextWithFlash('tickInGame', inGameValue);
+        setTextWithFlash('tickMatchmaking', stats.online?.inMatchmaking ?? 0);
+        setTextWithFlash('tickPendingImages', stats.pending?.profileImages ?? 0);
         setTextWithFlash('tickPendingFriends', stats.pending?.friendRequests ?? 0);
-        setTextWithFlash('tickRateEsc',        stats.rateLimit?.activeEscalations ?? 0);
+        setTextWithFlash('tickRateEsc', stats.rateLimit?.activeEscalations ?? 0);
 
-        setTextWithFlash('mainOnlineTotal',  stats.online?.totalUsers ?? 0);
-        setTextWithFlash('mainInGame',       inGameValue);
-        setTextWithFlash('mainAuditCount',   last24.auditEntries ?? 0);
-        setTextWithFlash('mainAlertCount',   last24.alerts ?? 0);
+        setTextWithFlash('mainOnlineTotal', stats.online?.totalUsers ?? 0);
+        setTextWithFlash('mainInGame', inGameValue);
+        setTextWithFlash('mainAuditCount', last24.auditEntries ?? 0);
+        setTextWithFlash('mainAlertCount', last24.alerts ?? 0);
 
         const onlineHint = document.getElementById('mainOnlineHint');
         if (onlineHint) {
@@ -2862,12 +2938,12 @@ function applyDashboardLiveStats() {
             inGameCard.classList.toggle('stat-card-empty', inGameValue <= 0);
         }
 
-        setTextWithFlash('mini24Logins',        last24.logins ?? 0);
+        setTextWithFlash('mini24Logins', last24.logins ?? 0);
         setTextWithFlash('mini24Registrations', last24.registrations ?? 0);
-        setTextWithFlash('mini24Audit',         last24.auditEntries ?? 0);
-        setTextWithFlash('mini24Critical',      last24.criticalAuditEntries ?? 0);
-        setTextWithFlash('mini24Alerts',        last24.alerts ?? 0);
-        setTextWithFlash('mini24Bans',          last24.newBans ?? 0);
+        setTextWithFlash('mini24Audit', last24.auditEntries ?? 0);
+        setTextWithFlash('mini24Critical', last24.criticalAuditEntries ?? 0);
+        setTextWithFlash('mini24Alerts', last24.alerts ?? 0);
+        setTextWithFlash('mini24Bans', last24.newBans ?? 0);
 
         // Tick band relatv ido + flash
         const tickBand = document.getElementById('tickBand');
@@ -2957,7 +3033,7 @@ function applyWsStatusToDashboard() {
             }
         }
         if (labelEl) labelEl.textContent = status.label;
-        if (timeEl)  timeEl.textContent = state.liveStatsAt ? `tick: ${formatRelative(state.liveStatsAt)}` : 'nincs tick';
+        if (timeEl) timeEl.textContent = state.liveStatsAt ? `tick: ${formatRelative(state.liveStatsAt)}` : 'nincs tick';
 
         if (badge) {
             ['no_token', 'connecting', 'connected', 'disconnected'].forEach((k) => badge.classList.remove(`ws-feed-${k}`));
@@ -2977,7 +3053,7 @@ function applyWsStatusToDashboard() {
         }
         if (tickIndicator) {
             tickIndicator.classList.toggle('text-success', status.key === 'connected');
-            tickIndicator.classList.toggle('text-muted',   status.key !== 'connected');
+            tickIndicator.classList.toggle('text-muted', status.key !== 'connected');
         }
 
         // Manualis frissites gomb disabled-e ha nincs WS
@@ -3114,17 +3190,18 @@ function showToast(message, variant = 'success', icon = 'bi-check-circle-fill') 
     }, 3000);
 }
 
-function openCriticalAction(action, targetLabel) {
+function openCriticalAction(action, targetLabel, overrideTargetUserId) {
     try {
         const modalEl = document.getElementById('criticalActionModal');
         if (modalEl && window.bootstrap?.Modal) {
             const titleMap = {
-                'users.ban':              'Felhasználó tiltása',
-                'users.delete':           'Felhasználó törlése',
-                'chat.delete':            'Chat üzenet törlése',
-                'notifications.broadcast':'Globális értesítés küldése',
-                'admin.grant':            'Admin szerep kiosztása',
-                'admin.revoke':           'Admin szerep visszavonása'
+                'users.ban': 'Felhasználó tiltása',
+                'users.unban': 'Tiltás feloldása',
+                'users.delete': 'Felhasználó törlése',
+                'chat.delete': 'Chat üzenet törlése',
+                'notifications.broadcast': 'Globális értesítés küldése',
+                'admin.grant': 'Admin szerep kiosztása',
+                'admin.revoke': 'Admin szerep visszavonása'
             };
             setText('criticalActionTitle', titleMap[action] || action);
             const desc = document.getElementById('criticalActionDescription');
@@ -3136,10 +3213,13 @@ function openCriticalAction(action, targetLabel) {
             }
             const reasonField = document.getElementById('criticalReason');
             const counter = document.getElementById('criticalReasonCount');
+            // Ha az inline tiltás panelen már megadta az indokot, vegyük át (nincs duplikáció).
+            const inlineBanReason = document.getElementById('banReason')?.value?.trim() || '';
             if (reasonField && counter) {
-                reasonField.value = '';
-                counter.textContent = '0';
-                counter.parentElement.classList.remove('valid');
+                reasonField.value = inlineBanReason;
+                const initLen = inlineBanReason.length;
+                counter.textContent = String(initLen);
+                counter.parentElement.classList.toggle('valid', initLen >= 30);
                 reasonField.oninput = () => {
                     const len = reasonField.value.length;
                     counter.textContent = String(len);
@@ -3150,6 +3230,8 @@ function openCriticalAction(action, targetLabel) {
             if (passwordField) {
                 passwordField.value = '';
             }
+            const targetUserId = overrideTargetUserId != null ? overrideTargetUserId : (state.selectedUser?.id || null);
+            state.criticalActionData = { action, targetUserId, targetLabel };
             new window.bootstrap.Modal(modalEl).show();
         } else {
             showToast(`A(z) ${action} még csak shell elem.`, 'info', 'bi-cone-striped');
@@ -3160,17 +3242,71 @@ function openCriticalAction(action, targetLabel) {
     }
 }
 
-function executeCriticalAction() {
-    try {
+async function executeCriticalAction() {
+    await runSafelyAsync('executeCriticalAction', async () => {
         const modalEl = document.getElementById('criticalActionModal');
         if (modalEl && window.bootstrap?.Modal) {
             window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
         }
-        showToast('A kritikus művelet még nincs bekötve, ez csak shell.', 'info', 'bi-cone-striped');
-    } catch (error) {
-        console.error('executeCriticalAction hiba:', error);
-        showToast('A kritikus művelet futtatása nem elérhető.', 'danger', 'bi-exclamation-triangle-fill');
-    }
+
+        const { action, targetUserId } = state.criticalActionData || {};
+        const reason = document.getElementById('criticalReason')?.value?.trim() || '';
+
+        if (reason.length < 30) {
+            showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+
+        if (action === 'users.ban') {
+            if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+            const banType = document.getElementById('banType')?.value || 'Ideiglenes';
+            const durationHours = Number(document.getElementById('banDuration')?.value) || 24;
+            try {
+                const res = await fetch(`/api/admin/users/${targetUserId}/ban`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ banType, durationHours, reason })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    showToast('A felhasználó sikeresen tiltva lett.', 'success', 'bi-shield-fill-check');
+                    await loadAdminUsersList({ silent: true });
+                    showSection(state.currentSectionId, null, { silent: true });
+                } else {
+                    if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                    showToast(data.message || 'Hiba a tiltás alkalmazásánál.', 'danger');
+                }
+            } catch (err) {
+                showToast('Hálózati hiba a tiltás során.', 'danger');
+                console.error('ban hiba:', err);
+            }
+        } else if (action === 'users.unban') {
+            if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+            try {
+                const res = await fetch(`/api/admin/users/${targetUserId}/unban`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ reason })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    showToast('A tiltás sikeresen feloldva.', 'success', 'bi-check-circle-fill');
+                    await loadAdminUsersList({ silent: true });
+                    showSection(state.currentSectionId, null, { silent: true });
+                } else {
+                    if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                    showToast(data.message || 'Hiba a tiltás feloldásánál.', 'danger');
+                }
+            } catch (err) {
+                showToast('Hálózati hiba a tiltás feloldása során.', 'danger');
+                console.error('unban hiba:', err);
+            }
+        } else {
+            showToast(`A(z) ${action || 'ismeretlen'} művelet még nincs bekötve.`, 'info', 'bi-cone-striped');
+        }
+    });
 }
 
 /* =============================================================
@@ -3202,15 +3338,15 @@ function renderAdminUserRow(user) {
 
             const actionItems = banned
                 ? [
-                    { icon: 'bi-eye',          variant: 'light',   title: 'Megtekintés',       onclick: `openAdminUserView(${user.id})` },
-                    { icon: 'bi-pencil',       variant: 'gold',    title: 'Szerkesztés',       onclick: `editAdminUser(${user.id})` },
-                    { icon: 'bi-check-circle', variant: 'success', title: 'Tiltás kezelése',   onclick: `banAdminUser(${user.id})` }
-                  ]
+                    { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés', onclick: `editAdminUser(${user.id})` },
+                    { icon: 'bi-check-circle', variant: 'success', title: 'Tiltás kezelése', onclick: `banAdminUser(${user.id})` }
+                ]
                 : [
-                    { icon: 'bi-eye',    variant: 'light',  title: 'Megtekintés',       onclick: `openAdminUserView(${user.id})` },
-                    { icon: 'bi-pencil', variant: 'gold',   title: 'Szerkesztés',       onclick: `editAdminUser(${user.id})` },
-                    { icon: 'bi-ban',    variant: 'danger', title: 'Tiltás (kritikus)', onclick: `banAdminUser(${user.id})` }
-                  ];
+                    { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés', onclick: `editAdminUser(${user.id})` },
+                    { icon: 'bi-ban', variant: 'danger', title: 'Tiltás (kritikus)', onclick: `banAdminUser(${user.id})` }
+                ];
 
             html = `
                 <tr class="admin-user-row${user.online ? ' is-online' : ''}" data-user-id="${user.id}" data-signature="${escapeHtml(signature)}">
@@ -3236,10 +3372,10 @@ function renderAdminUsersEmptyRow(reason) {
     let html = '';
     try {
         const messages = {
-            no_token: { icon: 'bi-shield-slash', title: 'Nincs admin token',            sub: 'A lista betöltéséhez aktív admin step-up token szükséges.' },
-            loading:  { icon: 'bi-arrow-repeat', title: 'Felhasználói lista betöltése…', sub: '' },
-            error:    { icon: 'bi-exclamation-triangle', title: 'Hiba a lista betöltésénél', sub: state.users.error || 'Ismeretlen hiba.' },
-            empty:    { icon: 'bi-inbox',        title: 'Nincs találat',                sub: 'Próbáld törölni vagy módosítani a szűrőket.' }
+            no_token: { icon: 'bi-shield-slash', title: 'Nincs admin token', sub: 'A lista betöltéséhez aktív admin step-up token szükséges.' },
+            loading: { icon: 'bi-arrow-repeat', title: 'Felhasználói lista betöltése…', sub: '' },
+            error: { icon: 'bi-exclamation-triangle', title: 'Hiba a lista betöltésénél', sub: state.users.error || 'Ismeretlen hiba.' },
+            empty: { icon: 'bi-inbox', title: 'Nincs találat', sub: 'Próbáld törölni vagy módosítani a szűrőket.' }
         };
         const m = messages[reason] || messages.empty;
         html = `
@@ -3405,7 +3541,7 @@ function ensureAdminUsersObserver() {
             // Már be van kötve ehhez a sentinelhez
         } else {
             if (state.users.observer) {
-                try { state.users.observer.disconnect(); } catch (_) {}
+                try { state.users.observer.disconnect(); } catch (_) { }
             }
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach((entry) => {
@@ -3725,7 +3861,7 @@ async function saveAdminUserDetailChanges() {
         });
 
         // Friss user lista + audit lista letöltése — minden admin felület naprakész
-        try { loadAdminUsersList({ silent: true }); } catch (_) {}
+        try { loadAdminUsersList({ silent: true }); } catch (_) { }
         // Ha a "Részletek megtekintése" modal éppen ezen a useren van nyitva,
         // frissítsük a benne lévő audit + security tabok tartalmát is
         try {
@@ -3738,7 +3874,7 @@ async function saveAdminUserDetailChanges() {
                     loadAdminUserSecurityActivity();
                 }
             }
-        } catch (_) {}
+        } catch (_) { }
 
         showToast(result.message || 'Mentés sikeres.', 'success', 'bi-check2-circle');
         return true;
@@ -3750,7 +3886,7 @@ async function saveAdminUserDetailChanges() {
         if (saveBtn) {
             saveBtn.innerHTML = originalLabel || '<i class="bi bi-check2-circle me-1"></i>Mentés';
             // a disabled állapotot a következő validateAdminUserDetailForm() helyreteszi
-            try { validateAdminUserDetailForm(); } catch (_) {}
+            try { validateAdminUserDetailForm(); } catch (_) { }
         }
     }
 }
@@ -3783,6 +3919,60 @@ function adminSendPasswordReset(userId) {
     } catch (e) {
         console.error('adminSendPasswordReset hiba:', e);
         showToast('Hiba történt a jelszó-visszaállítás során.', 'danger', 'bi-x-circle');
+    }
+}
+
+async function adminRevokeUserSessions(userId, event) {
+    try {
+        const user = findAdminUserById(userId) || state.selectedUser;
+        if (!user) {
+            showToast('A felhasználó nem található.', 'danger', 'bi-x-circle');
+            return;
+        }
+
+        // Biztonsági megerősítés kérése
+        if (!confirm(`Biztosan meg akarod szakítani ${user.username || 'a felhasználó'} összes aktív munkamenetét (kijelentkeztetés minden eszközről)?`)) {
+            return;
+        }
+
+        const btn = event ? event.target.closest('button') : null;
+        const originalText = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Folyamatban...';
+        }
+
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/revoke-sessions`, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+            body: JSON.stringify({ reason: 'admin_revoke_all_sessions' })
+        });
+
+        const result = await response.json().catch(() => ({}));
+
+        if (response.ok && result?.success) {
+            showToast(result.message || 'Munkamenetek sikeresen megszakítva.', 'success', 'bi-check2-circle');
+
+            // Ha épp nyitva van a részletek modal, csendben frissítjük a jelenléti állapotot (offline-ra fog ugrani)
+            if (state.userView?.userId && Number(state.userView.userId) === Number(userId)) {
+                loadAdminUserPresence();
+            }
+        } else {
+            const code = result?.code || '';
+            // Ellenőrizzük, hogy nem auth hiba-e (pl. lejárt az admin tokenünk közben)
+            if (!getAdminAuthFlow().handleAdminAuthError(code)) {
+                showToast(result?.message || 'Hiba történt a munkamenetek megszakításakor.', 'danger', 'bi-x-circle');
+            }
+        }
+
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        }
+    } catch (e) {
+        console.error('adminRevokeUserSessions hiba:', e);
+        showToast('Hálózati hiba történt a művelet során.', 'danger', 'bi-x-circle');
     }
 }
 
@@ -4160,7 +4350,7 @@ function resetAdminImageEditorState() {
 
 function revokeAdminImageObjectUrl() {
     if (adminImageEditorState.objectUrl) {
-        try { URL.revokeObjectURL(adminImageEditorState.objectUrl); } catch (_) {}
+        try { URL.revokeObjectURL(adminImageEditorState.objectUrl); } catch (_) { }
         adminImageEditorState.objectUrl = null;
     }
 }
@@ -4408,7 +4598,7 @@ function bindAdminImageEditorEvents() {
         if (adminImageEditorState.dragging) {
             adminImageEditorState.dragging = false;
             if (typeof event.pointerId === 'number') {
-                try { canvas.releasePointerCapture(event.pointerId); } catch (_) {}
+                try { canvas.releasePointerCapture(event.pointerId); } catch (_) { }
             }
         }
     };
@@ -4484,7 +4674,7 @@ async function handleAdminUserDetailImageRemove() {
         if (!backendSuccess) {
             const previous = String(selectedUser.profileImage || '');
             if (previous.startsWith('blob:')) {
-                try { URL.revokeObjectURL(previous); } catch (_) {}
+                try { URL.revokeObjectURL(previous); } catch (_) { }
             }
             applyAdminUserPartialUpdate(selectedUser.id, {
                 profileImage: '/profile_pictures/default.png',
@@ -4512,8 +4702,8 @@ function openAdminUserView(userId) {
             stopAdminUserViewRefresh();
             state.userView.userId = user.id;
             state.userView.activeTab = 'target';
-            state.userView.target   = { items: [], loading: false, error: null, loadedAt: null };
-            state.userView.actor    = { items: [], loading: false, error: null, loadedAt: null };
+            state.userView.target = { items: [], loading: false, error: null, loadedAt: null };
+            state.userView.actor = { items: [], loading: false, error: null, loadedAt: null };
             state.userView.security = { items: [], loading: false, error: null, loadedAt: null, filter: 'all' };
             state.userView.presence = { online: false, tabs: [], loadedAt: null, refreshTimerId: null };
             renderAdminUserViewModal(user);
@@ -4546,8 +4736,8 @@ function renderAdminUserViewModal(user) {
             setText('adminUserViewName', user.username || '—');
             setText('adminUserViewEmail', user.email || '—');
             setText('adminUserViewEloClassic', String(Number(user.elo || 0)));
-            setText('adminUserViewEloMM',      String(Number(user.eloMM || 0)));
-            setText('adminUserViewEloBullet',  String(Number(user.eloBullet || 0)));
+            setText('adminUserViewEloMM', String(Number(user.eloMM || 0)));
+            setText('adminUserViewEloBullet', String(Number(user.eloBullet || 0)));
             setText('adminUserViewWins', String(Number(user.wins || 0)));
             setText('adminUserViewLosses', String(Number(user.losses || 0)));
             setText('adminUserViewDraws', String(Number(user.draws || 0)));
@@ -4656,7 +4846,7 @@ async function loadAdminUserAuditTab(tabKey) {
                 try {
                     const body = await response.json();
                     if (body?.message) bodyMessage = body.message;
-                } catch (_) {}
+                } catch (_) { }
                 if (response.status === 401 || response.status === 403) {
                     handleAdminAuthError('admin_token_required');
                 }
@@ -4749,8 +4939,8 @@ function updateAdminUserViewTabsHint(tabKey) {
         const hintEl = document.getElementById('adminUserViewTabsHint');
         if (hintEl) {
             const messages = {
-                target:   '<i class="bi bi-info-circle me-1"></i>Audit napló — utolsó 100',
-                actor:    '<i class="bi bi-info-circle me-1"></i>Admin műveletek — utolsó 100',
+                target: '<i class="bi bi-info-circle me-1"></i>Audit napló — utolsó 100',
+                actor: '<i class="bi bi-info-circle me-1"></i>Admin műveletek — utolsó 100',
                 security: '<i class="bi bi-shield-lock me-1"></i>A felhasználó saját biztonsági naplója (max 150)'
             };
             hintEl.innerHTML = messages[tabKey] || messages.target;
@@ -4791,7 +4981,7 @@ async function loadAdminUserSecurityActivity() {
                 try {
                     const body = await response.json();
                     if (body?.message) bodyMessage = body.message;
-                } catch (_) {}
+                } catch (_) { }
                 if (response.status === 401 || response.status === 403) {
                     handleAdminAuthError('admin_token_required');
                 }
@@ -4875,8 +5065,8 @@ function renderAdminUserSecurityEntry(entry) {
                 : '—';
             const ok = entry.success === false ? 'fail' : (entry.success === true ? 'ok' : 'na');
             const okIcon = ok === 'ok' ? 'bi-check-circle-fill text-success'
-                         : ok === 'fail' ? 'bi-x-circle-fill text-danger'
-                         : 'bi-dash-circle text-muted';
+                : ok === 'fail' ? 'bi-x-circle-fill text-danger'
+                    : 'bi-dash-circle text-muted';
             const eventLabel = entry.eventType || entry.message || '—';
             const category = entry.eventCategory || 'all';
             const ip = entry.ipAddress || '—';
@@ -4949,7 +5139,7 @@ function renderAdminUserViewPresence(data) {
         const panel = document.getElementById('adminUserViewPresence');
         const badge = document.getElementById('adminUserViewPresenceBadge');
         const label = document.getElementById('adminUserViewPresenceLabel');
-        const meta  = document.getElementById('adminUserViewPresenceMeta');
+        const meta = document.getElementById('adminUserViewPresenceMeta');
         const tabsList = document.getElementById('adminUserViewPresenceTabs');
         if (panel && badge && label && meta && tabsList) {
             const online = Boolean(data?.online);

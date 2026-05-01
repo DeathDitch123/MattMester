@@ -1288,4 +1288,202 @@ router.get(
     }
 );
 
+// POST /admin/users/:id/revoke-sessions
+// Az összes aktív munkamenet és bejelentkezett eszköz megszüntetése (kijelentkeztetés)
+router.post(
+    '/users/:id/revoke-sessions',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_EDIT_PROFILE), // Mivel ez egy módosító művelet, használjuk a jogosultságot
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a munkamenetek megszüntetése során.' };
+        try {
+            const userId = Number(request.params?.id) || 0;
+            if (!userId) {
+                statusCode = 400;
+                throw new Error('Érvénytelen felhasználó azonosító.');
+            }
+
+            // 1. Tokenek visszavonása (tokenService segítségével, mint az edit/demote résznél)
+            try {
+                const tokenService = require('../admin/tokenService.js');
+                await tokenService.revokeAllForUser(userId);
+            } catch (revokeErr) {
+                console.warn('revoke-sessions: token revoke hiba:', revokeErr.message);
+            }
+
+            // 2. HTTP session(ök) megsemmisítése a session store-ból
+            try {
+                const sessionStore = request.app?.locals?.sessionStore;
+                if (sessionStore && typeof sessionStore.all === 'function') {
+                    await new Promise((resolve) => {
+                        sessionStore.all((err, sessions) => {
+                            if (err || !sessions) { resolve(); return; }
+                            // sessions: { [sid]: sessionObj, ... }
+                            const destroyPromises = Object.entries(sessions)
+                                .filter(([, s]) => Number(s?.userId) === userId)
+                                .map(([sid]) => new Promise((res) => {
+                                    sessionStore.destroy(sid, () => res());
+                                }));
+                            Promise.all(destroyPromises).then(resolve);
+                        });
+                    });
+                }
+            } catch (sessionErr) {
+                console.warn('revoke-sessions: session destroy hiba:', sessionErr.message);
+            }
+
+            // 3. WebSocket kapcsolatok lezárása (Socket.io)
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.disconnectAllForAdminUser === 'function') {
+                    await adminSocketHub.disconnectAllForAdminUser(userId, 'admin_revoke_sessions');
+                }
+                const socketHub = request.app?.locals?.socketHub;
+                if (socketHub && typeof socketHub.disconnectUser === 'function') {
+                    await socketHub.disconnectUser(userId, 'admin_revoke_sessions');
+                }
+            } catch (kickErr) {
+                console.warn('revoke-sessions: socket disconnect hiba:', kickErr.message);
+            }
+
+            // 3. Audit log bejegyzés
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_EDIT_PROFILE;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'user';
+            response.locals.adminAudit.targetId = userId;
+            response.locals.adminAudit.success = true;
+
+            payload = {
+                success: true,
+                message: 'A felhasználó összes munkamenete sikeresen megszüntetve.'
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || 'Szerverhiba a művelet során.' };
+            
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_EDIT_PROFILE;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'REVOKE_SESSIONS_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// POST /admin/users/:id/ban
+router.post(
+    '/users/:id/ban',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_BAN),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a tiltás alkalmazása során.' };
+        try {
+            const userId = Number(request.params?.id) || 0;
+            if (!userId) {
+                statusCode = 400;
+                throw new Error('Érvénytelen felhasználó azonosító.');
+            }
+            const adminUserId = Number(request.adminAuth?.userId) || 0;
+            if (userId === adminUserId) {
+                statusCode = 400;
+                throw new Error('Saját magadat nem tilthatod ki.');
+            }
+
+            const body = request.body || {};
+            const banType = String(body.banType || 'Ideiglenes').trim();
+            const durationHours = Math.max(1, Number(body.durationHours) || 24);
+            const reason = String(body.reason || request.adminReason || '').trim();
+            if (reason.length < 30) {
+                statusCode = 400;
+                throw new Error('Az indoknak legalább 30 karakter hosszúnak kell lennie.');
+            }
+
+            let bannedUntil = null;
+            if (banType !== 'Végleges') {
+                const until = new Date();
+                until.setHours(until.getHours() + durationHours);
+                bannedUntil = until;
+            }
+
+            await sql.banUser(userId, reason, bannedUntil);
+
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.disconnectAllForAdminUser === 'function') {
+                    await adminSocketHub.disconnectAllForAdminUser(userId, 'banned');
+                }
+                const socketHub = request.app?.locals?.socketHub;
+                if (socketHub && typeof socketHub.banUser === 'function') {
+                    await socketHub.banUser(userId, reason);
+                }
+            } catch (kickErr) {
+                console.warn('ban: socket disconnect hiba:', kickErr.message);
+            }
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_BAN;
+            response.locals.adminAudit.severity = 'warning';
+            response.locals.adminAudit.targetType = 'user';
+            response.locals.adminAudit.targetId = userId;
+            response.locals.adminAudit.success = true;
+
+            payload = { success: true, message: 'A felhasználó sikeresen tiltva lett.' };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || 'Szerverhiba.' };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_BAN;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'BAN_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// POST /admin/users/:id/unban
+router.post(
+    '/users/:id/unban',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_UNBAN),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a tiltás feloldása során.' };
+        try {
+            const userId = Number(request.params?.id) || 0;
+            if (!userId) {
+                statusCode = 400;
+                throw new Error('Érvénytelen felhasználó azonosító.');
+            }
+
+            await sql.unbanUser(userId);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_UNBAN;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'user';
+            response.locals.adminAudit.targetId = userId;
+            response.locals.adminAudit.success = true;
+
+            payload = { success: true, message: 'A tiltás sikeresen feloldva.' };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || 'Szerverhiba.' };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_UNBAN;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'UNBAN_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
 module.exports = router;
