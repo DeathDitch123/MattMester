@@ -1,6 +1,7 @@
 const RESTORE_PASSWORD_REGEX = window.MattMesterValidationRules?.PASSWORD_REGEX || /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const RESET_TOKEN = new URLSearchParams(window.location.search).get('token') || '';
 let resetTokenState = RESET_TOKEN ? 'pending' : 'invalid';
+let rejectedSameAsOldPassword = '';
 
 document.addEventListener('DOMContentLoaded', () => {
     bindRestorePasswordPage();
@@ -123,6 +124,12 @@ function validateRestorePasswordForm() {
             allowBackslash: false
         });
         const passwordsMatch = Boolean(newPassword && confirmPassword && newPassword === confirmPassword);
+        const isRejectedSameAsOld = Boolean(rejectedSameAsOldPassword && newPassword === rejectedSameAsOldPassword);
+
+        if (passwordValidation.isValid && isRejectedSameAsOld) {
+            passwordValidation.isValid = false;
+            passwordValidation.error = 'Az új jelszó nem lehet ugyanaz, mint a régi jelszó! Változtasd meg.';
+        }
 
         applyPasswordFeedback(
             elements.newPasswordInput,
@@ -284,20 +291,10 @@ async function submitRestorePassword() {
 
             if (!response.ok) {
                 if (result.code === 'PASSWORD_SAME_AS_OLD') {
-                    const sameAsOldMessage = 'Az új jelszó nem lehet ugyanaz, mint a régi jelszó!';
-                    applyPasswordFeedback(
-                        elements.newPasswordInput,
-                        elements.newPasswordFeedback,
-                        'error',
-                        sameAsOldMessage
-                    );
-                    applyPasswordFeedback(
-                        elements.confirmPasswordInput,
-                        elements.confirmPasswordFeedback,
-                        'error',
-                        'Adj meg egy másik jelszót.'
-                    );
-                    setRestorePasswordStatus('danger', sameAsOldMessage);
+                    rejectedSameAsOldPassword = validation.password;
+                    if (elements.newPasswordInput) {
+                        elements.newPasswordInput.focus();
+                    }
                 }
                 throw new Error(result.message || 'Sikertelen jelszó-visszaállítás.');
             }
