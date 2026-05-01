@@ -169,6 +169,7 @@ app.set('trust proxy', 1); //?Middleware Proxy
 
 const socketHub = createSocketHub(io);
 app.locals.socketHub = socketHub;
+app.locals.sessionStore = sessionMiddleware.store;
 
 // Admin panel - /admin socket namespace + service binderek (ADMIN_PANEL.md F4)
 const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter, createAdminUserDisconnector } = require('./api/admin/socketNamespace.js');

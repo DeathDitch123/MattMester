@@ -153,6 +153,10 @@ const logoutHandler = async (request, response) => {
         statusCode = 500;
         payload = { success: false, message: error.message };
     }
+    const isGet = request.method === 'GET';
+    if (isGet) {
+        return response.redirect('/');
+    }
     return response.status(statusCode).json(payload);
 };
 router.get('/logout', logoutHandler);

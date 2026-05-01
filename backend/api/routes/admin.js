@@ -1316,13 +1316,33 @@ router.post(
                 console.warn('revoke-sessions: token revoke hiba:', revokeErr.message);
             }
 
-            // 2. WebSocket kapcsolatok lezárása (Socket.io)
+            // 2. HTTP session(ök) megsemmisítése a session store-ból
+            try {
+                const sessionStore = request.app?.locals?.sessionStore;
+                if (sessionStore && typeof sessionStore.all === 'function') {
+                    await new Promise((resolve) => {
+                        sessionStore.all((err, sessions) => {
+                            if (err || !sessions) { resolve(); return; }
+                            // sessions: { [sid]: sessionObj, ... }
+                            const destroyPromises = Object.entries(sessions)
+                                .filter(([, s]) => Number(s?.userId) === userId)
+                                .map(([sid]) => new Promise((res) => {
+                                    sessionStore.destroy(sid, () => res());
+                                }));
+                            Promise.all(destroyPromises).then(resolve);
+                        });
+                    });
+                }
+            } catch (sessionErr) {
+                console.warn('revoke-sessions: session destroy hiba:', sessionErr.message);
+            }
+
+            // 3. WebSocket kapcsolatok lezárása (Socket.io)
             try {
                 const adminSocketHub = request.app?.locals?.adminSocketHub;
                 if (adminSocketHub && typeof adminSocketHub.disconnectAllForAdminUser === 'function') {
                     await adminSocketHub.disconnectAllForAdminUser(userId, 'admin_revoke_sessions');
                 }
-                // Ha a user kliens socketHub-ot is használ:
                 const socketHub = request.app?.locals?.socketHub;
                 if (socketHub && typeof socketHub.disconnectUser === 'function') {
                     await socketHub.disconnectUser(userId, 'admin_revoke_sessions');
