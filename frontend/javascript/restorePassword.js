@@ -1,4 +1,4 @@
-const PASSWORD_REGEX = window.MattMesterValidationRules?.PASSWORD_REGEX || /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+const RESTORE_PASSWORD_REGEX = window.MattMesterValidationRules?.PASSWORD_REGEX || /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const RESET_TOKEN = new URLSearchParams(window.location.search).get('token') || '';
 let resetTokenState = RESET_TOKEN ? 'pending' : 'invalid';
 
@@ -97,7 +97,7 @@ function validatePasswordByPolicy(passwordInput, options = {}) {
         error = 'A jelszó nem megengedett karaktert tartalmaz.';
     } else if (password.length < settings.minLength) {
         error = `A jelszónak legalább ${settings.minLength} karakter hosszúnak kell lennie.`;
-    } else if (settings.enforceComplexity && !PASSWORD_REGEX.test(password)) {
+    } else if (settings.enforceComplexity && !RESTORE_PASSWORD_REGEX.test(password)) {
         error = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
     }
 

@@ -406,35 +406,6 @@ router.post('/profile/upload-image', profileImageUploadLimiter, isAuthenticated,
     });
 });
 
-// Bejelentkezett user per-mode ELO értékei — minden mode-ra a megfelelő oszlopból.
-router.get('/profile/elo-by-mode', isAuthenticated, async (request, response) => {
-    try {
-        const { getPool } = require('../../sql/database.js');
-        const pool = getPool();
-        const userId = request.session.userId;
-
-        const [rows] = await pool.execute(
-            `SELECT elo, elo_mattmester, elo_classical, elo_blitz FROM users WHERE id = ?`,
-            [userId]
-        );
-        if (!rows[0]) {
-            return response.status(404).json({ success: false, message: 'Felhasználó nem található.' });
-        }
-        const r = rows[0];
-        return response.status(200).json({
-            success: true,
-            elo: {
-                mattmester: r.elo_mattmester ?? r.elo,
-                classical:  r.elo_classical  ?? r.elo,
-                blitz:      r.elo_blitz      ?? r.elo
-            }
-        });
-    } catch (error) {
-        console.error('[profile/elo-by-mode] hiba:', error);
-        return response.status(500).json({ success: false, message: 'Szerverhiba az ELO lekérdezésekor.' });
-    }
-});
-
 // Bejelentkezett user képesség-használati statisztikája — ability_log + abilities join.
 // Visszaad: [{ key, displayName, count }] minden lehetséges ability-re (count=0 ha sosem használt).
 router.get('/profile/abilities-usage', isAuthenticated, async (request, response) => {
