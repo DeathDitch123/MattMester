@@ -595,6 +595,8 @@ const formatDateOnly = (iso) => {
    6.5) Felhasználói lista — szűrés + lazy loading + REST
    ============================================================= */
 const ADMIN_USERS_PAGE_SIZE = 50;
+const ADMIN_USER_DETAIL_IMAGE_MAX_SIZE_BYTES = 3 * 1024 * 1024;
+const ADMIN_USER_DETAIL_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 // Egy felhasználó "signature"-je: rövid string ami akkor változik, ha vmi
 // vizuálisan releváns mezője módosult. Diff-flash-hoz használjuk.
@@ -716,6 +718,53 @@ function renderEloTrio(user) {
     return html;
 }
 
+function renderEmailVerifiedBadgeInline(user) {
+    let html = '';
+    try {
+        const verified = Boolean(user?.emailVerified);
+        const verifiedAt = user?.emailVerifiedAt ? new Date(user.emailVerifiedAt) : null;
+        const tooltip = verified
+            ? (verifiedAt && !Number.isNaN(verifiedAt.getTime())
+                ? `Email megerősítve: ${verifiedAt.toLocaleString('hu-HU')}`
+                : 'Email megerősítve')
+            : 'Az email cím nincs megerősítve.';
+        if (verified) {
+            html = `<span class="email-verified-badge is-verified" title="${escapeHtml(tooltip)}">
+                        <i class="bi bi-patch-check-fill"></i>Megerősítve
+                    </span>`;
+        } else {
+            html = `<span class="email-verified-badge is-unverified" title="${escapeHtml(tooltip)}">
+                        <i class="bi bi-exclamation-circle-fill"></i>Nem megerősítve
+                    </span>`;
+        }
+    } catch (err) {
+        console.warn('renderEmailVerifiedBadgeInline hiba:', err);
+        html = '<span class="email-verified-badge is-unverified"><i class="bi bi-exclamation-circle-fill"></i>Nem megerősítve</span>';
+    }
+    return html;
+}
+
+function renderProfileImageStatusBadgeInline(user) {
+    let html = '';
+    try {
+        const status = String(user?.profileImageStatus || '').toLowerCase();
+        const labels = {
+            approved: { icon: 'bi-image-fill', label: 'Jóváhagyott', cls: 'is-approved', tip: 'Profilkép: jóváhagyott' },
+            pending:  { icon: 'bi-hourglass-split', label: 'Függő', cls: 'is-pending', tip: 'Profilkép: jóváhagyásra vár' },
+            rejected: { icon: 'bi-image-alt', label: 'Elutasított', cls: 'is-rejected', tip: 'Profilkép: elutasítva' },
+            default:  { icon: 'bi-person-circle', label: 'Alapértelmezett', cls: 'is-default', tip: 'Profilkép: alapértelmezett' }
+        };
+        const meta = labels[status] || labels.default;
+        html = `<span class="profile-image-status-badge ${meta.cls}" title="${escapeHtml(meta.tip)}">
+                    <i class="bi ${meta.icon}"></i>${escapeHtml(meta.label)}
+                </span>`;
+    } catch (err) {
+        console.warn('renderProfileImageStatusBadgeInline hiba:', err);
+        html = '<span class="profile-image-status-badge is-default"><i class="bi bi-person-circle"></i>Alapértelmezett</span>';
+    }
+    return html;
+}
+
 // Aktuális szűrt + rendezett user lista (a teljes state.users.list-ből).
 function getFilteredAdminUsers() {
     let result = [];
@@ -805,6 +854,12 @@ async function loadAdminUsersList(options = {}) {
                     renderAdminUsersTable({ reason: 'error' });
                 } else {
                     state.users.list = json.data;
+                    if (state.selectedUserId !== null) {
+                        const selectedId = Number(state.selectedUserId);
+                        const selected = json.data.find((u) => Number(u.id) === selectedId) || null;
+                        state.selectedUser = selected;
+                        if (!selected) state.selectedUserId = null;
+                    }
                     state.users.loadedAt = new Date();
                     state.users.error = null;
                     state.users.loading = false;
@@ -1236,16 +1291,31 @@ const SECTIONS = {
         const hasUser = Boolean(u);
         const username = hasUser ? (u.username || '—') : '—';
         const email = hasUser ? (u.email || '—') : '—';
-        const elo = hasUser ? Number(u.elo || 0) : 0;
+        const eloClassic = hasUser ? Number(u.elo || 0) : 0;
+        const eloMM = hasUser ? Number(u.eloMM || 0) : 0;
+        const eloBullet = hasUser ? Number(u.eloBullet || 0) : 0;
         const role = hasUser && u.role === 'admin' ? 'admin' : 'player';
         const wins = hasUser ? Number(u.wins || 0) : 0;
         const losses = hasUser ? Number(u.losses || 0) : 0;
         const draws = hasUser ? Number(u.draws || 0) : 0;
+        const totalGames = wins + losses + draws;
+        const winRate = totalGames > 0 ? ((wins / totalGames) * 100) : 0;
+        const emailBadge = hasUser ? renderEmailVerifiedBadgeInline(u) : '';
+        const imageBadge = hasUser ? renderProfileImageStatusBadgeInline(u) : '';
+        const isCurrentUser = hasUser && Number(state.currentUser?.id || 0) === Number(u.id || 0);
+        const uploadHint = isCurrentUser
+            ? 'A saját profilodnál a feltöltés backend oldalon is működik.'
+            : 'Admin feltöltésnél a kép státusza azonnal jóváhagyottként jelenik meg a felületen.';
         return `
         ${h.header({
             icon: 'bi-person-vcard', title: 'Részletek és szerkesztés',
             subtitle: hasUser ? `${username} — kiválasztott profil` : 'Egy kiválasztott profil teljes munkaablakja',
-            actions: [{ label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }]
+            actions: [
+                hasUser
+                    ? { label: '', icon: 'bi-eye', variant: 'outline-light', size: 'sm', attrs: 'title="Profil megtekintése" aria-label="Profil megtekintése"', onclick: 'openSelectedUserProfileView()' }
+                    : null,
+                { label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }
+            ].filter(Boolean)
         })}
 
         ${hasUser ? '' : `
@@ -1274,11 +1344,41 @@ const SECTIONS = {
                                 data-profile-image="${escapeHtml(u.profileImage || '')}">
                             <h4 class="text-white mb-1">${escapeHtml(username)}</h4>
                             <small class="text-secondary d-block mb-3">${escapeHtml(email)}</small>
-                            ${rolePill(role)}
-                            ${u.isBanned ? ` ${statusPill('banned')}` : ''}
+                            <div class="admin-user-detail-status-cloud mb-3">
+                                ${rolePill(role)}
+                                ${u.isBanned ? statusPill('banned') : statusPill('active')}
+                                ${emailBadge}
+                                ${imageBadge}
+                            </div>
                             <hr class="border-secondary">
-                            <div class="text-gold display-5 fw-bold lh-1">${elo}</div>
-                            <small class="text-secondary">ELO értékelés</small>
+                            <div class="admin-user-detail-elo-grid">
+                                <div class="admin-user-detail-elo-box">
+                                    <div class="admin-user-detail-elo-value">${eloClassic}</div>
+                                    <small>Klasszikus</small>
+                                </div>
+                                <div class="admin-user-detail-elo-box is-primary">
+                                    <div class="admin-user-detail-elo-value">${eloMM}</div>
+                                    <small>MattMester</small>
+                                </div>
+                                <div class="admin-user-detail-elo-box">
+                                    <div class="admin-user-detail-elo-value">${eloBullet}</div>
+                                    <small>Bullet</small>
+                                </div>
+                            </div>
+                            <div class="admin-user-detail-image-tools mt-3">
+                                <div class="d-flex flex-wrap justify-content-center gap-2">
+                                    <label for="adminUserDetailImageUpload" class="btn btn-sm btn-outline-light mb-0" title="Profilkép feltöltése">
+                                        <i class="bi bi-upload me-1"></i>Feltöltés
+                                    </label>
+                                    <input id="adminUserDetailImageUpload" type="file" class="d-none" accept="image/jpeg,image/png,image/webp"
+                                        onchange="handleAdminUserDetailImageInputChange(event)">
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="handleAdminUserDetailImageRemove()">
+                                        <i class="bi bi-trash3 me-1"></i>Eltávolítás
+                                    </button>
+                                </div>
+                                <small class="text-secondary d-block mt-2">${escapeHtml(uploadHint)}</small>
+                                <div id="adminUserDetailImageMessage" class="alert d-none mt-2 mb-0 py-2 px-3"></div>
+                            </div>
                         </div>
                     `
                 })}
@@ -1289,6 +1389,9 @@ const SECTIONS = {
                             <div class="col-4"><div class="h4 text-success mb-0">${wins}</div><small class="text-secondary">Győzelem</small></div>
                             <div class="col-4"><div class="h4 text-danger mb-0">${losses}</div><small class="text-secondary">Vereség</small></div>
                             <div class="col-4"><div class="h4 text-warning mb-0">${draws}</div><small class="text-secondary">Döntetlen</small></div>
+                        </div>
+                        <div class="text-center mt-3">
+                            <span class="badge bg-dark border border-secondary">Győzelmi arány: ${winRate.toFixed(1)}%</span>
                         </div>
                     </div>
                 </div>
@@ -1305,7 +1408,9 @@ const SECTIONS = {
                                   { value: 'player', label: 'Játékos', selected: role === 'player' },
                                   { value: 'admin',  label: 'Admin',   selected: role === 'admin' }
                               ] },
-                            { id: 'editElo', label: 'ELO', type: 'number', value: String(elo) },
+                            { id: 'editEloClassic', label: 'ELO (Klasszikus)', type: 'number', value: String(eloClassic) },
+                            { id: 'editEloMM', label: 'ELO (MattMester)', type: 'number', value: String(eloMM) },
+                            { id: 'editEloBullet', label: 'ELO (Bullet)', type: 'number', value: String(eloBullet) },
                             { id: 'editReason',      label: 'Indok (kötelező — min. 10 char)', col: 12, type: 'textarea',
                               placeholder: 'Miért módosítod ezeket az adatokat? Naplózásra kerül.' }
                         ],
@@ -1313,6 +1418,21 @@ const SECTIONS = {
                         submit: { label: 'Mentés', icon: 'bi-check2', variant: 'gold' }
                     })
                 })}
+                <div class="content-card mt-4">
+                    <div class="card-header">
+                        <h5 class="card-title"><i class="bi bi-info-circle me-2 text-gold"></i>Fiókállapot</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            ${h.kv('Email állapot', `${Boolean(u.emailVerified) ? 'Megerősített' : 'Nem megerősített'}`)}
+                            ${h.kv('Email megerősítve', u.emailVerifiedAt ? formatDateOnly(u.emailVerifiedAt) : '—')}
+                            ${h.kv('Profilkép állapot', String(u.profileImageStatus || 'default'))}
+                            ${h.kv('Utolsó aktivitás', u.lastActive ? formatRelative(u.lastActive) : '—')}
+                            ${h.kv('Utolsó IP', u.lastIp || '—')}
+                            ${h.kv('Csatlakozott', formatDateOnly(u.createdAt))}
+                        </div>
+                    </div>
+                </div>
                 <div class="content-card mt-4 danger-zone">
                     <div class="card-header">
                         <h5 class="card-title text-danger"><i class="bi bi-exclamation-octagon-fill me-2"></i>Veszélyes műveletek</h5>
@@ -3216,6 +3336,189 @@ function applyUserDetailAvatar() {
         }
     } catch (err) {
         console.warn('applyUserDetailAvatar hiba:', err);
+    }
+}
+
+function setAdminUserDetailImageMessage(type, message) {
+    try {
+        const el = document.getElementById('adminUserDetailImageMessage');
+        if (!el) return;
+        if (!message) {
+            el.className = 'alert d-none mt-2 mb-0 py-2 px-3';
+            el.textContent = '';
+            return;
+        }
+        el.className = `alert alert-${type} mt-2 mb-0 py-2 px-3`;
+        el.textContent = message;
+    } catch (err) {
+        console.warn('setAdminUserDetailImageMessage hiba:', err);
+    }
+}
+
+function validateAdminUserDetailImageFile(file) {
+    if (!file) return 'Nincs kiválasztott fájl.';
+    if (!ADMIN_USER_DETAIL_IMAGE_ALLOWED_MIME_TYPES.has(file.type)) {
+        return 'Csak JPG, PNG vagy WEBP fájl tölthető fel.';
+    }
+    if (file.size <= 0) return 'Üres fájl nem tölthető fel.';
+    if (file.size > ADMIN_USER_DETAIL_IMAGE_MAX_SIZE_BYTES) {
+        return 'A fájl túl nagy. Maximum 3 MB engedélyezett.';
+    }
+    return '';
+}
+
+function applyAdminUserPartialUpdate(userId, partial = {}) {
+    let updated = null;
+    try {
+        const numericId = Number(userId);
+        if (!Number.isFinite(numericId)) return null;
+
+        if (Array.isArray(state.users.list)) {
+            state.users.list = state.users.list.map((entry) => {
+                if (Number(entry.id) === numericId) {
+                    updated = { ...entry, ...partial };
+                    return updated;
+                }
+                return entry;
+            });
+        }
+
+        if (state.selectedUser && Number(state.selectedUser.id) === numericId) {
+            state.selectedUser = { ...state.selectedUser, ...partial };
+            updated = state.selectedUser;
+        }
+
+        if (state.currentSectionId === 'users') {
+            renderAdminUsersTable({ reason: 'refresh' });
+        }
+        if (state.currentSectionId === 'userDetail') {
+            showSection('userDetail', null, { silent: true });
+        }
+        if (state.userView?.userId && Number(state.userView.userId) === numericId && updated) {
+            renderAdminUserViewModal(updated);
+        }
+    } catch (err) {
+        console.warn('applyAdminUserPartialUpdate hiba:', err);
+    }
+    return updated;
+}
+
+function openSelectedUserProfileView() {
+    try {
+        const selectedId = Number(state.selectedUser?.id || 0);
+        if (!selectedId) {
+            showToast('Nincs kiválasztott felhasználó.', 'warning', 'bi-exclamation-triangle');
+            return false;
+        }
+        return openAdminUserView(selectedId);
+    } catch (err) {
+        console.warn('openSelectedUserProfileView hiba:', err);
+        showToast('A profil megtekintés most nem elérhető.', 'danger', 'bi-x-circle');
+        return false;
+    }
+}
+
+async function handleAdminUserDetailImageInputChange(event) {
+    try {
+        const selectedUser = state.selectedUser;
+        const fileInput = event?.target || document.getElementById('adminUserDetailImageUpload');
+        const file = fileInput?.files?.[0] || null;
+
+        if (!selectedUser || !selectedUser.id) {
+            throw new Error('Nincs kiválasztott felhasználó.');
+        }
+
+        const validationError = validateAdminUserDetailImageFile(file);
+        if (validationError) throw new Error(validationError);
+
+        setAdminUserDetailImageMessage('info', 'Feltöltés folyamatban...');
+
+        let backendSuccess = false;
+        try {
+            const formData = new FormData();
+            formData.append('image', file, file.name || 'profile-image.png');
+            const response = await fetch(`/api/admin/users/${encodeURIComponent(selectedUser.id)}/profile-image`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders(),
+                body: formData
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.ok && result?.success) {
+                applyAdminUserPartialUpdate(selectedUser.id, {
+                    profileImage: result?.data?.profileImage || selectedUser.profileImage,
+                    profileImageStatus: result?.data?.profileImageStatus || 'approved'
+                });
+                setAdminUserDetailImageMessage('success', result?.message || 'Profilkép frissítve (jóváhagyott).');
+                backendSuccess = true;
+            }
+        } catch (_) {
+            backendSuccess = false;
+        }
+
+        if (!backendSuccess) {
+            const previous = String(selectedUser.profileImage || '');
+            if (previous.startsWith('blob:')) {
+                try { URL.revokeObjectURL(previous); } catch (_) {}
+            }
+            const localUrl = URL.createObjectURL(file);
+            applyAdminUserPartialUpdate(selectedUser.id, {
+                profileImage: localUrl,
+                profileImageStatus: 'approved'
+            });
+            setAdminUserDetailImageMessage('warning', 'Frontend előnézet frissítve. A végleges mentéshez backend endpoint szükséges.');
+        }
+    } catch (err) {
+        setAdminUserDetailImageMessage('danger', err?.message || 'A profilkép feltöltése sikertelen.');
+    } finally {
+        const input = document.getElementById('adminUserDetailImageUpload');
+        if (input) input.value = '';
+    }
+}
+
+async function handleAdminUserDetailImageRemove() {
+    try {
+        const selectedUser = state.selectedUser;
+        if (!selectedUser || !selectedUser.id) {
+            throw new Error('Nincs kiválasztott felhasználó.');
+        }
+
+        setAdminUserDetailImageMessage('info', 'Profilkép eltávolítása...');
+
+        let backendSuccess = false;
+        try {
+            const response = await fetch(`/api/admin/users/${encodeURIComponent(selectedUser.id)}/profile-image/remove`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ reason: 'admin_remove_profile_image' })
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.ok && result?.success) {
+                backendSuccess = true;
+                applyAdminUserPartialUpdate(selectedUser.id, {
+                    profileImage: '/profile_pictures/default.png',
+                    profileImageStatus: 'default'
+                });
+                setAdminUserDetailImageMessage('success', result?.message || 'Profilkép eltávolítva.');
+            }
+        } catch (_) {
+            backendSuccess = false;
+        }
+
+        if (!backendSuccess) {
+            const previous = String(selectedUser.profileImage || '');
+            if (previous.startsWith('blob:')) {
+                try { URL.revokeObjectURL(previous); } catch (_) {}
+            }
+            applyAdminUserPartialUpdate(selectedUser.id, {
+                profileImage: '/profile_pictures/default.png',
+                profileImageStatus: 'default'
+            });
+            setAdminUserDetailImageMessage('warning', 'Frontend állapot frissítve. A végleges mentéshez backend endpoint szükséges.');
+        }
+    } catch (err) {
+        setAdminUserDetailImageMessage('danger', err?.message || 'A profilkép eltávolítása sikertelen.');
     }
 }
 

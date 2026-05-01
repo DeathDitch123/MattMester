@@ -735,6 +735,60 @@ body::before {
 /* Profile summary card a userDetail-ban */
 .profile-summary .card-body { padding: 1.5rem; }
 
+.admin-user-detail-status-cloud {
+    display: inline-flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.4rem;
+}
+
+.admin-user-detail-elo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+}
+
+.admin-user-detail-elo-box {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    background: rgba(15, 23, 42, 0.55);
+    padding: 0.5rem 0.35rem;
+}
+
+.admin-user-detail-elo-box.is-primary {
+    border-color: rgba(212, 175, 55, 0.55);
+    background: rgba(212, 175, 55, 0.1);
+}
+
+.admin-user-detail-elo-value {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.admin-user-detail-elo-box.is-primary .admin-user-detail-elo-value {
+    color: var(--accent-gold);
+}
+
+.admin-user-detail-elo-box small {
+    display: block;
+    margin-top: 0.18rem;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+}
+
+.admin-user-detail-image-tools {
+    border-top: 1px dashed var(--border-soft);
+    padding-top: 0.7rem;
+}
+
+.admin-user-detail-image-tools .alert {
+    text-align: left;
+    font-size: 0.78rem;
+}
+
 /* Danger zone (userDetail veszélyes műveletek) */
 .danger-zone { border-color: rgba(233, 69, 96, 0.3); }
 
@@ -3099,11 +3153,17 @@ i.bi.spin {
         gap: 0.5rem;
         align-items: center;
     }
+    .admin-user-detail-elo-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 }
 
 @media (max-width: 575.98px) {
     .admin-users-table-wrap { max-height: calc(100vh - 320px); }
     .admin-users-table { min-width: 540px; }
+    .admin-user-detail-elo-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 /* =============================================================
