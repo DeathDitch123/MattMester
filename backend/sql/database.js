@@ -71,10 +71,6 @@ async function createTables() {
             INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT INTO users (username, password_hash, email, elo, elo_mattmester, elo_classical, elo_blitz, role, is_super_admin, is_email_verified, email_verified_at)
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 1500, 'admin', TRUE, TRUE, CURRENT_TIMESTAMP)
-            ON DUPLICATE KEY UPDATE is_super_admin = TRUE;
-        `,
 
         `ALTER TABLE users
             ALTER COLUMN profile_image SET DEFAULT '/profile_pictures/default.png'`,
@@ -487,9 +483,10 @@ async function runMigrations() {
     // Új oszlopok hozzáadása ha még nem léteznek (régi DB-knél a CREATE TABLE
     // IF NOT EXISTS nem ad új oszlopot, mert a tábla már megvolt).
     const newColumns = [
-        ['elo_mattmester', 'INT DEFAULT 800'],
-        ['elo_classical',  'INT DEFAULT 800'],
-        ['elo_blitz',      'INT DEFAULT 800']
+        ['elo_mattmester',  'INT DEFAULT 800'],
+        ['elo_classical',   'INT DEFAULT 800'],
+        ['elo_blitz',       'INT DEFAULT 800'],
+        ['is_super_admin',  'BOOLEAN NOT NULL DEFAULT FALSE']
     ];
     for (const [colName, colDef] of newColumns) {
         try {
@@ -511,6 +508,19 @@ async function runMigrations() {
     }
 }
 
+async function ensureAdminUser() {
+    try {
+        await pool.execute(
+            `INSERT INTO users (username, password_hash, email, elo, elo_mattmester, elo_classical, elo_blitz, role, is_super_admin, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 1500, 'admin', TRUE, TRUE, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE is_super_admin = TRUE`
+        );
+        console.log('[DB] Admin user OK.');
+    } catch (err) {
+        console.warn('[DB] ensureAdminUser hiba (kihagyva):', err.message);
+    }
+}
+
 async function initDatabase() {
     try {
         await ensureDatabaseExists();
@@ -522,6 +532,7 @@ async function initDatabase() {
         await createTables();
         await runMigrations();
         await ensureSchemaColumns();
+        await ensureAdminUser();
         console.log('Database initialized successfully.');
     } catch (err) {
         console.error('Failed to initialize database:', err);
