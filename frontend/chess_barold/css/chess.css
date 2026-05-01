@@ -1,34 +1,53 @@
-/*CSS GLOBÁLIS VÁLTOZÓK*/
+/*CSS GLOBÁLIS VÁLTOZÓK — szinkron a landing page (index.css) palettájával */
 :root
 {
-    --board-size: 560px;  /* Sakktábla mérete pixelben */
-    --light: #eeeed2;  /* Világos mező színe (bézs) */
-    --dark: #769656;  /* Sötét mező színe (zöld) */
-    --from: rgba(255,255,50,0.55);  /* Utolsó lépés kezdőpont színe (sárga, átlátszó) */
-    --capture: rgba(255,165,0,0.65);  /* Ütési lehetőség színe (narancs) */
-    --check: rgba(255,0,0,0.55);  /* Sakk jelzés színe (piros) */
-    --enpassant: rgba(50,255,50,0.65);  /* En passant jelzés színe (zöld) */
-    --castle: rgba(50, 64, 255, 0.65);  /* Sáncolás jelzés színe (zöld) */
-    --promotion: rgba(200,50,255,0.65);  /* Átváltozás jelzés színe (lila) */
-    --ui-bg: #3b3936;  /* Felhasználói felület háttérszíne (sötétszürke) */
+    /* Board-specifikus színek — arany & fekete (egységes a brand-palette-tel) */
+    --board-size: 560px;
+    --light: #d4af37;          /* világos mező = arany */
+    --dark:  #1a1a1a;          /* sötét mező = fekete (kicsit lágyítva, hogy a fekete bábuk se tűnjenek el) */
+    --from: rgba(255,255,255,0.40);   /* utolsó lépés: halvány fehér — látható mind goldon, mind feketén */
+    --capture: rgba(255,140,0,0.70);
+    --check: rgba(220,30,30,0.65);
+    --enpassant: rgba(50,255,50,0.65);
+    --castle: rgba(80, 130, 255, 0.70);
+    --promotion: rgba(200,50,255,0.70);
+
+    /* Landing page design tokens — egységes look across the site */
+    --bg-dark: #0f172a;
+    --bg-card: #1e293b;
+    --bg-sidebar: #020617;
+    --accent-gold: #d4af37;
+    --accent-gold-hover: #b8941f;
+    --accent-green: #10b981;
+    --accent-red: #ef4444;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --border-color: #334155;
+
+    /* Backwards compat — régi --ui-bg referenciák a card színt kapják */
+    --ui-bg: var(--bg-card);
 }
 
 *{
-    box-sizing: border-box; /* Minden elemhez: padding és border a méretbe bele számít */
+    box-sizing: border-box;
 }
 
 body
 {
-    margin: 0;  /* Nincs margó az oldal szélén */
-    font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;  /* Betűtípus prioritási sorrend */
-    background: #2b2926;  /* Sötét háttérszín */
-    color: #f4f4f4;  /* Világos szövegszín */
-    display: flex;  /* Flexbox layout használata */
-    justify-content: center;  /* Vízszintesen középre igazítás */
-    padding: 20px;  /* 20px belső margó minden oldalon */
-    min-height: 100vh;  /* Minimum magasság: teljes képernyő magasság */
-    overflow-x: hidden;  /* Vízszintes görgetés letiltása */
-    position: relative;  /* Relatív pozícionálás (gyermek elemek alapja) */
+    margin: 0;
+    font-family: 'Inter', "Segoe UI", Roboto, Arial, sans-serif;
+    background: radial-gradient(circle at top right, rgba(212, 175, 55, 0.06), transparent 30%), var(--bg-dark);
+    color: var(--text-primary);
+    display: flex;
+    justify-content: center;
+    padding: 20px;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
 }
 
 /* FŐ ALKALMAZÁS KONTÉNER */
@@ -50,27 +69,32 @@ body
 
 .player
 {
-    background: var(--ui-bg); /* Háttérszín a változóból */
-    padding: 10px 14px;  /* Belső margó (függőleges 10px, vízszintes 14px) */
-    border-radius: 8px;  /* Lekerekített sarkok 8px sugarral */
-    min-width: 320px;  /* Minimum szélesség */
-    display: flex;  /* Flexbox */
-    justify-content: space-between;  /* Elemek széthúzása (név balra, óra jobbra) */
-    align-items: center;  /* Függőleges középre igazítás */
-    box-shadow: 0 8px 18px rgba(0,0,0,0.5);  /* Árnyék (vízszintes 0, függőleges 8px, elmosás 18px) */
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 10px 14px;
+    border-radius: 10px;
+    min-width: 320px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.5);
 }
 
-.player .name 
+.player .name
 {
-    font-weight: 700;  /* Vastag betű (bold) */
+    font-weight: 600;
+    color: var(--text-primary);
 }
 
 .clock
 {
-    background: #111;  /* Nagyon sötét háttér */
-    padding: 6px 10px;  /* Belső margó */
-    border-radius: 6px;  /* Lekerekített sarkok */
-    font-family: monospace;  /* Fix szélességű betű (órához jobb) */
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-family: monospace;
+    color: var(--accent-gold);
+    font-weight: 600;
 }
 
 /* FŐ TARTALOM (sakktábla + oldalsáv) */
@@ -86,11 +110,12 @@ body
 
 .board-wrap
 {
-    width: var(--board-size);  /* Szélesség a változóból (560px) */
-    height: var(--board-size);  /* Magasság ugyanannyi */
-    border: 6px solid #5c4033;  /* 6px vastag barna keret */
-    box-shadow: 0 10px 30px rgba(0,0,0,0.6);  /* Árnyék hatás */
-    position: relative;  /* Relatív pozíció (modal elhelyezéshez) */
+    width: var(--board-size);
+    height: var(--board-size);
+    border: 4px solid var(--accent-gold);
+    border-radius: 6px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4) inset;
+    position: relative;
 }
 
 .board
@@ -231,10 +256,18 @@ body
 }
 
 .status-row
-{ 
-    background: #222;  /* Sötét háttér */
-    padding: 8px;  /* Belső margó */
-    border-radius: 6px;  /* Lekerekített sarkok */
+{
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: var(--text-primary);
+}
+.status-row strong { color: var(--accent-gold); }
+.status {
+    color: var(--text-secondary);
+    font-size: 0.9em;
+    padding: 0 4px;
 }
 
 .bot-thinking {
@@ -441,27 +474,29 @@ body
 }
 
 .mode-modal-content {
-    background: #2b2926;
-    border: 2px solid #444;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
     border-radius: 16px;
-    padding: 40px 36px;
-    max-width: 420px;
+    padding: 36px 32px;
+    max-width: 460px;
     width: 90%;
     text-align: center;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
 }
 
 .mode-title {
-    font-size: 1.8rem;
-    font-weight: 800;
-    color: #f4f4f4;
+    font-family: 'Playfair Display', serif;
+    font-size: 1.9rem;
+    font-weight: 700;
+    color: var(--accent-gold);
+    letter-spacing: 0.5px;
     margin: 0 0 6px 0;
 }
 
 .mode-subtitle {
-    font-size: 1rem;
-    color: #aaa;
-    margin: 0 0 24px 0;
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin: 0 0 22px 0;
 }
 
 /* Lépés elrejtés */
@@ -469,28 +504,28 @@ body
     display: none;
 }
 
-/* Mód választó gombok */
+/* Mód választó gombok (a step-opponent szakaszbeli Bot/PvP gombok) */
 .mode-btn {
     display: flex;
     flex-direction: column;
     align-items: center;
     gap: 6px;
     width: 100%;
-    padding: 18px;
-    margin-bottom: 12px;
-    background: var(--ui-bg);
-    border: 2px solid #555;
-    border-radius: 12px;
-    color: #f4f4f4;
+    padding: 16px;
+    margin-bottom: 10px;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    color: var(--text-primary);
     font-size: 1rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.18s ease;
 }
 
 .mode-btn:hover:not(.mode-btn-disabled) {
-    border-color: var(--dark);
-    background: #4a4745;
-    transform: translateY(-2px);
+    border-color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.06);
+    transform: translateY(-1px);
 }
 
 .mode-btn-disabled {
@@ -499,17 +534,18 @@ body
 }
 
 .mode-icon {
-    font-size: 2rem;
+    font-size: 1.8rem;
 }
 
 .mode-label {
-    font-weight: 700;
-    font-size: 1.1rem;
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--text-primary);
 }
 
 .mode-soon {
     font-size: 0.75rem;
-    color: #888;
+    color: var(--text-secondary);
     font-style: italic;
 }
 
@@ -528,61 +564,63 @@ body
     justify-content: space-between;
     align-items: center;
     width: 100%;
-    padding: 14px 16px;
-    background: var(--ui-bg);
-    border: 2px solid #555;
-    border-radius: 10px;
-    color: #f4f4f4;
+    padding: 12px 14px;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
     font-size: 0.95rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.18s ease;
 }
 
 .diff-btn:hover {
-    border-color: var(--dark);
-    background: #4a4745;
-    transform: translateX(4px);
+    border-color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.06);
+    transform: translateX(3px);
 }
 
 .diff-name {
-    font-weight: 700;
+    font-weight: 600;
 }
 
 .diff-elo {
-    font-size: 0.8rem;
-    color: #aaa;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
 }
 
 /* Vissza gomb */
 .mode-back-btn {
     background: none;
-    border: 1px solid #666;
-    color: #aaa;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
     padding: 8px 16px;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 0.9rem;
-    transition: all 0.2s;
+    font-size: 0.88rem;
+    transition: all 0.18s ease;
+    margin-top: 4px;
 }
 
 .mode-back-btn:hover {
-    color: #f4f4f4;
-    border-color: #999;
+    color: var(--accent-gold);
+    border-color: var(--accent-gold);
 }
 
 /* ELO kijelzés a modalban */
 .user-elo-display {
-    margin-top: 20px;
-    padding: 10px;
-    background: #222;
+    margin-top: 18px;
+    padding: 10px 14px;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 0.9rem;
-    color: #ccc;
+    color: var(--text-secondary);
 }
 
 .user-elo-display strong {
-    color: #8bc34a;
-    font-size: 1.1rem;
+    color: var(--accent-gold);
+    font-size: 1.05rem;
 }
 
 /* ELO változás kijelzés a sidebar-ban */
@@ -599,51 +637,56 @@ body
 }
 
 .elo-change.positive {
-    color: #8bc34a;
-    background: rgba(139, 195, 74, 0.1);
+    color: var(--accent-green);
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.4);
 }
 
 .elo-change.negative {
-    color: #f44336;
-    background: rgba(244, 67, 54, 0.1);
+    color: var(--accent-red);
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.4);
 }
 
-/* Új játék gomb */
+/* Új játék gomb — gold-elsődleges, mint a landing btn-gold */
 .new-game-btn {
-    background: var(--dark);
-    color: white;
+    background: var(--accent-gold);
+    color: var(--bg-dark);
     border: 0;
     padding: 10px;
     border-radius: 8px;
     cursor: pointer;
     width: 100%;
     font-size: 0.95rem;
-    transition: all 0.2s;
+    font-weight: 600;
+    transition: all 0.18s ease;
 }
 
 .new-game-btn:hover {
-    background: #6a8a4e;
+    background: var(--accent-gold-hover);
 }
 
 .new-game-btn.hidden {
     display: none;
 }
 
-/* FELADÁS GOMB */
+/* FELADÁS GOMB — outline-red-stílus */
 .felad-btn {
-    background: #c0392b;
-    color: white;
-    border: 0;
+    background: transparent;
+    color: var(--accent-red);
+    border: 1px solid var(--accent-red);
     padding: 10px;
     border-radius: 8px;
     cursor: pointer;
     width: 100%;
     font-size: 0.95rem;
-    transition: all 0.2s;
+    font-weight: 500;
+    transition: all 0.18s ease;
 }
 
 .felad-btn:hover {
-    background: #e74c3c;
+    background: rgba(239, 68, 68, 0.1);
+    color: #ff6b6b;
 }
 
 .felad-btn.hidden {
@@ -669,38 +712,39 @@ body
 }
 
 .surrender-modal-content {
-    background: #2b2926;
-    border: 2px solid #c0392b;
+    background: var(--bg-card);
+    border: 1px solid var(--accent-red);
     border-radius: 16px;
     padding: 36px 32px;
     max-width: 360px;
     width: 90%;
     text-align: center;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
 }
 
 .surrender-title {
-    font-size: 1.3rem;
+    font-family: 'Playfair Display', serif;
+    font-size: 1.4rem;
     font-weight: 700;
-    color: #f4f4f4;
+    color: var(--text-primary);
     margin: 0 0 4px 0;
 }
 
 .surrender-subtitle {
     font-size: 0.9rem;
-    color: #aaa;
+    color: var(--text-secondary);
     margin: 0 0 20px 0;
 }
 
 .surrender-confirm-btn {
     width: 100%;
     padding: 14px;
-    background: #c0392b;
+    background: var(--accent-red);
     color: white;
     border: 0;
     border-radius: 10px;
     font-size: 1rem;
-    font-weight: 700;
+    font-weight: 600;
     cursor: pointer;
     margin-bottom: 10px;
     display: flex;
@@ -716,7 +760,7 @@ body
 .surrender-confirm-btn small {
     font-size: 0.75rem;
     font-weight: 400;
-    opacity: 0.8;
+    opacity: 0.85;
 }
 
 /* Hosszan nyomás progress csík */
@@ -740,17 +784,17 @@ body
     width: 100%;
     padding: 10px;
     background: none;
-    color: #aaa;
-    border: 1px solid #555;
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     font-size: 0.9rem;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: all 0.18s ease;
 }
 
 .surrender-cancel-btn:hover {
-    color: #f4f4f4;
-    border-color: #999;
+    color: var(--text-primary);
+    border-color: var(--accent-gold);
 }
 
 /* ============================================================
@@ -772,19 +816,19 @@ body
     justify-content: space-between;
     align-items: center;
     padding: 10px 14px;
-    background: #2a2a2a;
-    color: #f4f4f4;
-    border: 1px solid #444;
+    background: var(--bg-sidebar);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
     border-radius: 8px;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
+    transition: all 0.18s ease;
     font: inherit;
     text-align: left;
 }
 
 .friend-btn:hover {
-    background: #353535;
-    border-color: #666;
+    background: rgba(212, 175, 55, 0.06);
+    border-color: var(--accent-gold);
 }
 
 .friend-name {
@@ -792,8 +836,9 @@ body
 }
 
 .friend-action {
-    color: #8fd08f;
+    color: var(--accent-gold);
     font-size: 0.85em;
+    font-weight: 500;
 }
 
 /* Queue spinner (random matchmaking) */
@@ -801,8 +846,8 @@ body
     width: 48px;
     height: 48px;
     margin: 20px auto;
-    border: 4px solid #333;
-    border-top-color: #8fd08f;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--accent-gold);
     border-radius: 50%;
     animation: queue-spin 0.9s linear infinite;
 }
@@ -830,19 +875,20 @@ body
 
 .pvp-waiting-content,
 .pvp-invite-content {
-    background: #1f1f1f;
-    color: #f4f4f4;
-    padding: 28px 40px;
-    border-radius: 12px;
-    border: 1px solid #444;
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 28px 36px;
+    border-radius: 14px;
+    border: 1px solid var(--border-color);
     text-align: center;
-    min-width: 280px;
+    min-width: 300px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
 }
 
 .pvp-waiting-name {
     font-weight: 700;
     margin-top: 6px;
-    color: #8fd08f;
+    color: var(--accent-gold);
 }
 
 .pvp-invite-buttons {
@@ -854,47 +900,47 @@ body
 
 .pvp-invite-btn {
     padding: 8px 18px;
-    border: none;
+    border: 1px solid transparent;
     border-radius: 6px;
     cursor: pointer;
     font: inherit;
     font-weight: 600;
-    transition: opacity 0.15s;
+    transition: all 0.18s ease;
 }
 
 .pvp-invite-btn.accept {
-    background: #4a7a4a;
-    color: #fff;
+    background: var(--accent-gold);
+    color: var(--bg-dark);
 }
+.pvp-invite-btn.accept:hover { background: var(--accent-gold-hover); }
 
 .pvp-invite-btn.decline {
-    background: #7a4a4a;
-    color: #fff;
+    background: transparent;
+    border-color: var(--accent-red);
+    color: var(--accent-red);
 }
+.pvp-invite-btn.decline:hover { background: rgba(239, 68, 68, 0.1); }
 
-.pvp-invite-btn:hover {
-    opacity: 0.85;
-}
-
-/* Döntetlen ajánlat gomb (sidebar) */
+/* Döntetlen ajánlat gomb (sidebar) — outline-gold */
 .draw-btn {
     margin: 8px 0;
     padding: 8px 14px;
-    background: #3a4a7a;
-    color: #f4f4f4;
-    border: 1px solid #5a6a9a;
+    background: transparent;
+    color: var(--accent-gold);
+    border: 1px solid var(--accent-gold);
     border-radius: 6px;
     cursor: pointer;
     font: inherit;
-    transition: background 0.15s;
+    font-weight: 500;
+    transition: all 0.18s ease;
 }
 
 .draw-btn:hover:not(:disabled) {
-    background: #4a5a8a;
+    background: rgba(212, 175, 55, 0.1);
 }
 
 .draw-btn:disabled {
-    opacity: 0.6;
+    opacity: 0.5;
     cursor: default;
 }
 
@@ -906,8 +952,8 @@ body
 .draw-offer {
     margin: 10px 0;
     padding: 12px;
-    background: #2a2a3a;
-    border: 1px solid #4a5a7a;
+    background: var(--bg-card);
+    border: 1px solid var(--accent-gold);
     border-radius: 8px;
     text-align: center;
 }
@@ -931,9 +977,9 @@ body
 .opponent-dc {
     margin: 8px 0;
     padding: 8px 12px;
-    background: #4a2a2a;
-    color: #ffcaca;
-    border: 1px solid #7a4a4a;
+    background: rgba(239, 68, 68, 0.1);
+    color: #fecaca;
+    border: 1px solid rgba(239, 68, 68, 0.5);
     border-radius: 6px;
     text-align: center;
     font-size: 0.9em;
@@ -945,34 +991,20 @@ body
 
 #dc-countdown {
     font-weight: 700;
-    color: #ffe0e0;
+    color: #fff;
 }
 
-/* ELO kijelzés a mód modal-ban */
-.user-elo-display {
-    margin-top: 16px;
-    padding: 8px 14px;
-    background: #252525;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
-    text-align: center;
-    font-size: 0.9em;
-    color: #ccc;
-}
-
-.user-elo-display strong {
-    color: #8fd08f;
-}
+/* (A `.user-elo-display` szabály korábban definiálva — landing palette használja.) */
 
 /* ============================================================
-   KÉPESSÉG BAR (abilities)
+   KÉPESSÉG BAR (abilities) — landing palette
    ============================================================ */
 .ability-bar {
     margin-top: 12px;
-    padding: 10px;
-    background: #252525;
-    border: 1px solid #3a3a3a;
-    border-radius: 6px;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
 }
 
 .ability-bar.hidden { display: none; }
@@ -982,68 +1014,69 @@ body
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
     font-size: 0.95em;
-    color: #ddd;
+    color: var(--text-primary);
 }
-.ability-points .ap-label   { color: #888; font-size: 0.85em; text-transform: uppercase; letter-spacing: 0.04em; }
-.ability-points .ap-mine    { color: #8fd08f; font-weight: 700; font-size: 1.1em; min-width: 28px; text-align: center; }
-.ability-points .ap-opp     { color: #d08f8f; font-weight: 700; font-size: 1.1em; min-width: 28px; text-align: center; }
-.ability-points .ap-sep     { color: #555; font-size: 0.8em; }
+.ability-points .ap-label   { color: var(--text-secondary); font-size: 0.78em; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.ability-points .ap-mine    { color: var(--accent-gold); font-weight: 700; font-size: 1.15em; min-width: 28px; text-align: center; }
+.ability-points .ap-opp     { color: var(--accent-red); font-weight: 700; font-size: 1.15em; min-width: 28px; text-align: center; }
+.ability-points .ap-sep     { color: var(--border-color); font-size: 0.8em; }
 
 .ability-buttons {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
+    gap: 8px;
 }
 
 .ability-btn {
     position: relative;
-    background: #2f2f2f;
-    border: 1px solid #444;
-    border-radius: 4px;
-    padding: 6px 8px;
-    color: #eee;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 8px 10px;
+    color: var(--text-primary);
     cursor: pointer;
     font-size: 0.82em;
     text-align: left;
-    transition: background 0.15s, border-color 0.15s;
+    transition: all 0.18s ease;
     overflow: hidden;
 }
 .ability-btn:hover:not(:disabled) {
-    background: #3a3a3a;
-    border-color: #5a5a5a;
+    background: rgba(212, 175, 55, 0.06);
+    border-color: var(--accent-gold);
 }
 .ability-btn:disabled {
-    opacity: 0.45;
+    opacity: 0.4;
     cursor: not-allowed;
 }
 .ability-btn.armed {
-    background: #4a4020;
-    border-color: #d4a73a;
-    box-shadow: 0 0 0 2px rgba(212,167,58,0.35);
+    background: rgba(212, 175, 55, 0.15);
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.35);
 }
 
 .ability-btn .ab-name {
     display: block;
     font-weight: 600;
-    margin-bottom: 2px;
+    margin-bottom: 3px;
+    color: var(--text-primary);
 }
 .ability-btn .ab-meta {
     display: flex;
     justify-content: space-between;
     font-size: 0.78em;
-    color: #aaa;
+    color: var(--text-secondary);
 }
-.ability-btn .ab-cost   { color: #8fd08f; }
-.ability-btn .ab-cost.unaffordable { color: #d08f8f; }
-.ability-btn .ab-uses   { color: #888; }
+.ability-btn .ab-cost   { color: var(--accent-gold); font-weight: 600; }
+.ability-btn .ab-cost.unaffordable { color: var(--accent-red); }
+.ability-btn .ab-uses   { color: var(--text-secondary); }
 
 .ability-btn .ab-cooldown-overlay {
     position: absolute;
     inset: 0;
-    background: rgba(0,0,0,0.55);
-    color: #fff;
+    background: rgba(0,0,0,0.6);
+    color: var(--accent-gold);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1053,13 +1086,13 @@ body
 }
 
 .ability-hint {
-    margin-top: 8px;
-    padding: 6px 8px;
-    background: #1f2a1f;
-    border: 1px solid #3a5a3a;
-    border-radius: 4px;
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(212, 175, 55, 0.08);
+    border: 1px solid rgba(212, 175, 55, 0.4);
+    border-radius: 6px;
     font-size: 0.82em;
-    color: #cfe8cf;
+    color: var(--accent-gold);
     text-align: center;
 }
 .ability-hint.hidden { display: none; }
@@ -1116,54 +1149,64 @@ body
 }
 
 /* ============================================================
-   MODE-LISTA (5 játékmód választó)
+   MODE-LISTA (5 játékmód választó) — landing palette
    ============================================================ */
 .mode-list {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 8px;
-    margin-bottom: 12px;
+    gap: 10px;
+    margin-bottom: 10px;
 }
 .mode-list .mode-card {
-    background: #2f2f2f;
-    border: 1px solid #444;
-    border-radius: 6px;
-    padding: 12px 14px;
-    color: #eee;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 16px;
+    color: var(--text-primary);
     cursor: pointer;
     text-align: left;
-    transition: background 0.15s, border-color 0.15s;
+    transition: all 0.18s ease;
 }
 .mode-list .mode-card:hover {
-    background: #3a3a3a;
-    border-color: #d4a73a;
+    background: rgba(212, 175, 55, 0.06);
+    border-color: var(--accent-gold);
+    transform: translateY(-1px);
 }
 .mode-list .mode-card .mc-name {
     display: block;
-    font-weight: 700;
+    font-weight: 600;
     font-size: 1.05em;
-    margin-bottom: 4px;
+    color: var(--text-primary);
+    margin-bottom: 6px;
 }
 .mode-list .mode-card .mc-meta {
     display: flex;
     gap: 8px;
-    font-size: 0.82em;
-    color: #aaa;
+    font-size: 0.78em;
     flex-wrap: wrap;
 }
 .mode-list .mode-card .mc-meta .mc-tag {
-    padding: 2px 6px;
-    background: #1d1d1d;
-    border-radius: 3px;
+    padding: 3px 8px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
+    color: var(--text-secondary);
+    font-weight: 500;
 }
-.mode-list .mode-card .mc-meta .mc-tag.mc-tag-abilities { color: #d4a73a; }
-.mode-list .mode-card .mc-meta .mc-tag.mc-tag-time      { color: #8fd08f; }
+.mode-list .mode-card .mc-meta .mc-tag.mc-tag-abilities {
+    color: var(--accent-gold);
+    border-color: rgba(212, 175, 55, 0.4);
+}
+.mode-list .mode-card .mc-meta .mc-tag.mc-tag-time {
+    color: var(--accent-green);
+    border-color: rgba(16, 185, 129, 0.4);
+}
 
 /* Ranked toggle */
 .ranked-toggle-row {
     display: flex;
     justify-content: center;
-    margin: 8px 0 14px;
+    margin: 4px 0 16px;
 }
 .ranked-toggle {
     display: inline-flex;
@@ -1171,16 +1214,24 @@ body
     gap: 8px;
     cursor: pointer;
     user-select: none;
-    color: #ccc;
+    color: var(--text-secondary);
     font-size: 0.9em;
+    padding: 6px 12px;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: 999px;
 }
-.ranked-toggle input { width: 16px; height: 16px; cursor: pointer; }
-.ranked-toggle .ranked-toggle-label { color: #ddd; }
+.ranked-toggle input {
+    width: 16px; height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent-gold);
+}
+.ranked-toggle .ranked-toggle-label { color: var(--text-primary); }
 
 /* Végtelen óra megjelenítés */
 .clock.infinity {
-    color: #d4a73a;
-    font-size: 1.3em;
+    color: var(--accent-gold);
+    font-size: 1.4em;
     font-weight: 700;
 }
 
