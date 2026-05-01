@@ -149,12 +149,25 @@ h6 {
     min-height: 100vh;
     border-right: 1px solid var(--border-color);
     position: fixed;
+    top: 0;
+    left: 0;
     width: 272px;
     z-index: 1000;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
     backdrop-filter: blur(20px);
+}
+
+/* Admin-stilusu osszehuzhato sidebar minden viewport-meretben.
+   Desktopon a 'collapsed' allapot eltunteti az oldalsavot es a main-content
+   margojat is nullara csukja az 'expanded' osztaly hatasara. */
+.sidebar.collapsed {
+    transform: translateX(-100%);
+}
+
+.main-content.expanded {
+    margin-left: 0 !important;
 }
 
 .sidebar-brand {
@@ -233,6 +246,23 @@ h6 {
     min-height: 100vh;
     position: relative;
     z-index: 1;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* A toggle gomb minden meretben latszik, kis ikonos kerek formaban.
+   Az aria-expanded allapot vizualisan megfordit egy fokot, hogy ranezesre
+   eldontheto legyen, hogy nyitva van-e a sidebar. */
+.sidebar-toggle-btn {
+    flex-shrink: 0;
+}
+
+.sidebar-toggle-btn[aria-expanded="false"] i {
+    transform: rotate(180deg);
+    transition: transform 0.25s ease;
+}
+
+.sidebar-toggle-btn i {
+    transition: transform 0.25s ease;
 }
 
 .main-content-inner {
@@ -295,17 +325,40 @@ h6 {
     transform: translateX(-50%);
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 8px;
     z-index: 1;
     white-space: nowrap;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+    padding: 8px 12px;
+    border-radius: 12px;
+}
+
+.top-bar-center:hover {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.1);
+}
+
+.top-bar-center:focus-visible {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: 2px;
 }
 
 .top-bar-search {
     width: 280px;
+    display: flex;
+    align-items: center;
+    height: 40px;
 }
 
 .top-bar-search-field {
     position: relative;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
 }
 
 .top-bar-search-feedback {
@@ -322,8 +375,11 @@ h6 {
     padding: 8px 44px 8px 12px;
     border-radius: 12px;
     width: 100%;
+    height: 40px;
     font-size: 0.875rem;
     transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
 }
 
 .top-bar-search input:focus {
@@ -409,86 +465,60 @@ h6 {
     transform: translateY(-2px);
 }
 
-.notification-dot {
+.top-bar-btn-with-badge {
+    position: relative;
+}
+
+.top-bar-badge {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 8px;
-    height: 8px;
-    background: var(--accent-red);
-    border-radius: 50%;
-    border: 2px solid var(--bg-card);
-    box-shadow: 0 0 5px var(--accent-red);
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--accent-red, #dc3545);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    border: 2px solid var(--bg-card, #0f172a);
+    box-shadow: 0 0 6px rgba(220, 53, 69, 0.55);
+    pointer-events: none;
+    transition: transform 0.15s ease;
 }
 
-.top-bar-user {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 4px 14px 4px 4px;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--border-color);
-    border-radius: 14px;
-    cursor: pointer;
-    transition: all 0.2s ease;
+.top-bar-badge[hidden] {
+    display: none !important;
 }
 
-.top-bar-user:hover {
-    border-color: rgba(212, 175, 55, 0.3);
-    background: rgba(212, 175, 55, 0.05);
+.top-bar-badge.is-pulse {
+    animation: top-bar-badge-pulse 0.6s ease;
 }
 
-.top-bar-user img {
-    width: 34px;
-    height: 34px;
-    border-radius: 10px;
-    object-fit: cover;
-    border: 2px solid transparent;
-    transition: border-color 0.2s ease;
+@keyframes top-bar-badge-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.25); }
+    100% { transform: scale(1); }
 }
 
-.top-bar-user:hover img {
-    border-color: var(--accent-gold);
+.top-bar-badge--chat {
+    background: var(--accent-blue, #3b82f6);
+    box-shadow: 0 0 6px rgba(59, 130, 246, 0.55);
 }
 
-.top-bar-user-info {
-    line-height: 1.2;
-}
-
-.top-bar-user-name {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.top-bar-user-role {
-    font-size: 0.7rem;
-    color: var(--accent-gold);
+.notifications-modal-content--transparent {
+    background: rgba(15, 23, 42, 0.78) !important;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
 /* Responsive kiigazítások a Top Bar-hoz */
 @media (max-width: 991.98px) {
     .top-bar {
         padding: 10px 16px;
-    }
-}
-
-@media (max-width: 575.98px) {
-    .top-bar-user {
-        padding: 0;
-        border: none;
-        background: transparent;
-    }
-
-    .top-bar-user img {
-        width: 40px;
-        height: 40px;
-        border-radius: 12px;
-    }
-
-    .top-bar-user:hover {
-        background: transparent;
-        border-color: transparent;
     }
 }
 
@@ -625,10 +655,6 @@ h6 {
 
 .profile-avatar:hover {
     transform: scale(1.05);
-}
-
-.profile-image-pending-blur {
-    filter: blur(3px) saturate(0.75);
 }
 
 .profile-status {
@@ -1870,10 +1896,6 @@ h6 {
 
     .search-results-list {
         height: min(320px, calc(100vh - 300px));
-    }
-
-    .top-bar-user-info {
-        display: none;
     }
 
     .main-content-inner {

@@ -1,165 +1,443 @@
-<h1 align="center">NodeJS - Template project</h1>
+<h1 align="center">MattMester</h1>
 
-## readme.md preview megnyitása:<br>
+<p align="center">Online sakk-portál Node.js + Express + MySQL + Socket.IO alapokon.<br>Iskolai projekt — fejlesztés és futtatás localhoston.</p>
 
-`Ctrl + Shift + V`<br>
+---
 
-## package.json fájl létrehozása, amennyiben nem létezik:<br>
+## Tartalomjegyzék
 
-1. Terminal megnyitása.<br>
+- [Előfeltételek](#előfeltételek)
+- [Beüzemelés (gyors)](#beüzemelés-gyors)
+- [Függőségek (npm)](#függőségek-npm)
+- [Adatbázis](#adatbázis)
+- [Környezeti változók (.env)](#környezeti-változók-env)
+- [Indítás és parancsok](#indítás-és-parancsok)
+- [Tesztek](#tesztek)
+- [Email verifikáció (SMTP)](#email-verifikáció-smtp)
+- [Rate limiterek](#rate-limiterek)
+- [Hibakeresés](#hibakeresés)
+- [Projekt struktúra](#projekt-struktúra)
+- [Konfigurációs sablonok](#konfigurációs-sablonok)
 
-2. npm init<br>
+---
 
-3. **Package name:** A projekt neve<br>
+## Előfeltételek
 
-4. **Version:** Elég egy entert nyomni<br>
+| Eszköz | Verzió | Megjegyzés |
+|---|---|---|
+| Node.js | 18.x vagy újabb | LTS ajánlott |
+| npm | 9.x vagy újabb | Node-dal érkezik |
+| MySQL | 8.0 vagy MariaDB 10.5+ | XAMPP is jó: `127.0.0.1:3306`, root user, üres jelszó |
+| Modern böngésző | — | Bootstrap 5 + ES2020+ |
 
-5. **Description:** Leírása a projektnek _(valamilyen stringet megadunk, majd enter)_<br>
+A backend alapból a `127.0.0.1:3306` MySQL szerverhez csatlakozik, root userrel, üres jelszóval (lásd `backend/sql/database.js`). Ha másképp van konfigurálva a saját MySQL-ed, az értékeket ott kell átírni.
 
-6. **Entry point:** elég egy entert nyomnunk<br>
+---
 
-7. **Test command:** elég egy entert nyomnunk<br>
+## Beüzemelés (gyors)
 
-8. **Git repository:** elég egy entert nyomnunk<br>
+```bash
+# 1. Repo klónozás
+git clone <repo-url> MattMester
+cd MattMester
 
-9. **Keywords:** elég egy entert nyomnunk<br>
+# 2. Backend függőségek telepítése
+cd backend
+npm install
 
-10. **Author:** beírhatjuk a saját nevünket<br>
+# 3. MySQL elindítása (XAMPP / MySQL service)
+#    A 'mattmester' adatbázist a backend automatikusan létrehozza induláskor.
 
-11. **License:** elég egy entert nyomnunk<br>
+# 4. .env fájl (opcionális, csak SMTP-hez kötelező — lásd lejjebb)
 
-12. Ezután megjelenik az, hogy ez a fájl, amit szeretnénk-e létrehozni, majd egy enter megadásával létrehozhatjuk a **package.json** fájlt.<br>
-
-## NodeJS - Template project használata:<br>
-
-1. Töltsd le a Template project-et és csomagold ki.<br>
-
-2. Lépj be a backend mappába:<br>
-   `cd backend`<br>
-
-3. Telepítsd a függőségeket a backend mappába a következő parancs segítségével, amennyiben nincs node_modules mappa a backend mappában:<br>
-   `npm install`<br>
-
-4. Backend indítása fejlesztés alatt: _(Fájlok szerkesztésének az esetén újraindul a szerver.)_<br>
-   `npm run dev`<br>
-   _(Automatikusan indul: CORS middleware + Chat Rate Limiter cleanup)_<br>
-
-5. Backend indítása élesben: _(Fájlok szerkesztésének az esetén nem indul újra a szerver.)_<br>
-   `npm run start`<br>
-
-6. Tesztek futtatása:<br>
-   `npm test` - Összes teszt futtatása<br>
-   `npm run test:watch` - Tesztek figyelési módban<br>
-   `npm run test:coverage` - Code coverage report<br>
-
-## Email verifikáció beállítása (SMTP):<br>
-
-Az email verifikáció működéséhez valós SMTP adatok szükségesek. Ha ez nincs beállítva, a rendszer fejlesztői `json-dev` fallback módba vált, és a levél csak logba kerül.<br>
-
-1. Lépj be a backend mappába:<br>
-   `cd backend`<br>
-
-2. Készíts `.env` fájlt a backend mappában (például a `.env.example` alapján).<br>
-
-3. Töltsd ki legalább ezeket a mezőket:<br>
-
-```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=<kuldo-email-cim>
-SMTP_PASS=<smtp-jelszo-vagy-app-password>
-SMTP_SECURE=false
-SMTP_FROM=MattMester <kuldo-email-cim>
-PUBLIC_BASE_URL=http://127.0.0.1:3000
+# 5. Indítás
+npm run dev
 ```
 
-4. Indítsd újra a backendet:<br>
-   `npm run dev`<br>
+Ezután nyisd meg böngészőben: **http://localhost:3000**
 
-5. Profil oldalon, az Account Status szekcióban kérj új verifikációs emailt.<br>
+---
 
-### Gmail gyors beállítás (teszthez):<br>
+## Függőségek (npm)
 
-1. Kapcsold be a kétlépcsős azonosítást a Google fiókban.<br>
-2. Készíts App Password-öt.<br>
-3. Az App Password értékét használd `SMTP_PASS` mezőként.<br>
+A `cd backend && npm install` parancs az összes alábbit telepíti a `package.json` alapján. Itt csak referenciaként látható, hogy mi mire kell.
 
-### Diagnosztika: miért nem érkezik meg az email?<br>
+### Production
 
-Gyakori okok:<br>
-- Rossz SMTP host vagy port<br>
-- Hibás SMTP user/pass (auth hiba)<br>
-- Hibás `SMTP_FROM` vagy a provider tiltja<br>
-- Provider sandbox mód<br>
-- Spam/Promóciók mappa<br>
-- Lokális tűzfal / hálózati tiltás<br>
+| Csomag | Cél |
+|---|---|
+| `express` | Web framework (HTTP route-ok) |
+| `express-session` | Session tárolás (cookie + memória) |
+| `express-rate-limit` | Brute-force / abuse védelem az endpointokon |
+| `mysql2` | MySQL kliens (promise API) |
+| `bcrypt` | Jelszó hash-elés (password_hash) |
+| `multer` | Fájl-feltöltés (profilkép) |
+| `socket.io` | Real-time kommunikáció (chat, presence, notification, sakk) |
+| `cors` | Cross-origin engedélyezés |
+| `dotenv` | `.env` fájl betöltése |
+| `nodemailer` | SMTP email küldés (verifikáció, jelszó-visszaállítás) |
+| `vary` | HTTP `Vary` header helper |
 
-Backend logban ezeket nézd:<br>
-- `Transporter init sikeres: kind=smtp`<br>
-- `SMTP kapcsolat ellenőrzés rendben (verify).`<br>
-- `Küldés sikeres` + `messageId`<br>
+### Development
 
-Ha ezt látod, hogy `SMTP fallback aktiv: kind=json-dev`, akkor nincs érvényes SMTP beállítás betöltve a környezetből.<br>
+| Csomag | Cél |
+|---|---|
+| `nodemon` | Auto-restart fájlváltozásra (`npm run dev`) |
+| `kill-port` | Port felszabadítása induláskor (3000) |
+| `jest` | Teszt framework |
+| `supertest` | HTTP integrációs tesztek |
 
-## NPM hiba esetén<br>
+### Manuális telepítés (ha valamiért külön kell)
 
-Amennyiben a npm run start nem működik a következő hiba miatt:<br>
+```bash
+cd backend
+npm install express express-session express-rate-limit mysql2 bcrypt multer socket.io cors dotenv nodemailer vary
+npm install --save-dev nodemon kill-port jest supertest
+```
+
+> Note: A `bcrypt` natív modult fordít install közben. Windowson Visual Studio Build Tools (vagy Python 3 + windows-build-tools) szükséges hozzá. Ha problémás, alternatívaként `bcryptjs` (tisztán JS) használható, de a `package.json` jelenleg `bcrypt`-et köt.
+
+---
+
+## Adatbázis
+
+A backend első indításkor automatikusan:
+
+1. Létrehozza a `mattmester` adatbázist, ha nem létezik (`CREATE DATABASE IF NOT EXISTS`)
+2. Felhúzza az összes táblát (`users`, `friend_relations`, `chat_conversations`, `chat_messages`, `notifications`, `notification_reads`, `user_logs`, stb.)
+3. Lefuttat egy idempotens `ensureSchemaColumns` lépést, ami régi DB-be is hozzáadja a hiányzó oszlopokat (pl. új `notification_reads.dismissed_at`)
+
+A séma forrása: [backend/sql/create_database.sql](backend/sql/create_database.sql) (referencia) és [backend/sql/database.js](backend/sql/database.js) (futási idejű init).
+
+A `create_database.sql` 20 teszt-felhasználót is létrehoz seed-ként (`testuser01` … `testuser20`, jelszó: `123456Ab`). Ezek csak akkor kerülnek be, ha kézzel futtatod le az SQL fájlt phpMyAdmin/MySQL CLI-ben — a futási idejű init nem hozza létre őket.
+
+### Csatlakozási adatok átírása
+
+Ha a saját MySQL-ed nem `root` / üres jelszó / `127.0.0.1`:
+
+```javascript
+// backend/sql/database.js
+const dbConfig = {
+    host: '127.0.0.1',
+    user: 'root',
+    password: '',
+    database: 'mattmester',
+    ...
+};
+```
+
+---
+
+## Környezeti változók (.env)
+
+A repo gyökerében található [.env.example](.env.example) sablont másold át `.env` néven (akár a repo gyökerébe, akár `backend/` alá — a backend mindkét helyet betölti, a `backend/.env` előbbre van rangsorolva). A fejlesztői környezet észszerű alapértelmezésekkel indul akkor is, ha hiányzik (`SESSION_SECRET` esetén dev-ben warning + véletlen érték; production-ben azonnali fail).
+
+| Változó | Kötelező? | Default | Megjegyzés |
+|---|---|---|---|
+| `NODE_ENV` | nem | `development` | `production` esetén `cookie.secure=true`, `sameSite=strict` és kötelező `SESSION_SECRET`. |
+| `SESSION_SECRET` | **production-ben igen** | dev-ben véletlen érték (warning) | Production-ben hiánya azonnali kilépést okoz. |
+| `ALLOWED_ORIGINS` | nem | `http://localhost:3000` | Vesszővel elválasztott CORS origin lista. |
+| `DB_HOST` | nem | `127.0.0.1` | MySQL host. |
+| `DB_PORT` | nem | `3306` | MySQL port. |
+| `DB_USER` | nem | `root` | MySQL user. |
+| `DB_PASSWORD` | nem | (üres) | MySQL jelszó. |
+| `DB_NAME` | nem | `mattmester` | MySQL DB név (létrehozás auto). |
+| `DEBUG` | nem | (üres) | Debug-szintű log kapcsoló (lásd issues.md #55). |
+| `CHAT_BLACKLIST_POLICY` | nem | `hard_block` | `soft_warn` \| `hard_block`. |
+| `SMTP_*` | nem | fallback `json-dev` mód | Üresen hagyva a levelek a logba kerülnek. |
+| `PUBLIC_BASE_URL` | csak SMTP-hez | `http://127.0.0.1:3000` | Verifikációs / reset link base URL-je. |
+
+> **Koherencia**: minden változó pontosan ezen a néven szerepel a kódban és a [.env.example](.env.example) fájlban is. Új változót hozzáadáskor mindkét helyen frissíteni kell.
+
+### `trust proxy: 1` használata
+
+A backend [backend/server.js](backend/server.js) `app.set('trust proxy', 1)` beállítása arra utasítja az Express-t, hogy **pontosan egy** előtte álló reverse proxy `X-Forwarded-*` headerét megbízhatónak tekintse (pl. ezekből olvas IP-t és protokollt a rate limiter és a `cookie.secure`).
+
+- ✅ **Production** Nginx / Cloudflare / Apache reverse proxy mögött (egyetlen hop): helyes — a kliens valódi IP-jét megkapjuk.
+- ❌ **Direct expose** (proxy nélkül publikus port): hibás — bárki spoofolhat `X-Forwarded-For`-t, ezzel megkerülve a rate limitert vagy hamis IP-t auditolva.
+- ❌ **Több proxy láncolat** (pl. CDN → load balancer → app): a `1` kevés, állítsd a tényleges hop-számra vagy whitelist-re.
+- ⚠️ **Lokál fejlesztés**: localhoston a beállítás közömbös; HTTPS terminátor nélkül a `cookie.secure` (production módban) eldobja a süti-t — ezért dev-ben automatikusan `secure: false`.
+
+---
+
+## Indítás és parancsok
+
+A backend mappában (`cd backend`):
+
+| Parancs | Cwd | Mire jó |
+|---|---|---|
+| `npm run dev` | `backend/` | Fejlesztői mód: `kill-port 3000` + nodemon (auto-restart fájlváltozásra) |
+| `npm run dev:raw` | `backend/` | Csak nodemon, port-felszabadítás nélkül |
+| `npm run start` | `backend/` | Egyszerű `node server.js` (nincs auto-restart) |
+| `npm test` | `backend/` | Összes Jest teszt futtatása (backend + frontend, a frissített `jest.config.js` alapján) |
+| `npm run test:watch` | `backend/` | Tesztek figyelési módban |
+| `npm run test:coverage` | `backend/` | Code coverage report |
+
+Ha a 3000-es port lefagyott a háttérben:
+
+```bash
+cd backend
+npx kill-port 3000
+```
+
+---
+
+## Admin panel
+
+> A teljes architekturális terv: [ADMIN_PANEL.md](ADMIN_PANEL.md).
+
+### Jelenlegi állapot (2026-04-29)
+
+Az admin panel auth és token kezelése az **F1–F3 fázison** át van vezetve:
+- ✅ **F1**: Séma (`users.is_super_admin`, `admin_tokens`, `admin_audit_log`, `admin_alert_log`, `admin_rate_escalations`). Meglévő `metric_*` mezők `user_logs`-ból eltávolítva.
+- ✅ **F2**: Step-up admin token (`POST /api/admin/auth/elevate/refresh/revoke/status`). `parseAdminToken` middleware. 15 perc sliding TTL, SHA-256 hash.
+- ✅ **F3**: `AuditLogService` + middleware lánc (`requireReasonOnMutate`, `auditContext`, `auditFlush`). Redaction, before/after diff.
+- 🟡 **F4–F9**: WebSocket `/admin` namespace, AlertingService, super-admin ops, read-only API-k, retention job — tervezve, de implementáció awaiting.
+- 🔵 **Frontend**: Az új `frontend/javascript/shared/adminAuthFlow.js` DI factory kentralizálja az auth hibakezelést és token refresht. Frontend tesztek: `adminTokenFlow.test.js` (9 teszt).
+
+### Ismert nyitott kérdések
+
+- ✅ **WS event-name eltérés**: backend most `admin:alert:suspicious_pattern` néven broadcastol (sync a frontenddel). [backend/api/admin/alertingService.js:143](backend/api/admin/alertingService.js#L143)
+- ✅ **Backend konstansok expozíciója**: `GET /api/public/admin-constants` endpoint elérhető — TTL-ek, reason hosszok, UI timing, és `ADMIN_ERROR_CODES` egy forrásból. [backend/api/routes/public.js](backend/api/routes/public.js)
+- **Dead backend exports**: `isAdmin` helper már nem használt (helyette `parseAdminToken` middleware). Deprecate + külön PR eltávolítás.
+
+### Következő lépések
+
+1. Végigmenni az F4–F9 fázisokon (WebSocket, AlertingService, super-admin ops).
+2. Frontend bekötése a `/api/public/admin-constants` válaszára (jelenleg még hardcoded értékekből táplálkozik).
+3. Dead exportok takarítása.
+4. Frontend admin operációk (ban, unban, profile image review, stb.) — ezek az F4–F9 mögé kerülnek.
+
+További részletekért nézd meg az [ADMIN_PANEL.md](ADMIN_PANEL.md) és [ADMIN_AUTH_CHANGES.md](ADMIN_AUTH_CHANGES.md) fájlokat.
+
+---
+
+## Tesztek
+
+Helye: [backend/__tests__/](backend/__tests__/) és [frontend/__tests__/](frontend/__tests__/). A `npm test` (repo gyökérből, a frissített `jest.config.js`-sel) jelenleg **11 teszt-suite-ot, 104 tesztet** futtat:
+
+### Backend tesztek
+
+| Fájl | Lefedi |
+|---|---|
+| `chat.test.js` | Chat API endpointok, üzenet validáció |
+| `chatLifecycle.test.js` | Konverzáció létrehozás / cleanup / blokkolás |
+| `rate-limiter.test.js` | Rate limiter middleware logika |
+| `sessionStateRefresh.test.js` | Session-váltás, real-time chat badge |
+| `profileImageUtils.test.js` | Profilkép útvonal-normalizálás |
+| `profileImageVisibility.test.js` | Profilkép láthatósági szabályok (pending/approved/admin) |
+| `notificationDismiss.test.js` | Értesítés permanens user-oldali eltávolítás (multi-tab szinkron + SQL filter) |
+| `adminAuthRoutes.test.js` | Admin step-up token (elevate/refresh/revoke/status endpointok) |
+| `adminMiddleware.test.js` | Admin auth middleware (`parseAdminToken`, error codes) |
+| `adminAuditService.test.js` | Audit log recording, diff, redaction |
+
+### Frontend tesztek (ÚJ — 2026-04-29)
+
+| Fájl | Lefedi |
+|---|---|
+| `adminTokenFlow.test.js` | Shared `adminAuthFlow.js` factory (9 teszt: sikeres refresh, auth errors, hálózati hibák) |
+
+A coverage küszöb (`package.json` → `jest.coverageThreshold`) jelenleg 50% minden dimenzióra.
+
+### Tesztek futtatása
+
+```bash
+# Backend tesztek (backend/ mappában)
+cd backend
+npm test
+
+# Frontend tesztek (backend/ mappában, jest.config.js konfig miatt)
+cd backend
+npx jest ../frontend/__tests__/adminTokenFlow.test.js --runInBand
+
+# Összes teszt (backend/ mappában)
+npx jest --config jest.config.js --runInBand
+```
+
+---
+
+## Email verifikáció (SMTP)
+
+Az email verifikáció és jelszó-visszaállítás működéséhez érvényes SMTP adatok kellenek. Ha hiányoznak, a backend automatikusan `json-dev` fallback módba vált és a levél tartalmát logba írja — fejlesztéshez ez bőven elég.
+
+### Gmail gyors beállítás teszthez
+
+1. Kapcsold be a 2FA-t a Google fiókban
+2. Generálj App Password-öt
+3. Tedd be `SMTP_PASS`-ként a `.env`-be
+
+### Diagnosztika
+
+Backend logban keresd:
+
+- `Transporter init sikeres: kind=smtp` → SMTP konfig betöltve
+- `SMTP kapcsolat ellenőrzés rendben (verify)` → kapcsolódás OK
+- `Küldés sikeres` + `messageId` → sikeres küldés
+- `SMTP fallback aktiv: kind=json-dev` → nincs érvényes SMTP, csak logba ír
+
+Gyakori hibák: rossz SMTP host/port, hibás user/pass (auth hiba), provider tiltja a `SMTP_FROM` címet, spam/promóciók mappa, lokális tűzfal blokkolás.
+
+---
+
+## Rate limiterek
+
+Minden user-érzékeny endpoint a [backend/api/middleware/rateLimiter.js](backend/api/middleware/rateLimiter.js) közös factory-jával van védve. A kulcs alapértelmezetten user-id (ha be van jelentkezve), különben IP.
+
+Aktuális preset-ek (csak nagyságrend, pontos értékért lásd a forrást):
+
+| Limiter | Ablak | Max | Védelem |
+|---|---|---|---|
+| `authLoginLimiter` | 15 perc | 10 sikertelen | Brute-force login |
+| `authRegisterLimiter` | 60 perc | 5 | Bot regisztráció |
+| `verifyPasswordLimiter` | 15 perc | 10 sikertelen | Settings password check |
+| `profileUpdateLimiter` | 15 perc | 10 | Bcrypt-intenzív profilmódosítás |
+| `profileImageUploadLimiter` | 15 perc | 8 | Disk-spam |
+| `profileImageRemoveLimiter` | 15 perc | 15 | Toggle-spam |
+| `profileDeleteLimiter` | 60 perc | 5 | Destruktív |
+| `friendActionLimiter` | 1 perc | 20 | Social graph flood |
+| `playerSearchLimiter` | 1 perc | 30 | Username enumeráció |
+| `chatMessageLimiter` | 10 mp | 10 | Burst chat-spam |
+| `chatDirectOpenLimiter` | 1 perc | 15 | Conversation-spam |
+| `logoutAllDevicesLimiter` | 15 perc | 5 | O(n) session-store DoS |
+| `emailVerifyResendLimiter` | 15 perc | 5 | Email-spam |
+| `emailVerifyConsumeLimiter` | 15 perc | 30 | Token enumeráció |
+| `passwordResetRequestLimiter` | 60 perc | 3 | Reset-email spam |
+| `passwordResetTokenLimiter` | 15 perc | 20 | Reset token brute-force |
+| `notificationActionLimiter` | 1 perc | 60 | Notification dismiss/read spam-click |
+
+Limit átlépésnél a válasz `429 Too Many Requests`, JSON-formátum: `{ success: false, message, code? }`. A `code` csak egyes limitereknél van (pl. `EMAIL_RESEND_RATE_LIMIT`); kliens-oldalon érdemes mind a `code`-ot, mind a `message`-et kezelni.
+
+Új endpoint védése factory-val:
+
+```javascript
+const { createRateLimiter } = require('./api/middleware/rateLimiter.js');
+
+const myLimiter = createRateLimiter({
+    windowMs: 10 * 60 * 1000,
+    max: 20,
+    message: 'Túl sok kérés, próbáld újra később.'
+});
+
+router.post('/my-endpoint', myLimiter, handler);
+```
+
+---
+
+## Hibakeresés
+
+### `npm run start` blokkolva PowerShell-ben
 
 ```
-Cannot be loaded because running scripts is disabled on this system.
+... cannot be loaded because running scripts is disabled on this system.
 ```
 
-#### Megoldás:<br>
+Megoldás (admin PowerShell):
 
-Át kell állítani a PowerShell végrehajtási házirendjét. Ezt rendszergazdai jogosultságokkal futó PowerShell-ben tudod megtenni:<br>
-
-1. Nyisd meg a PowerShell-t.<br>
-
-2. Állítsd be az Execution Policy-t a következő parancs segítségével:<br>
-
-```
+```powershell
 Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 ```
 
-3. Nyomj enter-t.
+Majd zárd be és nyisd újra a VS Code-ot.
 
-4. Zárd be és nyisd újra a VS Code-ot.
+### Port 3000 foglalt
 
-## Használat:<br>
+```bash
+npx kill-port 3000
+```
 
-Nyisd meg a böngésződben a **http://localhost:3000** címet.
+(A `npm run dev` ezt automatikusan megteszi.)
 
-## Felhasznált npm package-ek backend-en:<br>
+### `bcrypt` install fail Windowson
 
-### Production Dependencies:<br>
-`express` - Web framework<br>
-`express-session` - Session management<br>
-`mysql2` - MySQL database driver<br>
-`bcrypt` - Password hashing<br>
-`multer` - File upload handling<br>
-`socket.io` - Real-time communication<br>
-`cors` - Cross-Origin Resource Sharing<br>
-`express-rate-limit` - Brute-force védelem az auth endpointokon<br>
-`dotenv` - Környezeti változók betöltése `.env` fájlból<br>
+A natív C++ build tools hiányzik. Telepíts Visual Studio Build Tools-t, vagy használj `bcryptjs`-t (drop-in JS replacement).
 
-### Development Dependencies:<br>
-`nodemon` - Auto-restart on file changes<br>
-`jest` - Testing framework<br>
-`supertest` - HTTP assertion library<br>
+### `Unknown column 'nr.dismissed_at'`
 
-## nodemon.json felépítése:<br>
+Régi DB-d van új kódbázissal. Indítsd újra a backendet — az `ensureSchemaColumns` automatikusan hozzáadja a hiányzó oszlopot.
 
-1. **"watch": ["."]:** megadja, hogy a teljes projektmappát figyelje a nodemon.<br>
+### Admin token lifecycle
 
-2. **"ext": "js":** Ha bármely .js fájl változik → Nodemon újraindítja a szervert.<br>
+Browser DevTools (Network tab):
+- `POST /api/admin/auth/elevate` → `{ token, expiresAt, isSuperAdmin }`
+- `POST /api/admin/auth/refresh` → `{ success: true }` + token extension
+- `Authorization: Bearer <token>` header minden admin fetch-en
+- `401 + { code: 'ADMIN_NO_SESSION'|'ADMIN_TOKEN_INVALID'|… }` → frontend handle (redirect / elevate modal)
 
-3. **"exec": "node server.js":** Ezt a parancsot futtatja a nodemon minden újraindításkor.<br>
+Browser Console:
+- `window.MattMesterAdminAuthFlow.adminAuthHeaders()` → aktuális Bearer header
+- `window.createRequestController()` → pending request track + cancel-capable
 
-4. **"legacyWatch": true:** Engedélyezi a lassabb, de stabilabb fájlfigyelési módot.<br>
+### WebSocket admin namespace
 
-5. **"usePolling": true:** Rendszeresen ellenőrzi, változott-e a fájl.<br>
+Browser Console (socket.io debug):
+```javascript
+window.io('/admin').on('connect', () => console.log('✓ /admin connected'));
+window.io('/admin').on('admin:audit:created', (payload) => console.log('📋 audit:', payload));
+```
 
-6. **"interval": 1000:** Meghatározza, hogy a polling milyen időközönként történjen az ellenőrzés.<br>
+---
+
+## Projekt struktúra
+
+```
+MattMester/
+├── backend/
+│   ├── server.js                 # Express + Socket.IO entry point
+│   ├── sockets.js                # Socket.IO event handlerek + hub
+│   ├── services.js               # Stats, leaderboard, notification service
+│   ├── api/
+│   │   ├── api.js                # Aggregátor router
+│   │   ├── chess_api.js          # /api/chess/* (PvP, ELO)
+│   │   ├── funtions.js           # isAuthenticated, isAdmin, requireVerifiedEmail
+│   │   ├── chatUtils.js          # Chat rate limit + audit
+│   │   ├── emailVerification.js  # SMTP transport + token kezelés
+│   │   ├── validation.js         # Username/email/password regex-ek
+│   │   ├── middleware/
+│   │   │   └── rateLimiter.js    # Univerzális rate limiter factory + presetek
+│   │   └── routes/
+│   │       ├── _shared.js        # Közös helper-ek (parsePositiveInteger, logAuthenticatedAction)
+│   │       ├── auth.js           # /login /register /logout
+│   │       ├── profile.js        # /profile/*
+│   │       ├── friends.js        # /friends/*
+│   │       ├── chat.js           # /chat/*
+│   │       ├── notifications.js  # /notifications/*
+│   │       ├── players.js        # /players/* (keresés, leaderboard)
+│   │       ├── security.js       # /security/* (logout-all-devices)
+│   │       └── admin.js          # /admin/*
+│   ├── sql/
+│   │   ├── database.js           # MySQL pool + tábla init + ensureSchemaColumns
+│   │   ├── sql_funtions.js       # Összes DB lekérdezés
+│   │   └── create_database.sql   # Referencia séma + 20 teszt-user seed
+│   ├── chess/
+│   │   └── pvp.js                # Real-time PvP sakk logika
+│   ├── profile_pictures/         # Feltöltött avatar-ok (default.png is itt)
+│   ├── __tests__/                # Jest tesztek
+│   └── package.json
+├── frontend/
+│   ├── html/                     # index, profile, adminPanel, gameRoom, mailVerified, restorePassword
+│   ├── javascript/
+│   │   ├── index.js              # Főoldal: login/register, leaderboard, chess launcher
+│   │   ├── profile.js            # Profil oldal: friends, settings, notifications, chat
+│   │   ├── adminPanel.js         # Admin felület
+│   │   ├── socketClient.js       # Socket.IO kliens-oldali wrapper + event bus
+│   │   ├── chatModal.js          # Chat modal logika
+│   │   ├── gameRoom.js           # Sakk szoba
+│   │   ├── profileImageUtils.js  # Avatar normalizálás + pending blur
+│   │   ├── requestControl.js     # Debounce + AbortController helper
+│   │   ├── mailVerified.js       # Email verify landing
+│   │   └── restorePassword.js    # Jelszó-visszaállítás landing
+│   ├── css/                      # Stíluslapok
+│   ├── chess_barold/             # Sakk játékfelület (HTML+JS+CSS+sounds)
+│   └── bootstrap/                # Lokális Bootstrap 5
+├── readme.md
+└── backend/issues.md             # Karbantartási teendők, prioritizálva
+```
+
+---
+
+## Konfigurációs sablonok
+
+### `nodemon.json` (létezik a backend mappában)
 
 ```json
 {
@@ -174,23 +452,16 @@ Nyisd meg a böngésződben a **http://localhost:3000** címet.
 }
 ```
 
-## .prettierrc fájl felépítése:<br>
+| Mező | Mire jó |
+|---|---|
+| `watch` | Figyelt mappa(k) |
+| `ext` | Mely kiterjesztések triggereljék az újraindítást |
+| `exec` | Indító parancs |
+| `legacyWatch` + `usePolling` | Stabilabb fájlfigyelés (Windows / VM esetén ajánlott) |
 
-1. Létrehozunk a projektünkben a következő néven egy fájlt: .prettierrc<br>
+### `.prettierrc` (opcionális)
 
-2. A fájlban nyitunk kapcsos zárójeleket, amelyek közé definiálhatjuk, hogy miket formázzon automatikusan a prettier<br>
-
-3. Beállítása annak, hogy minden idézőjel szimpla idézőjel legyen: ”singleQuote”: true (false értékkel minden szimpla rendes idézőjel lesz).<br>
-
-4. Annak beállítása, hogy legyen-e szóköz az objektum kapcsos zárójelei között: "bracketSpacing": true<br>
-
-5. Annak meghatározása, hogy maximum hány karakter hosszú lehet egy sor: "printWidth": 100<br>
-
-6. Beállítása annak, hogy a tabulátor hány szóközt érjen: "tabWidth": 4<br>
-
-7. Annak meghatározása, hogy egy objektum esetén az utolsó sor után ne szerepeljen vessző: "trailingComma": "none"<br>
-
-```
+```json
 {
     "singleQuote": true,
     "bracketSpacing": true,
@@ -200,96 +471,10 @@ Nyisd meg a böngésződben a **http://localhost:3000** címet.
 }
 ```
 
-## .prettierrc használata:<br>
+VS Code-ban:
 
-1. Az Extensions fülben telepítsd a prettier-t.<br>
+1. Telepítsd a Prettier extension-t
+2. `Settings → Editor: Default Formatter → Prettier`
+3. `Settings → Editor: Format On Save → enabled`
 
-2. Keresd meg a VS Code beállításokban az editor.defaultFormatter opciót és válasszuk ki a Prettiert, mint formázót.<br>
-
-3. Settings => Rákeresés a következőre: Format => Editor: Format On Save _(Ez legyen bekapcsolva)_<br>
-
-4. Keyboard shortcuts => Format document => CMD + P / CTRL + P<br>
-
-5. Egyéb: Prettier ignorálás: (sor elé) // prettier-ignore<br>
-
-## Amennyiben egy port-on továbbra is futna a szerver, viszont a terminal-t már bezártuk, így onnan nem tudjuk leállítani:<br>
-
-`npx kill-port port`<br>
-
-`npx kill-port 3000`<br>
-
-## Chat System - Konfigurációs Beállítások<br>
-
-### CORS Beállítás (Production-hez):
-
-
- Létrehozz egy `.env` fájlt a backend mappában:
-
-```
-ALLOWED_ORIGINS=http://localhost:3000,https://mattmester.com,https://www.mattmester.com
-SESSION_SECRET=<kriptográfiailag biztonságos string>
-CHAT_BLACKLIST_POLICY=hard_block
-NODE_ENV=production
-```
-
-### Chat Rate Limiter Beállítások:
-
-Az alábbi konstansok módosítható az `api.js`-ben:
-
-```javascript
-const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;    // Üzenetek szám / időablakon
-const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000; // 10 másodperces ablak
-```
-
-**Rate Limiter Cleanup:** Automatikusan fut 5 percenként, feldolgozza a memóriát és megtisztítja a régi adatokat.<br>
-
-### Auth Rate Limiter (brute-force védelem):
-
-Az auth-végpontokat (`/login`, `/register`, `/profile/verify-current-password`) a [backend/api/middleware/rateLimiter.js](backend/api/middleware/rateLimiter.js) középső réteg védi. A modul egy univerzális factory-t (`createRateLimiter`) és három előre konfigurált limitert exportál:
-
-| Limiter | Ablak | Max kérés | Megjegyzés |
-|---------|------|-----------|------------|
-| `authLoginLimiter` | 15 perc | 10 | Csak sikertelen loginokat számol (`skipSuccessfulRequests`) |
-| `authRegisterLimiter` | 60 perc | 5 | Regisztráció / bot spam védelem |
-| `verifyPasswordLimiter` | 15 perc | 10 | Settings modal aktuális jelszó ellenőrzés, csak sikertelen kísérlet számít |
-
-Új endpointra saját limiter így köthető be:
-
-```javascript
-const { createRateLimiter } = require('./api/middleware/rateLimiter.js');
-
-const myLimiter = createRateLimiter({
-    windowMs: 10 * 60 * 1000,
-    max: 20,
-    message: 'Túl sok kérés, próbáld újra később.'
-});
-
-router.post('/my-endpoint', myLimiter, handler);
-```
-
-Limit átlépésnél a válasz `429 Too Many Requests` státuszú JSON: `{ success: false, message }`.<br>
-
-Egyes limitek opcionális `code` mezőt is visszaadhatnak (példa: `EMAIL_RESEND_RATE_LIMIT`), ezért kliens oldalon érdemes `code` és `message` mezőt is kezelni.<br>
-
-### Jest Testing<br>
-
-A projekt Jest tesztsuite-tal rendelkezik. A tesztek a következő területeket fedik le:
-
-- **Chat API Endpoints** - Konverzáció listázása, üzenetkezelés, privát chat<br>
-- **Rate Limiting** - Rate limit logika validációja<br>
-- **Error Handling** - Hibakezelés és validáció<br>
-
-Tesztek futtatása:
-
-```bash
-# Összes teszt futtatása
-npm test
-
-# Tesztek figyelési módban (auto-reload)
-npm run test:watch
-
-# Code coverage report
-npm run test:coverage
-```
-
-Tesztek helye: `backend/__tests__/`<br>
+Egy soros prettier-kihagyás: a sor elé `// prettier-ignore`.

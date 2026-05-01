@@ -4,6 +4,7 @@ const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
 const { chatMessageLimiter, chatDirectOpenLimiter } = require('../middleware/rateLimiter.js');
 const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('../chatUtils.js');
 const { parsePositiveInteger, getAuthenticatedUserIdOrThrow } = require('./_shared.js');
+const { notificationService } = require('../../services.js');
 
 const router = express.Router();
 
@@ -245,6 +246,47 @@ router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, 
         }
 
         const data = await sql.insertMessageInConversation(currentUserId, conversationId, message, policyResult);
+
+        // Broadcast-szintű maszkolás: a sender saját pending képe nem szivároghat
+        // ki a többi résztvevőhöz. A REST válaszban (alább) a feladó saját nézete
+        // marad meg; a socket payload-ot defaultra cseréljük, ha a feltöltés még
+        // pending. (Az approved kép globálisan látható.)
+        const broadcastSafeData = (() => {
+            const isPending = String(data?.senderProfileImageStatus || '').toLowerCase() === 'pending';
+            if (!isPending) {
+                return data;
+            }
+            return {
+                ...data,
+                senderProfileImage: '/profile_pictures/default.png',
+                senderProfileImageStatus: 'default'
+            };
+        })();
+
+        // Authoritative real-time broadcast: a resztvevok (kuldovel egyutt) kapjanak
+        // chat:message:new + chat:unread:update + chat:list:refresh eventeket,
+        // hogy a chat ikon badge-e valos idoben frissuljon, meg akkor is, ha a
+        // cimzettnek nincs megnyitva a beszelgetes.
+        const socketHub = request.app?.locals?.socketHub;
+        if (socketHub?.broadcastChat) {
+            try {
+                socketHub.broadcastChat(conversationId, {
+                    ...broadcastSafeData,
+                    conversationId,
+                    receivedAt: new Date().toISOString()
+                });
+            } catch (broadcastError) {
+                console.warn('[chat REST] broadcastChat hiba:', broadcastError.message);
+            }
+        }
+        if (socketHub?.broadcastChatMessageSideEffects) {
+            try {
+                await socketHub.broadcastChatMessageSideEffects(conversationId, currentUserId);
+            } catch (sideEffectError) {
+                console.warn('[chat REST] side-effect hiba:', sideEffectError.message);
+            }
+        }
+
         payload = {
             success: true,
             data,
@@ -271,6 +313,41 @@ router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, 
         payload.message = error.message || payload.message;
     }
 
+    return response.status(statusCode).json(payload);
+});
+
+router.get('/chat/unread-total', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, totalUnread: 0, message: 'Szerverhiba az olvasatlan üzenetek lekérése során.' };
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+        const totalUnread = await sql.getUnreadChatMessageTotal(currentUserId);
+        payload = { success: true, totalUnread, message: 'OK' };
+    } catch (error) {
+        statusCode = resolveStatusCodeByError(error, 500);
+        payload.message = error.message || payload.message;
+    }
+    return response.status(statusCode).json(payload);
+});
+
+router.post('/chat/conversations/:conversationId/read', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, totalUnread: 0, message: 'Szerverhiba a beszélgetés olvasottá jelölése során.' };
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+        const conversationId = parsePositiveInteger(request.params?.conversationId, null);
+        if (!conversationId) {
+            throw new Error('Érvénytelen beszélgetés azonosító.');
+        }
+        await sql.assertConversationParticipant(currentUserId, conversationId);
+        await sql.markConversationReadForUser(currentUserId, conversationId);
+        const socketHub = request.app?.locals?.socketHub;
+        const totalUnread = await notificationService.refreshChatUnreadForUser(socketHub, currentUserId);
+        payload = { success: true, totalUnread, message: 'Beszélgetés olvasottnak jelölve.' };
+    } catch (error) {
+        statusCode = resolveStatusCodeByError(error, 500);
+        payload.message = error.message || payload.message;
+    }
     return response.status(statusCode).json(payload);
 });
 

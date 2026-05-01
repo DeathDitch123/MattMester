@@ -1,6 +1,5 @@
 (function initMattMesterProfileImageUtils(globalScope) {
     const DEFAULT_PROFILE_IMAGE_SRC = '/profile_pictures/default.png';
-    const PENDING_BLUR_CLASS = 'profile-image-pending-blur';
     const PENDING_STATUS = 'pending';
     const DEFAULT_ALT_TEXT = 'Profilkép';
     const DEFAULT_USERNAME = 'Felhasználó';
@@ -144,6 +143,9 @@
     }
 
     function bindDefaultImageFallback(imgElement) {
+        // Egyszeri error listener: ha a kép betöltése elakad, az alapértelmezettre
+        // állunk vissza. A pending státusz blur-ja kikerült: a backend gondoskodik
+        // arról, hogy mások default képet kapjanak, így nincs vizuális maszkolás.
         try {
             if (imgElement && !imgElement.dataset.profileImageFallbackBound) {
                 imgElement.dataset.profileImageFallbackBound = '1';
@@ -152,7 +154,6 @@
                         const currentSrc = String(imgElement.src || '');
                         if (!currentSrc.endsWith(DEFAULT_PROFILE_IMAGE_SRC)) {
                             imgElement.src = DEFAULT_PROFILE_IMAGE_SRC;
-                            imgElement.classList.remove(PENDING_BLUR_CLASS);
                         }
                     } catch (handlerError) {
                         imgElement.src = DEFAULT_PROFILE_IMAGE_SRC;
@@ -176,20 +177,20 @@
                 const altOverride = typeof opts.alt === 'string' && opts.alt.trim()
                     ? opts.alt.trim()
                     : viewModel.alt;
-                const extraPendingClasses = Array.isArray(opts.extraPendingClasses)
-                    ? opts.extraPendingClasses
-                    : [];
                 const sizePx = resolveSizePx(opts.size);
 
-                imgElement.src = viewModel.src;
-                imgElement.alt = altOverride;
-                imgElement.classList.toggle(PENDING_BLUR_CLASS, viewModel.isPending);
+                bindDefaultImageFallback(imgElement);
 
-                extraPendingClasses.forEach((cls) => {
-                    if (typeof cls === 'string' && cls.trim()) {
-                        imgElement.classList.toggle(cls.trim(), viewModel.isPending);
-                    }
-                });
+                imgElement.dataset.profileImageStatus = String(viewModel.status || 'approved');
+                imgElement.dataset.profileImageDefault = viewModel.isDefault ? '1' : '0';
+
+                imgElement.alt = altOverride;
+
+                const nextSrc = String(viewModel.src || DEFAULT_PROFILE_IMAGE_SRC);
+                const currentSrc = String(imgElement.getAttribute('src') || '');
+                if (currentSrc !== nextSrc) {
+                    imgElement.src = nextSrc;
+                }
 
                 if (sizePx > 0) {
                     imgElement.style.width = `${sizePx}px`;
@@ -201,7 +202,6 @@
                     imgElement.dataset.profileImageVariant = opts.variant.trim();
                 }
 
-                bindDefaultImageFallback(imgElement);
                 appliedViewModel = viewModel;
             }
         } catch (error) {
@@ -211,22 +211,8 @@
         return appliedViewModel;
     }
 
-    function injectGlobalPendingBlurStyle(doc) {
-        try {
-            if (doc && doc.head && !doc.getElementById('mattmester-profile-image-utils-style')) {
-                const styleEl = doc.createElement('style');
-                styleEl.id = 'mattmester-profile-image-utils-style';
-                styleEl.textContent = `.${PENDING_BLUR_CLASS} { filter: blur(3px) saturate(0.75); }`;
-                doc.head.appendChild(styleEl);
-            }
-        } catch (error) {
-            // Style injekció hiba esetén a CSS fájlokban definiált fallback veszi át.
-        }
-    }
-
     const api = {
         DEFAULT_PROFILE_IMAGE_SRC,
-        PENDING_BLUR_CLASS,
         PENDING_STATUS,
         normalizeProfileImageSource,
         normalizeProfileImageStatus,
@@ -237,12 +223,4 @@
     };
 
     globalScope.MattMesterProfileImage = api;
-
-    try {
-        if (globalScope.document) {
-            injectGlobalPendingBlurStyle(globalScope.document);
-        }
-    } catch (error) {
-        // Ha nincs document (pl. teszt környezet), némán elbukik.
-    }
 })(typeof window !== 'undefined' ? window : globalThis);

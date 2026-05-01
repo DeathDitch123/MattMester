@@ -25,6 +25,26 @@ function isAllowedProfileImagePath(value) {
     return ALLOWED_PROFILE_IMAGE_EXTENSIONS.has(extension);
 }
 
+// Egységes láthatósági szabály: pending képet csak a tulajdonosa lát.
+// Bárki más (vagy publikus/cache-elt nézet, ahol nincs viewer) az alapértelmezett képet kapja.
+// A 'rejected' státusz biztonsági okból szintén default fallback. Az 'approved'/'default' érintetlen.
+function applyProfileImageVisibility(profileImage, profileImageStatus, ownerUserId, viewerUserId) {
+    const normalizedStatus = String(profileImageStatus || 'approved').toLowerCase();
+    const normalizedOwnerId = Number(ownerUserId) || 0;
+    const normalizedViewerId = Number(viewerUserId) || 0;
+    const isOwner = normalizedOwnerId > 0 && normalizedOwnerId === normalizedViewerId;
+    let result = {
+        profileImage: profileImage || DEFAULT_PROFILE_IMAGE_PATH,
+        profileImageStatus: normalizedStatus || 'approved'
+    };
+    if (normalizedStatus === 'pending' && !isOwner) {
+        result = { profileImage: DEFAULT_PROFILE_IMAGE_PATH, profileImageStatus: 'default' };
+    } else if (normalizedStatus === 'rejected') {
+        result = { profileImage: DEFAULT_PROFILE_IMAGE_PATH, profileImageStatus: 'default' };
+    }
+    return result;
+}
+
 async function normalizeUserProfileImage(pool, userId, currentProfileImage, latestUploadStatus) {
     let normalizedProfileImage = currentProfileImage;
 
@@ -177,62 +197,84 @@ async function updateUserPasswordAndClearResetToken(userId, passwordHash) {
     }
     return result;
 }
+// Publikus, cache-elt ranglistákon a pending képet mindig default-ra cseréljük
+// (a leaderboard-ot mindenki látja, így a pending nem szivároghat ki).
+const LEADERBOARD_PROFILE_IMAGE_EXPRESSION = `
+    CASE
+        WHEN u.profile_image = '/profile_pictures/default.png' THEN '/profile_pictures/default.png'
+        WHEN COALESCE(
+            (
+                SELECT piu.status
+                FROM profile_image_uploads piu
+                WHERE piu.user_id = u.id
+                ORDER BY piu.upload_time DESC, piu.id DESC
+                LIMIT 1
+            ),
+            'approved'
+        ) IN ('pending', 'rejected') THEN '/profile_pictures/default.png'
+        ELSE u.profile_image
+    END AS profile_image
+`;
+
 async function getLeaderBoardByElo() {
     const pool = getPool();
-    const query = `SELECT id, username, elo, profile_image, last_active, created_at
-                   FROM users
-                   WHERE is_banned = FALSE
-                   ORDER BY elo DESC
+    const query = `SELECT u.id, u.username, u.elo, ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION}, u.last_active, u.created_at
+                   FROM users u
+                   WHERE u.is_banned = FALSE
+                   ORDER BY u.elo DESC
                    LIMIT 100`;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getLeaderBoardByMM() {
     const pool = getPool();
-    // DB oszlop neve elo_classical (régi nev: elo_MM) — alias-szel megőrzzük
-    // a régi mezőnevet a JS / frontend kompatibilitásért.
-    const query = `SELECT id, username, elo_classical AS elo_MM, profile_image, last_active, created_at
-                   FROM users
-                   WHERE is_banned = FALSE
-                   ORDER BY elo_classical DESC
+    const query = `SELECT u.id, u.username, u.elo_classical AS elo_MM, ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION}, u.last_active, u.created_at
+                   FROM users u
+                   WHERE u.is_banned = FALSE
+                   ORDER BY u.elo_classical DESC
                    LIMIT 100`;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getLeaderBoardByBullet() {
     const pool = getPool();
-    // DB oszlop neve elo_blitz (régi nev: elo_bullet) — alias-szel megőrzzük.
-    const query = `SELECT id, username, elo_blitz AS elo_bullet, profile_image, last_active, created_at
-                   FROM users
-                   WHERE is_banned = FALSE
-                   ORDER BY elo_blitz DESC
+    const query = `SELECT u.id, u.username, u.elo_blitz AS elo_bullet, ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION}, u.last_active, u.created_at
+                   FROM users u
+                   WHERE u.is_banned = FALSE
+                   ORDER BY u.elo_blitz DESC
                    LIMIT 100`;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getLeaderBoardByWinRate() {
     const pool = getPool();
     const query = `
-        SELECT 
+        SELECT
             u.id,
             u.username,
             u.elo,
-            u.profile_image,
+            ${LEADERBOARD_PROFILE_IMAGE_EXPRESSION},
             ROUND(
                 IFNULL(
                     (s.wins / NULLIF(s.wins + s.losses + s.draws, 0)) * 100, 
@@ -250,17 +292,19 @@ async function getLeaderBoardByWinRate() {
             statistics s ON u.id = s.user_id
         WHERE 
             u.is_banned = FALSE
-        ORDER BY 
+        ORDER BY
             u.elo DESC,
             winrate_percent DESC
         LIMIT 100;
         `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query);
-        return rows;
+        result = rows;
     } catch (error) {
         throw new Error('Hiba a felhasználó lekérdezése során.');
     }
+    return result;
 }
 
 async function getSessionUserById(userId) {
@@ -369,7 +413,7 @@ async function getSessionUserById(userId) {
     }
 }
 
-async function getPublicPlayerProfileById(targetUserId) {
+async function getPublicPlayerProfileById(targetUserId, viewerUserId = 0) {
     const pool = getPool();
     const query = `
         SELECT
@@ -403,17 +447,26 @@ async function getPublicPlayerProfileById(targetUserId) {
         LIMIT 1
     `;
 
+    let result = null;
     try {
         const [rows] = await pool.execute(query, [targetUserId]);
-        if (!rows.length) {
-            return null;
+        if (rows.length) {
+            const row = rows[0];
+            const visibility = applyProfileImageVisibility(
+                row.profile_image,
+                row.profile_image_status,
+                row.id,
+                viewerUserId
+            );
+            row.profile_image = visibility.profileImage;
+            row.profile_image_status = visibility.profileImageStatus;
+            result = row;
         }
-
-        return rows[0];
     } catch (error) {
         console.error('Hiba a publikus játékos profil lekérdezése során:', error);
         throw new Error('Nem sikerült a játékos profil lekérése.');
     }
+    return result;
 }
 
 async function getUserAuthById(userId) {
@@ -511,6 +564,200 @@ async function updateUserProfileSettings(userId, updates) {
     }
 }
 
+// Admin által végzett user-mező módosítás. Két táblát érint:
+//   - users: username, email, role, is_email_verified, email_verified_at, elo, elo_MM, elo_bullet
+//   - statistics: wins, losses, draws, abilities_used (külön tábla, nincs FK kaszkád UPDATE-re)
+// Tranzakcióban: előbb FOR UPDATE snapshot a JOIN-on, majd csak a változott mezőkre UPDATE.
+// Visszaadja a { before, after, changedKeys } objektumot az audit log-hoz.
+async function adminUpdateUserCore(userId, changes = {}) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const trimStr = (v) => String(v).trim();
+    const allowedRoles = new Set(['player', 'admin']);
+    const clampInt = (max) => (v) => {
+        const n = Math.trunc(Number(v));
+        if (!Number.isFinite(n) || n < 0) return 0;
+        return Math.min(n, max);
+    };
+    const ELO_MAX = 9999;
+    const STAT_MAX = 1_000_000;
+
+    try {
+        await connection.beginTransaction();
+
+        const [userRows] = await connection.execute(
+            `SELECT id, username, email, role, is_email_verified,
+                    elo, elo_MM, elo_bullet
+             FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
+            [userId]
+        );
+        if (!userRows.length) {
+            await connection.rollback();
+            const error = new Error('A felhasznalo nem talalhato.');
+            error.code = 'USER_NOT_FOUND';
+            throw error;
+        }
+
+        // statistics sor lehet hogy nincs — biztos ami biztos létrehozzuk üresen, hogy a FOR UPDATE
+        // egy létező sort lockoljon. (INSERT IGNORE — ha van, nem ír felül.)
+        await connection.execute(
+            'INSERT IGNORE INTO statistics (user_id, wins, losses, draws, abilities_used) VALUES (?, 0, 0, 0, 0)',
+            [userId]
+        );
+        const [statRows] = await connection.execute(
+            'SELECT wins, losses, draws, abilities_used FROM statistics WHERE user_id = ? LIMIT 1 FOR UPDATE',
+            [userId]
+        );
+        const statRow = statRows[0] || { wins: 0, losses: 0, draws: 0, abilities_used: 0 };
+
+        const before = {
+            username: userRows[0].username,
+            email: userRows[0].email,
+            role: userRows[0].role,
+            emailVerified: Boolean(userRows[0].is_email_verified),
+            elo: Number(userRows[0].elo) || 0,
+            eloMM: Number(userRows[0].elo_MM) || 0,
+            eloBullet: Number(userRows[0].elo_bullet) || 0,
+            wins: Number(statRow.wins) || 0,
+            losses: Number(statRow.losses) || 0,
+            draws: Number(statRow.draws) || 0,
+            totalAbilities: Number(statRow.abilities_used) || 0
+        };
+
+        // ---- users tábla mezői ----
+        const userFields = [];
+        const userParams = [];
+        const changedKeys = [];
+
+        const setUserIf = (key, column, raw, transform = (x) => x) => {
+            if (raw === undefined) return;
+            const next = transform(raw);
+            if (next === before[key]) return;
+            userFields.push(`${column} = ?`);
+            userParams.push(next);
+            changedKeys.push(key);
+        };
+
+        if (typeof changes.username === 'string') {
+            const trimmed = trimStr(changes.username);
+            if (trimmed.length < 3 || trimmed.length > 50) {
+                await connection.rollback();
+                throw new Error('A felhasznalonevnek 3 es 50 karakter kozott kell lennie.');
+            }
+            setUserIf('username', 'username', trimmed);
+        }
+
+        if (typeof changes.email === 'string') {
+            const trimmed = trimStr(changes.email).toLowerCase();
+            if (trimmed.length < 3 || trimmed.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+                await connection.rollback();
+                throw new Error('Ervenytelen e-mail cim.');
+            }
+            setUserIf('email', 'email', trimmed);
+        }
+
+        if (typeof changes.role === 'string') {
+            const trimmed = trimStr(changes.role);
+            if (!allowedRoles.has(trimmed)) {
+                await connection.rollback();
+                throw new Error('Ervenytelen szerepkor.');
+            }
+            setUserIf('role', 'role', trimmed);
+        }
+
+        if (changes.emailVerified !== undefined) {
+            const next = Boolean(changes.emailVerified);
+            if (next !== before.emailVerified) {
+                userFields.push('is_email_verified = ?');
+                userParams.push(next ? 1 : 0);
+                if (next) {
+                    userFields.push('email_verified_at = NOW()');
+                } else {
+                    userFields.push('email_verified_at = NULL');
+                }
+                changedKeys.push('emailVerified');
+            }
+        }
+
+        setUserIf('elo',       'elo',        changes.elo,       clampInt(ELO_MAX));
+        setUserIf('eloMM',     'elo_MM',     changes.eloMM,     clampInt(ELO_MAX));
+        setUserIf('eloBullet', 'elo_bullet', changes.eloBullet, clampInt(ELO_MAX));
+
+        // ---- statistics tábla mezői ----
+        const statFields = [];
+        const statParams = [];
+        const setStatIf = (key, column, raw) => {
+            if (raw === undefined) return;
+            const next = clampInt(STAT_MAX)(raw);
+            if (next === before[key]) return;
+            statFields.push(`${column} = ?`);
+            statParams.push(next);
+            changedKeys.push(key);
+        };
+        setStatIf('wins',           'wins',           changes.wins);
+        setStatIf('losses',         'losses',         changes.losses);
+        setStatIf('draws',          'draws',          changes.draws);
+        setStatIf('totalAbilities', 'abilities_used', changes.totalAbilities);
+
+        if (userFields.length === 0 && statFields.length === 0) {
+            await connection.commit();
+            return { changed: false, before, after: { ...before }, changedKeys: [] };
+        }
+
+        try {
+            if (userFields.length > 0) {
+                userParams.push(userId);
+                await connection.execute(
+                    `UPDATE users SET ${userFields.join(', ')} WHERE id = ?`,
+                    userParams
+                );
+            }
+            if (statFields.length > 0) {
+                statParams.push(userId);
+                await connection.execute(
+                    `UPDATE statistics SET ${statFields.join(', ')} WHERE user_id = ?`,
+                    statParams
+                );
+            }
+        } catch (error) {
+            await connection.rollback();
+            if (error?.code === 'ER_DUP_ENTRY') {
+                if (String(error.sqlMessage || '').includes('username')) {
+                    throw new Error('A felhasznalonev mar foglalt.');
+                }
+                if (String(error.sqlMessage || '').includes('email')) {
+                    throw new Error('Az e-mail cim mar foglalt.');
+                }
+                throw new Error('Duplikalt adat — a modositas nem menthető.');
+            }
+            throw error;
+        }
+
+        const after = { ...before };
+        for (const key of changedKeys) {
+            if (key === 'emailVerified') {
+                after.emailVerified = Boolean(changes.emailVerified);
+            } else if (key === 'username' || key === 'role') {
+                after[key] = trimStr(changes[key]);
+            } else if (key === 'email') {
+                after.email = trimStr(changes.email).toLowerCase();
+            } else if (key === 'elo' || key === 'eloMM' || key === 'eloBullet') {
+                after[key] = clampInt(ELO_MAX)(changes[key]);
+            } else if (key === 'wins' || key === 'losses' || key === 'draws' || key === 'totalAbilities') {
+                after[key] = clampInt(STAT_MAX)(changes[key]);
+            }
+        }
+
+        await connection.commit();
+        return { changed: changedKeys.length > 0, before, after, changedKeys };
+    } catch (error) {
+        try { await connection.rollback(); } catch (_) {}
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 async function insertUserLog(userId, logData) {
     const pool = getPool();
     const metadata = logData.metadata || null;
@@ -527,15 +774,12 @@ async function insertUserLog(userId, logData) {
             severity,
             source,
             success,
-            metric_key,
-            metric_value,
-            metric_delta,
             message,
             ip_address,
             user_agent,
             metadata,
             occurred_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
 
     const params = [
@@ -545,9 +789,6 @@ async function insertUserLog(userId, logData) {
         logData.severity || 'info',
         logData.source || 'backend',
         typeof logData.success === 'boolean' ? logData.success : null,
-        logData.metricKey || null,
-        typeof logData.metricValue === 'number' ? logData.metricValue : null,
-        typeof logData.metricDelta === 'number' ? logData.metricDelta : null,
         logData.message || null,
         ipAddress,
         userAgent,
@@ -646,6 +887,8 @@ async function getAllUsers() {
             u.email,
             u.role,
             u.profile_image,
+            u.is_email_verified,
+            u.email_verified_at,
             u.elo,
             u.elo_classical AS elo_MM,
             u.elo_blitz AS elo_bullet,
@@ -653,6 +896,13 @@ async function getAllUsers() {
             u.banned_until,
             u.last_active,
             u.created_at,
+            (
+                SELECT piu.status
+                FROM profile_image_uploads piu
+                WHERE piu.user_id = u.id
+                ORDER BY piu.upload_time DESC, piu.id DESC
+                LIMIT 1
+            ) AS profile_image_status,
             COALESCE(s.wins, 0) AS wins,
             COALESCE(s.losses, 0) AS losses,
             COALESCE(s.draws, 0) AS draws,
@@ -909,6 +1159,47 @@ async function getUserProfileImage(userId) {
     }
 }
 
+async function uploadProfileImageAdminApproved(userId, filename) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [userRows] = await connection.execute('SELECT id FROM users WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+        if (!userRows.length) {
+            throw new Error('A felhasználó nem található.');
+        }
+
+        if (!isAllowedProfileImagePath(filename)) {
+            throw new Error('Érvénytelen profilkép útvonal.');
+        }
+
+        const adminUserId = Number(global._currentAdminUserId) || 0;
+
+        const [insertResult] = await connection.execute(
+            'INSERT INTO profile_image_uploads (user_id, filename, status, review_note, reviewed_by, review_time) VALUES (?, ?, "approved", ?, ?, NOW())',
+            [userId, filename, 'Admin által azonnal jóváhagyva.', adminUserId || null]
+        );
+
+        await connection.execute('UPDATE users SET profile_image = ? WHERE id = ?', [filename, userId]);
+
+        await connection.commit();
+        return {
+            uploadId: insertResult.insertId,
+            status: 'approved',
+            profileImage: filename
+        };
+    } catch (error) {
+        await connection.rollback();
+        if (error.message === 'A felhasználó nem található.' || error.message === 'Érvénytelen profilkép útvonal.') {
+            throw error;
+        }
+        throw new Error('Hiba a profil kép admin feltöltése során.');
+    } finally {
+        connection.release();
+    }
+}
+
 async function resetUserProfileImageToDefault(userId) {
     const pool = getPool();
     const connection = await pool.getConnection();
@@ -1077,13 +1368,27 @@ async function searchUsersByUsernameContains(searchText, currentUserId) {
           AND u.is_banned = FALSE
         ORDER BY u.username ASC
     `;
+    let result = [];
     try {
         const [rows] = await pool.execute(query, [currentUserId, currentUserId, `%${searchText}%`, currentUserId]);
-        return rows;
+        result = rows.map((row) => {
+            const visibility = applyProfileImageVisibility(
+                row.profile_image,
+                row.profile_image_status,
+                row.id,
+                currentUserId
+            );
+            return {
+                ...row,
+                profile_image: visibility.profileImage,
+                profile_image_status: visibility.profileImageStatus
+            };
+        });
     } catch (error) {
         console.error('Hiba a felhasználó keresése során:', error);
-        return [];
+        result = [];
     }
+    return result;
 }
 
 
@@ -1280,17 +1585,24 @@ async function isEitherUserBlocked(currentUserId, targetUserId, executor = null)
     }
 }
 
-function buildFriendListItem(row, relationStatus) {
+function buildFriendListItem(row, relationStatus, viewerUserId = 0) {
     const normalizedStatus = String(relationStatus || 'none');
     const ownBlockActive = Boolean(Number(row.own_block_active || 0));
     const oppositeBlockActive = Boolean(Number(row.opposite_block_active || 0));
     const isBlockedContext = normalizedStatus.startsWith('blocked');
 
+    const visibility = applyProfileImageVisibility(
+        row.profile_image,
+        row.profile_image_status,
+        row.id,
+        viewerUserId
+    );
+
     return {
         userId: row.id,
         username: row.username,
-        profileImage: row.profile_image || '/profile_pictures/default.png',
-        profileImageStatus: row.profile_image_status || 'approved',
+        profileImage: visibility.profileImage,
+        profileImageStatus: visibility.profileImageStatus,
         relationStatus: normalizedStatus,
         canView: normalizedStatus === 'friends' || normalizedStatus === 'incoming_pending' || isBlockedContext,
         canAccept: normalizedStatus === 'incoming_pending',
@@ -1345,7 +1657,7 @@ async function getAcceptedFriendsForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId]);
-        return rows.map((row) => buildFriendListItem(row, 'friends'));
+        return rows.map((row) => buildFriendListItem(row, 'friends', userId));
     } catch (error) {
         throw new Error('Hiba a baratlista lekerdezese soran.');
     }
@@ -1392,7 +1704,7 @@ async function getIncomingPendingFriendsForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId, userId, userId, userId, userId, userId, userId]);
-        return rows.map((row) => buildFriendListItem(row, 'incoming_pending'));
+        return rows.map((row) => buildFriendListItem(row, 'incoming_pending', userId));
     } catch (error) {
         throw new Error('Hiba a bejovo baratkerelmek lekerdezese soran.');
     }
@@ -1430,7 +1742,7 @@ async function getBlockedUsersForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId]);
-        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 1, opposite_block_active: 0 }, 'blocked_by_me'));
+        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 1, opposite_block_active: 0 }, 'blocked_by_me', userId));
     } catch (error) {
         throw new Error('Hiba a tiltott felhasznalok lekerdezese soran.');
     }
@@ -1468,7 +1780,7 @@ async function getBlockedByThemForUser(userId) {
         `;
 
         const [rows] = await pool.execute(query, [userId]);
-        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 0, opposite_block_active: 1 }, 'blocked_by_them'));
+        return rows.map((row) => buildFriendListItem({ ...row, own_block_active: 0, opposite_block_active: 1 }, 'blocked_by_them', userId));
     } catch (error) {
         throw new Error('Hiba a masik fel altal tiltott lista lekerdezese soran.');
     }
@@ -2078,6 +2390,9 @@ const CHAT_BLOCKED_WORDS = [
     'tetu',
     'ribanc',
     'kurvajo',
+    'kurvanyomor',
+    'nigger',
+    'nigga',
     // Spanish profanity
     'mierda',
     'joder',
@@ -2443,12 +2758,20 @@ async function getUserConversations(userId, limit = 20, cursor = null) {
             unreadCount: Number(row.unread_count || 0),
             participantCount: Number(row.participant_count || 0),
             otherUser: row.other_user_id
-                ? {
-                    userId: row.other_user_id,
-                    username: row.other_user_username,
-                    profileImage: row.other_user_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
-                    profileImageStatus: row.other_user_profile_image_status || 'default'
-                }
+                ? (() => {
+                    const visibility = applyProfileImageVisibility(
+                        row.other_user_profile_image,
+                        row.other_user_profile_image_status,
+                        row.other_user_id,
+                        normalizedUserId
+                    );
+                    return {
+                        userId: row.other_user_id,
+                        username: row.other_user_username,
+                        profileImage: visibility.profileImage,
+                        profileImageStatus: visibility.profileImageStatus
+                    };
+                })()
                 : null
         }));
 
@@ -2526,18 +2849,26 @@ async function getConversationMessages(userId, conversationId, beforeMessageId =
         const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
 
         return {
-            data: sliced.map((row) => ({
-                id: row.id,
-                conversationId: row.conversation_id,
-                senderId: row.sender_id,
-                senderUsername: row.sender_username,
-                senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
-                senderProfileImageStatus: row.sender_profile_image_status || 'default',
-                body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
-                bodyOriginal: row.body,
-                isBodyMasked: Boolean(row.is_body_masked),
-                sentAt: row.sent_at
-            })),
+            data: sliced.map((row) => {
+                const visibility = applyProfileImageVisibility(
+                    row.sender_profile_image,
+                    row.sender_profile_image_status,
+                    row.sender_id,
+                    normalizedUserId
+                );
+                return {
+                    id: row.id,
+                    conversationId: row.conversation_id,
+                    senderId: row.sender_id,
+                    senderUsername: row.sender_username,
+                    senderProfileImage: visibility.profileImage,
+                    senderProfileImageStatus: visibility.profileImageStatus,
+                    body: row.is_body_masked ? (row.body_masked || row.body) : row.body,
+                    bodyOriginal: row.body,
+                    isBodyMasked: Boolean(row.is_body_masked),
+                    sentAt: row.sent_at
+                };
+            }),
             hasMore,
             nextCursor: hasMore && sliced.length ? sliced[sliced.length - 1].id : null
         };
@@ -2868,7 +3199,617 @@ async function getUserVerificationStatusById(userId) {
     return statusRow;
 }
 
+// =====================
+// Notifications (DB-backed unified notification system)
+// =====================
+
+const ALLOWED_NOTIFICATION_AUDIENCES = new Set(['user', 'multi', 'global', 'role', 'system']);
+const ALLOWED_NOTIFICATION_SEVERITIES = new Set(['info', 'success', 'warning', 'error']);
+const ALLOWED_NOTIFICATION_TARGET_ROLES = new Set(['player', 'admin']);
+
+function normalizeNotificationInput(notification) {
+    const input = notification && typeof notification === 'object' ? notification : {};
+    const type = String(input.type || '').trim().slice(0, 64);
+    const audience = ALLOWED_NOTIFICATION_AUDIENCES.has(input.audience) ? input.audience : 'user';
+    const severity = ALLOWED_NOTIFICATION_SEVERITIES.has(input.severity) ? input.severity : 'info';
+    const targetRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(input.targetRole) ? input.targetRole : null;
+    const targetUserId = normalizePositiveInt(input.targetUserId, 0) || null;
+    const senderUserId = normalizePositiveInt(input.senderUserId, 0) || null;
+    const title = String(input.title || '').trim().slice(0, 160);
+    const message = String(input.message || '').trim().slice(0, 500);
+    let payloadJson = null;
+    if (input.payload && typeof input.payload === 'object') {
+        try {
+            payloadJson = JSON.stringify(input.payload);
+        } catch (serializeError) {
+            payloadJson = null;
+        }
+    }
+    return {
+        type,
+        audience,
+        severity,
+        targetRole,
+        targetUserId,
+        senderUserId,
+        title,
+        message,
+        payloadJson
+    };
+}
+
+async function insertNotification(notification) {
+    const pool = getPool();
+    let insertedRow = null;
+    try {
+        const data = normalizeNotificationInput(notification);
+        if (!data.type) {
+            throw new Error('Értesítés típus kötelező.');
+        }
+        if (!data.title) {
+            throw new Error('Értesítés cím kötelező.');
+        }
+        if (!data.message) {
+            throw new Error('Értesítés szöveg kötelező.');
+        }
+        if (data.audience === 'user' && !data.targetUserId) {
+            throw new Error('Egy célzott értesítéshez target_user_id kötelező.');
+        }
+        if (data.audience === 'role' && !data.targetRole) {
+            throw new Error('Szerep alapú értesítéshez target_role kötelező.');
+        }
+
+        const [result] = await pool.execute(
+            `
+                INSERT INTO notifications
+                    (type, audience, target_user_id, target_role, sender_user_id,
+                     title, message, payload, severity)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `,
+            [
+                data.type,
+                data.audience,
+                data.targetUserId,
+                data.targetRole,
+                data.senderUserId,
+                data.title,
+                data.message,
+                data.payloadJson,
+                data.severity
+            ]
+        );
+
+        insertedRow = {
+            id: result.insertId,
+            type: data.type,
+            audience: data.audience,
+            targetUserId: data.targetUserId,
+            targetRole: data.targetRole,
+            senderUserId: data.senderUserId,
+            title: data.title,
+            message: data.message,
+            payload: data.payloadJson ? JSON.parse(data.payloadJson) : null,
+            severity: data.severity,
+            createdAt: new Date().toISOString(),
+            isRead: false
+        };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítés mentése során.');
+    }
+    return insertedRow;
+}
+
+async function getNotificationsForUser(userId, userRole, limit = 30, cursor = null) {
+    const pool = getPool();
+    let result = { data: [], nextCursor: null, hasMore: false };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+
+        const normalizedRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(userRole) ? userRole : 'player';
+        const normalizedLimit = normalizeListLimit(limit, 30, 100);
+        const normalizedCursor = normalizePositiveInt(cursor, 0);
+
+        const params = [normalizedUserId, normalizedUserId, normalizedRole];
+        let cursorClause = '';
+        if (normalizedCursor) {
+            cursorClause = 'AND n.id < ?';
+            params.push(normalizedCursor);
+        }
+        params.push(normalizedLimit + 1);
+
+        // Dismissed (per-user soft-deleted) értesítéseket nem listázzuk.
+        const [rows] = await pool.execute(
+            `
+                SELECT
+                    n.id,
+                    n.type,
+                    n.audience,
+                    n.target_user_id,
+                    n.target_role,
+                    n.sender_user_id,
+                    sender.username AS sender_username,
+                    n.title,
+                    n.message,
+                    n.payload,
+                    n.severity,
+                    n.created_at,
+                    CASE WHEN nr.read_at IS NULL THEN 0 ELSE 1 END AS is_read
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                LEFT JOIN users sender ON sender.id = n.sender_user_id
+                WHERE (
+                    n.target_user_id = ?
+                    OR n.audience = 'global'
+                    OR (n.audience = 'role' AND n.target_role = ?)
+                )
+                AND (nr.dismissed_at IS NULL)
+                ${cursorClause}
+                ORDER BY n.id DESC
+                LIMIT ?
+            `,
+            params
+        );
+
+        const hasMore = rows.length > normalizedLimit;
+        const sliced = hasMore ? rows.slice(0, normalizedLimit) : rows;
+
+        const data = sliced.map((row) => {
+            let payload = null;
+            if (row.payload) {
+                try {
+                    payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload;
+                } catch (parseError) {
+                    payload = null;
+                }
+            }
+            return {
+                id: Number(row.id),
+                type: row.type,
+                audience: row.audience,
+                targetUserId: row.target_user_id ? Number(row.target_user_id) : null,
+                targetRole: row.target_role || null,
+                senderUserId: row.sender_user_id ? Number(row.sender_user_id) : null,
+                senderUsername: row.sender_username || null,
+                title: row.title,
+                message: row.message,
+                payload,
+                severity: row.severity,
+                createdAt: row.created_at,
+                isRead: Boolean(row.is_read)
+            };
+        });
+
+        result = {
+            data,
+            nextCursor: hasMore && data.length ? data[data.length - 1].id : null,
+            hasMore
+        };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítések lekérése során.');
+    }
+    return result;
+}
+
+async function markNotificationRead(userId, notificationId) {
+    const pool = getPool();
+    let outcome = { changed: false };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedNotificationId = normalizePositiveInt(notificationId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedNotificationId) {
+            throw new Error('Érvénytelen értesítés azonosító.');
+        }
+
+        const [accessRows] = await pool.execute(
+            `
+                SELECT n.id
+                FROM notifications n
+                LEFT JOIN users u ON u.id = ?
+                WHERE n.id = ?
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = u.role)
+                  )
+                LIMIT 1
+            `,
+            [normalizedUserId, normalizedNotificationId, normalizedUserId]
+        );
+
+        if (accessRows.length) {
+            const [insertResult] = await pool.execute(
+                `
+                    INSERT INTO notification_reads (notification_id, user_id, read_at)
+                    VALUES (?, ?, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        read_at = COALESCE(read_at, VALUES(read_at))
+                `,
+                [normalizedNotificationId, normalizedUserId]
+            );
+            // affectedRows: 1 = beszúrva, 2 = update történt, 0 = no-op (már volt read_at)
+            outcome = { changed: insertResult.affectedRows === 1 };
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítés olvasottá jelölése során.');
+    }
+    return outcome;
+}
+
+// Egy adott értesítés permanens user-oldali eltávolítása (X / akció gomb).
+// Idempotens: többszöri hívás nem hibázik, dismissed_at nem íródik felül.
+async function dismissNotificationForUser(userId, notificationId) {
+    const pool = getPool();
+    let outcome = { changed: false, alreadyDismissed: false, accessible: false };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedNotificationId = normalizePositiveInt(notificationId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedNotificationId) {
+            throw new Error('Érvénytelen értesítés azonosító.');
+        }
+
+        const [accessRows] = await pool.execute(
+            `
+                SELECT n.id, nr.dismissed_at
+                FROM notifications n
+                LEFT JOIN users u ON u.id = ?
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE n.id = ?
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = u.role)
+                  )
+                LIMIT 1
+            `,
+            [normalizedUserId, normalizedUserId, normalizedNotificationId, normalizedUserId]
+        );
+
+        if (accessRows.length) {
+            outcome.accessible = true;
+            const wasAlreadyDismissed = accessRows[0].dismissed_at !== null;
+            outcome.alreadyDismissed = wasAlreadyDismissed;
+            if (!wasAlreadyDismissed) {
+                await pool.execute(
+                    `
+                        INSERT INTO notification_reads (notification_id, user_id, read_at, dismissed_at)
+                        VALUES (?, ?, NOW(), NOW())
+                        ON DUPLICATE KEY UPDATE
+                            read_at = COALESCE(read_at, VALUES(read_at)),
+                            dismissed_at = COALESCE(dismissed_at, VALUES(dismissed_at))
+                    `,
+                    [normalizedNotificationId, normalizedUserId]
+                );
+                outcome.changed = true;
+            }
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítés eltávolítása során.');
+    }
+    return outcome;
+}
+
+// Friend action utáni cleanup: az adott senderhez tartozó friend_request
+// értesítéseket dismiss-eli a current usernél (nem read csak), hogy
+// session-váltás után se jöjjenek vissza.
+async function dismissFriendRequestNotificationsForUser(userId, senderUserId) {
+    const pool = getPool();
+    let outcome = { changed: 0 };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedSenderUserId = normalizePositiveInt(senderUserId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedSenderUserId) {
+            throw new Error('Érvénytelen kuldo felhasznalo azonosito.');
+        }
+
+        // 1. lépés: új sorokat húzunk fel azokra az értesítésekre, amelyek
+        //   még nincsenek a notification_reads-ben (új sor = read+dismiss együtt).
+        const [insertResult] = await pool.execute(
+            `
+                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at, dismissed_at)
+                SELECT n.id, ?, NOW(), NOW()
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE nr.notification_id IS NULL
+                  AND n.type = 'friend_request'
+                  AND n.target_user_id = ?
+                  AND n.sender_user_id = ?
+            `,
+            [normalizedUserId, normalizedUserId, normalizedUserId, normalizedSenderUserId]
+        );
+
+        // 2. lépés: a már létező soroknál (csak read volt) dismissed_at beállítás.
+        const [updateResult] = await pool.execute(
+            `
+                UPDATE notification_reads nr
+                JOIN notifications n
+                    ON n.id = nr.notification_id
+                SET nr.dismissed_at = NOW(),
+                    nr.read_at = COALESCE(nr.read_at, NOW())
+                WHERE nr.user_id = ?
+                  AND nr.dismissed_at IS NULL
+                  AND n.type = 'friend_request'
+                  AND n.target_user_id = ?
+                  AND n.sender_user_id = ?
+            `,
+            [normalizedUserId, normalizedUserId, normalizedSenderUserId]
+        );
+
+        outcome = {
+            changed: Number(insertResult.affectedRows || 0) + Number(updateResult.affectedRows || 0)
+        };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a friend request ertesites eltavolitasakor.');
+    }
+    return outcome;
+}
+
+// "Mind olvasott" UI gomb backend-je: minden látható (még nem dismissed)
+// értesítést permanensen eltávolít a user nézetéből (read+dismiss együtt).
+// A felirat a UI-on magyar konvenció miatt marad "Mind olvasott", de a
+// viselkedés tényleges per-user dismiss minden listázott elemen.
+async function dismissAllNotificationsForUser(userId, userRole) {
+    const pool = getPool();
+    let outcome = { changed: 0 };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        const normalizedRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(userRole) ? userRole : 'player';
+
+        const [insertResult] = await pool.execute(
+            `
+                INSERT IGNORE INTO notification_reads (notification_id, user_id, read_at, dismissed_at)
+                SELECT n.id, ?, NOW(), NOW()
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE nr.notification_id IS NULL
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = ?)
+                  )
+            `,
+            [normalizedUserId, normalizedUserId, normalizedUserId, normalizedRole]
+        );
+
+        const [updateResult] = await pool.execute(
+            `
+                UPDATE notification_reads nr
+                JOIN notifications n
+                    ON n.id = nr.notification_id
+                LEFT JOIN users u ON u.id = ?
+                SET nr.dismissed_at = NOW(),
+                    nr.read_at = COALESCE(nr.read_at, NOW())
+                WHERE nr.user_id = ?
+                  AND nr.dismissed_at IS NULL
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = ?)
+                  )
+            `,
+            [normalizedUserId, normalizedUserId, normalizedUserId, normalizedRole]
+        );
+
+        outcome = {
+            changed: Number(insertResult.affectedRows || 0) + Number(updateResult.affectedRows || 0)
+        };
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az értesítések tömeges eltávolítása során.');
+    }
+    return outcome;
+}
+
+// Visszafelé kompatibilis alias: a route-ok és külső hívók a régi nevet
+// használják, viselkedés ugyanaz mint a dismiss-all (per spec).
+const markAllNotificationsReadForUser = dismissAllNotificationsForUser;
+const markFriendRequestNotificationsReadForUser = dismissFriendRequestNotificationsForUser;
+
+async function getUnreadNotificationCount(userId, userRole) {
+    const pool = getPool();
+    let count = 0;
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        const normalizedRole = ALLOWED_NOTIFICATION_TARGET_ROLES.has(userRole) ? userRole : 'player';
+
+        // Olvasatlan = read_at IS NULL ÉS dismissed_at IS NULL.
+        // (A dismiss workflow mindig read_at-et is beállít, így a két feltétel
+        // nem mond ellent egymásnak; a védelem szándékos, ha külső path
+        // valaha is csak dismissed_at-et állítana be.)
+        const [rows] = await pool.execute(
+            `
+                SELECT COUNT(*) AS unread_count
+                FROM notifications n
+                LEFT JOIN notification_reads nr
+                    ON nr.notification_id = n.id AND nr.user_id = ?
+                WHERE (nr.read_at IS NULL)
+                  AND (nr.dismissed_at IS NULL)
+                  AND (
+                        n.target_user_id = ?
+                        OR n.audience = 'global'
+                        OR (n.audience = 'role' AND n.target_role = ?)
+                  )
+            `,
+            [normalizedUserId, normalizedUserId, normalizedRole]
+        );
+
+        count = Number(rows[0]?.unread_count || 0);
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az olvasatlan értesítések számolása során.');
+    }
+    return count;
+}
+
+async function getUnreadChatMessageTotal(userId) {
+    const pool = getPool();
+    let total = 0;
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+
+        const [rows] = await pool.execute(
+            `
+                SELECT COALESCE(SUM(unread_per_conv.unread_count), 0) AS total_unread
+                FROM (
+                    SELECT (
+                        SELECT COUNT(*)
+                        FROM chat_messages msg
+                        WHERE msg.conversation_id = current_participant.conversation_id
+                          AND msg.id > COALESCE(current_participant.last_read_message_id, 0)
+                          AND msg.sender_id <> current_participant.user_id
+                    ) AS unread_count
+                    FROM chat_participants current_participant
+                    WHERE current_participant.user_id = ?
+                ) AS unread_per_conv
+            `,
+            [normalizedUserId]
+        );
+
+        total = Number(rows[0]?.total_unread || 0);
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az olvasatlan üzenetek számolása során.');
+    }
+    return total;
+}
+
+async function markConversationReadForUser(userId, conversationId) {
+    const pool = getPool();
+    let outcome = { changed: false, lastMessageId: 0 };
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        const normalizedConversationId = normalizePositiveInt(conversationId, 0);
+        if (!normalizedUserId) {
+            throw new Error('Érvénytelen felhasználó azonosító.');
+        }
+        if (!normalizedConversationId) {
+            throw new Error('Érvénytelen beszélgetés azonosító.');
+        }
+
+        const [maxRows] = await pool.execute(
+            `
+                SELECT COALESCE(MAX(id), 0) AS max_message_id
+                FROM chat_messages
+                WHERE conversation_id = ?
+            `,
+            [normalizedConversationId]
+        );
+        const maxMessageId = Number(maxRows[0]?.max_message_id || 0);
+
+        if (maxMessageId > 0) {
+            const [updateResult] = await pool.execute(
+                `
+                    UPDATE chat_participants
+                    SET last_read_message_id = GREATEST(COALESCE(last_read_message_id, 0), ?)
+                    WHERE conversation_id = ?
+                      AND user_id = ?
+                `,
+                [maxMessageId, normalizedConversationId, normalizedUserId]
+            );
+            outcome = { changed: updateResult.affectedRows > 0, lastMessageId: maxMessageId };
+        } else {
+            outcome = { changed: false, lastMessageId: 0 };
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a beszélgetés olvasottá jelölése során.');
+    }
+    return outcome;
+}
+
+async function getUserBasicById(userId) {
+    const pool = getPool();
+    let user = null;
+    try {
+        const normalizedUserId = normalizePositiveInt(userId, 0);
+        if (normalizedUserId) {
+            const [rows] = await pool.execute(
+                `SELECT id, username, role FROM users WHERE id = ? LIMIT 1`,
+                [normalizedUserId]
+            );
+            if (rows.length) {
+                user = { id: rows[0].id, username: rows[0].username, role: rows[0].role };
+            }
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a felhasználó alap adatok lekérése során.');
+    }
+    return user;
+}
+
+async function findUserByUsernameForAdmin(username) {
+    const pool = getPool();
+    let user = null;
+    try {
+        const normalizedUsername = String(username || '').trim();
+        if (normalizedUsername) {
+            const [rows] = await pool.execute(
+                `SELECT id, username, role FROM users WHERE username = ? LIMIT 1`,
+                [normalizedUsername]
+            );
+            if (rows.length) {
+                user = { id: rows[0].id, username: rows[0].username, role: rows[0].role };
+            }
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a felhasználó keresése során.');
+    }
+    return user;
+}
+
+async function getUserIdsByRole(role) {
+    const pool = getPool();
+    let ids = [];
+    try {
+        if (ALLOWED_NOTIFICATION_TARGET_ROLES.has(role)) {
+            const [rows] = await pool.execute(
+                `SELECT id FROM users WHERE role = ? AND is_banned = FALSE`,
+                [role]
+            );
+            ids = rows.map((row) => Number(row.id));
+        }
+    } catch (error) {
+        throw new Error(error.message || 'Hiba a szerep alapú felhasználó lekérés során.');
+    }
+    return ids;
+}
+
+async function getAllActiveUserIds() {
+    const pool = getPool();
+    let ids = [];
+    try {
+        const [rows] = await pool.execute(
+            `SELECT id FROM users WHERE is_banned = FALSE`
+        );
+        ids = rows.map((row) => Number(row.id));
+    } catch (error) {
+        throw new Error(error.message || 'Hiba az aktív felhasználók lekérése során.');
+    }
+    return ids;
+}
+
 module.exports = {
+    applyProfileImageVisibility,
     insertUser,
     getUserByUsername,
     getUserByEmail,
@@ -2884,6 +3825,7 @@ module.exports = {
     getPublicPlayerProfileById,
     getUserAuthById,
     updateUserProfileSettings,
+    adminUpdateUserCore,
     insertUserLog,
     getUserSecurityActivity,
     getTotalUsers,
@@ -2894,6 +3836,7 @@ module.exports = {
     ipCollisionCheck,
     ipCollisions,
     uploadProfileImage,
+    uploadProfileImageAdminApproved,
     getPendingProfileImages,
     approveProfileImage,
     rejectProfileImage,
@@ -2929,5 +3872,20 @@ module.exports = {
     findUserByVerificationTokenHash,
     markEmailVerified,
     clearEmailVerificationState,
-    getUserVerificationStatusById
+    getUserVerificationStatusById,
+    insertNotification,
+    getNotificationsForUser,
+    markNotificationRead,
+    dismissNotificationForUser,
+    dismissFriendRequestNotificationsForUser,
+    dismissAllNotificationsForUser,
+    markFriendRequestNotificationsReadForUser,
+    markAllNotificationsReadForUser,
+    getUnreadNotificationCount,
+    getUnreadChatMessageTotal,
+    markConversationReadForUser,
+    getUserBasicById,
+    findUserByUsernameForAdmin,
+    getUserIdsByRole,
+    getAllActiveUserIds
 };

@@ -20,6 +20,7 @@
     const state = {
         initialized: false,
         globalEventsBound: false,
+        sessionResetBound: false,
         options: { ...DEFAULTS },
         activeConversationId: null,
         conversationList: [],
@@ -951,6 +952,44 @@
         }
     }
 
+    function computeAggregateUnreadTotal() {
+        let total = 0;
+        if (Array.isArray(state.conversationList)) {
+            state.conversationList.forEach((conversation) => {
+                total += Math.max(0, Number(conversation.unreadCount) || 0);
+            });
+        }
+        return total;
+    }
+
+    function dispatchChatUnreadTotalEvent() {
+        try {
+            const totalUnread = computeAggregateUnreadTotal();
+            globalScope.dispatchEvent(new CustomEvent('mattmester:chat:unread-total', {
+                detail: { totalUnread, at: new Date().toISOString() }
+            }));
+        } catch (dispatchError) {
+            console.warn('[chatModal] aggregate unread dispatch hiba:', dispatchError.message);
+        }
+    }
+
+    async function markConversationReadOnServer(conversationId) {
+        let success = false;
+        try {
+            const normalizedId = Number(conversationId) || 0;
+            if (normalizedId) {
+                const response = await fetch(`/api/chat/conversations/${normalizedId}/read`, {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+                success = response.ok;
+            }
+        } catch (markError) {
+            console.warn('[chatModal] mark conversation read hiba:', markError.message);
+        }
+        return success;
+    }
+
     function moveConversationToTop(conversationId) {
         const normalizedId = Number(conversationId) || 0;
         const index = state.conversationList.findIndex((item) => Number(item.conversationId) === normalizedId);
@@ -966,6 +1005,7 @@
             const payload = await requestJson(`${state.options.conversationsEndpoint}?limit=${state.options.pageLimit}`);
             state.conversationList = Array.isArray(payload.data) ? payload.data : [];
             renderConversationList();
+            dispatchChatUnreadTotalEvent();
         } finally {
             setConversationLoading(false);
         }
@@ -1023,6 +1063,33 @@
         return globalScope.MattMesterSocket?.socket || null;
     }
 
+    function resetAllConversationState(reason = 'session-change') {
+        // Teljes cache dobas: session valtas (login / logout / user A -> user B)
+        // utan ne maradjon a regi user beszelgetes-listaja, uzenetei, aktiv
+        // beszelgetese. Kulonben a chat ikon badge es a modal inkonzisztens lenne.
+        try {
+            console.log('[chatModal] reset conversations:', reason);
+            state.conversationList = [];
+            state.messagesByConversation = new Map();
+            state.paginationCursorByConversation = new Map();
+            state.hasMoreByConversation = new Map();
+            state.isLoadingByConversation = new Map();
+            state.activeConversationId = null;
+            state.searchText = '';
+            if (dom.searchInput) {
+                dom.searchInput.value = '';
+            }
+            setHasActiveConversation(false);
+            updateConversationHeader(null);
+            renderConversationList();
+            renderMessageList();
+            setFeedback('', false);
+            dispatchChatUnreadTotalEvent();
+        } catch (resetError) {
+            console.warn('[chatModal] reset hiba:', resetError.message);
+        }
+    }
+
     function bindSocketEvents() {
         const socket = getSocket();
         if (socket && state.boundSocket !== socket) {
@@ -1041,14 +1108,31 @@
         }
     }
 
+    function bindChatSessionResetHandler() {
+        // Session valtas vagy logout eseten a backend kuld egy reset eventet,
+        // illetve a profile.js is dispatchelhet lokalis resetet. Mindket esetben
+        // a cachelt beszelgeteseket eldobjuk.
+        if (!state.sessionResetBound) {
+            globalScope.addEventListener('mattmester:chat:unread:reset', () => {
+                resetAllConversationState('server-chat-unread-reset');
+            });
+            globalScope.addEventListener('mattmester:session-context:changed', () => {
+                resetAllConversationState('session-context-changed');
+            });
+            state.sessionResetBound = true;
+        }
+    }
+
     function removeConversationFromState(conversationId) {
         const normalizedId = Number(conversationId) || 0;
-        if (!normalizedId) return;
-        state.conversationList = state.conversationList.filter((item) => Number(item.conversationId) !== normalizedId);
-        state.messagesByConversation.delete(normalizedId);
-        state.paginationCursorByConversation.delete(normalizedId);
-        state.hasMoreByConversation.delete(normalizedId);
-        state.isLoadingByConversation.delete(normalizedId);
+        if (normalizedId) {
+            state.conversationList = state.conversationList.filter((item) => Number(item.conversationId) !== normalizedId);
+            state.messagesByConversation.delete(normalizedId);
+            state.paginationCursorByConversation.delete(normalizedId);
+            state.hasMoreByConversation.delete(normalizedId);
+            state.isLoadingByConversation.delete(normalizedId);
+            dispatchChatUnreadTotalEvent();
+        }
     }
 
     function resolveConversationUnavailableMessage(reason) {
@@ -1109,7 +1193,10 @@
                 }
                 renderConversationList();
                 renderMessageList();
+                markConversationReadOnServer(conversationId).catch(() => {});
             }
+
+            dispatchChatUnreadTotalEvent();
         }
     }
 
@@ -1172,6 +1259,7 @@
             moveConversationToTop(conversationId);
             renderConversationList();
             renderMessageList();
+            dispatchChatUnreadTotalEvent();
         }
     }
 
@@ -1244,6 +1332,8 @@
         setFeedback('', false);
 
         renderConversationList();
+        dispatchChatUnreadTotalEvent();
+        markConversationReadOnServer(normalizedId).catch(() => {});
         await leaveConversationRoom(previousConversationId);
         await joinConversationRoom(normalizedId);
         await loadConversationMessages(normalizedId, { older: false });
@@ -1415,6 +1505,7 @@
 
         if (state.initialized) {
             bindSocketEvents();
+            bindChatSessionResetHandler();
         } else {
             ensureStyles();
             ensureMarkup();
@@ -1427,6 +1518,7 @@
             bindEvents();
             bindSocketEvents();
             bindGlobalEvents();
+            bindChatSessionResetHandler();
             updateConversationHeader(null);
             setHasActiveConversation(false);
 

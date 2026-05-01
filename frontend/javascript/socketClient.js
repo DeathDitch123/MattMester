@@ -695,6 +695,39 @@
             updateSocketInfoPanel(socketState);
         });
 
+        socket.on('notification:reset', (payload = {}) => {
+            // Session váltás (login / logout / user A -> user B) után érkezik:
+            // a kliens törölje a cache-elt értesítés listát és badge-et.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:reset', {
+                    detail: {
+                        previousUserId: payload?.previousUserId || null,
+                        currentUserId: payload?.currentUserId || null,
+                        reason: payload?.reason || 'session-change',
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (resetError) {
+                console.warn('[socketClient] notification:reset hiba:', resetError.message);
+            }
+        });
+
+        socket.on('chat:unread:reset', (payload = {}) => {
+            // Session váltás után a chat unread totalt is nullázzuk.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:chat:unread:reset', {
+                    detail: {
+                        previousUserId: payload?.previousUserId || null,
+                        currentUserId: payload?.currentUserId || null,
+                        reason: payload?.reason || 'session-change',
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (resetError) {
+                console.warn('[socketClient] chat:unread:reset hiba:', resetError.message);
+            }
+        });
+
         socket.on('notification:push', (payload = {}) => {
             // Notification payload továbbítása globális eseményként a közös moduloknak.
             const normalizedPayload = normalizeNotificationPayload(payload);
@@ -702,6 +735,73 @@
                 ...normalizedPayload,
                 receivedAt: new Date().toISOString()
             });
+        });
+
+        socket.on('notification:badge:update', (payload = {}) => {
+            // Authoritative badge frissítés a szerverről (DB alapú olvasatlan szám).
+            try {
+                const unreadCount = Number(payload?.unreadCount) || 0;
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:badge', {
+                    detail: { unreadCount, at: payload?.at || new Date().toISOString() }
+                }));
+            } catch (badgeError) {
+                console.warn('[socketClient] notification:badge:update hiba:', badgeError.message);
+            }
+        });
+
+        // Multi-tab szinkron: ha az adott user másik tabján egy értesítést
+        // dismiss-elt, vagy a backend dismiss-elt egy kapcsolódó értesítést
+        // (pl. friend action), itt érkezik be a parancs.
+        socket.on('notification:dismissed', (payload = {}) => {
+            try {
+                const notificationId = Number(payload?.notificationId) || 0;
+                if (notificationId > 0) {
+                    globalScope.dispatchEvent(new CustomEvent('mattmester:notification:dismissed', {
+                        detail: { notificationId, at: payload?.at || new Date().toISOString() }
+                    }));
+                }
+            } catch (dismissError) {
+                console.warn('[socketClient] notification:dismissed hiba:', dismissError.message);
+            }
+        });
+
+        socket.on('notification:dismissed-all', (payload = {}) => {
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:dismissed-all', {
+                    detail: { at: payload?.at || new Date().toISOString() }
+                }));
+            } catch (dismissAllError) {
+                console.warn('[socketClient] notification:dismissed-all hiba:', dismissAllError.message);
+            }
+        });
+
+        socket.on('notification:dismissed-bulk', (payload = {}) => {
+            try {
+                const filter = payload?.filter && typeof payload.filter === 'object' ? payload.filter : {};
+                globalScope.dispatchEvent(new CustomEvent('mattmester:notification:dismissed-bulk', {
+                    detail: {
+                        filter: {
+                            type: typeof filter.type === 'string' ? filter.type : null,
+                            senderUserId: Number(filter.senderUserId) || null
+                        },
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (dismissBulkError) {
+                console.warn('[socketClient] notification:dismissed-bulk hiba:', dismissBulkError.message);
+            }
+        });
+
+        socket.on('chat:unread:update', (payload = {}) => {
+            // Authoritative chat unread összesen frissítés (pl. mark-read után).
+            try {
+                const totalUnread = Number(payload?.totalUnread) || 0;
+                globalScope.dispatchEvent(new CustomEvent('mattmester:chat:unread-total', {
+                    detail: { totalUnread, at: payload?.at || new Date().toISOString() }
+                }));
+            } catch (chatBadgeError) {
+                console.warn('[socketClient] chat:unread:update hiba:', chatBadgeError.message);
+            }
         });
 
         globalScope.addEventListener(NOTIFICATION_CLICK_EVENT_NAME, (event) => {
@@ -721,6 +821,23 @@
                     ...payload,
                     source: 'notification-dom-click'
                 });
+            }
+        });
+
+        socket.on('user:profile:adminEdit', (payload = {}) => {
+            // Admin által módosult a profil — továbbítjuk az oldalaknak,
+            // hogy a Security & Activity History és a session-info azonnal frissüljön.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:user:profile:adminEdit', {
+                    detail: {
+                        changedKeys: Array.isArray(payload?.changedKeys) ? payload.changedKeys : [],
+                        after: payload?.after || null,
+                        reason: payload?.reason || null,
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (forwardErr) {
+                console.warn('[socketClient] user:profile:adminEdit forward hiba:', forwardErr.message);
             }
         });
 

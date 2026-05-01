@@ -3,11 +3,11 @@
 
 <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self';
-            connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+            connect-src 'self' https://cdn.jsdelivr.net;
             script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
             style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
-            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob: https://ui-avatars.com;">
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Profil</title>
 
@@ -34,7 +34,7 @@
     <!-- Sidebar -->
     <nav class="sidebar" id="sidebar">
         <div class="sidebar-brand">
-            <a class="navbar-brand brand d-flex align-items-center gap-2" href="#">
+            <a class="navbar-brand brand d-flex align-items-center gap-2" href="/">
                 <i class="bi bi-king-fill"></i>
                 <span>MATTMESTER</span>
             </a>
@@ -87,8 +87,10 @@
         <div class="top-bar">
             <div class="top-bar-left">
                 <button
-                    class="btn btn-outline-gold d-lg-none py-1 px-2 d-flex align-items-center justify-content-center"
-                    onclick="toggleSidebar()" style="height: 40px; width: 40px; border-radius: 12px;">
+                    class="btn btn-outline-gold sidebar-toggle-btn py-1 px-2 d-flex align-items-center justify-content-center"
+                    onclick="toggleSidebar()" type="button" aria-label="Oldalsáv ki/be"
+                    aria-controls="sidebar" aria-expanded="true"
+                    style="height: 40px; width: 40px; border-radius: 12px;">
                     <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
                 </button>
                 <button class="top-bar-btn d-lg-none" type="button" data-tooltip="Keresés" data-bs-toggle="modal"
@@ -106,32 +108,25 @@
                 </div>
             </div>
 
-            <div class="top-bar-center d-lg-none">
+            <a href="/" class="top-bar-center d-lg-none">
                 <i data-lucide="crown" style="color: var(--accent-gold); width: 22px; height: 22px;"></i>
                 <span
                     style="font-family: 'Playfair Display', serif; font-weight: 700; color: var(--text-primary); font-size: 1.1rem; letter-spacing: 0.5px;">MattMester</span>
-            </div>
+            </a>
 
             <div class="top-bar-right">
-                <div class="d-none d-md-flex align-items-center gap-2">
-                    <button class="top-bar-btn" id="openMessagesModal" type="button" data-tooltip="Üzenetek"
-                        data-open-chat="inbox" aria-label="Chat megnyitása">
-                        <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
-                    </button>
-                </div>
-
-                <button class="top-bar-btn" type="button" data-tooltip="Értesítések" data-bs-toggle="modal"
-                    data-bs-target="#notificationsModal">
-                    <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
-                    <span class="notification-dot"></span>
+                <button class="top-bar-btn top-bar-btn-with-badge" id="openMessagesModal" type="button"
+                    data-tooltip="Üzenetek" data-open-chat="inbox" aria-label="Üzenetek megnyitása">
+                    <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                    <span class="top-bar-badge top-bar-badge--chat" data-badge-target="chat" hidden>0</span>
                 </button>
 
-                <div class="top-bar-user">
-                    <div class="top-bar-user-info d-none d-sm-block">
-                        <div class="top-bar-user-name">GrandMaster_99</div>
-                        <div class="top-bar-user-role">Admin</div>
-                    </div>
-                </div>
+                <button class="top-bar-btn top-bar-btn-with-badge" id="openNotificationsModal" type="button"
+                    data-tooltip="Értesítések" data-bs-toggle="modal" data-bs-target="#notificationsModal"
+                    aria-label="Értesítések megnyitása">
+                    <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
+                    <span class="top-bar-badge top-bar-badge--notification" data-badge-target="notifications" hidden>0</span>
+                </button>
             </div>
         </div>
 
@@ -144,8 +139,8 @@
                         <div class="d-flex flex-column flex-md-row align-items-center gap-4">
                             <div class="position-relative">
                                 <img id="profileAvatarDashboard" class="profile-avatar"
-                                    src="https://ui-avatars.com/api/?name=Grand+Master&background=d4af37&color=000&size=128"
-                                    alt="GrandMaster_99">
+                                    src="/profile_pictures/default.png"
+                                    alt="Profil">
                                 <span class="position-absolute bottom-0 end-0 p-1">
                                     <span class="status-dot shadow-glow"></span>
                                 </span>
@@ -452,9 +447,9 @@
                                 <div class="row g-4">
                                     <div class="col-md-12 d-flex align-items-center gap-4 border-bottom pb-4"
                                         style="border-color: var(--border-color) !important;">
-                                        <img src="https://ui-avatars.com/api/?name=GrandMaster_99&background=1e293b&color=d4af37&size=240"
-                                            alt="Current Avatar" id="profileAvatarSettings" class="profile-avatar"
-                                            style="width: 80px; height: 80px;">
+                                        <img src="/profile_pictures/default.png"
+                                            alt="Profil" id="profileAvatarSettings" class="profile-avatar"
+                                            style="width: 80px; height: 80px; object-fit: cover;">
                                         <div>
                                             <h6 class="text-white mb-2">Profile Picture</h6>
                                             <div class="d-flex gap-2">
@@ -545,11 +540,12 @@
 
     <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
-            <div class="modal-content modal-surface notifications-modal-content">
+            <div class="modal-content modal-surface notifications-modal-content notifications-modal-content--transparent">
                 <div class="modal-header">
                     <h5 class="modal-title d-flex align-items-center gap-2" id="notificationsModalLabel">
                         <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
                         Értesítések
+                        <span id="notificationsUnreadCounter" class="badge bg-danger ms-2" hidden>0</span>
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
@@ -559,7 +555,11 @@
                         Nincs új értesítés.
                     </div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer d-flex justify-content-between gap-2">
+                    <button type="button" class="btn btn-outline-gold btn-sm" id="markAllNotificationsReadBtn">
+                        <i data-lucide="check-check" style="width: 14px; height: 14px;"></i>
+                        Mind olvasott
+                    </button>
                     <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Bezárás</button>
                 </div>
             </div>

@@ -1,4 +1,4 @@
-const { services } = require('./services.js');
+const { services, notificationService } = require('./services.js');
 const sql = require('./sql/sql_funtions.js');
 const { registerPvpHandlers, handlePvpDisconnect } = require('./chess/pvp.js');
 const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
@@ -301,6 +301,111 @@ function createSocketHub(io) {
         };
     }
 
+    async function broadcastChatMessageSideEffects(conversationId, senderUserId) {
+        // Új chat üzenet után az összes résztvevőnek (a küldőnek is, mert az ő
+        // last_read_message_id-ja is változott) authoritative chat:unread:update
+        // eseményt küldünk, illetve chat:list:refresh jelzést, hogy a frontend
+        // a beszélgetéslista preview-t és rendezést is aktualizálja.
+        try {
+            const normalizedConversationId = parsePositiveInteger(conversationId, null);
+            if (!normalizedConversationId) {
+                throw new Error('Érvénytelen conversation azonosító a side-effecthez.');
+            }
+
+            const participantIds = await sql.getPrivateConversationParticipantIds(normalizedConversationId);
+            const uniqueParticipants = [...new Set(
+                (participantIds || []).map((id) => parsePositiveInteger(id, null)).filter(Boolean)
+            )];
+
+            if (!uniqueParticipants.length) {
+                // Nem privát vagy már töröltük a résztvevőket: nincs mit broadcastolni.
+                return;
+            }
+
+            const now = new Date().toISOString();
+            const normalizedSenderId = parsePositiveInteger(senderUserId, 0);
+
+            for (const participantUserId of uniqueParticipants) {
+                try {
+                    const unreadChatTotal = await sql.getUnreadChatMessageTotal(participantUserId);
+                    io.to(`user-room:${participantUserId}`).emit('chat:unread:update', {
+                        totalUnread: Math.max(0, Number(unreadChatTotal) || 0),
+                        conversationId: normalizedConversationId,
+                        at: now
+                    });
+
+                    // A küldő kivételével küldünk chat:list:refresh-t, mivel a küldő
+                    // kliense már helyi állapotban frissül az új üzenet DOM hozzáadásával.
+                    // A címzett azonban NEM tagja a conversation roomnak, ha nincs nyitva a chat,
+                    // ezért csak így kap trigger-t a beszélgetéslistája frissítésére.
+                    if (participantUserId !== normalizedSenderId) {
+                        io.to(`user-room:${participantUserId}`).emit('chat:list:refresh', {
+                            conversationId: normalizedConversationId,
+                            reason: 'new-message',
+                            at: now
+                        });
+                    }
+                } catch (perUserError) {
+                    console.warn('[sockets] per-user chat refresh hiba:', participantUserId, perUserError.message);
+                }
+            }
+        } catch (error) {
+            throw new Error(`Chat üzenet side-effect hiba: ${error.message}`);
+        }
+    }
+
+    async function emitAuthoritativeStateAfterSync(socket, previousUserId, refreshedContext) {
+        // Session-váltás / reconnect után a kliens authoritative állapotot kér:
+        //  - reset esemény, ha a userId váltott (korábbi notification-lista elavul)
+        //  - aktuális notification badge
+        //  - aktuális chat unread total
+        try {
+            const normalizedPreviousUserId = Number(previousUserId) || 0;
+            const currentUserId = Number(refreshedContext?.userId) || 0;
+            const userChanged = normalizedPreviousUserId !== currentUserId;
+
+            if (userChanged) {
+                // Explicit jelzés a kliensnek: töröld a cache-elt listát / badge-et,
+                // mert új vagy nincs session context van.
+                socket.emit('notification:reset', {
+                    previousUserId: normalizedPreviousUserId || null,
+                    currentUserId: currentUserId || null,
+                    reason: 'session-change',
+                    at: new Date().toISOString()
+                });
+                socket.emit('chat:unread:reset', {
+                    previousUserId: normalizedPreviousUserId || null,
+                    currentUserId: currentUserId || null,
+                    reason: 'session-change',
+                    at: new Date().toISOString()
+                });
+            }
+
+            if (currentUserId) {
+                const unreadNotifications = await sql.getUnreadNotificationCount(
+                    currentUserId,
+                    refreshedContext?.role || 'player'
+                );
+                socket.emit('notification:badge:update', {
+                    unreadCount: Math.max(0, Number(unreadNotifications) || 0),
+                    at: new Date().toISOString()
+                });
+
+                const unreadChatTotal = await sql.getUnreadChatMessageTotal(currentUserId);
+                socket.emit('chat:unread:update', {
+                    totalUnread: Math.max(0, Number(unreadChatTotal) || 0),
+                    at: new Date().toISOString()
+                });
+            } else {
+                // Guest / logout: biztosan null a badge.
+                socket.emit('notification:badge:update', { unreadCount: 0, at: new Date().toISOString() });
+                socket.emit('chat:unread:update', { totalUnread: 0, at: new Date().toISOString() });
+            }
+        } catch (error) {
+            throw new Error(`Authoritative state refresh hiba: ${error.message}`);
+        }
+    }
+
     function refreshSocketContextFromSession(socket) {
         try {
             const existingContext = getCurrentSocketContext(socket);
@@ -312,8 +417,12 @@ function createSocketHub(io) {
             };
 
             if (existingContext.userId && existingContext.userId !== mergedContext.userId) {
+                // User session changed (login -> logout, user A -> user B, stb.):
+                // a régi felhasználó minden privát szobáját el kell hagynunk,
+                // különben az új session is a régi user értesítéseit/üzeneteit kapná.
                 socket.leave(`user-room:${existingContext.userId}`);
                 socket.leave(`${SOCKET_ROOMS.presence}:${existingContext.userId}`);
+                socket.leave(`notification-user:${existingContext.userId}`);
             }
 
             if (existingContext.role === 'admin' && mergedContext.role !== 'admin') {
@@ -323,6 +432,7 @@ function createSocketHub(io) {
             if (mergedContext.userId) {
                 socket.join(`user-room:${mergedContext.userId}`);
                 socket.join(`${SOCKET_ROOMS.presence}:${mergedContext.userId}`);
+                socket.join(`notification-user:${mergedContext.userId}`);
             }
 
             if (mergedContext.role === 'admin') {
@@ -443,8 +553,15 @@ function createSocketHub(io) {
         registerPvpHandlers(socket, io);
 
         socket.on('socket:sync', () => {
+            let syncSucceeded = false;
+            let previousUserId = 0;
+            let refreshedContextRef = null;
             try {
+                const existingContext = socketsById.get(socket.id) || context;
+                previousUserId = Number(existingContext?.userId) || 0;
+
                 const refreshedContext = refreshSocketContextFromSession(socket);
+                refreshedContextRef = refreshedContext;
                 const socketState = syncSocketState(socket);
                 const presenceState = syncPresence();
 
@@ -460,6 +577,7 @@ function createSocketHub(io) {
                     presence: presenceState,
                     timestamp: new Date().toISOString()
                 });
+                syncSucceeded = true;
             } catch (error) {
                 console.error('socket:sync hiba:', error);
                 socket.emit('socket:sync:done', {
@@ -467,6 +585,18 @@ function createSocketHub(io) {
                     message: error.message || 'A socket context frissítése sikertelen.',
                     timestamp: new Date().toISOString()
                 });
+            }
+
+            // Authoritative állapot-visszatöltés a sync után: ha a userId
+            // váltott (login / logout / user A -> user B), vagy eleve van
+            // bejelentkezett user, mindig elküldjük a friss badge értékeket.
+            // Ez oldja meg, hogy a modalban ne maradjanak "kísértet" értesítések
+            // és a chat ikon olvasatlan számlálója is reconnect/sync után friss legyen.
+            if (syncSucceeded) {
+                emitAuthoritativeStateAfterSync(socket, previousUserId, refreshedContextRef)
+                    .catch((refreshError) => {
+                        console.warn('[sockets] socket:sync utani badge refresh hiba:', refreshError.message);
+                    });
             }
         });
 
@@ -611,8 +741,19 @@ function createSocketHub(io) {
                     policyResult
                 );
 
+                // A pending profilkép nem szivároghat ki a többi résztvevőhöz a
+                // socket broadcast-ban: a feladón kívül mindenkinek defaultot küldünk.
+                const senderStatusForBroadcast = String(insertedMessage?.senderProfileImageStatus || '').toLowerCase();
+                const broadcastInsertedMessage = senderStatusForBroadcast === 'pending'
+                    ? {
+                        ...insertedMessage,
+                        senderProfileImage: '/profile_pictures/default.png',
+                        senderProfileImageStatus: 'default'
+                    }
+                    : insertedMessage;
+
                 const messagePayload = {
-                    ...insertedMessage,
+                    ...broadcastInsertedMessage,
                     conversationId,
                     socketId: socket.id,
                     clientId: currentContext.clientId,
@@ -621,6 +762,15 @@ function createSocketHub(io) {
                 };
 
                 io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
+
+                // Authoritative chat unread + chat list refresh minden résztvevőnek,
+                // nem csak akiknek nyitva van a beszélgetés. Enélkül a címzett chat
+                // ikonján a badge nem frissül valós időben, amíg újra nem tölt.
+                try {
+                    await broadcastChatMessageSideEffects(conversationId, currentContext.userId);
+                } catch (sideEffectError) {
+                    console.warn('[sockets] chat:message:send side-effect hiba:', sideEffectError.message);
+                }
             } catch (error) {
                 const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet');
 
@@ -777,6 +927,15 @@ function createSocketHub(io) {
                 updatedBy
             });
         },
+        // Általános célú user-emit a `user-room:${userId}` szobába.
+        // Akkor használd, amikor egy konkrét felhasználónak kell egy ad-hoc
+        // socket eseményt küldeni (pl. admin által módosított profil push).
+        emitToUser(targetUserId, eventName, payload) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized || !eventName) return false;
+            io.to(`user-room:${normalized}`).emit(String(eventName), payload || {});
+            return true;
+        },
         pushNotification(targetUserId, notification) {
             const payload = {
                 ...notification,
@@ -792,12 +951,104 @@ function createSocketHub(io) {
 
             return payload;
         },
+        pushNotificationToUsers(targetUserIds, notification) {
+            const payload = {
+                ...notification,
+                sentAt: new Date().toISOString()
+            };
+            const uniqueIds = [...new Set((targetUserIds || []).map((id) => parsePositiveInteger(id, null)).filter(Boolean))];
+            uniqueIds.forEach((userId) => {
+                io.to(`notification-user:${userId}`).emit('notification:push', { ...payload, targetUserId: userId });
+            });
+            return { payload, deliveredTo: uniqueIds };
+        },
+        pushNotificationGlobal(notification) {
+            const payload = {
+                ...notification,
+                sentAt: new Date().toISOString(),
+                targetUserId: null,
+                audience: notification?.audience || 'global'
+            };
+            io.to(SOCKET_ROOMS.notifications).emit('notification:push', payload);
+            return payload;
+        },
+        emitNotificationBadgeUpdate(userId, unreadCount) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            const normalizedCount = Math.max(0, parsePositiveInteger(unreadCount, 0));
+            if (normalizedUserId) {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:badge:update', {
+                    unreadCount: normalizedCount,
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        // Multi-tab szinkron: az adott userhez tartozó összes nyitott klienshez
+        // (minden tab) eljut, hogy adott értesítést azonnal eltávolítsa a UI-ból.
+        emitNotificationDismissed(userId, notificationId) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            const normalizedNotificationId = parsePositiveInteger(notificationId, null);
+            if (normalizedUserId && normalizedNotificationId) {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:dismissed', {
+                    notificationId: normalizedNotificationId,
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        // "Mind olvasott" gomb után: minden látható értesítés tűnjön el a
+        // user összes tab-jából.
+        emitNotificationDismissedAll(userId) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            if (normalizedUserId) {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:dismissed-all', {
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        // Friend action utáni cleanup: type+sender filter alapján a kliens
+        // törli a megfelelő értesítéseket (ID lista helyett szűrő-leírás).
+        emitNotificationDismissedBulk(userId, filter) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            if (normalizedUserId && filter && typeof filter === 'object') {
+                io.to(`notification-user:${normalizedUserId}`).emit('notification:dismissed-bulk', {
+                    filter: {
+                        type: typeof filter.type === 'string' ? filter.type : null,
+                        senderUserId: parsePositiveInteger(filter.senderUserId, null)
+                    },
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        emitChatUnreadUpdate(userId, totalUnread) {
+            const normalizedUserId = parsePositiveInteger(userId, null);
+            const normalizedTotal = Math.max(0, parsePositiveInteger(totalUnread, 0));
+            if (normalizedUserId) {
+                io.to(`user-room:${normalizedUserId}`).emit('chat:unread:update', {
+                    totalUnread: normalizedTotal,
+                    at: new Date().toISOString()
+                });
+            }
+        },
+        emitChatUnreadUpdateForUsers(userIds, totals) {
+            const totalsMap = totals && typeof totals === 'object' ? totals : {};
+            const uniqueIds = [...new Set((userIds || []).map((id) => parsePositiveInteger(id, null)).filter(Boolean))];
+            uniqueIds.forEach((userId) => {
+                const totalUnread = Math.max(0, parsePositiveInteger(totalsMap[userId], 0));
+                io.to(`user-room:${userId}`).emit('chat:unread:update', {
+                    totalUnread,
+                    at: new Date().toISOString()
+                });
+            });
+        },
         broadcastChat(roomId, messagePayload) {
             const conversationId = parsePositiveInteger(roomId, null);
             if (conversationId) {
                 io.to(getConversationRoomName(conversationId)).emit('chat:message:new', messagePayload);
             }
         },
+        // REST endpointok (chat.js POST /messages) is hívhatják, hogy minden
+        // résztvevő authoritative chat:unread:update + chat:list:refresh
+        // eseményt kapjon, ne csak a conversation room tagjai.
+        broadcastChatMessageSideEffects,
         // Kapcsolat megszűnésekor / cleanup után valós idejű értesítés küldése
         // az érintett felhasználóknak. A frontend erre frissíti a chat listát
         // és eltünteti az aktív beszélgetést.

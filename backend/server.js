@@ -4,6 +4,7 @@ const session = require('express-session'); //?npm install express-session
 const path = require('path');
 const http = require('http');
 const fs = require('fs');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
@@ -18,9 +19,13 @@ const envPaths = [
 
 envPaths.forEach((envPath) => {
     if (fs.existsSync(envPath)) {
-        dotenv.config({ path: envPath, override: false });
+        dotenv.config({ path: envPath, override: false, quiet: true });
     }
 });
+
+// Why: a NODE_ENV az egész fájl viselkedését eldönti (cookie.secure, sameSite, SESSION_SECRET fallback engedélyezése).
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const IS_PRODUCTION = NODE_ENV === 'production';
 
 //!Beállítások
 const app = express();
@@ -30,15 +35,34 @@ const io = new Server(server);
 const ip = '127.0.0.1';
 const port = 3000;
 
-//?Session beállítása
-const sessionSecret = process.env.SESSION_SECRET || 'chu+)2_23iIa6sou&>#o79247r9Xbsibv%';
+//?Session secret feloldása
+// Why: production-ben a hardcoded fallback session-hijack vektor; dev-ben viszont a tesztek és helyi futás ne törjön, ha nincs .env.
+function resolveSessionSecret() {
+    let secret = process.env.SESSION_SECRET;
+    if (!secret) {
+        if (IS_PRODUCTION) {
+            console.error('[Server] SESSION_SECRET kötelező NODE_ENV=production esetén. Állítsd be az .env-ben (lásd .env.example) és indítsd újra.');
+            process.exit(1);
+        }
+        secret = crypto.randomBytes(32).toString('hex');
+        console.warn('[Server] SESSION_SECRET hiányzik — dev fallback random érték generálva. Production-ben kötelező a .env beállítás.');
+    }
+    return secret;
+}
+
+const sessionSecret = resolveSessionSecret();
 const sessionMiddleware = session({
     secret: sessionSecret,
     resave: false,
-    saveUninitialized: true,
+    // Why: GDPR + memória — minden látogatónak ne készüljön session-rekord, csak ha tényleg írunk bele (login után).
+    saveUninitialized: false,
     cookie: {
         maxAge: 1000 * 60 * 60 * 24, //1 nap időtartam
-        httpOnly: true, secure: false, sameSite: 'lax'
+        httpOnly: true,
+        // Why: secure cookie csak HTTPS mögött működik; dev-ben (http://localhost) ki kell kapcsolni, különben a böngésző eldobja.
+        secure: IS_PRODUCTION,
+        // Why: production-ben strict — CSRF védelem; dev-ben lax kell, hogy a localhost <-> 127.0.0.1 váltás és OAuth-szerű redirect ne dobja el.
+        sameSite: IS_PRODUCTION ? 'strict' : 'lax'
     }
 });
 
@@ -98,11 +122,72 @@ try {
     console.warn('[Server] CORS module not available, skipping CORS middleware');
 }
 
+// Why: helmet alap biztonsági headerek (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, stb.) +
+//      a meglévő frontend <meta CSP>-vel SZINKRON forrás-engedélyek. A böngésző a HTTP-header és a meta-tag CSP-t
+//      metszetként alkalmazza, ezért ugyanazokat a forrásokat kell engedni itt, mint amit a HTML-ek is engednek
+//      (cdn.jsdelivr.net Bootstrap/popper/chart.js, Google Fonts), különben a layout szétesik.
+//      'unsafe-inline' a meglévő inline script/style miatt; nonce-os szigorítás külön issue.
+try {
+    const helmet = require('helmet');
+    app.use(helmet({
+        contentSecurityPolicy: {
+            useDefaults: true,
+            directives: {
+                defaultSrc: ["'self'"],
+                scriptSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net'],
+                // Why: a meglévő frontend HTML-ek bőven használnak inline onclick=/onchange= handlereket.
+                //      A helmet useDefaults: true alapból 'none'-ra tenné a script-src-attr-t és blokkolná őket
+                //      (gombok, navigáció nem reagálna), ezért szinkronba hozzuk a script-src-rel.
+                scriptSrcAttr: ["'unsafe-inline'"],
+                styleSrc: ["'self'", "'unsafe-inline'", 'https://cdn.jsdelivr.net', 'https://fonts.googleapis.com'],
+                // Why: inline style="..." attribútumok is vannak; a meta CSP-vel összhangban engedjük.
+                styleSrcAttr: ["'unsafe-inline'"],
+                imgSrc: ["'self'", 'data:', 'blob:'],
+                // Why: Socket.IO ws:// / wss:// + cdn.jsdelivr.net a HTML meta CSP-kkel megegyezően.
+                connectSrc: ["'self'", 'ws:', 'wss:', 'https://cdn.jsdelivr.net'],
+                fontSrc: ["'self'", 'data:', 'https://cdn.jsdelivr.net', 'https://fonts.gstatic.com'],
+                objectSrc: ["'none'"],
+                frameAncestors: ["'self'"]
+            }
+        },
+        // Why: dev-ben (http://) a HSTS csak a böngésző gyorsítótárát piszkítaná. Production-ben a reverse proxy szintjén kapcsoljuk be.
+        hsts: IS_PRODUCTION,
+        // Why: cross-origin asset-ek (jsdelivr Bootstrap, Google Fonts) miatt nem zárhatjuk le ezeket teljesen.
+        crossOriginEmbedderPolicy: false,
+        crossOriginResourcePolicy: { policy: 'cross-origin' }
+    }));
+    console.log('[Server] Helmet middleware loaded');
+} catch (helmetError) {
+    console.warn('[Server] Helmet module not available, skipping security headers:', helmetError.message);
+}
+
 app.use(express.json()); //?Middleware JSON
+// Why: trust proxy=1 csak akkor helyes, ha a backend egyetlen reverse proxy mögött (pl. Nginx, Cloudflare) fut.
+//      Direct expose esetén X-Forwarded-* spoofolható, ezért a rate limiter és session secure-cookie félrevezethető.
+//      A `readme.md` "Környezeti változók" szekciója részletezi a feltételeket.
 app.set('trust proxy', 1); //?Middleware Proxy
 
 const socketHub = createSocketHub(io);
 app.locals.socketHub = socketHub;
+
+// Admin panel - /admin socket namespace + service binderek (ADMIN_PANEL.md F4)
+const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter, createAdminUserDisconnector } = require('./api/admin/socketNamespace.js');
+const adminAuditService = require('./api/admin/auditService.js');
+const adminAlertingService = require('./api/admin/alertingService.js');
+const adminNamespace = createAdminNamespace(io);
+const adminSocketHub = {
+    broadcastAdmin: createAdminBroadcaster(adminNamespace),
+    emitToAdminUser: createAdminUserEmitter(adminNamespace),
+    disconnectAllForAdminUser: createAdminUserDisconnector(adminNamespace),
+    namespace: adminNamespace
+};
+app.locals.adminSocketHub = adminSocketHub;
+adminAuditService.bindSocketHub(adminSocketHub);
+adminAlertingService.bindSocketHub(adminSocketHub);
+
+// Admin dashboard - 5 mp-enkenti stats tick (admin:stats:tick)
+const adminStatsTickService = require('./api/admin/statsTickService.js');
+adminStatsTickService.start({ adminSocketHub, socketHub });
 
 // Belepett felhasznalo ellenorzese vedett oldalakhoz
 function requireAuth(req, res, next) {
@@ -261,11 +346,15 @@ initDatabase()
     .then(async () => {
         await services.refreshStats(io);
         services.handleHeartbeat(io); //?Heartbeat indítása a statisztikák frissítéséhez
-        leaderboardService.handleLeaderBoardCache(); //?Leaderboard cache periodikus frissítése
+        leaderboardService.handleLeaderBoardCache(io); //?Leaderboard cache periodikus frissítése + realtime socket push
         
         // Cleanup service: discarded profilképek törlése minden percben
         setInterval(cleanupDiscardedProfileImages, 60000); // 60 másodpercenként futtatás
         console.log('Cleanup service elindítva (percenkénti futás)');
+
+        // Admin audit retention scheduler (ADMIN_PANEL.md F9)
+        const { startRetentionScheduler } = require('./api/admin/retentionJob.js');
+        startRetentionScheduler();
         
         server.on('error', (error) => {
             if (error && error.code === 'EADDRINUSE') {

@@ -1,10 +1,13 @@
 const mysql = require('mysql2/promise');
 
+// Why: env-alapú DB-credek lehetővé teszik, hogy a XAMPP-default (root / üres jelszó / localhost) felüljárható
+//      legyen production deployhoz, miközben a meglévő iskolai/lokál setup default-ből változatlan marad.
 const dbConfig = {
-    host: '127.0.0.1',
-    user: 'root',
-    password: '',
-    database: 'mattmester',
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'mattmester',
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
@@ -52,6 +55,7 @@ async function createTables() {
             elo_classical INT DEFAULT 800,
             elo_blitz INT DEFAULT 800,
             role ENUM('player', 'admin') DEFAULT 'player',
+            is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
             is_banned BOOLEAN DEFAULT FALSE,
             ban_reason VARCHAR(255),
             banned_until TIMESTAMP NULL,
@@ -67,8 +71,9 @@ async function createTables() {
             INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT IGNORE INTO users (username, password_hash, email, elo, elo_mattmester, elo_classical, elo_blitz, role, is_email_verified, email_verified_at)
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 1500, 'admin', TRUE, CURRENT_TIMESTAMP);
+        `INSERT INTO users (username, password_hash, email, elo, elo_mattmester, elo_classical, elo_blitz, role, is_super_admin, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 1500, 'admin', TRUE, TRUE, CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE is_super_admin = TRUE;
         `,
 
         `ALTER TABLE users
@@ -123,7 +128,8 @@ async function createTables() {
             status ENUM('ongoing', 'finished', 'abandoned', 'draw') DEFAULT 'ongoing',
             FOREIGN KEY (white_player_id) REFERENCES users(id),
             FOREIGN KEY (black_player_id) REFERENCES users(id),
-            FOREIGN KEY (winner_id) REFERENCES users(id)
+            FOREIGN KEY (winner_id) REFERENCES users(id),
+            INDEX idx_games_status (status)
         )`,
 
         `CREATE TABLE IF NOT EXISTS game_chats (
@@ -152,7 +158,8 @@ async function createTables() {
             promotion_piece VARCHAR(10),
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
-            FOREIGN KEY (player_id) REFERENCES users(id)
+            FOREIGN KEY (player_id) REFERENCES users(id),
+            INDEX idx_moves_game (game_id)
         )`,
 
         `CREATE TABLE IF NOT EXISTS ability_log (
@@ -165,7 +172,8 @@ async function createTables() {
             FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE CASCADE,
             FOREIGN KEY (move_id) REFERENCES moves(id) ON DELETE CASCADE,
             FOREIGN KEY (player_id) REFERENCES users(id),
-            FOREIGN KEY (ability_id) REFERENCES abilities(id)
+            FOREIGN KEY (ability_id) REFERENCES abilities(id),
+            INDEX idx_ability_log_game (game_id)
         )`,
 
         `CREATE TABLE IF NOT EXISTS friends (
@@ -205,7 +213,8 @@ async function createTables() {
             reviewed_by INT,
             review_time TIMESTAMP NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL
+            FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_profile_image_uploads_user_status (user_id, status)
         )`,
 
         `CREATE TABLE IF NOT EXISTS chat_conversations (
@@ -225,7 +234,7 @@ async function createTables() {
             user_id INT NOT NULL,
             joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_read_message_id INT NULL,
-            UNIQUE KEY unique_chat_participant (conversation_id, user_id),
+            UNIQUE KEY unique_participant (conversation_id, user_id),
             INDEX idx_chat_participants_user (user_id),
             INDEX idx_chat_participants_conversation (conversation_id),
             FOREIGN KEY (conversation_id) REFERENCES chat_conversations(id) ON DELETE CASCADE,
@@ -246,6 +255,38 @@ async function createTables() {
             INDEX idx_chat_messages_sender (sender_id)
         )`,
 
+        `CREATE TABLE IF NOT EXISTS notifications (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            type VARCHAR(64) NOT NULL,
+            audience ENUM('user', 'multi', 'global', 'role', 'system') NOT NULL DEFAULT 'user',
+            target_user_id INT NULL,
+            target_role ENUM('player', 'admin') NULL,
+            sender_user_id INT NULL,
+            title VARCHAR(160) NOT NULL,
+            message VARCHAR(500) NOT NULL,
+            payload JSON NULL,
+            severity ENUM('info', 'success', 'warning', 'error') DEFAULT 'info',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (sender_user_id) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_notifications_target_user_created (target_user_id, created_at),
+            INDEX idx_notifications_audience_created (audience, created_at),
+            INDEX idx_notifications_role_created (target_role, created_at),
+            INDEX idx_notifications_type (type)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS notification_reads (
+            notification_id BIGINT NOT NULL,
+            user_id INT NOT NULL,
+            read_at TIMESTAMP NULL DEFAULT NULL,
+            dismissed_at TIMESTAMP NULL DEFAULT NULL,
+            PRIMARY KEY (notification_id, user_id),
+            FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE CASCADE,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_notification_reads_user (user_id),
+            INDEX idx_notification_reads_dismissed (user_id, dismissed_at)
+        )`,
+
         `CREATE TABLE IF NOT EXISTS user_logs (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             user_id INT NOT NULL,
@@ -254,9 +295,6 @@ async function createTables() {
             severity ENUM('info', 'warning', 'error', 'critical') DEFAULT 'info',
             source VARCHAR(50) DEFAULT 'backend',
             success BOOLEAN NULL,
-            metric_key VARCHAR(100) NULL,
-            metric_value DECIMAL(14, 4) NULL,
-            metric_delta DECIMAL(14, 4) NULL,
             message VARCHAR(255) NULL,
             ip_address VARCHAR(45) NULL,
             user_agent VARCHAR(255) NULL,
@@ -265,14 +303,157 @@ async function createTables() {
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_user_logs_user_time (user_id, occurred_at),
             INDEX idx_user_logs_user_event_time (user_id, event_type, occurred_at),
-            INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
             INDEX idx_user_logs_user_severity_time (user_id, severity, occurred_at),
             INDEX idx_user_logs_ip_time (ip_address, occurred_at)
+        )`,
+
+        // Admin panel tablak (ADMIN_PANEL.md §6)
+        `CREATE TABLE IF NOT EXISTS admin_tokens (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            token_hash CHAR(64) NOT NULL,
+            issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_used_at TIMESTAMP NULL,
+            expires_at TIMESTAMP NULL DEFAULT NULL,
+            revoked_at TIMESTAMP NULL,
+            issued_ip VARCHAR(45) NOT NULL,
+            issued_user_agent VARCHAR(255) NULL,
+            UNIQUE KEY ux_admin_tokens_hash (token_hash),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_admin_tokens_user_active (user_id, revoked_at, expires_at)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            actor_user_id INT NOT NULL,
+            actor_username VARCHAR(50) NOT NULL,
+            action VARCHAR(64) NOT NULL,
+            severity ENUM('info', 'warning', 'critical') DEFAULT 'info',
+            target_type VARCHAR(32) NULL,
+            target_id BIGINT NULL,
+            target_key VARCHAR(64) NULL,
+            target_label VARCHAR(120) NULL,
+            reason VARCHAR(1000) NOT NULL,
+            before_state JSON NULL,
+            after_state JSON NULL,
+            success BOOLEAN NOT NULL,
+            error_code VARCHAR(64) NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            user_agent VARCHAR(255) NULL,
+            request_id CHAR(26) NOT NULL,
+            occurred_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+            FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+            INDEX idx_aal_occurred (occurred_at),
+            INDEX idx_aal_actor_time (actor_user_id, occurred_at),
+            INDEX idx_aal_action_time (action, occurred_at),
+            INDEX idx_aal_target (target_type, target_id, occurred_at),
+            INDEX idx_aal_target_key (target_type, target_key, occurred_at),
+            INDEX idx_aal_severity_time (severity, occurred_at),
+            INDEX idx_aal_request (request_id)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS admin_alert_log (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            kind ENUM('unauthorized', 'rate_escalated', 'token_invalid', 'suspicious_pattern') NOT NULL,
+            severity ENUM('warning', 'critical') DEFAULT 'warning',
+            user_id INT NULL,
+            ip_address VARCHAR(45) NOT NULL,
+            endpoint VARCHAR(255) NULL,
+            user_agent VARCHAR(255) NULL,
+            detail JSON NULL,
+            occurred_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_aalert_time (occurred_at),
+            INDEX idx_aalert_kind_time (kind, occurred_at),
+            INDEX idx_aalert_ip_time (ip_address, occurred_at)
+        )`,
+
+        `CREATE TABLE IF NOT EXISTS admin_rate_escalations (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            scope ENUM('ip', 'user') NOT NULL,
+            scope_value VARCHAR(64) NOT NULL,
+            multiplier DECIMAL(4, 2) NOT NULL DEFAULT 5.00,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NULL DEFAULT NULL,
+            reason VARCHAR(255) NULL,
+            UNIQUE KEY ux_rate_esc_scope (scope, scope_value),
+            INDEX idx_rate_esc_expires (expires_at)
         )`
     ];
 
     for (const query of queries) {
         await pool.execute(query);
+    }
+}
+
+// Forward-compat oszlop-szinkron: ha egy regi DB-ben hianyzik egy uj oszlop,
+// itt biztonsagosan, idempotensen hozzaadjuk. Sosem dropol es sosem modositja
+// a meglevo adatot. Csak az alkalmazas-szintu sema-evolucio helyettesitesere,
+// nem teljes migracio-runner.
+async function ensureSchemaColumns() {
+    const expectedColumns = [
+        {
+            table: 'notification_reads',
+            column: 'dismissed_at',
+            definition: 'TIMESTAMP NULL DEFAULT NULL AFTER read_at',
+            indexName: 'idx_notification_reads_dismissed',
+            indexColumns: '(user_id, dismissed_at)'
+        },
+        {
+            table: 'notification_reads',
+            column: 'read_at',
+            definition: 'TIMESTAMP NULL DEFAULT NULL',
+            // index nem kell, PK lefedi
+            indexName: null,
+            indexColumns: null,
+            relaxOnly: true // csak akkor modositunk ha a meglevo definicio NOT NULL es default CURRENT_TIMESTAMP
+        }
+    ];
+
+    for (const spec of expectedColumns) {
+        try {
+            const [colRows] = await pool.execute(
+                `
+                    SELECT COLUMN_NAME, IS_NULLABLE, COLUMN_DEFAULT
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = ?
+                      AND COLUMN_NAME = ?
+                `,
+                [spec.table, spec.column]
+            );
+
+            if (!colRows.length) {
+                await pool.query(`ALTER TABLE \`${spec.table}\` ADD COLUMN \`${spec.column}\` ${spec.definition}`);
+                console.log(`[schema] hozzaadva: ${spec.table}.${spec.column}`);
+            } else if (spec.relaxOnly) {
+                const isNullable = String(colRows[0].IS_NULLABLE || '').toUpperCase() === 'YES';
+                if (!isNullable) {
+                    await pool.query(`ALTER TABLE \`${spec.table}\` MODIFY COLUMN \`${spec.column}\` ${spec.definition}`);
+                    console.log(`[schema] lazitva nullable-re: ${spec.table}.${spec.column}`);
+                }
+            }
+
+            if (spec.indexName) {
+                const [idxRows] = await pool.execute(
+                    `
+                        SELECT INDEX_NAME
+                        FROM INFORMATION_SCHEMA.STATISTICS
+                        WHERE TABLE_SCHEMA = DATABASE()
+                          AND TABLE_NAME = ?
+                          AND INDEX_NAME = ?
+                        LIMIT 1
+                    `,
+                    [spec.table, spec.indexName]
+                );
+                if (!idxRows.length) {
+                    await pool.query(`ALTER TABLE \`${spec.table}\` ADD INDEX \`${spec.indexName}\` ${spec.indexColumns}`);
+                    console.log(`[schema] index hozzaadva: ${spec.table}.${spec.indexName}`);
+                }
+            }
+        } catch (err) {
+            console.warn(`[schema] ensureSchemaColumns hiba (${spec.table}.${spec.column}):`, err.message);
+        }
     }
 }
 
@@ -340,6 +521,7 @@ async function initDatabase() {
 
         await createTables();
         await runMigrations();
+        await ensureSchemaColumns();
         console.log('Database initialized successfully.');
     } catch (err) {
         console.error('Failed to initialize database:', err);

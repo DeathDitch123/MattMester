@@ -37,19 +37,21 @@
     "devDependencies": {
         "jest": "^29.7.0",
         "kill-port": "^2.0.1",
-        "nodemon": "^3.1.10",
-        "supertest": "^6.3.3"
+        "nodemon": "^3.1.14",
+        "supertest": "^6.3.4"
     },
     "dependencies": {
         "bcrypt": "^6.0.0",
         "cors": "^2.8.6",
         "dotenv": "^17.4.2",
-        "express": "^5.1.0",
-        "express-rate-limit": "^8.3.2",
-        "express-session": "^1.18.2",
-        "multer": "^2.0.2",
-        "mysql2": "^3.15.2",
-        "nodemailer": "^8.0.5",
-        "socket.io": "^4.8.3"
+        "express": "^5.2.1",
+        "express-rate-limit": "^8.4.1",
+        "express-session": "^1.19.0",
+        "helmet": "^8.1.0",
+        "multer": "^2.1.1",
+        "mysql2": "^3.22.3",
+        "nodemailer": "^8.0.6",
+        "socket.io": "^4.8.3",
+        "vary": "^1.1.2"
     }
 }

@@ -88,10 +88,26 @@ const friendsState = {
 };
 const notificationCenterState = {
     bound: false,
+    initialized: false,
     items: [],
     unreadCount: 0,
-    maxItems: 40
+    maxItems: 50,
+    lastKnownUserId: 0,
+    // In-flight dismiss / akcio-folyamatok per notificationId. A click handler
+    // ezzel akadalyozza meg, hogy ugyanazt a gombot tobbszor is meg lehessen
+    // nyomni, mig egy futo POST be nem fejezodik (vagy vissza nem allitjuk).
+    pendingActionIds: new Set(),
+    // "Mind olvasott" gombhoz kulon, mert tobb gomb lehet (multi-tab),
+    // de ugyanazon a tab-on egyszerre csak egy futhasson.
+    markAllInFlight: false
 };
+const chatBadgeState = {
+    bound: false,
+    initialized: false,
+    totalUnread: 0,
+    lastKnownUserId: 0
+};
+const NOTIFICATION_BADGE_CAP = 99;
 const accountStatusState = {
     bound: false,
     sending: false,
@@ -253,16 +269,60 @@ function getNotificationCenterElements() {
         modal: document.getElementById('notificationsModal'),
         list: document.getElementById('notificationsList'),
         empty: document.getElementById('notificationsEmpty'),
-        dot: document.querySelector('.notification-dot')
+        counter: document.getElementById('notificationsUnreadCounter'),
+        markAllBtn: document.getElementById('markAllNotificationsReadBtn')
     };
 }
 
-function setNotificationDotState() {
-    const { dot } = getNotificationCenterElements();
-    if (dot) {
-        const hasUnread = notificationCenterState.unreadCount > 0;
-        dot.classList.toggle('d-none', !hasUnread);
+function getBadgeElements(target) {
+    return Array.from(document.querySelectorAll(`[data-badge-target="${target}"]`));
+}
+
+function formatBadgeCount(count) {
+    const safe = Math.max(0, Number.isFinite(count) ? Math.trunc(count) : 0);
+    let text = '0';
+    if (safe > NOTIFICATION_BADGE_CAP) {
+        text = `${NOTIFICATION_BADGE_CAP}+`;
+    } else {
+        text = String(safe);
     }
+    return { count: safe, text };
+}
+
+function applyBadgeState(target, count) {
+    const { count: safeCount, text } = formatBadgeCount(count);
+    const elements = getBadgeElements(target);
+    elements.forEach((element) => {
+        element.textContent = text;
+        if (safeCount > 0) {
+            element.removeAttribute('hidden');
+            element.classList.add('is-pulse');
+            setTimeout(() => element.classList.remove('is-pulse'), 600);
+        } else {
+            element.setAttribute('hidden', 'hidden');
+            element.classList.remove('is-pulse');
+        }
+    });
+}
+
+function setNotificationBadge(count) {
+    notificationCenterState.unreadCount = Math.max(0, Number(count) || 0);
+    applyBadgeState('notifications', notificationCenterState.unreadCount);
+    const { counter } = getNotificationCenterElements();
+    if (counter) {
+        const { count: safeCount, text } = formatBadgeCount(notificationCenterState.unreadCount);
+        counter.textContent = text;
+        if (safeCount > 0) {
+            counter.removeAttribute('hidden');
+        } else {
+            counter.setAttribute('hidden', 'hidden');
+        }
+    }
+}
+
+function setChatBadge(totalUnread) {
+    chatBadgeState.totalUnread = Math.max(0, Number(totalUnread) || 0);
+    applyBadgeState('chat', chatBadgeState.totalUnread);
 }
 
 function formatNotificationTime(value) {
@@ -270,24 +330,66 @@ function formatNotificationTime(value) {
     return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('hu-HU');
 }
 
+function escapeHtml(value) {
+    const text = String(value == null ? '' : value);
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function normalizeNotificationItem(payloadInput = {}) {
     const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
     const type = String(payload.type || '').trim().toLowerCase();
-    const conversationId = Number(payload.conversationId) || 0;
-    const fromUserId = Number(payload.fromUserId || payload.targetUserId || payload.senderUserId || payload.userId) || 0;
-    const title = String(payload.title || '').trim() || (type === 'chat_message' ? 'Új chat üzenet' : 'Értesítés');
+    const id = Number(payload.id) || 0;
+    const conversationId = Number(payload.conversationId || payload.payload?.conversationId) || 0;
+    const innerPayload = payload.payload && typeof payload.payload === 'object' ? payload.payload : {};
+    const fromUserId = Number(
+        payload.senderUserId
+        || innerPayload.senderUserId
+        || payload.fromUserId
+        || innerPayload.fromUserId
+        || payload.userId
+    ) || 0;
+    const fromUsername = String(payload.senderUsername || innerPayload.senderUsername || '').trim();
+    const title = String(payload.title || '').trim() || 'Értesítés';
     const message = String(payload.message || payload.text || '').trim() || 'Új esemény érkezett.';
-    const receivedAt = payload.receivedAt || new Date().toISOString();
+    const receivedAt = payload.createdAt || payload.receivedAt || payload.sentAt || new Date().toISOString();
+    const severity = ['info', 'success', 'warning', 'error'].includes(payload.severity) ? payload.severity : 'info';
+    const isRead = Boolean(payload.isRead);
 
     return {
         ...payload,
+        id,
         type,
         conversationId,
         fromUserId,
+        fromUsername,
         title,
         message,
-        receivedAt
+        receivedAt,
+        severity,
+        isRead,
+        payload: innerPayload
     };
+}
+
+// Extensible action renderer: notification type -> array of action descriptors
+function getNotificationActionsForItem(item) {
+    const actions = [];
+    if (item.type === 'friend_request' && item.fromUserId) {
+        actions.push({ key: 'profile', label: 'Profil', icon: 'user', variant: 'btn-outline-light' });
+        actions.push({ key: 'accept', label: 'Elfogad', icon: 'check', variant: 'btn-success' });
+        actions.push({ key: 'reject', label: 'Elutasít', icon: 'x', variant: 'btn-outline-danger' });
+        actions.push({ key: 'block', label: 'Letilt', icon: 'shield-off', variant: 'btn-danger' });
+    }
+    if (item.type === 'chat_message' && (item.conversationId || item.fromUserId)) {
+        actions.push({ key: 'open_chat', label: 'Megnyitás', icon: 'message-circle', variant: 'btn-outline-primary' });
+    }
+    actions.push({ key: 'remove', label: 'Bezár', icon: 'trash-2', variant: 'btn-outline-secondary' });
+    return actions;
 }
 
 function renderNotificationCenterList() {
@@ -299,27 +401,40 @@ function renderNotificationCenterList() {
 
         if (hasItems) {
             notificationCenterState.items.forEach((item) => {
-                const isChatMessage = item.type === 'chat_message';
-                const canOpenChat = isChatMessage && (item.conversationId > 0 || item.fromUserId > 0);
-                const button = document.createElement('button');
-                button.type = 'button';
-                button.className = `notification-item btn w-100 text-start ${canOpenChat ? 'notification-item-clickable' : ''}`.trim();
-                button.setAttribute('role', 'listitem');
-                button.dataset.notificationType = item.type;
-                button.dataset.conversationId = String(item.conversationId || '');
-                button.dataset.fromUserId = String(item.fromUserId || '');
-                button.dataset.notificationPayload = JSON.stringify(item);
-                button.dataset.notificationClick = canOpenChat ? 'true' : 'false';
-                button.innerHTML = `
-                    <div class="notification-item-head d-flex justify-content-between align-items-start gap-2">
-                        <strong class="text-light">${item.title}</strong>
-                        <small class="text-secondary">${formatNotificationTime(item.receivedAt)}</small>
+                const wrapper = document.createElement('div');
+                wrapper.className = `notification-item p-2 mb-2 rounded ${item.isRead ? 'is-read' : 'is-unread'}`;
+                wrapper.setAttribute('role', 'listitem');
+                wrapper.dataset.notificationId = String(item.id || '');
+                wrapper.dataset.notificationType = item.type;
+                wrapper.dataset.conversationId = String(item.conversationId || '');
+                wrapper.dataset.fromUserId = String(item.fromUserId || '');
+
+                const actions = getNotificationActionsForItem(item);
+                const actionsHtml = actions.map((action) => `
+                    <button type="button" class="btn btn-sm ${action.variant} d-inline-flex align-items-center gap-1"
+                        data-notification-action="${action.key}" aria-label="${escapeHtml(action.label)}">
+                        <i data-lucide="${action.icon}" style="width: 14px; height: 14px;"></i>
+                        <span class="d-none d-sm-inline">${escapeHtml(action.label)}</span>
+                    </button>
+                `).join('');
+
+                wrapper.innerHTML = `
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div class="flex-grow-1">
+                            <strong class="text-light d-block">${escapeHtml(item.title)}</strong>
+                            <div class="small text-secondary mt-1">${escapeHtml(item.message)}</div>
+                        </div>
+                        <small class="text-secondary text-nowrap">${escapeHtml(formatNotificationTime(item.receivedAt))}</small>
                     </div>
-                    <div class="small text-secondary mt-1">${item.message}</div>
+                    <div class="notification-actions d-flex flex-wrap gap-2 mt-2">${actionsHtml}</div>
                 `;
 
-                list.appendChild(button);
+                list.appendChild(wrapper);
             });
+
+            if (window.lucide && typeof window.lucide.createIcons === 'function') {
+                window.lucide.createIcons();
+            }
         }
     }
 }
@@ -328,7 +443,6 @@ async function openChatInboxFromLauncher() {
     if (!window.MattMesterChatModal) {
         throw new Error('A chat modal API nem érhető el.');
     }
-
     await window.MattMesterChatModal.openInbox();
 }
 
@@ -343,63 +457,489 @@ function bindGlobalChatLaunchers() {
     });
 }
 
+async function fetchNotificationsFromServer() {
+    let success = false;
+    try {
+        const response = await fetch('/api/notifications?limit=50', { credentials: 'same-origin' });
+        if (response.ok) {
+            const json = await response.json();
+            if (json?.success) {
+                notificationCenterState.items = (json.data || []).map(normalizeNotificationItem);
+                setNotificationBadge(Number(json.unreadCount) || 0);
+                renderNotificationCenterList();
+                success = true;
+            }
+        }
+    } catch (error) {
+        console.warn('[notifications] initial fetch hiba:', error.message);
+    }
+    return success;
+}
+
+async function fetchChatUnreadTotal() {
+    let total = 0;
+    try {
+        const response = await fetch('/api/chat/unread-total', { credentials: 'same-origin' });
+        if (response.ok) {
+            const json = await response.json();
+            if (json?.success) {
+                total = Number(json.totalUnread) || 0;
+            }
+        }
+    } catch (error) {
+        console.warn('[chat] unread-total fetch hiba:', error.message);
+    }
+    setChatBadge(total);
+    return total;
+}
+
+async function markNotificationReadOnServer(notificationId) {
+    let success = false;
+    try {
+        const normalizedNotificationId = Number(notificationId);
+        if (!Number.isInteger(normalizedNotificationId) || normalizedNotificationId <= 0) {
+            console.error('[notifications] mark read kihagyva: ervenytelen notificationId:', notificationId);
+            return false;
+        }
+
+        const response = await fetch(`/api/notifications/${normalizedNotificationId}/read`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        const json = await response.json().catch(() => ({}));
+        success = response.ok && Boolean(json?.success);
+
+        if (!success) {
+            console.error('[notifications] mark read sikertelen:', {
+                notificationId: normalizedNotificationId,
+                status: response.status,
+                message: String(json?.message || 'ismeretlen hiba')
+            });
+        }
+    } catch (error) {
+        console.error('[notifications] mark read hiba:', error.message);
+    }
+    return success;
+}
+
+async function markAllNotificationsReadOnServer() {
+    let success = false;
+    try {
+        const response = await fetch('/api/notifications/read-all', {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        const json = await response.json().catch(() => ({}));
+        success = response.ok && Boolean(json?.success);
+        if (!success) {
+            console.error('[notifications] mark-all-read sikertelen:', {
+                status: response.status,
+                message: String(json?.message || 'ismeretlen hiba')
+            });
+        }
+    } catch (error) {
+        console.error('[notifications] mark-all-read hiba:', error.message);
+    }
+    return success;
+}
+
+// Per-spec: az X / akció gombok permanens user-oldali eltávolítást váltanak ki.
+// A backend a notification_reads.dismissed_at-be ír, így re-loginnal sem
+// jönnek vissza. Idempotens: ismételt hívás 200-at ad vissza.
+async function dismissNotificationOnServer(notificationId) {
+    let success = false;
+    try {
+        const normalizedNotificationId = Number(notificationId);
+        if (!Number.isInteger(normalizedNotificationId) || normalizedNotificationId <= 0) {
+            console.error('[notifications] dismiss kihagyva: ervenytelen notificationId:', notificationId);
+            return false;
+        }
+
+        const response = await fetch(`/api/notifications/${normalizedNotificationId}/dismiss`, {
+            method: 'POST',
+            credentials: 'same-origin'
+        });
+        const json = await response.json().catch(() => ({}));
+        success = response.ok && Boolean(json?.success);
+
+        if (!success) {
+            console.error('[notifications] dismiss sikertelen:', {
+                notificationId: normalizedNotificationId,
+                status: response.status,
+                message: String(json?.message || 'ismeretlen hiba')
+            });
+        }
+    } catch (error) {
+        console.error('[notifications] dismiss hiba:', error.message);
+    }
+    return success;
+}
+
+async function performFriendActionFromNotification(action, fromUserId) {
+    let outcome = { success: false, message: '' };
+    try {
+        let url = null;
+        let method = 'POST';
+        let body = null;
+        if (action === 'accept') {
+            url = '/api/friends/accept';
+            body = JSON.stringify({ targetUserId: fromUserId });
+        } else if (action === 'reject') {
+            url = '/api/friends/reject';
+            body = JSON.stringify({ targetUserId: fromUserId });
+        } else if (action === 'block') {
+            url = '/api/friends/block';
+            body = JSON.stringify({ targetUserId: fromUserId });
+        }
+        if (url) {
+            const response = await fetch(url, {
+                method,
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body
+            });
+            const json = await response.json().catch(() => ({}));
+            outcome = {
+                success: Boolean(json?.success),
+                message: String(json?.message || (response.ok ? 'OK' : 'Hiba a művelet során.'))
+            };
+        }
+    } catch (error) {
+        outcome = { success: false, message: error.message || 'Hiba a friend művelet során.' };
+    }
+    return outcome;
+}
+
+function resetNotificationCenterState(reason = 'session-change') {
+    // Teljes cache torles: session valtas / logout / user A -> user B eseten
+    // a modalban ne maradjanak a regi user ertesitesei.
+    try {
+        console.log('[notifications] reset:', reason);
+        notificationCenterState.items = [];
+        notificationCenterState.unreadCount = 0;
+        setNotificationBadge(0);
+        renderNotificationCenterList();
+    } catch (error) {
+        console.warn('[notifications] reset hiba:', error.message);
+    }
+}
+
+function resetChatBadgeState(reason = 'session-change') {
+    try {
+        console.log('[chat badge] reset:', reason);
+        chatBadgeState.totalUnread = 0;
+        setChatBadge(0);
+    } catch (error) {
+        console.warn('[chat badge] reset hiba:', error.message);
+    }
+}
+
+async function refreshNotificationAndChatStateForCurrentSession(reason = 'session-refresh') {
+    // Authoritative lekerdezes a szerverrol: a UI pontosan azt mutassa,
+    // amit a DB tarol a belepett userre. Ha nincs user, mindent nullazunk.
+    try {
+        console.log('[notifications+chat] refresh:', reason);
+        const sessionInfo = await fetchSessionInfo();
+        const loggedIn = Boolean(sessionInfo?.user?.id);
+        if (loggedIn) {
+            notificationCenterState.lastKnownUserId = Number(sessionInfo.user.id) || 0;
+            chatBadgeState.lastKnownUserId = Number(sessionInfo.user.id) || 0;
+            await fetchNotificationsFromServer();
+            await fetchChatUnreadTotal();
+        } else {
+            notificationCenterState.lastKnownUserId = 0;
+            chatBadgeState.lastKnownUserId = 0;
+            resetNotificationCenterState(reason);
+            resetChatBadgeState(reason);
+        }
+    } catch (error) {
+        console.warn('[notifications+chat] refresh hiba:', error.message);
+    }
+}
+
 function bindNotificationCenterEvents() {
     if (!notificationCenterState.bound) {
-        const { list, modal } = getNotificationCenterElements();
+        const { list, modal, markAllBtn } = getNotificationCenterElements();
+
+        // Admin által módosult profil — friss adatok lehúzása, hogy a felület
+        // (Security & Activity History, ELO/wins/losses, e-mail, stb.) azonnal
+        // tükrözze az új állapotot, ne csak az értesítés.
+        window.addEventListener('mattmester:user:profile:adminEdit', () => {
+            runSafelyAsync('userProfileAdminEditRefresh', async () => {
+                try { await refreshSecurityActivity(); } catch (_) {}
+                try { await refreshAuthUi('admin-profile-edit'); } catch (_) {}
+            });
+        });
 
         window.addEventListener('mattmester:notification:push', (event) => {
             runSafely('notificationPushCollect', () => {
                 const notification = normalizeNotificationItem(event?.detail || {});
+                const existingIndex = notification.id
+                    ? notificationCenterState.items.findIndex((entry) => entry.id === notification.id)
+                    : -1;
+                if (existingIndex >= 0) {
+                    notificationCenterState.items.splice(existingIndex, 1);
+                }
                 notificationCenterState.items.unshift(notification);
                 if (notificationCenterState.items.length > notificationCenterState.maxItems) {
                     notificationCenterState.items.length = notificationCenterState.maxItems;
                 }
-
-                notificationCenterState.unreadCount += 1;
-                setNotificationDotState();
+                if (!notification.isRead) {
+                    setNotificationBadge(notificationCenterState.unreadCount + 1);
+                }
                 renderNotificationCenterList();
+            });
+        });
+
+        window.addEventListener('mattmester:notification:badge', (event) => {
+            runSafely('notificationBadgeUpdate', () => {
+                const count = Number(event?.detail?.unreadCount) || 0;
+                setNotificationBadge(count);
+            });
+        });
+
+        window.addEventListener('mattmester:chat:unread-total', (event) => {
+            runSafely('chatUnreadTotalUpdate', () => {
+                const total = Number(event?.detail?.totalUnread) || 0;
+                setChatBadge(total);
+            });
+        });
+
+        window.addEventListener('mattmester:notification:reset', (event) => {
+            runSafely('notificationResetFromServer', () => {
+                const reason = String(event?.detail?.reason || 'session-change');
+                resetNotificationCenterState(reason);
+            });
+        });
+
+        // Multi-tab szinkron: ha az adott user masik tabjan / a backend
+        // dismiss-elte az ertesitest, ezen a tabon is azonnal tunjon el.
+        window.addEventListener('mattmester:notification:dismissed', (event) => {
+            runSafely('notificationDismissedFromServer', () => {
+                const notificationId = Number(event?.detail?.notificationId) || 0;
+                if (notificationId > 0) {
+                    const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
+                    if (idx >= 0) {
+                        const wasUnread = !notificationCenterState.items[idx].isRead;
+                        notificationCenterState.items.splice(idx, 1);
+                        if (wasUnread) {
+                            setNotificationBadge(Math.max(0, notificationCenterState.unreadCount - 1));
+                        }
+                        renderNotificationCenterList();
+                    }
+                }
+            });
+        });
+
+        window.addEventListener('mattmester:notification:dismissed-all', () => {
+            runSafely('notificationDismissedAllFromServer', () => {
+                notificationCenterState.items = [];
+                setNotificationBadge(0);
+                renderNotificationCenterList();
+            });
+        });
+
+        window.addEventListener('mattmester:notification:dismissed-bulk', (event) => {
+            runSafely('notificationDismissedBulkFromServer', () => {
+                const filter = event?.detail?.filter || {};
+                const filterType = typeof filter.type === 'string' ? filter.type : null;
+                const filterSenderUserId = Number(filter.senderUserId) || null;
+                if (!filterType && !filterSenderUserId) {
+                    return;
+                }
+                let unreadDelta = 0;
+                notificationCenterState.items = notificationCenterState.items.filter((entry) => {
+                    const matchesType = !filterType || entry.type === filterType;
+                    const matchesSender = !filterSenderUserId || Number(entry.fromUserId) === filterSenderUserId;
+                    const shouldRemove = matchesType && matchesSender;
+                    if (shouldRemove && !entry.isRead) {
+                        unreadDelta += 1;
+                    }
+                    return !shouldRemove;
+                });
+                if (unreadDelta > 0) {
+                    setNotificationBadge(Math.max(0, notificationCenterState.unreadCount - unreadDelta));
+                }
+                renderNotificationCenterList();
+            });
+        });
+
+        window.addEventListener('mattmester:chat:unread:reset', (event) => {
+            runSafely('chatUnreadResetFromServer', () => {
+                const reason = String(event?.detail?.reason || 'session-change');
+                resetChatBadgeState(reason);
+            });
+        });
+
+        window.addEventListener('mattmester:session-context:changed', (event) => {
+            // Amikor a socket:state / presence:state observer session valtast jelez,
+            // authoritative refresh-t inditunk a backend fele, hogy a frontend
+            // allapot mindig a DB-vel legyen szinkronban.
+            runSafelyAsync('notificationSessionContextRefresh', async () => {
+                const reason = `session-context:${event?.detail?.trigger || 'change'}`;
+                await refreshNotificationAndChatStateForCurrentSession(reason);
             });
         });
 
         if (list) {
             list.addEventListener('click', (event) => {
-                runSafely('notificationListClick', () => {
-                    const item = event.target.closest('[data-notification-click="true"]');
-                    if (item && window.MattMesterSocket?.handleNotificationClick) {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        const payloadText = String(item.dataset.notificationPayload || '').trim();
-                        let payload = {};
-                        if (payloadText) {
-                            try {
-                                payload = JSON.parse(payloadText);
-                            } catch (error) {
-                                payload = {
-                                    type: item.dataset.notificationType,
-                                    conversationId: item.dataset.conversationId,
-                                    fromUserId: item.dataset.fromUserId
-                                };
+                runSafelyAsync('notificationListAction', async () => {
+                    const button = event.target.closest('[data-notification-action]');
+                    if (!button) {
+                        return;
+                    }
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const wrapper = button.closest('[data-notification-id]');
+                    const notificationId = Number(wrapper?.dataset.notificationId) || 0;
+                    const fromUserId = Number(wrapper?.dataset.fromUserId) || 0;
+                    const conversationId = Number(wrapper?.dataset.conversationId) || 0;
+                    const action = button.dataset.notificationAction;
+
+                    // Profil = view-only, ratelimit / spam vedelem nem ertelmezett.
+                    if (action === 'profile' && fromUserId) {
+                        await openPlayerProfileModalByUserId(fromUserId);
+                        return;
+                    }
+
+                    // open_chat = read + modal close, nem optimistic remove.
+                    if (action === 'open_chat' && (conversationId || fromUserId)) {
+                        const isReadSaved = await markNotificationReadOnServer(notificationId);
+                        if (!isReadSaved) {
+                            console.error('[notifications] chat megnyitas mellett read mentes sikertelen:', notificationId);
+                        }
+                        window.dispatchEvent(new CustomEvent('mattmester:chat:open-conversation', {
+                            detail: { conversationId, targetUserId: fromUserId }
+                        }));
+                        if (modal) {
+                            bootstrap.Modal.getOrCreateInstance(modal).hide();
+                        }
+                        return;
+                    }
+
+                    // Innen lefele: minden ag dismiss-elendo, ami optimistic
+                    // local-removal-t es per-notif in-flight guardot ervenyesit.
+                    const isResolvingAction = (
+                        action === 'remove'
+                        || ((action === 'accept' || action === 'reject' || action === 'block') && fromUserId)
+                    );
+                    if (!isResolvingAction || !notificationId) {
+                        return;
+                    }
+
+                    // 1. lepes — abuse / double-click vedelem: ha mar fut egy
+                    //    POST erre az ertesitesre, a kovetkezo klikkek no-op-ok.
+                    if (notificationCenterState.pendingActionIds.has(notificationId)) {
+                        return;
+                    }
+                    notificationCenterState.pendingActionIds.add(notificationId);
+
+                    // 2. lepes — minden akcio-gombot disable-elunk a kartyan,
+                    //    hogy egy lassu valtas alatt se lehessen tovabbi POST-okat
+                    //    ramai meg. Mar nem latszik, ha eltunt, de safety-net.
+                    const cardButtons = wrapper
+                        ? Array.from(wrapper.querySelectorAll('[data-notification-action]'))
+                        : [button];
+                    cardButtons.forEach((btn) => { btn.disabled = true; });
+
+                    // 3. lepes — optimistic UI: local state-bol kivesszuk, mielott
+                    //    a halozati hivas befejezodne. Ha hibazik, visszaallitjuk.
+                    const idx = notificationCenterState.items.findIndex((entry) => entry.id === notificationId);
+                    let removedItem = null;
+                    let removedIndex = -1;
+                    if (idx >= 0) {
+                        removedIndex = idx;
+                        removedItem = notificationCenterState.items[idx];
+                        notificationCenterState.items.splice(idx, 1);
+                        if (removedItem && !removedItem.isRead) {
+                            setNotificationBadge(Math.max(0, notificationCenterState.unreadCount - 1));
+                        }
+                        renderNotificationCenterList();
+                    }
+
+                    const restoreOnFailure = (feedbackMessage) => {
+                        if (removedItem && removedIndex >= 0) {
+                            const insertAt = Math.min(removedIndex, notificationCenterState.items.length);
+                            notificationCenterState.items.splice(insertAt, 0, removedItem);
+                            if (!removedItem.isRead) {
+                                setNotificationBadge(notificationCenterState.unreadCount + 1);
+                            }
+                            renderNotificationCenterList();
+                        }
+                        if (feedbackMessage && typeof setFriendsFeedback === 'function') {
+                            setFriendsFeedback(feedbackMessage, 'warning');
+                        }
+                    };
+
+                    try {
+                        if (action === 'remove') {
+                            const isDismissSaved = await dismissNotificationOnServer(notificationId);
+                            if (!isDismissSaved) {
+                                restoreOnFailure('Az ertesites eltavolitasa nem sikerult.');
+                            }
+                        } else {
+                            // accept / reject / block: friend action elobb, dismiss utana.
+                            const result = await performFriendActionFromNotification(action, fromUserId);
+                            if (result.success) {
+                                const isDismissSaved = await dismissNotificationOnServer(notificationId);
+                                if (!isDismissSaved && typeof setFriendsFeedback === 'function') {
+                                    setFriendsFeedback('A muvelet sikerult, de az ertesites eltavolitasa nem sikerult. Frissitsd az oldalt.', 'warning');
+                                }
+                                if (typeof setFriendsFeedback === 'function') {
+                                    setFriendsFeedback(result.message, 'success');
+                                }
+                                if (typeof refreshFriendsList === 'function') {
+                                    await refreshFriendsList(friendsState?.activeFilter || 'friend');
+                                }
+                            } else {
+                                restoreOnFailure(null);
+                                if (typeof setFriendsFeedback === 'function') {
+                                    setFriendsFeedback(result.message || 'Hiba a muvelet soran.', 'error');
+                                }
                             }
                         }
+                    } finally {
+                        notificationCenterState.pendingActionIds.delete(notificationId);
+                        // Ha a kartya meg latszik (hiba miatt visszaallt), engedelyezzuk
+                        // ujra a gombokat. Ha eltunt, a felhasznalo soha nem latja
+                        // oket, de a guard tisztitas igy is fontos a memoria miatt.
+                        cardButtons.forEach((btn) => { btn.disabled = false; });
+                    }
+                });
+            });
+        }
 
-                        const triggerChatOpen = () => {
-                            window.MattMesterSocket.handleNotificationClick(payload);
-                            notificationCenterState.unreadCount = Math.max(0, notificationCenterState.unreadCount - 1);
-                            setNotificationDotState();
-                        };
+        if (markAllBtn) {
+            markAllBtn.addEventListener('click', () => {
+                runSafelyAsync('markAllNotificationsRead', async () => {
+                    // Per spec: a "Mind olvasott" gomb feliratot megtartjuk, de
+                    // a viselkedese permanens user-oldali eltavolitas mindenre.
+                    if (notificationCenterState.markAllInFlight) {
+                        return;
+                    }
+                    notificationCenterState.markAllInFlight = true;
+                    markAllBtn.disabled = true;
 
-                        if (modal) {
-                            modal.addEventListener('hidden.bs.modal', () => {
-                                runSafely('notificationModalHiddenChatOpen', () => {
-                                    triggerChatOpen();
-                                });
-                            }, { once: true });
+                    // Optimistic: azonnal kiuritjuk a UI-t, hibara visszaallitjuk.
+                    const previousItems = notificationCenterState.items.slice();
+                    const previousUnread = notificationCenterState.unreadCount;
+                    notificationCenterState.items = [];
+                    setNotificationBadge(0);
+                    renderNotificationCenterList();
 
-                            const modalInstance = bootstrap.Modal.getOrCreateInstance(modal);
-                            modalInstance.hide();
-                        } else {
-                            triggerChatOpen();
+                    try {
+                        const success = await markAllNotificationsReadOnServer();
+                        if (!success) {
+                            notificationCenterState.items = previousItems;
+                            setNotificationBadge(previousUnread);
+                            renderNotificationCenterList();
+                            if (typeof setFriendsFeedback === 'function') {
+                                setFriendsFeedback('Az ertesitesek tomeges eltavolitasa nem sikerult.', 'warning');
+                            }
                         }
+                    } finally {
+                        notificationCenterState.markAllInFlight = false;
+                        markAllBtn.disabled = false;
                     }
                 });
             });
@@ -407,17 +947,27 @@ function bindNotificationCenterEvents() {
 
         if (modal) {
             modal.addEventListener('shown.bs.modal', () => {
-                runSafely('notificationModalShown', () => {
-                    notificationCenterState.unreadCount = 0;
-                    setNotificationDotState();
-                    renderNotificationCenterList();
+                runSafelyAsync('notificationModalShown', async () => {
+                    await fetchNotificationsFromServer();
                 });
             });
         }
 
         notificationCenterState.bound = true;
-        setNotificationDotState();
-        renderNotificationCenterList();
+    }
+
+    if (!notificationCenterState.initialized) {
+        runSafelyAsync('notificationsInitialFetch', async () => {
+            await fetchNotificationsFromServer();
+        });
+        notificationCenterState.initialized = true;
+    }
+
+    if (!chatBadgeState.initialized) {
+        runSafelyAsync('chatUnreadInitialFetch', async () => {
+            await fetchChatUnreadTotal();
+        });
+        chatBadgeState.initialized = true;
     }
 }
 //sessionInfo
@@ -715,6 +1265,12 @@ function bindCrossTabProfileRefreshEvents() {
             const unsubscribe = window.MattMesterSocket.subscribeSessionContextChanges(async (eventPayload = {}) => {
                 try {
                     await refreshAuthUi();
+                    // Session valtas eseten az ertesites es chat unread allapotot
+                    // is authoritative modon be kell tolteni, kulonben a modalban
+                    // es a chat ikonon a regi user adatai maradnak.
+                    await refreshNotificationAndChatStateForCurrentSession(
+                        `cross-tab:${eventPayload?.trigger || 'change'}`
+                    );
                 } catch (error) {
                     throw new Error(`Cross-tab profil frissítési hiba: ${error.message}`);
                 }
@@ -2362,36 +2918,37 @@ function bindModalPlayerSearchValidation() {
 
 function getProfileImageStatusMeta(statusInput) {
     const normalizedStatus = String(statusInput || '').trim().toLowerCase() || 'approved';
-
-    if (normalizedStatus === 'pending') {
-        return {
-            normalizedStatus,
-            textClass: 'text-warning',
-            label: 'Függő (elbírálásra vár)'
-        };
-    }
-
-    if (normalizedStatus === 'rejected') {
-        return {
-            normalizedStatus,
-            textClass: 'text-danger',
-            label: 'Elutasított'
-        };
-    }
-
-    if (normalizedStatus === 'default') {
-        return {
-            normalizedStatus,
-            textClass: 'text-info',
-            label: 'Alapértelmezett'
-        };
-    }
-
-    return {
+    let meta = {
         normalizedStatus: 'approved',
         textClass: 'text-success',
-        label: 'Jóváhagyott'
+        label: 'Jóváhagyott',
+        helpText: ''
     };
+
+    if (normalizedStatus === 'pending') {
+        meta = {
+            normalizedStatus,
+            textClass: 'text-warning',
+            label: 'Függő (elbírálásra vár)',
+            helpText: 'Csak te látod ezt a képet. Mások az alapértelmezett képet látják jóváhagyásig.'
+        };
+    } else if (normalizedStatus === 'rejected') {
+        meta = {
+            normalizedStatus,
+            textClass: 'text-danger',
+            label: 'Elutasított',
+            helpText: 'A kép elutasításra került, a publikus profilkép visszaállt az alapértelmezettre.'
+        };
+    } else if (normalizedStatus === 'default') {
+        meta = {
+            normalizedStatus,
+            textClass: 'text-info',
+            label: 'Alapértelmezett',
+            helpText: ''
+        };
+    }
+
+    return meta;
 }
 
 function applyProfileImagePresentation(user) {
@@ -2426,7 +2983,10 @@ function applyProfileImagePresentation(user) {
     statusElements.forEach((statusElement) => {
         statusElement.classList.remove('text-secondary', 'text-success', 'text-warning', 'text-danger', 'text-info');
         statusElement.classList.add(statusMeta.textClass);
-        statusElement.textContent = `Profilkép státusz: ${statusMeta.label}`;
+        const baseText = `Profilkép státusz: ${statusMeta.label}`;
+        statusElement.textContent = statusMeta.helpText
+            ? `${baseText} — ${statusMeta.helpText}`
+            : baseText;
     });
 
     const removeButton = document.getElementById('removeAvatarButton');
@@ -2468,16 +3028,6 @@ function showStats(sessionInfo) {
         const rankClasses = ['rank-beginner', 'rank-intermediate', 'rank-advanced', 'rank-expert', 'rank-master', 'rank-grandmaster'];
         const roleBadgeClasses = ['admin', 'badge-custom', 'badge-admin', 'badge-player'];
         const statBadgeClasses = ['badge-custom', 'badge-win', 'badge-loss', 'badge-draw', 'badge-ongoing'];
-
-        document.querySelectorAll('.top-bar-user-name').forEach((element) => {
-            element.textContent = username;
-        });
-
-        document.querySelectorAll('.top-bar-user-role').forEach((element) => {
-            element.textContent = roleText;
-            element.classList.remove(...roleBadgeClasses);
-            element.classList.add('badge-custom', role === 'admin' ? 'badge-admin' : 'badge-player');
-        });
 
         const profileName = document.querySelector('.profile-header h1.h3');
         if (profileName) {
@@ -3867,13 +4417,148 @@ function bindRemoveAvatarEvents() {
     }
 }
 
-// Mobile Sidebar Toggle
-function toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const overlay = document.getElementById('mobileOverlay');
+// Sidebar toggle: admin-stilus, minden meretben mukodik.
+// - Desktop (>=992px): a 'collapsed' kapcsolja a sidebart, a main-content 'expanded'
+//   modon kiveszi a margin-left-et, igy a sidebar a teljes vegehez csuszik be/ki.
+// - Mobile (<992px): a 'show' kapcsolja az overlay-vel egyutt a sidebart, ahogy eddig.
+const SIDEBAR_DESKTOP_BREAKPOINT_PX = 992;
+const SIDEBAR_LOCAL_STORAGE_KEY = 'mattmester.profile.sidebarCollapsed';
 
-    sidebar.classList.toggle('show');
-    overlay.classList.toggle('show');
+function isDesktopViewportForSidebar() {
+    return Boolean(window.matchMedia && window.matchMedia(`(min-width: ${SIDEBAR_DESKTOP_BREAKPOINT_PX}px)`).matches);
+}
+
+function getSidebarToggleButton() {
+    return document.querySelector('.sidebar-toggle-btn');
+}
+
+function applySidebarCollapsedState(collapsed) {
+    try {
+        const sidebar = document.getElementById('sidebar');
+        const mainContent = document.querySelector('.main-content');
+        const toggleBtn = getSidebarToggleButton();
+        if (sidebar) {
+            sidebar.classList.toggle('collapsed', Boolean(collapsed));
+        }
+        if (mainContent) {
+            mainContent.classList.toggle('expanded', Boolean(collapsed));
+        }
+        if (toggleBtn) {
+            toggleBtn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        }
+    } catch (error) {
+        console.warn('applySidebarCollapsedState hiba:', error.message || error);
+    }
+}
+
+function persistSidebarCollapsedState(collapsed) {
+    try {
+        window.localStorage?.setItem(SIDEBAR_LOCAL_STORAGE_KEY, collapsed ? '1' : '0');
+    } catch (error) {
+        // Privat mod / quota hiba: nem fatalis, csak nem perzisztal a preference.
+    }
+}
+
+function readPersistedSidebarCollapsedState() {
+    let collapsed = false;
+    try {
+        collapsed = window.localStorage?.getItem(SIDEBAR_LOCAL_STORAGE_KEY) === '1';
+    } catch (error) {
+        collapsed = false;
+    }
+    return collapsed;
+}
+
+function toggleSidebar() {
+    try {
+        const sidebar = document.getElementById('sidebar');
+        const overlay = document.getElementById('mobileOverlay');
+        if (!sidebar) {
+            return;
+        }
+
+        if (isDesktopViewportForSidebar()) {
+            const willBeCollapsed = !sidebar.classList.contains('collapsed');
+            applySidebarCollapsedState(willBeCollapsed);
+            persistSidebarCollapsedState(willBeCollapsed);
+        } else {
+            sidebar.classList.toggle('show');
+            if (overlay) {
+                overlay.classList.toggle('show');
+            }
+            const isShown = sidebar.classList.contains('show');
+            const toggleBtn = getSidebarToggleButton();
+            if (toggleBtn) {
+                toggleBtn.setAttribute('aria-expanded', isShown ? 'true' : 'false');
+            }
+        }
+    } catch (error) {
+        console.error('toggleSidebar hiba:', error);
+    }
+}
+
+function initSidebarCollapseFromPreference() {
+    try {
+        if (isDesktopViewportForSidebar()) {
+            applySidebarCollapsedState(readPersistedSidebarCollapsedState());
+        } else {
+            // Mobile / tablet: alapallapot zarva, a 'show' osztaly hianya jelenti ezt.
+            applySidebarCollapsedState(false);
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobileOverlay');
+            if (sidebar) sidebar.classList.remove('show');
+            if (overlay) overlay.classList.remove('show');
+        }
+    } catch (error) {
+        console.warn('initSidebarCollapseFromPreference hiba:', error.message || error);
+    }
+}
+
+// Reszponzivitas: ha a felhasznalo atmeretezi az ablakot, valtsuk a megfelelo
+// megjelenitest, hogy ne maradjon ott egy desktop-stilusu collapsed state mobil
+// nezetben (overlay vs margin-trigger eltero modon mukodik).
+function bindSidebarResponsiveSync() {
+    try {
+        if (typeof window.matchMedia !== 'function') {
+            return;
+        }
+        const mql = window.matchMedia(`(min-width: ${SIDEBAR_DESKTOP_BREAKPOINT_PX}px)`);
+        const handler = () => {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobileOverlay');
+            if (!sidebar) {
+                return;
+            }
+            if (mql.matches) {
+                // Desktopra valtas: zarjuk az overlay-t, allitsuk be a perzisztalt collapse-et.
+                sidebar.classList.remove('show');
+                if (overlay) overlay.classList.remove('show');
+                applySidebarCollapsedState(readPersistedSidebarCollapsedState());
+            } else {
+                // Mobilra valtas: collapsed osztalyt nem hasznaljuk, alapertelmezett zart sidebar.
+                applySidebarCollapsedState(false);
+                sidebar.classList.remove('show');
+                if (overlay) overlay.classList.remove('show');
+            }
+        };
+        if (typeof mql.addEventListener === 'function') {
+            mql.addEventListener('change', handler);
+        } else if (typeof mql.addListener === 'function') {
+            mql.addListener(handler);
+        }
+    } catch (error) {
+        console.warn('bindSidebarResponsiveSync hiba:', error.message || error);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initSidebarCollapseFromPreference();
+        bindSidebarResponsiveSync();
+    }, { once: true });
+} else {
+    initSidebarCollapseFromPreference();
+    bindSidebarResponsiveSync();
 }
 
 // Active state handling for navigation

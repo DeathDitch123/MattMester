@@ -1,5 +1,5 @@
 const usernameRegex = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+const { PASSWORD_REGEX: passwordRegex } = require('../../frontend/javascript/shared/validationRules.js');
 
 module.exports = { usernameRegex, emailRegex, passwordRegex };
