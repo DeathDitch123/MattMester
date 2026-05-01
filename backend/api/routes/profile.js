@@ -448,7 +448,8 @@ router.get('/profile/abilities-usage', isAuthenticated, async (request, response
             swap:       { name: 'Bábucsere',       icon: 'shuffle' },
             board_hide: { name: 'Tábla eltakar',   icon: 'eye-off' },
             shield:     { name: 'Pajzs',           icon: 'shield' },
-            time_steal: { name: 'Időlopás',        icon: 'hourglass' }
+            lefokozas:  { name: 'Lefokozás',       icon: 'arrow-down-circle' }
+            
         };
 
         const items = rows.map(r => ({

@@ -569,9 +569,10 @@ function botKepessegValaszt(jatek, nehezseg) {
         if (target) return { key: 'freeze', params: { x: target.x, y: target.y } };
     }
 
-    // 3) time_steal: ha van legalább egy capture lépés a következő körben → buff aktiválás
-    if (canUse('time_steal') && vanCapture(jatek, botSzin)) {
-        return { key: 'time_steal' };
+    // 3) lefokozas: ha van ellenséges sliding bábu (rook/bishop/queen) → fokozzuk le
+    if (canUse('lefokozas')) {
+        const target = ertekesSlidingEllenseg(jatek, botSzin, ellenSzin);
+        if (target) return { key: 'lefokozas', params: { x: target.x, y: target.y } };
     }
 
     // 4) time_pause: nagyon ritkán, csak felső szinteken (a botnak nem hasznos
@@ -630,16 +631,25 @@ function legveszelyesebbEllenseg(jatek, botSzin, ellenSzin) {
     return legjobb;
 }
 
-function vanCapture(jatek, szin) {
+function ertekesSlidingEllenseg(jatek, botSzin, ellenSzin) {
+    // Lefokozás célpont: az ellenfél legértékesebb sliding bábuja (queen > rook > bishop).
+    // Csak akkor választunk, ha a célpont nincs már lefokozva (a backend különben elutasítja).
+    const RANG = { queen: 9, rook: 5, bishop: 3 };
+    const demoted = jatek.abilities?.effects?.demotedPieces || [];
+    let legjobb = null;
+    let legjobbErtek = 0;
     for (let i = 0; i < jatek.tabla.length; i++) {
         const m = jatek.tabla[i];
-        if (!m.piece || m.piece.color !== szin) continue;
-        const lepesek = szabLepKeres(jatek, m.piece);
-        for (let j = 0; j < lepesek.length; j++) {
-            if (lepesek[j].capture) return true;
+        if (!m.piece || m.piece.color !== ellenSzin) continue;
+        const rang = RANG[m.piece.type] || 0;
+        if (rang === 0) continue;
+        if (demoted.some(d => d.x === m.x && d.y === m.y)) continue;
+        if (rang > legjobbErtek) {
+            legjobbErtek = rang;
+            legjobb = m;
         }
     }
-    return false;
+    return legjobb;
 }
 
 module.exports = {

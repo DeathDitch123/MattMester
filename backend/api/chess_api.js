@@ -22,6 +22,20 @@ function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// requireVerifiedEmail vendég bot-játéknál átugrandó: ha nincs session de a játékban
+// a fehér slot vendég (userId=null) és botAktiv, engedjük tovább ellenőrzés nélkül.
+function requireVerifiedEmailOrGuestBot(req, res, next) {
+    const userId = req.session?.userId || null;
+    if (!userId) {
+        const gameId = parseInt(req.params.id, 10);
+        const jatek = jatekKeres(gameId);
+        if (jatek && jatek.botAktiv && jatek.jatekosok.white.userId === null) {
+            return next();
+        }
+    }
+    return requireVerifiedEmail(req, res, next);
+}
+
 function findGameOrThrow(paramId) {
     const gameId = parseInt(paramId, 10);
     const jatek = jatekKeres(gameId);
@@ -39,13 +53,22 @@ function findGameOrThrow(paramId) {
 // Throw-ol 401-gyel ha nincs session, 403-mal ha nem résztvevő.
 function requireParticipant(req, jatek) {
     const userId = req.session?.userId || null;
+
+    const whiteId = jatek.jatekosok.white.userId;
+    const blackId = jatek.jatekosok.black.userId;
+
+    // Vendég bot-játék: a fehér játékos bejelentkezés nélkül indított bot meccset.
+    // Ilyenkor whiteId is null — session hiányában is engedjük a hozzáférést.
+    if (!userId && jatek.botAktiv && whiteId === null) {
+        return 'white';
+    }
+
     if (!userId) {
         const e = new Error('Bejelentkezés szükséges.');
         e.statusCode = 401;
         throw e;
     }
-    const whiteId = jatek.jatekosok.white.userId;
-    const blackId = jatek.jatekosok.black.userId;
+
     let szin = null;
     if (whiteId === blackId && whiteId === userId) {
         szin = jatek.koronLevo; // hot-seat: aktív szín
@@ -225,7 +248,7 @@ router.get('/:id/moves/:x/:y', (req, res) => {
 // ────────────────────────────────────────────
 // POST /api/chess/:id/move — Lépés végrehajtás
 // ────────────────────────────────────────────
-router.post('/:id/move', requireVerifiedEmail, async (req, res) => {
+router.post('/:id/move', requireVerifiedEmailOrGuestBot, async (req, res) => {
     try {
         const jatek = findGameOrThrow(req.params.id);
         rejectIfPvp(jatek);                       // PvP socket-szel megy
@@ -411,7 +434,7 @@ router.get('/abilities', (req, res) => {
 // ────────────────────────────────────────────
 // POST /api/chess/:id/ability — Képesség aktiválás (bot meccshez)
 // ────────────────────────────────────────────
-router.post('/:id/ability', requireVerifiedEmail, async (req, res) => {
+router.post('/:id/ability', requireVerifiedEmailOrGuestBot, async (req, res) => {
     try {
         const jatek = findGameOrThrow(req.params.id);
         rejectIfPvp(jatek);                       // PvP socket-en (chess:ability)

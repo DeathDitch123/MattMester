@@ -24,7 +24,7 @@ const FELIRATOK = {
     swap:       { nev: 'Bábucsere',       rovid: 'CSE' },
     board_hide: { nev: 'Tábla eltakar',   rovid: 'TAK' },
     shield:     { nev: 'Pajzs',           rovid: 'PJZ' },
-    time_steal: { nev: 'Időlopás',        rovid: 'LOP' }
+    lefokozas:  { nev: 'Lefokozás',       rovid: 'LEF' }
 };
 
 // ──────────────────────────────────────────────────────────
@@ -187,7 +187,7 @@ function gombokFrissit(allapot) {
 function effektekFrissit(allapot) {
     // Frozen + shielded mezők ikonjai
     document.querySelectorAll('.square').forEach(sq => {
-        sq.classList.remove('frozen', 'shielded');
+        sq.classList.remove('frozen', 'shielded', 'demoted');
     });
     const frozen = allapot.abilities.effects.frozenPieces || [];
     for (const f of frozen) {
@@ -198,6 +198,11 @@ function effektekFrissit(allapot) {
     for (const s of shielded) {
         const el = mezoElemKeres(s.x, s.y);
         if (el) el.classList.add('shielded');
+    }
+    const demoted = allapot.abilities.effects.demotedPieces || [];
+    for (const d of demoted) {
+        const el = mezoElemKeres(d.x, d.y);
+        if (el) el.classList.add('demoted');
     }
 }
 
@@ -318,6 +323,9 @@ function targetMezokKiemel(key) {
         predicate = (m) => m.piece && m.piece.color === szin && m.piece.type !== 'king';
     } else if (key === 'swap') {
         predicate = (m) => m.piece && m.piece.color === szin && m.piece.type !== 'king';
+    } else if (key === 'lefokozas') {
+        const sliding = new Set(['rook', 'bishop', 'queen']);
+        predicate = (m) => m.piece && m.piece.color === ellen && sliding.has(m.piece.type);
     } else {
         return;
     }

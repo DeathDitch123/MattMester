@@ -107,7 +107,7 @@ async function createTables() {
             ('swap',       'Bábucsere — két saját bábu pozíciójának cseréje (a köröd is)', 5),
             ('board_hide', 'Táblakitakarás — ellenfél 5mp-ig nem tud lépni', 5),
             ('shield',     'Pajzs — saját bábu 1 körre sebezhetetlenné válik', 4),
-            ('time_steal', 'Időlopás — következő ütésednél 5mp átkerül az ellenfél órájáról', 3)
+            ('lefokozas',  'Lefokozás — ellenséges bástya/futó/vezér a következő körében max. 4 mezőt léphet', 4)
         `,
 
         `CREATE TABLE IF NOT EXISTS games (

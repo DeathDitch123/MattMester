@@ -28,7 +28,7 @@ function abilitiesAlapallapot() {
             shieldedPieces:  [],   // [{ pieceId, ofColor, movesLeft }]
             blockedUntilMs:  { white: null, black: null }, // board_hide
             pausedUntilMs:   { white: null, black: null }, // time_pause
-            pendingTimeSteal:{ white: 0, black: 0 }        // hátralévő használatok
+            demotedPieces:   []                            // [{ x, y, ofColor, untilMoveOf, maxSquares }] — lefokozás
         }
     };
 }
@@ -198,7 +198,7 @@ function jatekAllapotKliens(jatek) {
                 shieldedPieces:  shieldedPiecesKliens(jatek),
                 blockedUntilMs:  { ...jatek.abilities.effects.blockedUntilMs },
                 pausedUntilMs:   { ...jatek.abilities.effects.pausedUntilMs },
-                pendingTimeSteal:{ ...jatek.abilities.effects.pendingTimeSteal }
+                demotedPieces:   jatek.abilities.effects.demotedPieces.map(d => ({ ...d }))
             }
         };
     }

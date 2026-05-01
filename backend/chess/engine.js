@@ -22,7 +22,6 @@ const {
     isMezoFagyott,
     isMezoVedett,
     isJatekosBlokkolt,
-    timeStealAlkalmaz,
     cooldownTickAndCleanup
 } = require('./abilities.js');
 
@@ -131,8 +130,6 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         if (capturedType) {
             pontHozzaad(jatek, babu.color, capturedType);
         }
-        // Képesség: időlopás — ha aktív buff, átköt másodperceket az ellenfél órájáról.
-        timeStealAlkalmaz(jatek, babu.color);
     }
 
     // --- En passant mező frissítése ---
