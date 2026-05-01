@@ -735,6 +735,19 @@ body::before {
 /* Profile summary card a userDetail-ban */
 .profile-summary .card-body { padding: 1.5rem; }
 
+.admin-user-detail-layout {
+    align-items: flex-start;
+}
+
+.admin-user-detail-sticky {
+    position: sticky;
+    top: 5.5rem;
+}
+
+.admin-user-detail-hero {
+    border-color: rgba(212, 175, 55, 0.18);
+}
+
 .admin-user-detail-status-cloud {
     display: inline-flex;
     flex-wrap: wrap;
@@ -787,6 +800,37 @@ body::before {
 .admin-user-detail-image-tools .alert {
     text-align: left;
     font-size: 0.78rem;
+}
+
+.user-detail-save-pack {
+    border-color: rgba(212, 175, 55, 0.28);
+    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.08);
+}
+
+.user-detail-save-pack .card-header {
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.08), transparent);
+}
+
+.user-detail-save-pack .alert {
+    background: rgba(15, 23, 42, 0.82);
+    color: var(--text-primary);
+}
+
+.admin-user-detail-main-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.admin-user-detail-split-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1rem;
+}
+
+.admin-user-detail-status-card,
+.admin-user-detail-save-card {
+    min-width: 0;
 }
 
 /* Danger zone (userDetail veszélyes műveletek) */
@@ -904,6 +948,14 @@ body::before {
 /* ---------- Responsive ---------- */
 @media (max-width: 1199.98px) {
     :root { --content-pad: 1.5rem; }
+
+    .admin-user-detail-sticky {
+        position: static;
+    }
+
+    .admin-user-detail-split-row {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 991.98px) {

@@ -597,6 +597,7 @@ const formatDateOnly = (iso) => {
 const ADMIN_USERS_PAGE_SIZE = 50;
 const ADMIN_USER_DETAIL_IMAGE_MAX_SIZE_BYTES = 3 * 1024 * 1024;
 const ADMIN_USER_DETAIL_IMAGE_ALLOWED_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const ADMIN_USER_ROLE_OPTIONS = ['player', 'admin'];
 
 // Egy felhasználó "signature"-je: rövid string ami akkor változik, ha vmi
 // vizuálisan releváns mezője módosult. Diff-flash-hoz használjuk.
@@ -763,6 +764,25 @@ function renderProfileImageStatusBadgeInline(user) {
         html = '<span class="profile-image-status-badge is-default"><i class="bi bi-person-circle"></i>Alapértelmezett</span>';
     }
     return html;
+}
+
+function renderPresenceStatusBadgeInline(user) {
+    const isOnline = Boolean(user?.online);
+    return isOnline
+        ? '<span class="badge badge-status-active"><i class="bi bi-circle-fill me-1"></i>Online</span>'
+        : '<span class="badge badge-status-pending"><i class="bi bi-circle me-1"></i>Offline</span>';
+}
+
+function getAdminRoleOptions(user) {
+    const knownRoles = new Set(ADMIN_USER_ROLE_OPTIONS);
+    const userRole = String(user?.role || '').trim();
+    if (userRole) knownRoles.add(userRole);
+    const roles = Array.from(knownRoles);
+    return roles.map((role) => ({
+        value: role,
+        label: role === 'admin' ? 'Adminisztrátor' : (role === 'player' ? 'Játékos' : role.charAt(0).toUpperCase() + role.slice(1)),
+        selected: String(userRole || 'player') === role
+    }));
 }
 
 // Aktuális szűrt + rendezett user lista (a teljes state.users.list-ből).
@@ -1298,10 +1318,12 @@ const SECTIONS = {
         const wins = hasUser ? Number(u.wins || 0) : 0;
         const losses = hasUser ? Number(u.losses || 0) : 0;
         const draws = hasUser ? Number(u.draws || 0) : 0;
+        const abilitiesUsed = hasUser ? Number(u.totalAbilities || 0) : 0;
         const totalGames = wins + losses + draws;
         const winRate = totalGames > 0 ? ((wins / totalGames) * 100) : 0;
         const emailBadge = hasUser ? renderEmailVerifiedBadgeInline(u) : '';
         const imageBadge = hasUser ? renderProfileImageStatusBadgeInline(u) : '';
+        const presenceBadge = hasUser ? renderPresenceStatusBadgeInline(u) : '';
         const isCurrentUser = hasUser && Number(state.currentUser?.id || 0) === Number(u.id || 0);
         const uploadHint = isCurrentUser
             ? 'A saját profilodnál a feltöltés backend oldalon is működik.'
@@ -1330,23 +1352,25 @@ const SECTIONS = {
         `}
 
         ${hasUser ? `
-        <div class="row g-4">
-            <div class="col-lg-4">
+        <div class="row g-4 admin-user-detail-layout">
+            <div class="col-12 col-xl-5">
+                <div class="admin-user-detail-sticky">
                 ${h.card({
-                    classes: 'profile-summary',
+                    classes: 'profile-summary admin-user-detail-hero',
                     body: `
                         <div class="text-center">
                             <img id="userDetailProfileImage"
                                 class="rounded-circle border border-3 border-gold mb-3" alt="Profil"
-                                style="width:120px;height:120px;object-fit:cover;"
+                                style="width:132px;height:132px;object-fit:cover;"
                                 data-fallback="true"
                                 data-username="${escapeHtml(u.username || '')}"
                                 data-profile-image="${escapeHtml(u.profileImage || '')}">
                             <h4 class="text-white mb-1">${escapeHtml(username)}</h4>
-                            <small class="text-secondary d-block mb-3">${escapeHtml(email)}</small>
+                            <small class="text-secondary d-block mb-3 text-break">${escapeHtml(email)}</small>
                             <div class="admin-user-detail-status-cloud mb-3">
                                 ${rolePill(role)}
-                                ${u.isBanned ? statusPill('banned') : statusPill('active')}
+                                ${presenceBadge}
+                                ${u.isBanned ? statusPill('banned') : ''}
                                 ${emailBadge}
                                 ${imageBadge}
                             </div>
@@ -1395,41 +1419,135 @@ const SECTIONS = {
                         </div>
                     </div>
                 </div>
+                </div>
             </div>
-            <div class="col-lg-8">
+            <div class="col-12 col-xl-7">
+                <div class="admin-user-detail-main-grid">
                 ${h.card({
                     title: 'Alapadatok szerkesztése', icon: 'bi-pencil-square',
-                    body: h.form({
-                        fields: [
-                            { id: 'editUsername',    label: 'Felhasználónév', value: u.username || '' },
-                            { id: 'editEmail',       label: 'E-mail',         value: u.email || '', type: 'email' },
-                            { id: 'editRole',        label: 'Szerepkör', type: 'select',
-                              options: [
-                                  { value: 'player', label: 'Játékos', selected: role === 'player' },
-                                  { value: 'admin',  label: 'Admin',   selected: role === 'admin' }
-                              ] },
-                            { id: 'editEloClassic', label: 'ELO (Klasszikus)', type: 'number', value: String(eloClassic) },
-                            { id: 'editEloMM', label: 'ELO (MattMester)', type: 'number', value: String(eloMM) },
-                            { id: 'editEloBullet', label: 'ELO (Bullet)', type: 'number', value: String(eloBullet) },
-                            { id: 'editReason',      label: 'Indok (kötelező — min. 10 char)', col: 12, type: 'textarea',
-                              placeholder: 'Miért módosítod ezeket az adatokat? Naplózásra kerül.' }
-                        ],
-                        cancel: { label: 'Mégse' },
-                        submit: { label: 'Mentés', icon: 'bi-check2', variant: 'gold' }
-                    })
+                    body: `
+                        <form class="row g-3" onsubmit="event.preventDefault(); saveAdminUserDetailChanges();">
+                            <div class="col-12 col-xl-6">
+                                <label for="editUsername" class="form-label">Felhasználónév</label>
+                                <input id="editUsername" name="editUsername" type="text" class="form-control" value="${escapeHtml(u.username || '')}">
+                            </div>
+                            <div class="col-12 col-xl-6">
+                                <label for="editEmail" class="form-label">E-mail</label>
+                                <input id="editEmail" name="editEmail" type="email" class="form-control" value="${escapeHtml(u.email || '')}">
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label for="editRole" class="form-label">Szerepkör</label>
+                                <select id="editRole" name="editRole" class="form-select">
+                                    ${getAdminRoleOptions(u).map((opt) => `<option value="${escapeHtml(opt.value)}" ${opt.selected ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`).join('')}
+                                </select>
+                                <small class="text-secondary d-block mt-1">A szerepkör a jelenleg az adatbázisban elérhető értékekből választható.</small>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <label class="form-label d-block">Fiók állapota</label>
+                                <div class="d-flex align-items-center gap-2 flex-wrap pt-1">
+                                    ${presenceBadge}
+                                    ${u.isBanned ? statusPill('banned') : ''}
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="card bg-transparent border border-secondary-subtle">
+                                    <div class="card-body">
+                                        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between mb-3">
+                                            <div>
+                                                <div class="fw-semibold text-white">ELO pontok</div>
+                                                <small class="text-secondary">Mindhárom érték külön szerkeszthető: klasszikus, MattMester és bullet.</small>
+                                            </div>
+                                        </div>
+                                        <div class="row g-3">
+                                            <div class="col-12 col-md-4">
+                                                <label for="editEloClassic" class="form-label">Klasszikus</label>
+                                                <input id="editEloClassic" name="editEloClassic" type="number" min="0" class="form-control" value="${escapeHtml(String(eloClassic))}">
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <label for="editEloMM" class="form-label">MattMester</label>
+                                                <input id="editEloMM" name="editEloMM" type="number" min="0" class="form-control" value="${escapeHtml(String(eloMM))}">
+                                            </div>
+                                            <div class="col-12 col-md-4">
+                                                <label for="editEloBullet" class="form-label">Bullet</label>
+                                                <input id="editEloBullet" name="editEloBullet" type="number" min="0" class="form-control" value="${escapeHtml(String(eloBullet))}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="card bg-transparent border border-secondary-subtle">
+                                    <div class="card-body">
+                                        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between mb-3">
+                                            <div>
+                                                <div class="fw-semibold text-white">Email megerősítettség</div>
+                                                <small class="text-secondary">Ezt az állapotot az admin itt közvetlenül át tudja állítani.</small>
+                                            </div>
+                                            <div class="form-check form-switch m-0">
+                                                <input class="form-check-input" type="checkbox" role="switch" id="editEmailVerified" ${u.emailVerified ? 'checked' : ''}>
+                                                <label class="form-check-label text-light" for="editEmailVerified">Megerősített</label>
+                                            </div>
+                                        </div>
+                                        <div class="row g-3">
+                                            <div class="col-12 col-md-3">
+                                                <label for="editWins" class="form-label">Győzelmek</label>
+                                                <input id="editWins" name="editWins" type="number" min="0" class="form-control" value="${escapeHtml(String(wins))}">
+                                            </div>
+                                            <div class="col-12 col-md-3">
+                                                <label for="editLosses" class="form-label">Vereségek</label>
+                                                <input id="editLosses" name="editLosses" type="number" min="0" class="form-control" value="${escapeHtml(String(losses))}">
+                                            </div>
+                                            <div class="col-12 col-md-3">
+                                                <label for="editDraws" class="form-label">Döntetlenek</label>
+                                                <input id="editDraws" name="editDraws" type="number" min="0" class="form-control" value="${escapeHtml(String(draws))}">
+                                            </div>
+                                            <div class="col-12 col-md-3">
+                                                <label for="editAbilitiesUsed" class="form-label">Képességek</label>
+                                                <input id="editAbilitiesUsed" name="editAbilitiesUsed" type="number" min="0" class="form-control" value="${escapeHtml(String(abilitiesUsed))}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </form>
+                    `
                 })}
-                <div class="content-card mt-4">
-                    <div class="card-header">
-                        <h5 class="card-title"><i class="bi bi-info-circle me-2 text-gold"></i>Fiókállapot</h5>
+                <div class="admin-user-detail-split-row mt-4">
+                    <div class="content-card admin-user-detail-status-card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="bi bi-info-circle me-2 text-gold"></i>Fiókállapot</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                ${h.kv('Email állapot', `${Boolean(u.emailVerified) ? 'Megerősített' : 'Nem megerősített'}`)}
+                                ${h.kv('Email megerősítve', u.emailVerifiedAt ? formatDateOnly(u.emailVerifiedAt) : '—')}
+                                ${h.kv('Profilkép állapot', String(u.profileImageStatus || 'default'))}
+                                ${h.kv('Utolsó aktivitás', u.lastActive ? formatRelative(u.lastActive) : '—')}
+                                ${h.kv('Utolsó IP', u.lastIp || '—')}
+                                ${h.kv('Csatlakozott', formatDateOnly(u.createdAt))}
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            ${h.kv('Email állapot', `${Boolean(u.emailVerified) ? 'Megerősített' : 'Nem megerősített'}`)}
-                            ${h.kv('Email megerősítve', u.emailVerifiedAt ? formatDateOnly(u.emailVerifiedAt) : '—')}
-                            ${h.kv('Profilkép állapot', String(u.profileImageStatus || 'default'))}
-                            ${h.kv('Utolsó aktivitás', u.lastActive ? formatRelative(u.lastActive) : '—')}
-                            ${h.kv('Utolsó IP', u.lastIp || '—')}
-                            ${h.kv('Csatlakozott', formatDateOnly(u.createdAt))}
+                    <div class="content-card mt-4 mt-xxl-0 user-detail-save-pack admin-user-detail-save-card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="bi bi-box-arrow-down-right me-2 text-gold"></i>Változtatási csomag</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="alert alert-dark border-secondary mb-3">
+                                Minden itt módosított mező egyetlen mentési csomag része lesz. Később ezt ugyanebből a csomagból lehet audit logra és felhasználói értesítésre bontani.
+                            </div>
+                            <div class="row g-3 align-items-end">
+                                <div class="col-12 col-lg-8">
+                                    <label for="editReason" class="form-label">Módosítás indoka</label>
+                                    <textarea id="editReason" class="form-control" rows="3" placeholder="Miért változtatod ezeket az adatokat? Ez később log és értesítés alapja lesz."></textarea>
+                                </div>
+                                <div class="col-12 col-lg-4 d-flex flex-column gap-2">
+                                    <button type="button" class="btn btn-gold btn-lg" onclick="saveAdminUserDetailChanges()">
+                                        <i class="bi bi-check2-circle me-1"></i>Összes módosítás mentése
+                                    </button>
+                                    <small class="text-secondary">Egy gomb, egy változtatási csomag, egy későbbi audit bejegyzés.</small>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1454,6 +1572,7 @@ const SECTIONS = {
                                       onclick: `banAdminUser(${u.id})` })}
                         </div>
                     </div>
+                </div>
                 </div>
             </div>
         </div>
@@ -1495,7 +1614,7 @@ const SECTIONS = {
                                 ${h.user({ name: u.username, email: u.email, profile_image: u.profileImage, username: u.username })}
                                 <div class="ban-target-meta">
                                     ${rolePill(u.role === 'admin' ? 'admin' : 'player')}
-                                    ${u.isBanned ? statusPill('banned') : statusPill('active')}
+                                    ${u.isBanned ? statusPill('banned') : renderPresenceStatusBadgeInline(u)}
                                 </div>
                             </div>
                         ` : `
@@ -3355,6 +3474,89 @@ function setAdminUserDetailImageMessage(type, message) {
     }
 }
 
+function collectAdminUserDetailFormValues() {
+    const getValue = (id) => document.getElementById(id)?.value ?? '';
+    const getNumber = (id, fallback = 0) => {
+        const parsed = Number(getValue(id));
+        return Number.isFinite(parsed) ? parsed : fallback;
+    };
+    return {
+        username: String(getValue('editUsername')).trim(),
+        email: String(getValue('editEmail')).trim(),
+        role: String(getValue('editRole')).trim(),
+        emailVerified: Boolean(document.getElementById('editEmailVerified')?.checked),
+        elo: getNumber('editEloClassic', 0),
+        eloMM: getNumber('editEloMM', 0),
+        eloBullet: getNumber('editEloBullet', 0),
+        wins: getNumber('editWins', 0),
+        losses: getNumber('editLosses', 0),
+        draws: getNumber('editDraws', 0),
+        abilitiesUsed: getNumber('editAbilitiesUsed', 0),
+        reason: String(document.getElementById('editReason')?.value || '').trim()
+    };
+}
+
+function applyAdminUserDetailFormValues(values) {
+    const selectedUser = state.selectedUser;
+    if (!selectedUser) return null;
+
+    const updated = {
+        ...selectedUser,
+        username: values.username || selectedUser.username,
+        email: values.email || selectedUser.email,
+        role: values.role || selectedUser.role,
+        emailVerified: Boolean(values.emailVerified),
+        elo: values.elo,
+        eloMM: values.eloMM,
+        eloBullet: values.eloBullet,
+        wins: values.wins,
+        losses: values.losses,
+        draws: values.draws,
+        totalAbilities: values.abilitiesUsed,
+        profileImageStatus: selectedUser.profileImageStatus || 'default'
+    };
+
+    state.selectedUser = updated;
+    if (Array.isArray(state.users.list)) {
+        state.users.list = state.users.list.map((item) => Number(item.id) === Number(updated.id) ? { ...item, ...updated } : item);
+    }
+    return updated;
+}
+
+function saveAdminUserDetailChanges() {
+    try {
+        const user = state.selectedUser;
+        if (!user) {
+            showToast('Nincs kiválasztott felhasználó.', 'warning', 'bi-exclamation-triangle');
+            return false;
+        }
+
+        const values = collectAdminUserDetailFormValues();
+        if (!values.reason || values.reason.length < 10) {
+            showToast('Az indok legalább 10 karakter legyen.', 'warning', 'bi-exclamation-circle');
+            return false;
+        }
+
+        const updated = applyAdminUserDetailFormValues(values);
+        if (!updated) {
+            showToast('Nem sikerült a módosítások előkészítése.', 'danger', 'bi-x-circle');
+            return false;
+        }
+
+        renderAdminUsersTable({ reason: 'refresh' });
+        if (state.currentSectionId === 'userDetail') {
+            showSection('userDetail', null, { silent: true });
+        }
+        setAdminUserDetailImageMessage('success', 'A frontend módosítások összegzése elkészült. A végleges mentés/logolás backend oldalon köthető majd hozzá.');
+        showToast('A módosítási csomag előkészítve.', 'success', 'bi-check2-circle');
+        return true;
+    } catch (err) {
+        console.warn('saveAdminUserDetailChanges hiba:', err);
+        showToast('A mentés előkészítése sikertelen.', 'danger', 'bi-x-circle');
+        return false;
+    }
+}
+
 function validateAdminUserDetailImageFile(file) {
     if (!file) return 'Nincs kiválasztott fájl.';
     if (!ADMIN_USER_DETAIL_IMAGE_ALLOWED_MIME_TYPES.has(file.type)) {
@@ -3585,7 +3787,7 @@ function renderAdminUserViewModal(user) {
             const roleBadge = document.getElementById('adminUserViewRole');
             if (roleBadge) roleBadge.outerHTML = `<span id="adminUserViewRole">${rolePill(user.role === 'admin' ? 'admin' : 'player')}</span>`;
             const statusBadge = document.getElementById('adminUserViewStatus');
-            if (statusBadge) statusBadge.outerHTML = `<span id="adminUserViewStatus">${user.isBanned ? statusPill('banned') : statusPill('active')}</span>`;
+            if (statusBadge) statusBadge.outerHTML = `<span id="adminUserViewStatus">${user.isBanned ? statusPill('banned') : renderPresenceStatusBadgeInline(user)}</span>`;
 
             const emailVerifiedEl = document.getElementById('adminUserViewEmailVerified');
             if (emailVerifiedEl) emailVerifiedEl.outerHTML = renderEmailVerifiedBadge(user);
