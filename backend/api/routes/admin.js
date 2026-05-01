@@ -9,9 +9,11 @@
 // kihagyja non-mutating method-okra, de az express.json() sem szukseges).
 
 const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs/promises');
 const sql = require('../../sql/sql_funtions.js');
 const adminRepo = require('../../sql/adminRepo.js');
-const { notificationService } = require('../../services.js');
 
 const authRoutes = require('../admin/authRoutes.js');
 const superAdminRoutes = require('../admin/superAdminRoutes.js');
@@ -402,6 +404,192 @@ router.post(
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW;
             response.locals.adminAudit.success = false;
             response.locals.adminAudit.errorCode = 'PROFILE_IMAGE_REJECT_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// Admin profil kép kezelés (feltöltés és eltávolítás - azonnal approved)
+const ADMIN_PROFILE_IMAGE_MAX_BYTES = 3 * 1024 * 1024;
+const ALLOWED_ADMIN_PROFILE_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+const adminProfileImageStorage = multer.diskStorage({
+    destination: (request, file, callback) => {
+        callback(null, path.join(__dirname, '../../profile_pictures'));
+    },
+    filename: (request, file, callback) => {
+        const sanitizedName = String(file.originalname || 'profile-image')
+            .replace(/[^a-zA-Z0-9._-]/g, '_')
+            .toLowerCase();
+        callback(null, Date.now() + '-' + sanitizedName);
+    }
+});
+
+const adminProfileImageUpload = multer({
+    storage: adminProfileImageStorage,
+    limits: { fileSize: ADMIN_PROFILE_IMAGE_MAX_BYTES },
+    fileFilter: (request, file, callback) => {
+        if (!ALLOWED_ADMIN_PROFILE_IMAGE_MIME_TYPES.has(file.mimetype)) {
+            callback(new Error('Nem támogatott képformátum. Csak JPG, PNG és WEBP engedélyezett.'));
+        } else {
+            callback(null, true);
+        }
+    }
+});
+
+// POST /admin/users/:id/profile-image - admin képfeltöltés (azonnal approved)
+router.post(
+    '/users/:id/profile-image',
+    adminLimiterChain,
+    parseAdminToken,
+    // Multer-t a reason-check ELŐTT futtatjuk, kulonben req.body meg ures
+    // (multipart/form-data eseten a body-t multer parse-olja).
+    (request, response, next) => {
+        adminProfileImageUpload.single('image')(request, response, (uploadError) => {
+            if (uploadError) {
+                return response.status(400).json({ success: false, message: uploadError.message || 'Képfeltöltés sikertelen.' });
+            }
+            next();
+        });
+    },
+    requireReasonOnMutate(ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a profilkép feltöltése során.' };
+        let uploadedPath = null;
+        try {
+            const userId = Number(request.params?.id) || 0;
+            if (!userId) {
+                statusCode = 400;
+                throw new Error('Érvénytelen felhasználó azonosító.');
+            }
+
+            if (!request.file) {
+                statusCode = 400;
+                throw new Error('A kép kiválasztása kötelező.');
+            }
+
+            if (request.file.size > ADMIN_PROFILE_IMAGE_MAX_BYTES) {
+                statusCode = 400;
+                throw new Error('A kép mérete legfeljebb 3 MB lehet.');
+            }
+
+            uploadedPath = `/profile_pictures/${request.file.filename}`;
+            
+            // Globális context az adminUserId-hez az SQL függvényen belül
+            global._currentAdminUserId = request.adminAuth?.userId || 0;
+            const uploadResult = await sql.uploadProfileImageAdminApproved(userId, uploadedPath);
+            delete global._currentAdminUserId;
+
+            // Értesítés küldése az usernek
+            try {
+                await sql.insertNotification({
+                    type: 'profile_image_updated',
+                    audience: 'user',
+                    targetUserId: userId,
+                    title: 'Profilkép frissítve',
+                    message: 'Az adminisztrátor frissítette a profilképedet.',
+                    severity: 'info'
+                });
+            } catch (notifyErr) {
+                console.warn('Értesítés küldése sikertelen:', notifyErr.message);
+            }
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'profile_image';
+            response.locals.adminAudit.targetId = uploadResult.uploadId;
+            response.locals.adminAudit.afterState = { status: 'approved', profileImage: uploadedPath };
+            response.locals.adminAudit.success = true;
+
+            payload = {
+                success: true,
+                message: 'Profilkép sikeresen feltöltve és jóváhagyva.',
+                data: {
+                    uploadId: uploadResult.uploadId,
+                    profileImage: uploadResult.profileImage,
+                    profileImageStatus: uploadResult.status
+                }
+            };
+        } catch (error) {
+            if (uploadedPath) {
+                try {
+                    const relativeUploadedPath = uploadedPath.replace(/^\//, '');
+                    await fs.unlink(path.join(__dirname, '../..', relativeUploadedPath));
+                } catch (deleteError) {
+                    console.warn('Feltöltött kép törlése nem sikerült:', deleteError.message);
+                }
+            }
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || 'Szerverhiba a képfeltöltés közben.' };
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'ADMIN_IMAGE_UPLOAD_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// POST /admin/users/:id/profile-image/remove - admin képeltávolítás
+router.post(
+    '/users/:id/profile-image/remove',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a profilkép eltávolítása során.' };
+        try {
+            const userId = Number(request.params?.id) || 0;
+            if (!userId) {
+                statusCode = 400;
+                throw new Error('Érvénytelen felhasználó azonosító.');
+            }
+
+            const removeResult = await sql.resetUserProfileImageToDefault(userId);
+
+            // Értesítés küldése az usernek
+            try {
+                await sql.insertNotification({
+                    type: 'profile_image_removed',
+                    audience: 'user',
+                    targetUserId: userId,
+                    title: 'Profilkép eltávolítva',
+                    message: 'Az adminisztrátor eltávolította a profilképedet.',
+                    severity: 'info'
+                });
+            } catch (notifyErr) {
+                console.warn('Értesítés küldése sikertelen:', notifyErr.message);
+            }
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'profile_image';
+            response.locals.adminAudit.targetId = userId;
+            response.locals.adminAudit.afterState = { status: 'default', profileImage: '/profile_pictures/default.png' };
+            response.locals.adminAudit.success = true;
+
+            payload = {
+                success: true,
+                message: 'Profilkép eltávolítva.',
+                data: {
+                    profileImage: removeResult.profileImage,
+                    profileImageStatus: removeResult.profileImageStatus
+                }
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            const messageLower = String(error?.message || '').toLowerCase();
+            if (messageLower.includes('nem található') || messageLower.includes('nem talalhato')) {
+                statusCode = 404;
+            }
+            payload = { success: false, message: error.message || 'Szerverhiba a profilkép eltávolítása közben.' };
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'ADMIN_IMAGE_REMOVE_FAILED';
         }
         return response.status(statusCode).json(payload);
     }

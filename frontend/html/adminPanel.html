@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data:;">
+        content="default-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Admin Panel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -357,6 +357,50 @@
                     <button type="button" class="btn btn-danger" onclick="executeCriticalAction()">
                         <i class="bi bi-shield-fill-check me-1"></i>Művelet végrehajtása
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin profilkép szerkesztő modal — a profil oldali editor admin párja (azonnal jóváhagyott) -->
+    <div class="modal fade" id="adminProfileImageEditorModal" tabindex="-1" aria-labelledby="adminProfileImageEditorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="adminProfileImageEditorModalLabel">
+                        <i class="bi bi-crop"></i>
+                        Profilkép kivágása — admin
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary mb-3">A képet húzással mozgathatod, zoomolhatod és forgathatod. Az admin által feltöltött kép azonnal jóváhagyott státuszt kap.</p>
+                    <div class="profile-image-editor-grid">
+                        <div class="profile-image-editor-main">
+                            <canvas id="adminProfileImageEditorCanvas" class="profile-image-editor-canvas" width="640" height="360"></canvas>
+                        </div>
+                        <div class="profile-image-editor-side">
+                            <div>
+                                <label for="adminProfileImageZoom" class="form-label mb-1">Nagyítás</label>
+                                <input id="adminProfileImageZoom" type="range" class="form-range" min="0.6" max="3" step="0.05" value="1">
+                            </div>
+                            <div>
+                                <label for="adminProfileImageRotate" class="form-label mb-1">Forgatás</label>
+                                <input id="adminProfileImageRotate" type="range" class="form-range" min="-180" max="180" step="1" value="0">
+                            </div>
+                            <div>
+                                <label class="form-label mb-2">Előnézet</label>
+                                <canvas id="adminProfileImageEditorPreview" class="profile-image-editor-preview" width="160" height="160"></canvas>
+                            </div>
+                            <button id="adminResetProfileImageEditor" type="button" class="btn btn-outline-gold btn-sm">Visszaállítás</button>
+                        </div>
+                    </div>
+                    <div id="adminProfileImageEditorMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-secondary me-auto">A kép azonnal jóváhagyottként kerül mentésre.</small>
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="adminSaveProfileImageButton">Mentés és jóváhagyás</button>
                 </div>
             </div>
         </div>

@@ -965,6 +965,47 @@ async function getUserProfileImage(userId) {
     }
 }
 
+async function uploadProfileImageAdminApproved(userId, filename) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    try {
+        await connection.beginTransaction();
+
+        const [userRows] = await connection.execute('SELECT id FROM users WHERE id = ? LIMIT 1 FOR UPDATE', [userId]);
+        if (!userRows.length) {
+            throw new Error('A felhasználó nem található.');
+        }
+
+        if (!isAllowedProfileImagePath(filename)) {
+            throw new Error('Érvénytelen profilkép útvonal.');
+        }
+
+        const adminUserId = Number(global._currentAdminUserId) || 0;
+
+        const [insertResult] = await connection.execute(
+            'INSERT INTO profile_image_uploads (user_id, filename, status, review_note, reviewed_by, review_time) VALUES (?, ?, "approved", ?, ?, NOW())',
+            [userId, filename, 'Admin által azonnal jóváhagyva.', adminUserId || null]
+        );
+
+        await connection.execute('UPDATE users SET profile_image = ? WHERE id = ?', [filename, userId]);
+
+        await connection.commit();
+        return {
+            uploadId: insertResult.insertId,
+            status: 'approved',
+            profileImage: filename
+        };
+    } catch (error) {
+        await connection.rollback();
+        if (error.message === 'A felhasználó nem található.' || error.message === 'Érvénytelen profilkép útvonal.') {
+            throw error;
+        }
+        throw new Error('Hiba a profil kép admin feltöltése során.');
+    } finally {
+        connection.release();
+    }
+}
+
 async function resetUserProfileImageToDefault(userId) {
     const pool = getPool();
     const connection = await pool.getConnection();
@@ -3584,6 +3625,7 @@ module.exports = {
     ipCollisionCheck,
     ipCollisions,
     uploadProfileImage,
+    uploadProfileImageAdminApproved,
     getPendingProfileImages,
     approveProfileImage,
     rejectProfileImage,
