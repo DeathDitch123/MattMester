@@ -283,6 +283,20 @@ async function submitRestorePassword() {
             const result = await response.json().catch(() => ({}));
 
             if (!response.ok) {
+                if (result.code === 'PASSWORD_SAME_AS_OLD') {
+                    applyPasswordFeedback(
+                        elements.newPasswordInput,
+                        elements.newPasswordFeedback,
+                        'error',
+                        result.message || 'Az új jelszó nem egyezhet meg a régivel.'
+                    );
+                    applyPasswordFeedback(
+                        elements.confirmPasswordInput,
+                        elements.confirmPasswordFeedback,
+                        'error',
+                        'Adj meg egy másik jelszót.'
+                    );
+                }
                 throw new Error(result.message || 'Sikertelen jelszó-visszaállítás.');
             }
 
