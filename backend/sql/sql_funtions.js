@@ -587,7 +587,9 @@ async function adminUpdateUserCore(userId, changes = {}) {
 
         const [userRows] = await connection.execute(
             `SELECT id, username, email, role, is_email_verified,
-                    elo, elo_MM, elo_bullet
+                    elo,
+                    elo_classical AS elo_MM,
+                    elo_blitz AS elo_bullet
              FROM users WHERE id = ? LIMIT 1 FOR UPDATE`,
             [userId]
         );
@@ -679,9 +681,9 @@ async function adminUpdateUserCore(userId, changes = {}) {
             }
         }
 
-        setUserIf('elo',       'elo',        changes.elo,       clampInt(ELO_MAX));
-        setUserIf('eloMM',     'elo_MM',     changes.eloMM,     clampInt(ELO_MAX));
-        setUserIf('eloBullet', 'elo_bullet', changes.eloBullet, clampInt(ELO_MAX));
+        setUserIf('elo',       'elo',             changes.elo,       clampInt(ELO_MAX));
+        setUserIf('eloMM',     'elo_classical',   changes.eloMM,     clampInt(ELO_MAX));
+        setUserIf('eloBullet', 'elo_blitz',       changes.eloBullet, clampInt(ELO_MAX));
 
         // ---- statistics tábla mezői ----
         const statFields = [];

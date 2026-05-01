@@ -7,8 +7,9 @@ CREATE TABLE
         email VARCHAR(100) UNIQUE,
         profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
         elo INT DEFAULT 800,
-        elo_MM INT DEFAULT 800,
-        elo_bullet INT DEFAULT 800,
+        elo_mattmester INT DEFAULT 800,
+        elo_classical INT DEFAULT 800,
+        elo_blitz INT DEFAULT 800,
         role ENUM ('player', 'admin') DEFAULT 'player',
         is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
         is_banned BOOLEAN DEFAULT FALSE,
@@ -34,8 +35,9 @@ INSERT INTO
         password_hash,
         email,
         elo,
-        elo_MM,
-        elo_bullet,
+        elo_mattmester,
+        elo_classical,
+        elo_blitz,
         role,
         is_super_admin,
         is_email_verified,
@@ -651,5 +653,5 @@ JOIN (
 ) AS random_elo ON random_elo.id = u.id
 SET
     u.elo = random_elo.base_elo,
-    u.elo_MM = random_elo.new_elo_mm,
-    u.elo_bullet = random_elo.new_elo_bullet;
+    u.elo_classical = random_elo.new_elo_mm,
+    u.elo_blitz = random_elo.new_elo_bullet;
