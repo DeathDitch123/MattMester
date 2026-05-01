@@ -822,6 +822,16 @@ body::before {
     gap: 1rem;
 }
 
+.admin-user-detail-shell {
+    align-items: flex-start;
+}
+
+.admin-user-detail-side-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
 .admin-user-detail-split-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -831,6 +841,13 @@ body::before {
 .admin-user-detail-status-card,
 .admin-user-detail-save-card {
     min-width: 0;
+}
+
+@media (min-width: 1400px) {
+    .admin-user-detail-side-stack {
+        position: sticky;
+        top: 5.5rem;
+    }
 }
 
 /* Danger zone (userDetail veszélyes műveletek) */
@@ -950,6 +967,10 @@ body::before {
     :root { --content-pad: 1.5rem; }
 
     .admin-user-detail-sticky {
+        position: static;
+    }
+
+    .admin-user-detail-side-stack {
         position: static;
     }
 

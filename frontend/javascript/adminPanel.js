@@ -1423,134 +1423,140 @@ const SECTIONS = {
             </div>
             <div class="col-12 col-xl-7">
                 <div class="admin-user-detail-main-grid">
-                ${h.card({
-                    title: 'Alapadatok szerkesztése', icon: 'bi-pencil-square',
-                    body: `
-                        <form class="row g-3" onsubmit="event.preventDefault(); saveAdminUserDetailChanges();">
-                            <div class="col-12 col-xl-6">
-                                <label for="editUsername" class="form-label">Felhasználónév</label>
-                                <input id="editUsername" name="editUsername" type="text" class="form-control" value="${escapeHtml(u.username || '')}">
-                            </div>
-                            <div class="col-12 col-xl-6">
-                                <label for="editEmail" class="form-label">E-mail</label>
-                                <input id="editEmail" name="editEmail" type="email" class="form-control" value="${escapeHtml(u.email || '')}">
-                            </div>
-                            <div class="col-12 col-md-6">
-                                <label for="editRole" class="form-label">Szerepkör</label>
-                                <select id="editRole" name="editRole" class="form-select">
-                                    ${getAdminRoleOptions(u).map((opt) => `<option value="${escapeHtml(opt.value)}" ${opt.selected ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`).join('')}
-                                </select>
-                                <small class="text-secondary d-block mt-1">A szerepkör a jelenleg az adatbázisban elérhető értékekből választható.</small>
-                            </div>
-                            <div class="col-12 col-md-6">
-                                <label class="form-label d-block">Fiók állapota</label>
-                                <div class="d-flex align-items-center gap-2 flex-wrap pt-1">
-                                    ${presenceBadge}
-                                    ${u.isBanned ? statusPill('banned') : ''}
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="card bg-transparent border border-secondary-subtle">
-                                    <div class="card-body">
-                                        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between mb-3">
-                                            <div>
-                                                <div class="fw-semibold text-white">ELO pontok</div>
-                                                <small class="text-secondary">Mindhárom érték külön szerkeszthető: klasszikus, MattMester és bullet.</small>
+                    <div class="row g-4 align-items-start">
+                        <div class="col-12 col-xxl-8">
+                            ${h.card({
+                                title: 'Alapadatok szerkesztése', icon: 'bi-pencil-square',
+                                body: `
+                                    <form class="row g-3" onsubmit="event.preventDefault(); saveAdminUserDetailChanges();">
+                                        <div class="col-12 col-lg-6">
+                                            <label for="editUsername" class="form-label">Felhasználónév</label>
+                                            <input id="editUsername" name="editUsername" type="text" class="form-control" value="${escapeHtml(u.username || '')}">
+                                        </div>
+                                        <div class="col-12 col-lg-6">
+                                            <label for="editEmail" class="form-label">E-mail</label>
+                                            <input id="editEmail" name="editEmail" type="email" class="form-control" value="${escapeHtml(u.email || '')}">
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <label for="editRole" class="form-label">Szerepkör</label>
+                                            <select id="editRole" name="editRole" class="form-select">
+                                                ${getAdminRoleOptions(u).map((opt) => `<option value="${escapeHtml(opt.value)}" ${opt.selected ? 'selected' : ''}>${escapeHtml(opt.label)}</option>`).join('')}
+                                            </select>
+                                            <small class="text-secondary d-block mt-1">A szerepkör a jelenleg az adatbázisban elérhető értékekből választható.</small>
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label d-block">Fiók állapota</label>
+                                            <div class="d-flex align-items-center gap-2 flex-wrap pt-1">
+                                                ${presenceBadge}
+                                                ${u.isBanned ? statusPill('banned') : ''}
                                             </div>
                                         </div>
+                                        <div class="col-12">
+                                            <div class="card bg-transparent border border-secondary-subtle">
+                                                <div class="card-body">
+                                                    <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between mb-3">
+                                                        <div>
+                                                            <div class="fw-semibold text-white">ELO pontok</div>
+                                                            <small class="text-secondary">Mindhárom érték külön szerkeszthető: klasszikus, MattMester és bullet.</small>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row g-3">
+                                                        <div class="col-12 col-md-4">
+                                                            <label for="editEloClassic" class="form-label">Klasszikus</label>
+                                                            <input id="editEloClassic" name="editEloClassic" type="number" min="0" class="form-control" value="${escapeHtml(String(eloClassic))}">
+                                                        </div>
+                                                        <div class="col-12 col-md-4">
+                                                            <label for="editEloMM" class="form-label">MattMester</label>
+                                                            <input id="editEloMM" name="editEloMM" type="number" min="0" class="form-control" value="${escapeHtml(String(eloMM))}">
+                                                        </div>
+                                                        <div class="col-12 col-md-4">
+                                                            <label for="editEloBullet" class="form-label">Bullet</label>
+                                                            <input id="editEloBullet" name="editEloBullet" type="number" min="0" class="form-control" value="${escapeHtml(String(eloBullet))}">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-12">
+                                            <div class="card bg-transparent border border-secondary-subtle">
+                                                <div class="card-body">
+                                                    <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between mb-3">
+                                                        <div>
+                                                            <div class="fw-semibold text-white">Email megerősítettség</div>
+                                                            <small class="text-secondary">Ezt az állapotot az admin itt közvetlenül át tudja állítani.</small>
+                                                        </div>
+                                                        <div class="form-check form-switch m-0">
+                                                            <input class="form-check-input" type="checkbox" role="switch" id="editEmailVerified" ${u.emailVerified ? 'checked' : ''}>
+                                                            <label class="form-check-label text-light" for="editEmailVerified">Megerősített</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="row g-3">
+                                                        <div class="col-12 col-md-3">
+                                                            <label for="editWins" class="form-label">Győzelmek</label>
+                                                            <input id="editWins" name="editWins" type="number" min="0" class="form-control" value="${escapeHtml(String(wins))}">
+                                                        </div>
+                                                        <div class="col-12 col-md-3">
+                                                            <label for="editLosses" class="form-label">Vereségek</label>
+                                                            <input id="editLosses" name="editLosses" type="number" min="0" class="form-control" value="${escapeHtml(String(losses))}">
+                                                        </div>
+                                                        <div class="col-12 col-md-3">
+                                                            <label for="editDraws" class="form-label">Döntetlenek</label>
+                                                            <input id="editDraws" name="editDraws" type="number" min="0" class="form-control" value="${escapeHtml(String(draws))}">
+                                                        </div>
+                                                        <div class="col-12 col-md-3">
+                                                            <label for="editAbilitiesUsed" class="form-label">Képességek</label>
+                                                            <input id="editAbilitiesUsed" name="editAbilitiesUsed" type="number" min="0" class="form-control" value="${escapeHtml(String(abilitiesUsed))}">
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </form>
+                                `
+                            })}
+                        </div>
+                        <div class="col-12 col-xxl-4">
+                            <div class="admin-user-detail-side-stack">
+                                <div class="content-card admin-user-detail-status-card">
+                                    <div class="card-header">
+                                        <h5 class="card-title"><i class="bi bi-info-circle me-2 text-gold"></i>Fiókállapot</h5>
+                                    </div>
+                                    <div class="card-body">
                                         <div class="row g-3">
-                                            <div class="col-12 col-md-4">
-                                                <label for="editEloClassic" class="form-label">Klasszikus</label>
-                                                <input id="editEloClassic" name="editEloClassic" type="number" min="0" class="form-control" value="${escapeHtml(String(eloClassic))}">
+                                            ${h.kv('Email állapot', `${Boolean(u.emailVerified) ? 'Megerősített' : 'Nem megerősített'}`)}
+                                            ${h.kv('Email megerősítve', u.emailVerifiedAt ? formatDateOnly(u.emailVerifiedAt) : '—')}
+                                            ${h.kv('Profilkép állapot', String(u.profileImageStatus || 'default'))}
+                                            ${h.kv('Utolsó aktivitás', u.lastActive ? formatRelative(u.lastActive) : '—')}
+                                            ${h.kv('Utolsó IP', u.lastIp || '—')}
+                                            ${h.kv('Csatlakozott', formatDateOnly(u.createdAt))}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="content-card user-detail-save-pack admin-user-detail-save-card">
+                                    <div class="card-header">
+                                        <h5 class="card-title"><i class="bi bi-box-arrow-down-right me-2 text-gold"></i>Változtatási csomag</h5>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="alert alert-dark border-secondary mb-3">
+                                            Minden itt módosított mező egyetlen mentési csomag része lesz. Később ezt ugyanebből a csomagból lehet audit logra és felhasználói értesítésre bontani.
+                                        </div>
+                                        <div class="row g-3 align-items-end">
+                                            <div class="col-12">
+                                                <label for="editReason" class="form-label">Módosítás indoka</label>
+                                                <textarea id="editReason" class="form-control" rows="3" placeholder="Miért változtatod ezeket az adatokat? Ez később log és értesítés alapja lesz."></textarea>
                                             </div>
-                                            <div class="col-12 col-md-4">
-                                                <label for="editEloMM" class="form-label">MattMester</label>
-                                                <input id="editEloMM" name="editEloMM" type="number" min="0" class="form-control" value="${escapeHtml(String(eloMM))}">
-                                            </div>
-                                            <div class="col-12 col-md-4">
-                                                <label for="editEloBullet" class="form-label">Bullet</label>
-                                                <input id="editEloBullet" name="editEloBullet" type="number" min="0" class="form-control" value="${escapeHtml(String(eloBullet))}">
+                                            <div class="col-12 d-flex flex-column gap-2">
+                                                <button type="button" class="btn btn-gold btn-lg" onclick="saveAdminUserDetailChanges()">
+                                                    <i class="bi bi-check2-circle me-1"></i>Összes módosítás mentése
+                                                </button>
+                                                <small class="text-secondary">Egy gomb, egy változtatási csomag, egy későbbi audit bejegyzés.</small>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-12">
-                                <div class="card bg-transparent border border-secondary-subtle">
-                                    <div class="card-body">
-                                        <div class="d-flex flex-wrap gap-3 align-items-center justify-content-between mb-3">
-                                            <div>
-                                                <div class="fw-semibold text-white">Email megerősítettség</div>
-                                                <small class="text-secondary">Ezt az állapotot az admin itt közvetlenül át tudja állítani.</small>
-                                            </div>
-                                            <div class="form-check form-switch m-0">
-                                                <input class="form-check-input" type="checkbox" role="switch" id="editEmailVerified" ${u.emailVerified ? 'checked' : ''}>
-                                                <label class="form-check-label text-light" for="editEmailVerified">Megerősített</label>
-                                            </div>
-                                        </div>
-                                        <div class="row g-3">
-                                            <div class="col-12 col-md-3">
-                                                <label for="editWins" class="form-label">Győzelmek</label>
-                                                <input id="editWins" name="editWins" type="number" min="0" class="form-control" value="${escapeHtml(String(wins))}">
-                                            </div>
-                                            <div class="col-12 col-md-3">
-                                                <label for="editLosses" class="form-label">Vereségek</label>
-                                                <input id="editLosses" name="editLosses" type="number" min="0" class="form-control" value="${escapeHtml(String(losses))}">
-                                            </div>
-                                            <div class="col-12 col-md-3">
-                                                <label for="editDraws" class="form-label">Döntetlenek</label>
-                                                <input id="editDraws" name="editDraws" type="number" min="0" class="form-control" value="${escapeHtml(String(draws))}">
-                                            </div>
-                                            <div class="col-12 col-md-3">
-                                                <label for="editAbilitiesUsed" class="form-label">Képességek</label>
-                                                <input id="editAbilitiesUsed" name="editAbilitiesUsed" type="number" min="0" class="form-control" value="${escapeHtml(String(abilitiesUsed))}">
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </form>
-                    `
-                })}
-                <div class="admin-user-detail-split-row mt-4">
-                    <div class="content-card admin-user-detail-status-card">
-                        <div class="card-header">
-                            <h5 class="card-title"><i class="bi bi-info-circle me-2 text-gold"></i>Fiókállapot</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                ${h.kv('Email állapot', `${Boolean(u.emailVerified) ? 'Megerősített' : 'Nem megerősített'}`)}
-                                ${h.kv('Email megerősítve', u.emailVerifiedAt ? formatDateOnly(u.emailVerifiedAt) : '—')}
-                                ${h.kv('Profilkép állapot', String(u.profileImageStatus || 'default'))}
-                                ${h.kv('Utolsó aktivitás', u.lastActive ? formatRelative(u.lastActive) : '—')}
-                                ${h.kv('Utolsó IP', u.lastIp || '—')}
-                                ${h.kv('Csatlakozott', formatDateOnly(u.createdAt))}
-                            </div>
                         </div>
                     </div>
-                    <div class="content-card mt-4 mt-xxl-0 user-detail-save-pack admin-user-detail-save-card">
-                        <div class="card-header">
-                            <h5 class="card-title"><i class="bi bi-box-arrow-down-right me-2 text-gold"></i>Változtatási csomag</h5>
-                        </div>
-                        <div class="card-body">
-                            <div class="alert alert-dark border-secondary mb-3">
-                                Minden itt módosított mező egyetlen mentési csomag része lesz. Később ezt ugyanebből a csomagból lehet audit logra és felhasználói értesítésre bontani.
-                            </div>
-                            <div class="row g-3 align-items-end">
-                                <div class="col-12 col-lg-8">
-                                    <label for="editReason" class="form-label">Módosítás indoka</label>
-                                    <textarea id="editReason" class="form-control" rows="3" placeholder="Miért változtatod ezeket az adatokat? Ez később log és értesítés alapja lesz."></textarea>
-                                </div>
-                                <div class="col-12 col-lg-4 d-flex flex-column gap-2">
-                                    <button type="button" class="btn btn-gold btn-lg" onclick="saveAdminUserDetailChanges()">
-                                        <i class="bi bi-check2-circle me-1"></i>Összes módosítás mentése
-                                    </button>
-                                    <small class="text-secondary">Egy gomb, egy változtatási csomag, egy későbbi audit bejegyzés.</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div class="content-card mt-4 danger-zone">
                     <div class="card-header">
                         <h5 class="card-title text-danger"><i class="bi bi-exclamation-octagon-fill me-2"></i>Veszélyes műveletek</h5>
@@ -1572,7 +1578,6 @@ const SECTIONS = {
                                       onclick: `banAdminUser(${u.id})` })}
                         </div>
                     </div>
-                </div>
                 </div>
             </div>
         </div>
