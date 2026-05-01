@@ -12,6 +12,7 @@
 import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt,
          huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres,
          lepesAnimacio } from './UI-megjelenites.js';
+import { abilitiesInit, abilitiesAllapotFrissit, abilitiesReset, isAbilityArmed } from './abilities.js';
 
 // Az aktuális játék ID — a szerver adja
 let gameId = null;
@@ -82,6 +83,12 @@ const OLDAL_VAZ = `
             <div class="board-wrap">
                 <div id="board" class="board" aria-label="Sakk tábla"></div>
 
+                <!-- TÁBLAKITAKARÁS overlay -->
+                <div id="board-hide-overlay" class="board-hide-overlay hidden">
+                    <span>Tábla eltakarva</span>
+                    <span id="board-hide-countdown">5</span>
+                </div>
+
                 <div id="promotion-modal" class="promotion-modal hidden">
                     <div class="promotion-overlay"></div>
                     <div class="promotion-choices">
@@ -98,6 +105,19 @@ const OLDAL_VAZ = `
                     Aktív: <strong id="turn-name">fehér</strong>
                 </div>
                 <div id="status" class="status">játékon</div>
+
+                <!-- KÉPESSÉG BAR -->
+                <div id="ability-bar" class="ability-bar hidden">
+                    <div class="ability-points">
+                        <span class="ap-label">Pontok</span>
+                        <span class="ap-mine" id="ap-mine">0</span>
+                        <span class="ap-sep">vs</span>
+                        <span class="ap-opp" id="ap-opp">0</span>
+                    </div>
+                    <div id="ability-buttons" class="ability-buttons"></div>
+                    <div id="ability-hint" class="ability-hint hidden"></div>
+                </div>
+
                 <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
                 <div id="opponent-disconnected" class="opponent-dc hidden">
                     Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp
@@ -135,13 +155,8 @@ const OLDAL_VAZ = `
 // API HÍVÁSOK
 // ────────────────────────────────────────────
 
-async function apiUjJatek() {
-    const res = await fetch('/api/chess/new', { method: 'POST' });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Hiba');
-    gameId = data.gameId;
-    return data.allapot;
-}
+// Hot-seat (lokális 2-játékos) endpoint TÖRÖLVE — a backend `/api/chess/new`
+// endpoint nincs többé. Csak bot meccs és PvP socket-en keresztül lehet játszani.
 
 async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 9000) {
     const controller = new AbortController();
@@ -155,17 +170,27 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 9000) {
     }
 }
 
-async function apiUjBotJatek(difficulty) {
+async function apiUjBotJatek(difficulty, mode, ranked) {
+    const body = { difficulty };
+    if (mode) body.mode = mode;
+    if (typeof ranked === 'boolean') body.ranked = ranked;
     const res = await fetch('/api/chess/new-bot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ difficulty })
+        body: JSON.stringify(body)
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Hiba');
     gameId = data.gameId;
     botInfo = data.botInfo;
     return data.allapot;
+}
+
+async function apiModes() {
+    const res = await fetch('/api/chess/modes');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Hiba a mód-lista lekérésekor.');
+    return data;
 }
 
 async function apiNehezsegek() {
@@ -217,9 +242,14 @@ async function apiFeladMagat() {
 // JÁTÉKMÓD VÁLASZTÁS
 // ────────────────────────────────────────────
 
+// Az aktuális kiválasztott mód + ranked flag (a teljes modal-flow-ban használt).
+let selectedMode = null;
+let selectedRanked = true;
+
 async function modValasztoMegjelenit() {
     const modal = document.getElementById("mode-modal");
-    const step1 = document.getElementById("mode-step1");
+    const stepModes = document.getElementById("mode-step-modes");
+    const stepOpponent = document.getElementById("mode-step-opponent");
     const step2 = document.getElementById("mode-step2");
     const stepPvp = document.getElementById("mode-step-pvp");
     const stepFriends = document.getElementById("mode-step-friends");
@@ -227,8 +257,9 @@ async function modValasztoMegjelenit() {
     const diffList = document.getElementById("difficulty-list");
 
     const mindElrejt = () => {
-        step1.classList.add("hidden");
-        step2.classList.add("hidden");
+        if (stepModes) stepModes.classList.add("hidden");
+        if (stepOpponent) stepOpponent.classList.add("hidden");
+        if (step2) step2.classList.add("hidden");
         if (stepPvp) stepPvp.classList.add("hidden");
         if (stepFriends) stepFriends.classList.add("hidden");
         if (stepQueue) stepQueue.classList.add("hidden");
@@ -236,7 +267,49 @@ async function modValasztoMegjelenit() {
 
     modal.classList.remove("hidden");
     mindElrejt();
-    step1.classList.remove("hidden");
+    stepModes.classList.remove("hidden");
+
+    // 1. lépés: 5 mód-gomb dinamikus generálás
+    try {
+        const { modes } = await apiModes();
+        const list = document.getElementById("mode-list");
+        if (list) {
+            list.innerHTML = "";
+            for (const k in modes) {
+                const m = modes[k];
+                const card = document.createElement("button");
+                card.className = "mode-card";
+                const idoTag = m.ido === null
+                    ? '<span class="mc-tag mc-tag-time">∞ idő</span>'
+                    : `<span class="mc-tag mc-tag-time">${m.ido / 60} perc</span>`;
+                const abilityTag = m.abilities
+                    ? '<span class="mc-tag mc-tag-abilities">Képességes</span>'
+                    : '<span class="mc-tag">Klasszikus</span>';
+                card.innerHTML = `
+                    <span class="mc-name">${m.nev}</span>
+                    <span class="mc-meta">
+                        ${abilityTag}
+                        ${idoTag}
+                    </span>
+                `;
+                card.addEventListener("click", () => {
+                    selectedMode = k;
+                    selectedRanked = !!m.rankedAllowed;
+                    document.getElementById("selected-mode-label").textContent = m.nev;
+                    const rankedInput = document.getElementById("ranked-toggle-input");
+                    if (rankedInput) {
+                        rankedInput.checked = selectedRanked;
+                        rankedInput.disabled = !m.rankedAllowed;
+                    }
+                    mindElrejt();
+                    if (stepOpponent) stepOpponent.classList.remove("hidden");
+                });
+                list.appendChild(card);
+            }
+        }
+    } catch (e) {
+        console.error("Mode-lista lekérdezés hiba:", e);
+    }
 
     // ELO lekérdezés
     try {
@@ -247,12 +320,19 @@ async function modValasztoMegjelenit() {
         console.error("ELO lekérdezés hiba:", e);
     }
 
-    // Robot gomb
+    // Ranked toggle change handler
+    const rankedInput = document.getElementById("ranked-toggle-input");
+    if (rankedInput) {
+        rankedInput.addEventListener("change", (e) => {
+            selectedRanked = e.target.checked;
+        });
+    }
+
+    // 2. lépés "Robot ellen" gomb
     document.getElementById("mode-bot").onclick = async () => {
         mindElrejt();
         step2.classList.remove("hidden");
 
-        // Nehézségek lekérdezése
         try {
             const szintek = await apiNehezsegek();
             diffList.innerHTML = "";
@@ -267,7 +347,7 @@ async function modValasztoMegjelenit() {
                 `;
                 btn.addEventListener("click", () => {
                     modal.classList.add("hidden");
-                    jatekIndit(s.szint);
+                    jatekIndit(s.szint, selectedMode, selectedRanked);
                 });
                 diffList.appendChild(btn);
             }
@@ -277,7 +357,7 @@ async function modValasztoMegjelenit() {
         }
     };
 
-    // PvP gomb
+    // 2. lépés "Játékos ellen" gomb
     const pvpBtn = document.getElementById("mode-pvp");
     if (pvpBtn) {
         pvpBtn.onclick = () => {
@@ -307,15 +387,22 @@ async function modValasztoMegjelenit() {
     }
 
     // Vissza gombok
+    const backModes = document.getElementById("mode-back-modes");
+    if (backModes) {
+        backModes.onclick = () => {
+            mindElrejt();
+            stepModes.classList.remove("hidden");
+        };
+    }
     document.getElementById("mode-back").onclick = () => {
         mindElrejt();
-        step1.classList.remove("hidden");
+        if (stepOpponent) stepOpponent.classList.remove("hidden");
     };
     const backPvp = document.getElementById("mode-back-pvp-menu");
     if (backPvp) {
         backPvp.onclick = () => {
             mindElrejt();
-            step1.classList.remove("hidden");
+            if (stepOpponent) stepOpponent.classList.remove("hidden");
         };
     }
     const backFriends = document.getElementById("mode-back-friends");
@@ -380,7 +467,12 @@ function meghivasKuld(targetUserId, targetName) {
     const socket = pvpSocketKeres();
     if (!socket) return;
 
-    socket.emit('chess:invite', { targetUserId });
+    // Mode + ranked az aktuális mod-választás állapotából
+    socket.emit('chess:invite', {
+        targetUserId,
+        mode: selectedMode,
+        ranked: selectedRanked
+    });
 
     const waiting = document.getElementById("pvp-waiting");
     const waitingName = document.getElementById("pvp-waiting-name");
@@ -399,7 +491,10 @@ function meghivasKuld(targetUserId, targetName) {
 function randomQueueIndit() {
     const socket = pvpSocketKeres();
     if (!socket) return;
-    socket.emit('chess:queue:join');
+    socket.emit('chess:queue:join', {
+        mode: selectedMode,
+        ranked: selectedRanked
+    });
 }
 
 function randomQueueMegse() {
@@ -419,6 +514,23 @@ function pvpSocketKeres() {
         pvpSocket = window.MattMesterSocket.socket;
     }
     return pvpSocket;
+}
+
+// Másik oldalról elfogadott meghívás — chessInviteGlobal.js mentett egy gameId-t a sessionStorage-ba.
+// Ezt a sakk oldal betöltése után küldjük el a szervernek.
+const PENDING_CHESS_INVITE_ACCEPT_KEY = 'mattmester.pendingChessInviteAccept';
+function pendingChessInviteAcceptKuld(socket) {
+    if (!socket) return;
+    let payload = null;
+    try {
+        const raw = window.sessionStorage.getItem(PENDING_CHESS_INVITE_ACCEPT_KEY);
+        if (raw) payload = JSON.parse(raw);
+    } catch (_) {}
+    if (!payload || !payload.gameId) return;
+    try { window.sessionStorage.removeItem(PENDING_CHESS_INVITE_ACCEPT_KEY); } catch (_) {}
+    // 60s lejárat (a backend invite TTL-jéhez igazodva)
+    if (payload.ts && Date.now() - payload.ts > 60000) return;
+    socket.emit('chess:invite:accept', { gameId: payload.gameId });
 }
 
 function pvpSocketInit() {
@@ -635,6 +747,17 @@ function pvpJatekKezdet(data) {
     // Board render + kliens időzítő indítás
     pvpAllapotFrissit(data.allapot);
     pvpKliensIdoIndit();
+
+    // Képesség UI inicializálás
+    // PvP-ben a state.update socket eventen érkezik vissza, így nem kell
+    // onAllapotValtozas callback — a meglévő `chess:state:update` handler
+    // hívja a pvpAllapotFrissit-et, ami az ability bar-t is frissíti.
+    abilitiesInit({
+        getGameId: () => pvpGameId,
+        getSzin:   () => sajatSzin,
+        isPvp:     () => true,
+        getSocket: () => pvpSocketKeres()
+    }).then(() => abilitiesAllapotFrissit(data.allapot));
 }
 
 function pvpAllapotFrissit(allapot) {
@@ -645,10 +768,9 @@ function pvpAllapotFrissit(allapot) {
     oldalVazVisszaallit();
     tablaRajzol(allapot, sajatSzin === 'black');
 
-    // Animáció az ellenfél lépéséhez
-    if (allapot.utolsoLepes && elozoAllapot && allapot.lepesszam !== elozoAllapot.lepesszam) {
-        const lepoSzin = allapot.koronLevo === 'white' ? 'black' : 'white';
-        if (lepoSzin !== sajatSzin) {
+    // Animáció minden új lépéshez (saját + ellenfél egyaránt)
+    if (ujLepesTortent(elozoAllapot, allapot)) {
+        {
             const animKulcs = allapotLepesKulcs(allapot);
             if (animKulcs && animKulcs !== utolsoAnimaltLepesKulcs) {
                 utolsoAnimaltLepesKulcs = animKulcs;
@@ -664,6 +786,7 @@ function pvpAllapotFrissit(allapot) {
     esemenyekUjraKot();
     nevekFrissit();
     eloValtozasFrissit(allapot.eloValtozas || null);
+    abilitiesAllapotFrissit(allapot);
 
     // Kliens időzítő újraszinkronizálás
     pvpKliensIdoIndit();
@@ -786,20 +909,40 @@ function pvpAllapotReset() {
         drawBtn.classList.add('hidden');
     }
     varakozoLepesPromisek.length = 0;
+    abilitiesReset();
 }
 
-async function jatekIndit(nehezseg) {
+async function jatekIndit(nehezseg, mode, ranked, modal) {
     try {
-        const allapot = await apiUjBotJatek(nehezseg);
+        const allapot = await apiUjBotJatek(nehezseg, mode, ranked);
+
+        if (modal) modal.classList.add("hidden");
 
         // Nevek frissítése
         nevekFrissit();
 
         allapotFrissit(allapot);
         idoPollingIndit();
-        console.log(`[INIT] Bot játék indítva — ${botInfo.nev} (ELO: ${botInfo.elo})`);
+
+        // Képesség UI inicializálás (bot meccs — REST mód, mindig white)
+        await abilitiesInit({
+            getGameId: () => gameId,
+            getSzin:   () => 'white',  // bot meccsen a játékos mindig white
+            isPvp:     () => false,
+            getSocket: () => null,
+            // REST ability response: a teljes új allapot-ot átfuttatjuk a fő
+            // állapot-frissítőn, hogy a tábla, óra és ability bar mind szinkron legyen.
+            onAllapotValtozas: (uj) => allapotFrissit(uj)
+        });
+        abilitiesAllapotFrissit(allapot);
+
+        console.log(`[INIT] Bot játék indítva — ${botInfo.nev} (ELO: ${botInfo.elo}) — mode=${allapot.mode || mode || 'default'}, ranked=${allapot.ranked}`);
     } catch (e) {
         console.error('Bot játék indítási hiba:', e);
+        const diffList = document.getElementById("difficulty-list");
+        if (diffList) {
+            diffList.innerHTML = `<p style="color:#f88">Hiba a játék indításakor: ${e.message || 'Ismeretlen hiba'}</p>`;
+        }
     }
 }
 
@@ -1039,6 +1182,13 @@ function botLepesAnimacioKell(elozoAllapot, ujAllapot) {
     return !!(ujAllapot.botAktiv && ujAllapot.botSzin === lepoSzin);
 }
 
+// Bármely új lépés (saját vagy ellenfél) történt-e az előző állapot óta.
+function ujLepesTortent(elozoAllapot, ujAllapot) {
+    if (!ujAllapot || !ujAllapot.utolsoLepes) return false;
+    if (!elozoAllapot) return false;
+    return ujAllapot.lepesszam !== elozoAllapot.lepesszam;
+}
+
 function lepesKuldesIndit() {
     lepesKuldesFolyamatban = true;
     if (lepesKuldesFailSafeTimer) clearTimeout(lepesKuldesFailSafeTimer);
@@ -1071,7 +1221,7 @@ function allapotFrissit(allapot, animald = false) {
     try { if (appObserver) appObserver.disconnect(); } catch(e) {}
     oldalVazVisszaallit();
     tablaRajzol(allapot, pvpAktiv && sajatSzin === 'black');
-    const automataAnimacio = botLepesAnimacioKell(elozoAllapot, allapot);
+    const automataAnimacio = ujLepesTortent(elozoAllapot, allapot);
     if ((animald || automataAnimacio) && allapot.utolsoLepes) {
         const animKulcs = allapotLepesKulcs(allapot);
         if (animKulcs && animKulcs !== utolsoAnimaltLepesKulcs) {
@@ -1088,6 +1238,7 @@ function allapotFrissit(allapot, animald = false) {
     nevekFrissit();
     eloValtozasFrissit(allapot.eloValtozas || null);
     botGondolkodasFrissit(allapot);
+    abilitiesAllapotFrissit(allapot);
 
     if (allapot.uzenet) {
         jatekVegeUI(allapot.uzenet);
@@ -1469,8 +1620,12 @@ async function init() {
         const socket = pvpSocketKeres();
         if (socket && socket.connected) {
             socket.emit('chess:rejoin');
+            pendingChessInviteAcceptKuld(socket);
         } else if (socket) {
-            socket.once('connect', () => socket.emit('chess:rejoin'));
+            socket.once('connect', () => {
+                socket.emit('chess:rejoin');
+                pendingChessInviteAcceptKuld(socket);
+            });
         }
     }, 500);
 
@@ -1518,6 +1673,7 @@ function huzasHozzaadMinden(allapot) {
     const mezok = document.querySelectorAll(".square");
     for (let i = 0; i < mezok.length; i++) {
         mezok[i].addEventListener("mousedown", function (e) {
+            if (isAbilityArmed()) return; // képesség célpont-választás folyamatban
             if (!kivalasztott || lepesKuldesFolyamatban) return;
 
             // Drag folyamat közben ne kezeljünk click-to-move-ot.
@@ -1537,6 +1693,7 @@ function huzasHozzaad(babuElem, fromX, fromY, piece, allapot) {
     let mozgott = false; // megkülönbözteti a kattintást a húzástól
 
     babuElem.addEventListener("mousedown", async function (e) {
+        if (isAbilityArmed()) return; // képesség célpont-választás folyamatban
         if (allapot.vege || lepesKuldesFolyamatban) return;
 
         e.preventDefault();

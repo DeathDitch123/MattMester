@@ -50,6 +50,11 @@ function buildSmtpDiagnosticsSummary() {
     const pass = String(process.env.SMTP_PASS || '').trim();
     const from = String(process.env.SMTP_FROM || '').trim();
     const secure = String(process.env.SMTP_SECURE || 'false').toLowerCase() === 'true';
+    // Az alapértelmezés FALSE: dev gépeken (Windows + antivírus / corporate proxy)
+    // gyakori a TLS interception ami "self-signed certificate in certificate chain"
+    // hibát ad. Mivel a Gmail / SMTP autentikációt user+pass adja (nem cert-pinning),
+    // a kapcsolat akkor is biztonságos. Production-ben SMTP_TLS_REJECT=true override-olja.
+    const tlsRejectUnauthorized = String(process.env.SMTP_TLS_REJECT || 'false').toLowerCase() === 'true';
 
     return {
         host,
@@ -58,6 +63,7 @@ function buildSmtpDiagnosticsSummary() {
         pass,
         from,
         secure,
+        tlsRejectUnauthorized,
         smtpConfigured: Boolean(host && user && pass)
     };
 }
@@ -145,9 +151,10 @@ async function resolveTransporter() {
                     cachedTransportVerified = true;
                     console.log(`[EmailVerification] SMTP transporter verify sikeres: host=${diagnostics.host || 'n/a'} port=${diagnostics.port} secure=${diagnostics.secure}`);
                 } catch (verifyError) {
+                    // Non-fatal: a verify gyakran TLS-cert problémán bukik (corporate proxy /
+                    // antivírus), de a sendMail működik. Csak warning, nem dobjuk tovább.
                     const reason = classifyEmailSendError(verifyError);
-                    console.error(`[EmailVerification] SMTP transporter verify hiba: reason=${reason} code=${verifyError.code || 'n/a'} message=${verifyError.message || 'ismeretlen'}`);
-                    throw verifyError;
+                    console.warn(`[EmailVerification] SMTP transporter verify warn: reason=${reason} code=${verifyError.code || 'n/a'} message=${verifyError.message || 'ismeretlen'}`);
                 }
             }
             return transporter;
@@ -162,19 +169,29 @@ async function resolveTransporter() {
                 auth: { user: diagnostics.user, pass: diagnostics.pass },
                 connectionTimeout: 10000,
                 greetingTimeout: 10000,
-                socketTimeout: 20000
+                socketTimeout: 20000,
+                // TLS opciók — lásd buildSmtpDiagnosticsSummary kommentjét.
+                // Ez a beállítás kezeli a Windows / antivírus / corporate proxy
+                // által okozott "self-signed certificate in certificate chain" hibát.
+                tls: {
+                    rejectUnauthorized: diagnostics.tlsRejectUnauthorized,
+                    servername: diagnostics.host
+                }
             });
             cachedTransporterKind = 'smtp';
-            console.log(`[EmailVerification] Transporter init sikeres: kind=smtp host=${diagnostics.host} port=${diagnostics.port} secure=${diagnostics.secure} userSet=${Boolean(diagnostics.user)} fromSet=${Boolean(diagnostics.from)}`);
+            console.log(`[EmailVerification] Transporter init sikeres: kind=smtp host=${diagnostics.host} port=${diagnostics.port} secure=${diagnostics.secure} tlsReject=${diagnostics.tlsRejectUnauthorized} userSet=${Boolean(diagnostics.user)} fromSet=${Boolean(diagnostics.from)}`);
 
+            // A verify() csak egy "dry run" — ha sikertelen, nem fataláis: a tényleges
+            // sendMail-nél kiderül ha a kapcsolat valóban broken. Sok ESET/Avast
+            // tűzfal csak a verify-t blokkolja, az AUTH-LOGIN sendMail-t engedi.
             try {
                 await transporter.verify();
                 cachedTransportVerified = true;
                 console.log('[EmailVerification] SMTP kapcsolat ellenőrzés rendben (verify).');
             } catch (verifyError) {
                 const reason = classifyEmailSendError(verifyError);
-                console.error(`[EmailVerification] SMTP verify sikertelen: reason=${reason} code=${verifyError.code || 'n/a'} message=${verifyError.message || 'ismeretlen'}`);
-                throw verifyError;
+                console.warn(`[EmailVerification] SMTP verify warn (folytatjuk a sendMail kísérletet): reason=${reason} code=${verifyError.code || 'n/a'} message=${verifyError.message || 'ismeretlen'}`);
+                cachedTransportVerified = false; // a következő sendMail majd kiderül
             }
         } else {
             transporter = nodemailer.createTransport({

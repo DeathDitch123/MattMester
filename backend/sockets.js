@@ -88,6 +88,7 @@ function createContextFromSocket(socket) {
         role: session.role || 'guest',
         profile_image: getSessionProfileImage(session),
         profile_image_status: getSessionProfileImageStatus(session),
+        is_email_verified: !!session.is_email_verified,
         connectedAt: new Date().toISOString(),
         lastSeenAt: new Date().toISOString()
     };

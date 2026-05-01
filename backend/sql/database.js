@@ -51,8 +51,9 @@ async function createTables() {
             email VARCHAR(100) UNIQUE,
             profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
             elo INT DEFAULT 800,
-            elo_MM INT DEFAULT 800,
-            elo_bullet INT DEFAULT 800,
+            elo_mattmester INT DEFAULT 800,
+            elo_classical INT DEFAULT 800,
+            elo_blitz INT DEFAULT 800,
             role ENUM('player', 'admin') DEFAULT 'player',
             is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
             is_banned BOOLEAN DEFAULT FALSE,
@@ -70,8 +71,8 @@ async function createTables() {
             INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
         )`,
 
-        `INSERT INTO users (username, password_hash, email, elo, elo_MM, elo_bullet, role, is_super_admin, is_email_verified, email_verified_at)
-            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 'admin', TRUE, TRUE, CURRENT_TIMESTAMP)
+        `INSERT INTO users (username, password_hash, email, elo, elo_mattmester, elo_classical, elo_blitz, role, is_super_admin, is_email_verified, email_verified_at)
+            VALUES ('admin', '$2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq', 'admin@mattmester.com', 1500, 1500, 1500, 1500, 'admin', TRUE, TRUE, CURRENT_TIMESTAMP)
             ON DUPLICATE KEY UPDATE is_super_admin = TRUE;
         `,
 
@@ -102,6 +103,16 @@ async function createTables() {
             description TEXT,
             cooldown_turns INT DEFAULT 0
         )`,
+
+        // Képesség seed (idempotens — INSERT IGNORE a UNIQUE name miatt)
+        `INSERT IGNORE INTO abilities (name, description, cooldown_turns) VALUES
+            ('time_pause', 'Időmegállítás — saját óra rövid szüneteltetése (8mp)', 4),
+            ('freeze',     'Bábu befagyasztás — egy ellenséges bábu 1 körig nem mozdulhat', 4),
+            ('swap',       'Bábucsere — két saját bábu pozíciójának cseréje (a köröd is)', 5),
+            ('board_hide', 'Táblakitakarás — ellenfél 5mp-ig nem tud lépni', 5),
+            ('shield',     'Pajzs — saját bábu 1 körre sebezhetetlenné válik', 4),
+            ('time_steal', 'Időlopás — következő ütésednél 5mp átkerül az ellenfél órájáról', 3)
+        `,
 
         `CREATE TABLE IF NOT EXISTS games (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -446,6 +457,60 @@ async function ensureSchemaColumns() {
     }
 }
 
+// ────────────────────────────────────────────
+// Migrációk régi adatbázisokhoz — minden ALTER hibatűréssel fut.
+// Új deployment esetén ezek vagy no-op-ok, vagy gyengén ártatlanok.
+// ────────────────────────────────────────────
+async function runMigrations() {
+    // Régi `elo_MM` oszlop átnevezése `elo_classical`-re (ha létezik még).
+    const renames = [
+        ['elo_MM',     'elo_classical'],
+        ['elo_bullet', 'elo_blitz']
+    ];
+    for (const [oldName, newName] of renames) {
+        try {
+            // INFORMATION_SCHEMA check, hogy csak akkor renameljünk, ha tényleg ez van.
+            const [rows] = await pool.execute(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = ?`,
+                [oldName]
+            );
+            if (rows.length > 0) {
+                await pool.execute(`ALTER TABLE users CHANGE \`${oldName}\` \`${newName}\` INT DEFAULT 800`);
+                console.log(`[Migration] users.${oldName} → users.${newName} sikeres.`);
+            }
+        } catch (err) {
+            console.warn(`[Migration] users rename ${oldName}→${newName} kihagyva: ${err.message}`);
+        }
+    }
+
+    // Új oszlopok hozzáadása ha még nem léteznek (régi DB-knél a CREATE TABLE
+    // IF NOT EXISTS nem ad új oszlopot, mert a tábla már megvolt).
+    const newColumns = [
+        ['elo_mattmester', 'INT DEFAULT 800'],
+        ['elo_classical',  'INT DEFAULT 800'],
+        ['elo_blitz',      'INT DEFAULT 800']
+    ];
+    for (const [colName, colDef] of newColumns) {
+        try {
+            const [rows] = await pool.execute(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = ?`,
+                [colName]
+            );
+            if (rows.length === 0) {
+                await pool.execute(`ALTER TABLE users ADD COLUMN \`${colName}\` ${colDef}`);
+                // Egyszer-induló UPDATE: a meglévő `elo` érték másolódik az új oszlopba,
+                // hogy meglévő user-ek ne 800-on induljanak az új mode-okon.
+                await pool.execute(`UPDATE users SET \`${colName}\` = elo WHERE \`${colName}\` = 800 AND elo <> 800`);
+                console.log(`[Migration] users.${colName} hozzáadva.`);
+            }
+        } catch (err) {
+            console.warn(`[Migration] users.${colName} hozzáadás kihagyva: ${err.message}`);
+        }
+    }
+}
+
 async function initDatabase() {
     try {
         await ensureDatabaseExists();
@@ -455,6 +520,7 @@ async function initDatabase() {
         conn.release();
 
         await createTables();
+        await runMigrations();
         await ensureSchemaColumns();
         console.log('Database initialized successfully.');
     } catch (err) {

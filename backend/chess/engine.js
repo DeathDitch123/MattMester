@@ -9,10 +9,19 @@
 //   - CommonJS module
 // ============================================================
 
-const { mezoKeres, jatekAllapotKliens } = require('./state.js');
+const { mezoKeres, jatekAllapotKliens, abilitiesAlapallapot } = require('./state.js');
 const { jatekAllapotEllenor, szabLepKeres, pozicioHash } = require('./logika.js');
 const { idoFut, idoLeall } = require('./timer.js');
+const { getMode } = require('./modes.js');
 const chessSql = require('./chess_sql_functions.js');
+const {
+    pontHozzaad,
+    isMezoFagyott,
+    isMezoVedett,
+    isJatekosBlokkolt,
+    timeStealAlkalmaz,
+    cooldownTickAndCleanup
+} = require('./abilities.js');
 
 /**
  * Játék újraindítása (vagy inicializálás).
@@ -31,8 +40,15 @@ function jatekUjraIndit(jatek) {
     jatek.lepesTortenet = [];
     jatek.pozicioTortenet = [];
     jatek.eloValtozas = null;
-    jatek.jatekosok.white.ido = 600;
-    jatek.jatekosok.black.ido = 600;
+
+    // Mode-alapú induló idő (null = végtelen)
+    const mode = getMode(jatek.mode);
+    const idoStart = mode ? mode.ido : 600;
+    jatek.jatekosok.white.ido = idoStart;
+    jatek.jatekosok.black.ido = idoStart;
+
+    // Képességeket csak akkor inicializáljuk ha a mód engedi.
+    jatek.abilities = jatek.abilitiesEnabled ? abilitiesAlapallapot() : null;
 
     // Tábla generálása 8x8
     for (let y = 0; y < 8; y++) {
@@ -100,6 +116,22 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
     // Ütés volt-e (DB-hez kell)
     const voltUtes = !!(to.piece || special === "enpassant");
 
+    // Képesség: ütésért járó pont — bábuérték alapján.
+    // (En passant: a captured pawn a lepes.captured.piece-ben van.)
+    if (voltUtes) {
+        let capturedType = null;
+        if (special === "enpassant" && lepes.captured && lepes.captured.piece) {
+            capturedType = lepes.captured.piece.type;
+        } else if (to.piece) {
+            capturedType = to.piece.type;
+        }
+        if (capturedType) {
+            pontHozzaad(jatek, babu.color, capturedType);
+        }
+        // Képesség: időlopás — ha aktív buff, átköt másodperceket az ellenfél órájáról.
+        timeStealAlkalmaz(jatek, babu.color);
+    }
+
     // --- En passant mező frissítése ---
     if (special === "double") {
         const irany = (babu.color === "white") ? -1 : 1;
@@ -144,7 +176,13 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
 
     // --- Játékosváltás és óra ---
     const lepettSzin = babu.color;
-    jatek.koronLevo = (jatek.koronLevo === "white") ? "black" : "white";
+    const ujSzin = (jatek.koronLevo === "white") ? "black" : "white";
+
+    // Képesség cleanup MIELŐTT a koronLevo vált — így a board_hide pending → activate
+    // az ujSzin részére helyesen állítódik be, és a lejárt fagyasztás/pajzs is törlődik.
+    cooldownTickAndCleanup(jatek, lepettSzin, ujSzin);
+
+    jatek.koronLevo = ujSzin;
     idoFut(jatek, jatek.koronLevo);
 
     // --- Pozíció hash mentés (háromszori ismétlés) ---
@@ -267,11 +305,21 @@ function legalLepesekKliens(jatek, x, y) {
 async function lepesKoordinataval(jatek, fromX, fromY, toX, toY, atvalTipus = "queen") {
     if (jatek.vege) return { success: false, error: "A játék véget ért." };
 
+    // Képesség: a táblád eltakarva (board_hide ellenfél által)
+    if (isJatekosBlokkolt(jatek, jatek.koronLevo)) {
+        return { success: false, error: "A táblád ideiglenesen eltakarva — várj." };
+    }
+
     const mezo = mezoKeres(jatek, fromX, fromY);
     if (!mezo || !mezo.piece) return { success: false, error: "Nincs bábu ezen a mezőn." };
 
     const babu = mezo.piece;
     if (babu.color !== jatek.koronLevo) return { success: false, error: "Nem te jössz." };
+
+    // Képesség: a bábu jegelve van
+    if (isMezoFagyott(jatek, fromX, fromY)) {
+        return { success: false, error: "Ez a bábu jegelve van — válassz másikat." };
+    }
 
     const lepesek = szabLepKeres(jatek, babu);
     const celMezo = mezoKeres(jatek, toX, toY);
@@ -279,6 +327,16 @@ async function lepesKoordinataval(jatek, fromX, fromY, toX, toY, atvalTipus = "q
 
     const talaltLepes = lepesek.find(l => l.to === celMezo);
     if (!talaltLepes) return { success: false, error: "Illegális lépés." };
+
+    // Képesség: a célbábu pajzsos → ütés tiltva. Ha nem ütés (üres mező), ez csak NoP.
+    if (celMezo.piece && isMezoVedett(jatek, toX, toY)) {
+        return { success: false, error: "A célbábu pajzs alatt — nem üthető." };
+    }
+    // EXPLOIT FIX #4 — en passant esetén a captured pawn másik mezőn van; külön check.
+    if (talaltLepes.special === "enpassant" && talaltLepes.captured
+        && isMezoVedett(jatek, talaltLepes.captured.x, talaltLepes.captured.y)) {
+        return { success: false, error: "A célbábu pajzs alatt — nem üthető (en passant)." };
+    }
 
     // Átváltozás: gyalog az utolsó sorba lép
     if (babu.type === "pawn") {

@@ -15,14 +15,28 @@ const { idoLeall } = require('./timer.js');
 const { eloMeccsEredmeny } = require('./elo.js');
 const chessSql = require('./chess_sql_functions.js');
 const sql = require('../sql/sql_funtions.js');
+const { abilityAktival } = require('./abilities.js');
+const { getMode, isValidMode, queueKey, DEFAULT_MODE } = require('./modes.js');
 
 // ── Adatstruktúrák ──
 
-// Függőben lévő meghívások: targetUserId → { gameId, inviterUserId, inviterName, timer }
+// Függőben lévő meghívások: targetUserId → { gameId, inviterUserId, inviterName, timer, mode, ranked }
 const pendingInvites = new Map();
 
-// Random matchmaking queue: [{ userId, username, elo, socketId }]
-const matchmakingQueue = [];
+// Per-mode random matchmaking queue: queueKey('mode', ranked) → [{ userId, username, elo, socketId, mode, ranked }]
+// A queueKey szegregálja a klasszikus / mattmester / blitz játékosokat,
+// és a ranked / casual is külön queue-ban van.
+const matchmakingQueueByMode = new Map();
+
+function getQueue(modeKey, ranked) {
+    const k = queueKey(modeKey, ranked);
+    if (!matchmakingQueueByMode.has(k)) matchmakingQueueByMode.set(k, []);
+    return matchmakingQueueByMode.get(k);
+}
+
+// Egy user csak egyetlen queue-ban lehet — ezt a userQueueIndex tartja számon,
+// hogy a `chess:queue:leave` és a disconnect cleanup tudja hol keresni.
+const userQueueIndex = new Map(); // userId → queueKey
 
 // Aktív PvP játékok userId → gameId (reconnect-hez)
 const activeGamesByUser = new Map();
@@ -45,18 +59,24 @@ function getOpponentColor(szin) {
 }
 
 /**
- * PvP ELO frissítés mindkét játékosra.
+ * PvP ELO frissítés mindkét játékosra. A használt ELO oszlop a játék mode-jából
+ * származik. Casual módban (jatek.ranked === false) vagy ha a mode-nak nincs
+ * eloColumn-ja, egyáltalán nem frissít — null-t ad vissza.
  * @param {object} jatek
  * @param {'white'|'black'|'draw'} eredmeny
- * @returns {{ feher: { ujElo, valtozas }, fekete: { ujElo, valtozas } }}
+ * @returns {{ feher: { ujElo, valtozas }, fekete: { ujElo, valtozas } } | null}
  */
 async function pvpEloFrissit(jatek, eredmeny) {
+    const mode = getMode(jatek.mode);
+    if (!jatek.ranked || !mode || !mode.eloColumn) return null;
+    const eloOszlop = mode.eloColumn;
+
     const whiteId = jatek.jatekosok.white.userId;
     const blackId = jatek.jatekosok.black.userId;
 
     const [whiteElo, blackElo, whiteMeccsek, blackMeccsek] = await Promise.all([
-        chessSql.eloLekerdezDb(whiteId),
-        chessSql.eloLekerdezDb(blackId),
+        chessSql.eloLekerdezDb(whiteId, eloOszlop),
+        chessSql.eloLekerdezDb(blackId, eloOszlop),
         chessSql.meccsekSzamDb(whiteId),
         chessSql.meccsekSzamDb(blackId)
     ]);
@@ -68,10 +88,11 @@ async function pvpEloFrissit(jatek, eredmeny) {
     );
 
     await Promise.all([
-        chessSql.eloFrissitDb(whiteId, feher.ujElo),
-        chessSql.eloFrissitDb(blackId, fekete.ujElo)
+        chessSql.eloFrissitDb(whiteId, feher.ujElo, eloOszlop),
+        chessSql.eloFrissitDb(blackId, fekete.ujElo, eloOszlop)
     ]);
 
+    console.log(`[ELO][${jatek.mode}/${eloOszlop}] white #${whiteId}: ${whiteElo}→${feher.ujElo}, black #${blackId}: ${blackElo}→${fekete.ujElo}`);
     return { feher, fekete };
 }
 
@@ -88,14 +109,16 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
     const gameId = jatek.gameId;
     const dbGameId = jatek.dbGameId;
 
-    // ELO frissítés
+    // ELO frissítés (casual módban null — kihagyjuk)
     let eloEredmeny = null;
     try {
         eloEredmeny = await pvpEloFrissit(jatek, eredmeny);
-        jatek.eloValtozas = {
-            white: { eloBefore: eloEredmeny.feher.ujElo - eloEredmeny.feher.valtozas, eloAfter: eloEredmeny.feher.ujElo, eloChange: eloEredmeny.feher.valtozas },
-            black: { eloBefore: eloEredmeny.fekete.ujElo - eloEredmeny.fekete.valtozas, eloAfter: eloEredmeny.fekete.ujElo, eloChange: eloEredmeny.fekete.valtozas }
-        };
+        if (eloEredmeny) {
+            jatek.eloValtozas = {
+                white: { eloBefore: eloEredmeny.feher.ujElo - eloEredmeny.feher.valtozas, eloAfter: eloEredmeny.feher.ujElo, eloChange: eloEredmeny.feher.valtozas },
+                black: { eloBefore: eloEredmeny.fekete.ujElo - eloEredmeny.fekete.valtozas, eloAfter: eloEredmeny.fekete.ujElo, eloChange: eloEredmeny.fekete.valtozas }
+            };
+        }
     } catch (err) {
         console.error('PvP ELO frissítési hiba:', err);
     }
@@ -141,9 +164,11 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
 
 /**
  * Játék indítása két játékos között (közös logika invite + queue-hoz).
+ * @param {string} mode  — game-mode kulcs
+ * @param {boolean} ranked
  */
-async function jatekIndit(io, socket1, socket2, user1Id, user1Name, user2Id, user2Name) {
-    const { gameId, jatek } = jatekLetrehoz();
+async function jatekIndit(io, socket1, socket2, user1Id, user1Name, user2Id, user2Name, mode = DEFAULT_MODE, ranked = true) {
+    const { gameId, jatek } = jatekLetrehoz({ mode, ranked });
 
     // Véletlenszerű szín
     const user1White = Math.random() < 0.5;
@@ -161,9 +186,9 @@ async function jatekIndit(io, socket1, socket2, user1Id, user1Name, user2Id, use
     // Board init
     jatekUjraIndit(jatek);
 
-    // DB mentés
+    // DB mentés (mode is kerül a games.time_control oszlopba)
     try {
-        jatek.dbGameId = await chessSql.jatekMentDb(whiteId, blackId);
+        jatek.dbGameId = await chessSql.jatekMentDb(whiteId, blackId, jatek.mode);
     } catch (err) {
         console.error('PvP jatekMentDb hiba:', err);
     }
@@ -215,11 +240,19 @@ function registerPvpHandlers(socket, io) {
     // BARÁT MEGHÍVÁS
     // ─────────────────────────────────────
 
-    socket.on('chess:invite', async ({ targetUserId }) => {
+    socket.on('chess:invite', async ({ targetUserId, mode, ranked }) => {
         const context = socket.data.socketContext;
         if (!context.userId) {
             return socket.emit('chess:error', { uzenet: 'Be kell jelentkezned.' });
         }
+        if (!context.is_email_verified) {
+            return socket.emit('chess:error', { uzenet: 'Megerősítetlen email — előbb verifikáld a fiókod.' });
+        }
+
+        // Mode validáció — érvénytelen mód esetén default-ra esünk vissza.
+        const modeKey = mode && isValidMode(mode) ? mode : DEFAULT_MODE;
+        const modeMeta = getMode(modeKey);
+        const isRanked = !!(modeMeta.rankedAllowed && ranked !== false);
 
         const userId = context.userId;
         const username = context.username;
@@ -263,8 +296,8 @@ function registerPvpHandlers(socket, io) {
             return socket.emit('chess:error', { uzenet: 'Az ellenfél nincs online.' });
         }
 
-        // Játék létrehozás (waiting állapotban)
-        const { gameId, jatek } = jatekLetrehoz();
+        // Játék létrehozás (waiting állapotban) — mode és ranked is be van állítva
+        const { gameId, jatek } = jatekLetrehoz({ mode: modeKey, ranked: isRanked });
         jatek.pvpAktiv = true;
         jatek.pvpStatusz = 'waiting';
 
@@ -293,15 +326,19 @@ function registerPvpHandlers(socket, io) {
             inviterUserId: userId,
             inviterName: username,
             inviterSocketId: socket.id,
+            mode: modeKey,
+            ranked: isRanked,
             timer
         });
 
-        // Értesítés küldése
-        socket.emit('chess:invite:sent', { targetUserId, gameId });
+        // Értesítés küldése — a meghívott lássa a mode-ot és ranked flag-et
+        socket.emit('chess:invite:sent', { targetUserId, gameId, mode: modeKey, ranked: isRanked });
         io.to(`user-room:${targetUserId}`).emit('chess:invite:received', {
             gameId,
             inviterUserId: userId,
-            inviterName: username
+            inviterName: username,
+            mode: modeKey,
+            ranked: isRanked
         });
     });
 
@@ -350,14 +387,14 @@ function registerPvpHandlers(socket, io) {
         // Board init
         jatekUjraIndit(jatek);
 
-        // DB mentés
+        // DB mentés (mode kerül a games.time_control oszlopba)
         try {
-            jatek.dbGameId = await chessSql.jatekMentDb(whiteId, blackId);
+            jatek.dbGameId = await chessSql.jatekMentDb(whiteId, blackId, jatek.mode);
         } catch (err) {
             console.error('PvP jatekMentDb hiba:', err);
         }
 
-        // Timer lejárat callback
+        // Timer lejárat callback (csak véges idős módnál releváns)
         jatek.onIdoLejar = (vesztesSzin) => {
             const nyertesSzin = getOpponentColor(vesztesSzin);
             jatekVegeKezeles(jatek, nyertesSzin, jatek.idoVegeUzenet, io);
@@ -432,21 +469,30 @@ function registerPvpHandlers(socket, io) {
     // RANDOM MATCHMAKING QUEUE
     // ─────────────────────────────────────
 
-    socket.on('chess:queue:join', async () => {
+    socket.on('chess:queue:join', async ({ mode, ranked } = {}) => {
         const context = socket.data.socketContext;
         if (!context.userId) {
             return socket.emit('chess:error', { uzenet: 'Be kell jelentkezned.' });
+        }
+        if (!context.is_email_verified) {
+            return socket.emit('chess:error', { uzenet: 'Megerősítetlen email — előbb verifikáld a fiókod.' });
         }
 
         const userId = context.userId;
         const username = context.username;
 
+        // Mode + ranked validáció
+        const modeKey = mode && isValidMode(mode) ? mode : DEFAULT_MODE;
+        const modeMeta = getMode(modeKey);
+        const isRanked = !!(modeMeta.rankedAllowed && ranked !== false);
+        const qKey = queueKey(modeKey, isRanked);
+
         if (activeGamesByUser.has(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
         }
 
-        // Már a queue-ban van?
-        if (matchmakingQueue.some(q => q.userId === userId)) {
+        // Már bármelyik queue-ban van?
+        if (userQueueIndex.has(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már a sorban vagy.' });
         }
 
@@ -460,21 +506,25 @@ function registerPvpHandlers(socket, io) {
             return socket.emit('chess:error', { uzenet: 'Előbb válaszolj a meghívásra.' });
         }
 
-        // ELO lekérdezés
+        // ELO lekérdezés a megfelelő mode-oszlopból (display célra)
         let elo = 800;
         try {
-            const dbElo = await chessSql.eloLekerdezDb(userId);
+            const oszlop = modeMeta.eloColumn || 'elo';
+            const dbElo = await chessSql.eloLekerdezDb(userId, oszlop);
             if (dbElo) elo = dbElo;
         } catch (err) { /* default 800 */ }
 
-        // Van-e már valaki a queue-ban?
-        if (matchmakingQueue.length > 0) {
-            const opponent = matchmakingQueue.shift();
+        const queue = getQueue(modeKey, isRanked);
 
-            // Self-match védelem (race condition esetén)
+        if (queue.length > 0) {
+            const opponent = queue.shift();
+            userQueueIndex.delete(opponent.userId);
+
+            // Self-match védelem (race condition esetén — ugyanazt a queue-t)
             if (opponent.userId === userId) {
-                matchmakingQueue.push({ userId, username, elo, socketId: socket.id });
-                socket.emit('chess:queue:joined');
+                queue.push({ userId, username, elo, socketId: socket.id, mode: modeKey, ranked: isRanked });
+                userQueueIndex.set(userId, qKey);
+                socket.emit('chess:queue:joined', { mode: modeKey, ranked: isRanked });
                 return;
             }
 
@@ -484,17 +534,19 @@ function registerPvpHandlers(socket, io) {
 
             if (!opponentSocket) {
                 // Ellenfél offline — mi maradunk a queue-ban
-                matchmakingQueue.push({ userId, username, elo, socketId: socket.id });
-                socket.emit('chess:queue:joined');
+                queue.push({ userId, username, elo, socketId: socket.id, mode: modeKey, ranked: isRanked });
+                userQueueIndex.set(userId, qKey);
+                socket.emit('chess:queue:joined', { mode: modeKey, ranked: isRanked });
                 return;
             }
 
-            // Match! Játék indítása
-            await jatekIndit(io, socket, opponentSocket, userId, username, opponent.userId, opponent.username);
+            // Match! Játék indítása az adott mode + ranked beállítással
+            await jatekIndit(io, socket, opponentSocket, userId, username, opponent.userId, opponent.username, modeKey, isRanked);
         } else {
             // Queue üres — hozzáadjuk magunkat
-            matchmakingQueue.push({ userId, username, elo, socketId: socket.id });
-            socket.emit('chess:queue:joined');
+            queue.push({ userId, username, elo, socketId: socket.id, mode: modeKey, ranked: isRanked });
+            userQueueIndex.set(userId, qKey);
+            socket.emit('chess:queue:joined', { mode: modeKey, ranked: isRanked });
         }
     });
 
@@ -502,11 +554,16 @@ function registerPvpHandlers(socket, io) {
         const context = socket.data.socketContext;
         if (!context.userId) return;
 
-        const idx = matchmakingQueue.findIndex(q => q.userId === context.userId);
-        if (idx !== -1) {
-            matchmakingQueue.splice(idx, 1);
-            socket.emit('chess:queue:left');
+        const qKey = userQueueIndex.get(context.userId);
+        if (!qKey) return;
+
+        const queue = matchmakingQueueByMode.get(qKey);
+        if (queue) {
+            const idx = queue.findIndex(q => q.userId === context.userId);
+            if (idx !== -1) queue.splice(idx, 1);
         }
+        userQueueIndex.delete(context.userId);
+        socket.emit('chess:queue:left');
     });
 
     // ─────────────────────────────────────
@@ -559,6 +616,50 @@ function registerPvpHandlers(socket, io) {
         }
 
         // Normál lépés — állapot broadcast
+        io.to(`chess-game:${gameId}`).emit('chess:state:update', {
+            allapot: jatekAllapotKliens(jatek)
+        });
+    });
+
+    // ─────────────────────────────────────
+    // KÉPESSÉG AKTIVÁLÁS
+    // ─────────────────────────────────────
+
+    socket.on('chess:ability', async ({ gameId, key, params }) => {
+        const context = socket.data.socketContext;
+        if (!context.userId) return;
+
+        const jatek = jatekKeres(gameId);
+        if (!jatek || !jatek.pvpAktiv || jatek.pvpStatusz !== 'active' || jatek.vege) {
+            return socket.emit('chess:error', { uzenet: 'Érvénytelen játék.' });
+        }
+
+        const szin = getUserColorInGame(jatek, context.userId);
+        if (!szin) {
+            return socket.emit('chess:error', { uzenet: 'Nem vagy résztvevője ennek a játéknak.' });
+        }
+
+        const eredmeny = abilityAktival(jatek, szin, key, params);
+        if (!eredmeny.success) {
+            return socket.emit('chess:error', { uzenet: eredmeny.error });
+        }
+
+        // Async ability log a DB-be
+        if (jatek.dbGameId) {
+            (async () => {
+                try {
+                    await chessSql.abilityLogMentDb({
+                        gameId: jatek.dbGameId,
+                        playerId: context.userId,
+                        abilityKey: key
+                    });
+                } catch (err) {
+                    console.error('[PvP] ability log hiba:', err);
+                }
+            })();
+        }
+
+        // Új állapot broadcast mindkét félnek
         io.to(`chess-game:${gameId}`).emit('chess:state:update', {
             allapot: jatekAllapotKliens(jatek)
         });
@@ -717,31 +818,44 @@ function registerPvpHandlers(socket, io) {
 async function handlePvpDisconnect(userId, io) {
     if (!userId) return;
 
-    // Queue-ból eltávolítás
-    const queueIdx = matchmakingQueue.findIndex(q => q.userId === userId);
-    if (queueIdx !== -1) {
-        matchmakingQueue.splice(queueIdx, 1);
+    // Queue-ból eltávolítás (per-mode index alapján)
+    const qKey = userQueueIndex.get(userId);
+    if (qKey) {
+        const queue = matchmakingQueueByMode.get(qKey);
+        if (queue) {
+            const idx = queue.findIndex(q => q.userId === userId);
+            if (idx !== -1) queue.splice(idx, 1);
+        }
+        userQueueIndex.delete(userId);
     }
 
-    // Pending invite cleanup
-    // Ha ő volt a meghívó
-    for (const [targetId, invite] of pendingInvites) {
-        if (invite.inviterUserId === userId) {
-            clearTimeout(invite.timer);
-            pendingInvites.delete(targetId);
-            jatekTorol(invite.gameId);
-            io.to(`user-room:${targetId}`).emit('chess:invite:cancelled');
-            break;
+    // Pending invite cleanup — grace period, hogy oldalnavigáció (transport close → reconnect)
+    // ne törölje a meghívást. 5mp után újra ellenőrizzük, és csak akkor takarítunk, ha a user
+    // tényleg offline maradt (egy másik tab/socket sincs).
+    const INVITE_DISCONNECT_GRACE_MS = 5_000;
+    setTimeout(async () => {
+        const stillOnline = (await io.in(`user-room:${userId}`).fetchSockets()).length > 0;
+        if (stillOnline) return;
+
+        // Ha ő volt a meghívó
+        for (const [targetId, invite] of pendingInvites) {
+            if (invite.inviterUserId === userId) {
+                clearTimeout(invite.timer);
+                pendingInvites.delete(targetId);
+                jatekTorol(invite.gameId);
+                io.to(`user-room:${targetId}`).emit('chess:invite:cancelled');
+                break;
+            }
         }
-    }
-    // Ha ő volt a meghívott
-    if (pendingInvites.has(userId)) {
-        const invite = pendingInvites.get(userId);
-        clearTimeout(invite.timer);
-        pendingInvites.delete(userId);
-        jatekTorol(invite.gameId);
-        io.to(`user-room:${invite.inviterUserId}`).emit('chess:invite:expired', {});
-    }
+        // Ha ő volt a meghívott
+        if (pendingInvites.has(userId)) {
+            const invite = pendingInvites.get(userId);
+            clearTimeout(invite.timer);
+            pendingInvites.delete(userId);
+            jatekTorol(invite.gameId);
+            io.to(`user-room:${invite.inviterUserId}`).emit('chess:invite:expired', {});
+        }
+    }, INVITE_DISCONNECT_GRACE_MS);
 
     // Aktív PvP játék disconnect kezelése
     const gameId = activeGamesByUser.get(userId);

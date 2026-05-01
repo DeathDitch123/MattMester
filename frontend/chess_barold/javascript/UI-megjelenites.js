@@ -100,16 +100,26 @@ function koronLevoFrissit(allapot) {
 
 /**
  * Frissíti a két játékos óráját a HTML-ben.
+ * Ha az ido érték null (végtelen idős mód), '∞' jelet ír ki countdown helyett.
  */
 function idoFrissit(allapot) {
     if (!allapot.ido) return;
     const format = (mp) => {
+        if (mp === null || mp === undefined) return '∞';
         const perc = Math.floor(mp / 60);
         const masodperc = mp % 60;
         return `${perc}:${masodperc.toString().padStart(2, '0')}`;
     };
-    document.getElementById("clock-white").textContent = format(allapot.ido.white);
-    document.getElementById("clock-black").textContent = format(allapot.ido.black);
+    const whiteEl = document.getElementById("clock-white");
+    const blackEl = document.getElementById("clock-black");
+    if (whiteEl) {
+        whiteEl.textContent = format(allapot.ido.white);
+        whiteEl.classList.toggle('infinity', allapot.ido.white === null);
+    }
+    if (blackEl) {
+        blackEl.textContent = format(allapot.ido.black);
+        blackEl.classList.toggle('infinity', allapot.ido.black === null);
+    }
 }
 
 /**

@@ -24,6 +24,7 @@
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../javascript/profileImageUtils.js" defer></script>
     <script src="../javascript/socketClient.js" defer></script>
+    <script src="../javascript/chessInviteGlobal.js" defer></script>
     <script src="../javascript/requestControl.js" defer></script>
     <script src="../javascript/index.js" defer></script>
 </head>
@@ -111,14 +112,11 @@
 
                         <div class="d-flex justify-content-around">
                             <div class="d-flex flex-wrap gap-2">
-                                <button class="btn btn-gold btn-lg" data-bs-toggle="modal"
-                                    data-bs-target="#playModal"><i class="bi bi-play-fill me-1"></i> Játék</button>
+                                <a href="../chess_barold/html/chess.html" class="btn btn-gold btn-lg"><i
+                                        class="bi bi-play-fill me-1"></i> Játék</a>
                             </div>
                             <a href="#ranglista" class="btn btn-outline-gold btn-lg"><i
                                     class="bi bi-trophy-fill me-1"></i>Ranglista</a>
-                        </div>
-                        <div class="mode-hint mt-3">Utolsó választott mód: <span id="lastModeLabel">Nincs
-                                kiválasztva</span>
                         </div>
                     </div>
                 </div>
@@ -254,35 +252,6 @@
     </footer>
     <!-- Modals -->
 
-    <!-- Player Info Modal -->
-    <div class="modal fade" id="playModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-play-fill me-2"></i>Válassz játékmódot</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-secondary">Válaszd ki, milyen módban szeretnél játszani.</p>
-                    <div class="d-grid gap-2">
-                        <button onclick="selectGame('MattMester')" class="btn btn-outline-gold mode-btn"
-                            data-mode="MattMester">MattMester</button>
-                        <button onclick="selectGame('MattMester10')" class="btn btn-outline-gold mode-btn"
-                            data-mode="MattMester10">Mattmester 10p</button>
-                        <button onclick="selectGame('Klasszikus')" class="btn btn-outline-gold mode-btn"
-                            data-mode="Klasszikus">Klasszikus</button>
-                        <button onclick="selectGame('Klasszikus10')" class="btn btn-outline-gold mode-btn"
-                            data-mode="Klasszikus10">Klasszikus 10p</button>
-                        <button onclick="selectGame('Bullet')" class="btn btn-outline-gold mode-btn"
-                            data-mode="Bullet">Bullet</button>
-                        <button onclick="selectGame('Gepellen')" class="btn btn-outline-gold mode-btn"
-                            data-mode="Gepellen">Gép ellen</button>
-                    </div>
-                    <small class="text-secondary d-block mt-3">Vendég módban is elérhető.</small>
-                </div>
-            </div>
-        </div>
-    </div>
     <!--? Bejelentkezés -->
     <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">

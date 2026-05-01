@@ -24,6 +24,7 @@
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../javascript/profileImageUtils.js" defer></script>
     <script src="../javascript/socketClient.js" defer></script>
+    <script src="../javascript/chessInviteGlobal.js" defer></script>
     <script src="../javascript/chatModal.js" defer></script>
     <script src="../javascript/profile.js" defer></script>
 </head>
@@ -279,54 +280,25 @@
                     <!-- Képességek -->
                     <div class="card mb-4 section-block" id="abilities">
                         <div class="card-header">
-                            <i data-lucide="zap" class="me-2"></i>Special Abilities Usage
+                            <i data-lucide="zap" class="me-2"></i>Képesség használat
                         </div>
                         <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-md-6">
-                                    <div class="ability-card d-flex align-items-center gap-3">
-                                        <div class="ability-icon">
-                                            <i data-lucide="flame"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1 text-white">Double Move</h6>
-                                            <small class="text-secondary">Used 45 times</small>
-                                        </div>
-                                    </div>
+                            <div id="abilities-usage-grid" class="row g-3">
+                                <div class="col-12 text-secondary text-center py-3" id="abilities-usage-loading">
+                                    Betöltés...
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="ability-card d-flex align-items-center gap-3">
-                                        <div class="ability-icon">
-                                            <i data-lucide="shield"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1 text-white">Shield Pawn</h6>
-                                            <small class="text-secondary">Used 23 times</small>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="ability-card d-flex align-items-center gap-3">
-                                        <div class="ability-icon">
-                                            <i data-lucide="eye"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1 text-white">Vision</h6>
-                                            <small class="text-secondary">Used 67 times</small>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="ability-card d-flex align-items-center gap-3">
-                                        <div class="ability-icon">
-                                            <i data-lucide="refresh-cw"></i>
-                                        </div>
-                                        <div>
-                                            <h6 class="mb-1 text-white">Undo Move</h6>
-                                            <small class="text-secondary">Used 12 times</small>
-                                        </div>
-                                    </div>
-                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Per-mode ELO -->
+                    <div class="card mb-4 section-block" id="elo-by-mode">
+                        <div class="card-header">
+                            <i data-lucide="trending-up" class="me-2"></i>ELO mód szerint
+                        </div>
+                        <div class="card-body">
+                            <div id="elo-by-mode-grid" class="row g-3">
+                                <div class="col-12 text-secondary text-center py-3">Betöltés...</div>
                             </div>
                         </div>
                     </div>

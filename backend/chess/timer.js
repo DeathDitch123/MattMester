@@ -24,7 +24,19 @@ function idoTikk(jatek, szin) {
     const jatekos = jatek.jatekosok[szin];
     if (!jatekos) return;
 
+    // Végtelen idős mód — ido === null jelzi. Nincs decrement, nincs lejárat.
+    if (jatekos.ido === null) return;
+
     const most = Date.now();
+
+    // Képesség: time_pause — saját óra szünetel.
+    // Az utolsoTickMs-t előre toljuk, hogy a szünet végén ne legyen "ugrás".
+    const pausedUntil = jatek.abilities && jatek.abilities.effects.pausedUntilMs[szin];
+    if (pausedUntil && most < pausedUntil) {
+        jatekos.utolsoTickMs = most;
+        return;
+    }
+
     if (!jatekos.utolsoTickMs) {
         jatekos.utolsoTickMs = most;
         return;
@@ -50,6 +62,8 @@ function idoTikk(jatek, szin) {
 
 function idoFut(jatek, szin) {
     idoLeall(jatek);
+    // Végtelen idős mód — ne indítsunk timer-t.
+    if (jatek.jatekosok[szin].ido === null) return;
     jatek.jatekosok[szin].utolsoTickMs = Date.now();
     jatek.jatekosok[szin].timer = setInterval(() => idoTikk(jatek, szin), 250);
 }

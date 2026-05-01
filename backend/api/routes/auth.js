@@ -85,6 +85,7 @@ router.post('/login', authLoginLimiter, async (request, response) => {
         request.session.elo_bullet = user.elo_bullet;
         request.session.profile_image = user.profile_image || '/profile_pictures/default.png';
         request.session.profile_image_status = user.profile_image_status || 'default';
+        request.session.is_email_verified = !!user.is_email_verified;
         request.session.cookie.maxAge = remember ? 1000 * 60 * 60 * 24 * 7 : null;
 
         const ipAddress = getRequestIpAddress(request);
@@ -219,6 +220,7 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
         request.session.elo_bullet = 800;
         request.session.profile_image = '/profile_pictures/default.png';
         request.session.profile_image_status = 'default';
+        request.session.is_email_verified = false;   // friss regisztráció — még nincs verify
         request.session.cookie.maxAge = null;
 
         const ipAddress = getRequestIpAddress(request);
@@ -325,6 +327,9 @@ router.get('/sessionInfo', async (request, response) => {
                 request.session.elo = dbUser.elo;
                 request.session.profile_image = dbUser.profile_image || '/profile_pictures/default.png';
                 request.session.profile_image_status = dbUser.profile_image_status || 'default';
+                // A verify flag-et is frissítjük, hogy a más tabon történt verifikáció
+                // a következő navigáción át megjelenjen ebben a session-ben is.
+                request.session.is_email_verified = !!dbUser.is_email_verified;
 
                 result.loggedIn = true;
                 result.user = {
@@ -418,6 +423,12 @@ router.get('/auth/verify-email', emailVerifyConsumeLimiter, async (request, resp
             throw new Error('A verifikációs link lejárt. Kérj új linket a /api/auth/resend-verification végponton.');
         } else {
             await sql.markEmailVerified(user.id);
+            // Ha ugyanaz a user verifyolt mint aki bejelentkezve van, frissítjük
+            // a session flag-et — a következő socket connection már verified-ként látja.
+            if (request.session?.userId === user.id) {
+                request.session.is_email_verified = true;
+                await saveSessionAsync(request, 'Hiba a session mentésekor verify után.');
+            }
             await logAuthenticatedAction(request, user.id, {
                 eventType: 'email_verification_success',
                 eventCategory: 'security',

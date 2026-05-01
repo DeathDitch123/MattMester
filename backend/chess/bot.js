@@ -524,8 +524,127 @@ function lepesFormaz(lepes, szin) {
     };
 }
 
+// ────────────────────────────────────────────
+// BOT KÉPESSÉG-VÁLASZTÁS (Phase 4)
+// ────────────────────────────────────────────
+// Egyszerű heurisztika — nehézségtől függően esélye van a botnak ability-t aktiválni.
+// Csak alapvető szabályok (nem optimal play). Cél: a játékos érezze hogy a bot is
+// használ képességeket időnként. swap és board_hide nincs benne (túl absztrakt döntés).
+
+const { mezoTamadva } = require('./logika.js');
+const { ABILITY_CONFIG } = require('./abilities.js');
+
+function botKepessegValaszt(jatek, nehezseg) {
+    if (!jatek.abilities) return null;
+    if (!jatek.botSzin) return null;
+
+    const botSzin = jatek.botSzin;
+    const ellenSzin = (botSzin === 'white') ? 'black' : 'white';
+    const myPoints = jatek.abilities.points[botSzin];
+    const myCd     = jatek.abilities.cooldowns[botSzin] || {};
+    const myUsed   = jatek.abilities.used[botSzin] || {};
+
+    // Aktiválási esély nehézségtől függően: szint 1 = 8%, szint 8 = 64%
+    const aktivPct = Math.min(70, nehezseg * 8);
+    if (Math.random() * 100 > aktivPct) return null;
+
+    function canUse(key) {
+        const c = ABILITY_CONFIG[key];
+        if (!c) return false;
+        if (myPoints < c.ar) return false;
+        if ((myCd[key] || 0) > 0) return false;
+        if ((myUsed[key] || 0) >= c.maxPerGame) return false;
+        return true;
+    }
+
+    // 1) shield: ha értékes bábunk (rook/queen) támadva van → pajzsoljuk
+    if (canUse('shield')) {
+        const target = veszelyeztetettErtekes(jatek, botSzin, ellenSzin);
+        if (target) return { key: 'shield', params: { x: target.x, y: target.y } };
+    }
+
+    // 2) freeze: ha ellenfél értékes bábuja jelenleg fenyeget minket → fagyasszuk
+    if (canUse('freeze')) {
+        const target = legveszelyesebbEllenseg(jatek, botSzin, ellenSzin);
+        if (target) return { key: 'freeze', params: { x: target.x, y: target.y } };
+    }
+
+    // 3) time_steal: ha van legalább egy capture lépés a következő körben → buff aktiválás
+    if (canUse('time_steal') && vanCapture(jatek, botSzin)) {
+        return { key: 'time_steal' };
+    }
+
+    // 4) time_pause: nagyon ritkán, csak felső szinteken (a botnak nem hasznos
+    //    de "demonstrálja" hogy létezik). Idő alatt érdemes aktiválni.
+    if (canUse('time_pause') && nehezseg >= 6 && jatek.jatekosok[botSzin].ido < 60) {
+        return { key: 'time_pause' };
+    }
+
+    return null;
+}
+
+function veszelyeztetettErtekes(jatek, botSzin, ellenSzin) {
+    // A "veszélyeztetett" = a bábut megtámadja egy ellenséges figura.
+    for (let i = 0; i < jatek.tabla.length; i++) {
+        const m = jatek.tabla[i];
+        if (!m.piece || m.piece.color !== botSzin) continue;
+        if (m.piece.type === 'king') continue; // királyra nem tehető pajzs
+        if (m.piece.type !== 'rook' && m.piece.type !== 'queen') continue;
+        if (mezoTamadva(jatek, m.x, m.y, ellenSzin)) {
+            return m;
+        }
+    }
+    return null;
+}
+
+function legveszelyesebbEllenseg(jatek, botSzin, ellenSzin) {
+    // Olyan ellenséges figura, amelyik most támadja a bot egy értékes bábuját.
+    // Keressük az ellenfél legértékesebb támadóját.
+    let legjobb = null;
+    let legjobbErtek = 0;
+    const FIGURA_RANG = { queen: 9, rook: 5, bishop: 3, knight: 3 };
+
+    for (let i = 0; i < jatek.tabla.length; i++) {
+        const m = jatek.tabla[i];
+        if (!m.piece || m.piece.color !== ellenSzin) continue;
+        if (m.piece.type === 'king' || m.piece.type === 'pawn') continue;
+
+        // Vajon m.piece támad-e bármi értékeset a botnál?
+        const tamadasok = szabLepKeres(jatek, m.piece);
+        let veszelyez = false;
+        for (let j = 0; j < tamadasok.length; j++) {
+            const cel = tamadasok[j].to;
+            if (cel.piece && cel.piece.color === botSzin && (cel.piece.type === 'queen' || cel.piece.type === 'rook')) {
+                veszelyez = true;
+                break;
+            }
+        }
+        if (!veszelyez) continue;
+
+        const rang = FIGURA_RANG[m.piece.type] || 0;
+        if (rang > legjobbErtek) {
+            legjobbErtek = rang;
+            legjobb = m;
+        }
+    }
+    return legjobb;
+}
+
+function vanCapture(jatek, szin) {
+    for (let i = 0; i < jatek.tabla.length; i++) {
+        const m = jatek.tabla[i];
+        if (!m.piece || m.piece.color !== szin) continue;
+        const lepesek = szabLepKeres(jatek, m.piece);
+        for (let j = 0; j < lepesek.length; j++) {
+            if (lepesek[j].capture) return true;
+        }
+    }
+    return false;
+}
+
 module.exports = {
     botLepesValaszt,
+    botKepessegValaszt,
     nehezsegiSzintInfo,
     osszesNehezsegiSzint,
     NEHEZSEGEK

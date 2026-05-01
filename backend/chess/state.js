@@ -8,16 +8,46 @@
 //   - Bot játék mezők: botSzin, nehezseg, botAktiv
 // ============================================================
 
+const { getMode, DEFAULT_MODE } = require('./modes.js');
+
 const jatekok = new Map(); // gameId -> jatek objektum
 
 let kovetkezoId = 1;
 
 /**
+ * Üres ability state objektum — minden új meccshez ilyennel indulunk.
+ * Külön függvény mert a jatekUjraIndit() is reseteli.
+ */
+function abilitiesAlapallapot() {
+    return {
+        points:    { white: 0, black: 0 },
+        used:      { white: {}, black: {} },   // ability key -> count
+        cooldowns: { white: {}, black: {} },   // ability key -> hátralévő körök
+        effects: {
+            frozenPieces:    [],   // [{ x, y, ofColor, untilMoveOf }]
+            shieldedPieces:  [],   // [{ x, y, ofColor, untilMoveOf }]
+            blockedUntilMs:  { white: null, black: null }, // board_hide
+            pausedUntilMs:   { white: null, black: null }, // time_pause
+            pendingTimeSteal:{ white: 0, black: 0 }        // hátralévő használatok
+        }
+    };
+}
+
+/**
  * Új játék objektum létrehozása.
+ * @param {object} [options]
+ * @param {string} [options.mode]   — game-mode kulcs (ABILITY/idő config). Default: DEFAULT_MODE.
+ * @param {boolean} [options.ranked] — ranked vagy casual. Default: true ha a mód engedi.
  * Visszaadja a gameId-t és a jatek referenciát.
  */
-function jatekLetrehoz() {
+function jatekLetrehoz(options = {}) {
     const gameId = kovetkezoId++;
+
+    const modeKey = options.mode || DEFAULT_MODE;
+    const mode = getMode(modeKey) || getMode(DEFAULT_MODE);
+    const ranked = mode.rankedAllowed && options.ranked !== false;
+    const idoStart = mode.ido;   // null = végtelen, egyébként sec
+
     const jatek = {
         gameId,
         tabla: [],          // 64 mező objektummal feltöltve (engine.js tölti fel)
@@ -31,9 +61,13 @@ function jatekLetrehoz() {
         lepesTortenet: [],   // visszajátszáshoz
         pozicioTortenet: [], // háromszori ismétlés ellenőrzéshez (pozíció hash-ek)
         jatekosok: {
-            white: { ido: 600, timer: null },
-            black: { ido: 600, timer: null }
+            white: { ido: idoStart, timer: null },
+            black: { ido: idoStart, timer: null }
         },
+        // ── MÓD MEZŐK ──
+        mode: mode.id,                   // 'mattmester' | 'mattmester_10p' | 'klasszikus' | 'klasszikus_10p' | 'blitz'
+        ranked: ranked,                  // ELO frissül-e a meccs végén
+        abilitiesEnabled: mode.abilities,
         // ── BOT MEZŐK ──
         botAktiv: false,        // ez bot játék?
         botSzin: null,          // 'white' | 'black' — melyik oldalon játszik a bot
@@ -48,7 +82,9 @@ function jatekLetrehoz() {
         disconnectTimer: null,      // grace period timer ref
         disconnectSzin: null,       // melyik szín disconnectelt
         onIdoLejar: null,           // callback: timer.js hívja amikor lejár az idő
-        drawAjanlat: null           // melyik szín ajánlott döntetlent: 'white' | 'black' | null
+        drawAjanlat: null,          // melyik szín ajánlott döntetlent: 'white' | 'black' | null
+        // ── KÉPESSÉGEK — csak akkor inicializálva ha a mód engedi ──
+        abilities: mode.abilities ? abilitiesAlapallapot() : null
     };
     jatekok.set(gameId, jatek);
     return { gameId, jatek };
@@ -125,6 +161,31 @@ function jatekAllapotKliens(jatek) {
         };
     }
 
+    // ── KÉPESSÉG ÁLLAPOT — mindkét félnek elküldjük (a sajatja + ellenfél pontjai),
+    //    kivéve azt amit szándékosan eltakarunk az ellenféltől (pl. a másik fél cooldown-ja).
+    //    A 'effects' nyilvános — mindkét oldal látja a jegelt/pajzsos mezőket. ──
+    let abilitiesKliens = null;
+    if (jatek.abilities) {
+        abilitiesKliens = {
+            points: { ...jatek.abilities.points },
+            cooldowns: {
+                white: { ...jatek.abilities.cooldowns.white },
+                black: { ...jatek.abilities.cooldowns.black }
+            },
+            used: {
+                white: { ...jatek.abilities.used.white },
+                black: { ...jatek.abilities.used.black }
+            },
+            effects: {
+                frozenPieces:    jatek.abilities.effects.frozenPieces.map(f => ({ ...f })),
+                shieldedPieces:  jatek.abilities.effects.shieldedPieces.map(s => ({ ...s })),
+                blockedUntilMs:  { ...jatek.abilities.effects.blockedUntilMs },
+                pausedUntilMs:   { ...jatek.abilities.effects.pausedUntilMs },
+                pendingTimeSteal:{ ...jatek.abilities.effects.pendingTimeSteal }
+            }
+        };
+    }
+
     return {
         gameId: jatek.gameId,
         tabla,
@@ -147,7 +208,13 @@ function jatekAllapotKliens(jatek) {
         pvpAktiv: jatek.pvpAktiv,
         pvpStatusz: jatek.pvpStatusz,
         pvpJatekosNevek: jatek.pvpJatekosNevek,
-        drawAjanlat: jatek.drawAjanlat
+        drawAjanlat: jatek.drawAjanlat,
+        // ── MÓD INFÓ A KLIENSNEK ──
+        mode: jatek.mode,
+        ranked: jatek.ranked,
+        abilitiesEnabled: jatek.abilitiesEnabled,
+        // ── KÉPESSÉG ÁLLAPOT (null klasszikus módban) ──
+        abilities: abilitiesKliens
     };
 }
 
@@ -156,5 +223,6 @@ module.exports = {
     jatekKeres,
     jatekTorol,
     mezoKeres,
-    jatekAllapotKliens
+    jatekAllapotKliens,
+    abilitiesAlapallapot
 };

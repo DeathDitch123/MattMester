@@ -55,7 +55,6 @@ document.addEventListener('DOMContentLoaded', () => {
         bindLogoutButtonUser();
         bindLogoutButtonAdmin();
         bindLeaderBoardControls();
-        restoreLastMode();
         socketHandler();
     });
 
@@ -1120,26 +1119,5 @@ function showToast(message) {
     toast.show();
 }
 
-function restoreLastMode() {
-    const lastModeLabel = document.getElementById('lastModeLabel');
-    if (!lastModeLabel) {
-        return;
-    }
-
-    const storedMode = localStorage.getItem('selectedGameMode');
-    if (storedMode) {
-        lastModeLabel.textContent = storedMode;
-    }
-}
-
-function selectGame(mode) {
-    const lastModeLabel = document.getElementById('lastModeLabel');
-    if (lastModeLabel) {
-        lastModeLabel.textContent = mode;
-    }
-
-    localStorage.setItem('selectedGameMode', mode);
-    window.location.href = `../chess_barold/html/chess.html?mode=${encodeURIComponent(mode)}`;
-}
-
-window.selectGame = selectGame;
+// A korábbi külső mode-választó (selectGame + restoreLastMode + #playModal)
+// törölve — a mode-választás teljes egészében a chess.html-en történik.

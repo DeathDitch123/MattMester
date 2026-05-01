@@ -5,10 +5,12 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self';
             connect-src 'self' http://127.0.0.1:3000;
             script-src 'self' 'unsafe-inline';
-            style-src 'self' 'unsafe-inline';
+            style-src 'self' https://fonts.googleapis.com 'unsafe-inline';
+            font-src 'self' https://fonts.gstatic.com;
             img-src 'self' data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mattmester</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../css/chess.css">
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../../javascript/socketClient.js" defer></script>
@@ -21,8 +23,22 @@
             <h2 class="mode-title">Mattmester</h2>
             <p class="mode-subtitle">Válassz játékmódot</p>
 
-            <!-- 1. LÉPÉS: Mód választás -->
-            <div id="mode-step1" class="mode-step">
+            <!-- 1. LÉPÉS: Játékmód (5 mód) — dinamikusan a /api/chess/modes-ból -->
+            <div id="mode-step-modes" class="mode-step">
+                <div id="mode-list" class="mode-list">
+                    <!-- gombok dinamikus generálással -->
+                </div>
+            </div>
+
+            <!-- 2. LÉPÉS: Bot vs Játékos + Ranked toggle -->
+            <div id="mode-step-opponent" class="mode-step hidden">
+                <p class="mode-subtitle"><span id="selected-mode-label">Mód</span></p>
+                <div class="ranked-toggle-row">
+                    <label class="ranked-toggle">
+                        <input type="checkbox" id="ranked-toggle-input" checked>
+                        <span class="ranked-toggle-label">Ranked (ELO frissül)</span>
+                    </label>
+                </div>
                 <button class="mode-btn" id="mode-bot">
                     <span class="mode-icon">🤖</span>
                     <span class="mode-label">Robot ellen</span>
@@ -31,16 +47,17 @@
                     <span class="mode-icon">👥</span>
                     <span class="mode-label">Játékos ellen</span>
                 </button>
+                <button class="mode-back-btn" id="mode-back-modes">← Vissza</button>
             </div>
 
-            <!-- 2. LÉPÉS: Nehézség választás (bot) -->
+            <!-- 3. LÉPÉS: Nehézség választás (bot) -->
             <div id="mode-step2" class="mode-step hidden">
                 <p class="mode-subtitle">Robot nehézség</p>
                 <div id="difficulty-list" class="difficulty-list"></div>
                 <button class="mode-back-btn" id="mode-back">← Vissza</button>
             </div>
 
-            <!-- 3. LÉPÉS: PvP almenü -->
+            <!-- 3b. LÉPÉS: PvP almenü -->
             <div id="mode-step-pvp" class="mode-step hidden">
                 <p class="mode-subtitle">Játékos ellen</p>
                 <button class="mode-btn" id="pvp-friend">
@@ -108,6 +125,12 @@
             <div class="board-wrap">
                 <div id="board" class="board" aria-label="Sakk tábla"></div>
 
+                <!-- TÁBLAKITAKARÁS overlay -->
+                <div id="board-hide-overlay" class="board-hide-overlay hidden">
+                    <span>Tábla eltakarva</span>
+                    <span id="board-hide-countdown">5</span>
+                </div>
+
                 <div id="promotion-modal" class="promotion-modal hidden">
                     <div class="promotion-overlay"></div>
                     <div class="promotion-choices">
@@ -124,6 +147,19 @@
                     Aktív: <strong id="turn-name">fehér</strong>
                 </div>
                 <div id="status" class="status">játékon</div>
+
+                <!-- KÉPESSÉG BAR -->
+                <div id="ability-bar" class="ability-bar hidden">
+                    <div class="ability-points">
+                        <span class="ap-label">Pontok</span>
+                        <span class="ap-mine" id="ap-mine">0</span>
+                        <span class="ap-sep">vs</span>
+                        <span class="ap-opp" id="ap-opp">0</span>
+                    </div>
+                    <div id="ability-buttons" class="ability-buttons"></div>
+                    <div id="ability-hint" class="ability-hint hidden"></div>
+                </div>
+
                 <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
                 <div id="opponent-disconnected" class="opponent-dc hidden">
                     Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp
