@@ -146,7 +146,7 @@ async function findUserByPasswordResetTokenHash(tokenHash) {
     let foundUser = null;
     try {
         const query = `
-            SELECT id, username, email, reset_password_token, reset_token_expires
+            SELECT id, username, email, password_hash, reset_password_token, reset_token_expires
             FROM users
             WHERE reset_password_token = ?
             LIMIT 1
