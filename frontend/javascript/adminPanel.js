@@ -1738,7 +1738,7 @@ const SECTIONS = {
                                             <td><span class="${b.bannedUntil ? '' : 'text-danger'}">${b.bannedUntil ? escapeHtml(new Date(b.bannedUntil).toLocaleString('hu-HU')) : 'Soha'}</span></td>
                                             <td class="text-end">
                                                 ${h.iconBtn({ icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${b.id})` })}
-                                                ${h.iconBtn({ icon: 'bi-check-circle', variant: 'success', title: 'Feloldás (kritikus)', onclick: `openCriticalAction('users.unban', '${escapeHtml(b.username || '').replace(/'/g, "\\\\'")}')` })}
+                                                ${h.iconBtn({ icon: 'bi-check-circle', variant: 'success', title: 'Feloldás (kritikus)', onclick: `openCriticalAction('users.unban', '${escapeHtml(b.username || '').replace(/'/g, "\\\\'")}', ${b.id})` })}
                                             </td>
                                         </tr>
                                     `).join('')}
@@ -3190,12 +3190,13 @@ function showToast(message, variant = 'success', icon = 'bi-check-circle-fill') 
     }, 3000);
 }
 
-function openCriticalAction(action, targetLabel) {
+function openCriticalAction(action, targetLabel, overrideTargetUserId) {
     try {
         const modalEl = document.getElementById('criticalActionModal');
         if (modalEl && window.bootstrap?.Modal) {
             const titleMap = {
                 'users.ban': 'Felhasználó tiltása',
+                'users.unban': 'Tiltás feloldása',
                 'users.delete': 'Felhasználó törlése',
                 'chat.delete': 'Chat üzenet törlése',
                 'notifications.broadcast': 'Globális értesítés küldése',
@@ -3212,10 +3213,13 @@ function openCriticalAction(action, targetLabel) {
             }
             const reasonField = document.getElementById('criticalReason');
             const counter = document.getElementById('criticalReasonCount');
+            // Ha az inline tiltás panelen már megadta az indokot, vegyük át (nincs duplikáció).
+            const inlineBanReason = document.getElementById('banReason')?.value?.trim() || '';
             if (reasonField && counter) {
-                reasonField.value = '';
-                counter.textContent = '0';
-                counter.parentElement.classList.remove('valid');
+                reasonField.value = inlineBanReason;
+                const initLen = inlineBanReason.length;
+                counter.textContent = String(initLen);
+                counter.parentElement.classList.toggle('valid', initLen >= 30);
                 reasonField.oninput = () => {
                     const len = reasonField.value.length;
                     counter.textContent = String(len);
@@ -3226,6 +3230,8 @@ function openCriticalAction(action, targetLabel) {
             if (passwordField) {
                 passwordField.value = '';
             }
+            const targetUserId = overrideTargetUserId != null ? overrideTargetUserId : (state.selectedUser?.id || null);
+            state.criticalActionData = { action, targetUserId, targetLabel };
             new window.bootstrap.Modal(modalEl).show();
         } else {
             showToast(`A(z) ${action} még csak shell elem.`, 'info', 'bi-cone-striped');
@@ -3236,17 +3242,71 @@ function openCriticalAction(action, targetLabel) {
     }
 }
 
-function executeCriticalAction() {
-    try {
+async function executeCriticalAction() {
+    await runSafelyAsync('executeCriticalAction', async () => {
         const modalEl = document.getElementById('criticalActionModal');
         if (modalEl && window.bootstrap?.Modal) {
             window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
         }
-        showToast('A kritikus művelet még nincs bekötve, ez csak shell.', 'info', 'bi-cone-striped');
-    } catch (error) {
-        console.error('executeCriticalAction hiba:', error);
-        showToast('A kritikus művelet futtatása nem elérhető.', 'danger', 'bi-exclamation-triangle-fill');
-    }
+
+        const { action, targetUserId } = state.criticalActionData || {};
+        const reason = document.getElementById('criticalReason')?.value?.trim() || '';
+
+        if (reason.length < 30) {
+            showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+
+        if (action === 'users.ban') {
+            if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+            const banType = document.getElementById('banType')?.value || 'Ideiglenes';
+            const durationHours = Number(document.getElementById('banDuration')?.value) || 24;
+            try {
+                const res = await fetch(`/api/admin/users/${targetUserId}/ban`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ banType, durationHours, reason })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    showToast('A felhasználó sikeresen tiltva lett.', 'success', 'bi-shield-fill-check');
+                    await loadAdminUsersList({ silent: true });
+                    showSection(state.currentSectionId, null, { silent: true });
+                } else {
+                    if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                    showToast(data.message || 'Hiba a tiltás alkalmazásánál.', 'danger');
+                }
+            } catch (err) {
+                showToast('Hálózati hiba a tiltás során.', 'danger');
+                console.error('ban hiba:', err);
+            }
+        } else if (action === 'users.unban') {
+            if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+            try {
+                const res = await fetch(`/api/admin/users/${targetUserId}/unban`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ reason })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    showToast('A tiltás sikeresen feloldva.', 'success', 'bi-check-circle-fill');
+                    await loadAdminUsersList({ silent: true });
+                    showSection(state.currentSectionId, null, { silent: true });
+                } else {
+                    if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                    showToast(data.message || 'Hiba a tiltás feloldásánál.', 'danger');
+                }
+            } catch (err) {
+                showToast('Hálózati hiba a tiltás feloldása során.', 'danger');
+                console.error('unban hiba:', err);
+            }
+        } else {
+            showToast(`A(z) ${action || 'ismeretlen'} művelet még nincs bekötve.`, 'info', 'bi-cone-striped');
+        }
+    });
 }
 
 /* =============================================================

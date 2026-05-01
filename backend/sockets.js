@@ -1066,6 +1066,19 @@ function createSocketHub(io) {
                 try { s.disconnect(true); } catch (_) { }
             });
             return true;
+        },
+        async banUser(targetUserId, reason) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            io.to(`user-room:${normalized}`).emit('user:banned', {
+                reason: String(reason || ''),
+                at: new Date().toISOString()
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
         }
     };
 }
