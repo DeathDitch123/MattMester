@@ -1545,6 +1545,9 @@ const SECTIONS = {
                                                 <label for="editReason" class="form-label">Módosítás indoka</label>
                                                 <textarea id="editReason" class="form-control" rows="3" placeholder="Miért változtatod ezeket az adatokat? Ez később log és értesítés alapja lesz."></textarea>
                                             </div>
+                                            <div class="col-12">
+                                                <div id="adminSavePackMessage" class="alert d-none mt-2 mb-0 py-2 px-3"></div>
+                                            </div>
                                             <div class="col-12 d-flex flex-column gap-2">
                                                 <button type="button" class="btn btn-gold btn-lg" onclick="saveAdminUserDetailChanges()">
                                                     <i class="bi bi-check2-circle me-1"></i>Összes módosítás mentése
@@ -1567,7 +1570,10 @@ const SECTIONS = {
                                 <div class="fw-semibold text-white">Jelszó visszaállítás</div>
                                 <small class="text-secondary">A felhasználó e-mailjére küldünk egy egyszer használatos linket.</small>
                             </div>
-                            ${h.btn({ label: 'Link küldése', icon: 'bi-send-fill', variant: 'outline-warning', size: 'sm' })}
+                            ${!u.emailVerified 
+                              ? `<button type="button" class="btn btn-outline-warning btn-sm" disabled title="Email cím nincs megerősítve"><i class="bi bi-send-fill me-1"></i>Link küldése</button>`
+                              : h.btn({ label: 'Link küldése', icon: 'bi-send-fill', variant: 'outline-warning', size: 'sm', onclick: `adminSendPasswordReset(${u.id})` })
+                            }
                         </div>
                         <div class="danger-action">
                             <div>
@@ -3559,6 +3565,37 @@ function saveAdminUserDetailChanges() {
         console.warn('saveAdminUserDetailChanges hiba:', err);
         showToast('A mentés előkészítése sikertelen.', 'danger', 'bi-x-circle');
         return false;
+    }
+}
+
+function adminSendPasswordReset(userId) {
+    try {
+        const user = state.selectedUser && Number(state.selectedUser.id) === Number(userId) ? state.selectedUser : (Array.isArray(state.users.list) ? state.users.list.find((x) => Number(x.id) === Number(userId)) : null);
+        if (!user || !user.email) {
+            showToast('Nincs kiválasztva felhasználó vagy email cím hiányzik.', 'danger', 'bi-x-circle');
+            return;
+        }
+
+        const btn = event.target.closest('button');
+        const originalText = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; }
+
+        fetch('/api/auth/forgot-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: user.email })
+        }).then((res) => res.json().catch(() => ({}))).then((result) => {
+            if (result && result.success) {
+                showToast('Jelszó-visszaállító email elküldve.', 'success', 'bi-check2-circle');
+            } else {
+                showToast(result.message || 'Nem sikerült elküldeni a visszaállító emailt.', 'danger', 'bi-x-circle');
+            }
+        }).catch((err) => {
+            showToast('Hálózati hiba történt a küldés során.', 'danger', 'bi-x-circle');
+        }).finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = originalText; } });
+    } catch (e) {
+        console.error('adminSendPasswordReset hiba:', e);
+        showToast('Hiba történt a jelszó-visszaállítás során.', 'danger', 'bi-x-circle');
     }
 }
 
