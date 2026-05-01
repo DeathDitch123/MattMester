@@ -1288,4 +1288,70 @@ router.get(
     }
 );
 
+// POST /admin/users/:id/revoke-sessions
+// Az összes aktív munkamenet és bejelentkezett eszköz megszüntetése (kijelentkeztetés)
+router.post(
+    '/users/:id/revoke-sessions',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_EDIT_PROFILE), // Mivel ez egy módosító művelet, használjuk a jogosultságot
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a munkamenetek megszüntetése során.' };
+        try {
+            const userId = Number(request.params?.id) || 0;
+            if (!userId) {
+                statusCode = 400;
+                throw new Error('Érvénytelen felhasználó azonosító.');
+            }
+
+            // 1. Tokenek visszavonása (tokenService segítségével, mint az edit/demote résznél)
+            try {
+                const tokenService = require('../admin/tokenService.js');
+                await tokenService.revokeAllForUser(userId);
+            } catch (revokeErr) {
+                console.warn('revoke-sessions: token revoke hiba:', revokeErr.message);
+            }
+
+            // 2. WebSocket kapcsolatok lezárása (Socket.io)
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.disconnectAllForAdminUser === 'function') {
+                    await adminSocketHub.disconnectAllForAdminUser(userId, 'admin_revoke_sessions');
+                }
+                // Ha a user kliens socketHub-ot is használ:
+                const socketHub = request.app?.locals?.socketHub;
+                if (socketHub && typeof socketHub.disconnectUser === 'function') {
+                    await socketHub.disconnectUser(userId, 'admin_revoke_sessions');
+                }
+            } catch (kickErr) {
+                console.warn('revoke-sessions: socket disconnect hiba:', kickErr.message);
+            }
+
+            // 3. Audit log bejegyzés
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_EDIT_PROFILE;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'user';
+            response.locals.adminAudit.targetId = userId;
+            response.locals.adminAudit.success = true;
+
+            payload = {
+                success: true,
+                message: 'A felhasználó összes munkamenete sikeresen megszüntetve.'
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || 'Szerverhiba a művelet során.' };
+            
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_EDIT_PROFILE;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'REVOKE_SESSIONS_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
 module.exports = router;
