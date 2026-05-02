@@ -154,9 +154,42 @@ async function recordSuspiciousPattern({ ipAddress, userAgent, endpoint, userId,
     return result;
 }
 
+// Altalanos admin akcio alert: ban/unban/delete utan a target user-rel.
+// kind pl. 'user_banned', 'user_unbanned', 'user_deleted'.
+async function recordAdminAction({ kind, severity = 'warning', userId, ipAddress, userAgent, endpoint, detail }) {
+    let result = { alertId: null };
+    try {
+        const inserted = await adminRepo.insertAlertEntry({
+            kind,
+            severity,
+            userId: userId || null,
+            ipAddress,
+            endpoint,
+            userAgent,
+            detail: detail || null
+        });
+        result.alertId = inserted.insertId;
+
+        safeBroadcast(`admin:alert:${kind}`, {
+            alertId: result.alertId,
+            occurredAt: new Date().toISOString(),
+            kind,
+            severity,
+            ip: ipAddress,
+            userId: userId || null,
+            endpoint,
+            detail: detail || null
+        });
+    } catch (error) {
+        console.error(`recordAdminAction (${kind}) hiba:`, error.message);
+    }
+    return result;
+}
+
 module.exports = {
     bindSocketHub,
     recordUnauthorized,
     recordTokenInvalid,
-    recordSuspiciousPattern
+    recordSuspiciousPattern,
+    recordAdminAction
 };

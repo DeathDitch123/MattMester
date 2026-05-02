@@ -26,8 +26,10 @@ const {
     auditContext
 } = require('../admin/middleware.js');
 const { auditFlush } = require('../admin/auditService.js');
+const alertingService = require('../admin/alertingService.js');
 const { adminLimiterChain } = require('../admin/adminRateLimiter.js');
 const { ADMIN_PERMISSIONS, ADMIN_ERROR_CODES } = require('../admin/constants.js');
+const { invalidateIpBlockCache } = require('../middleware/ipBlockGuard.js');
 
 const router = express.Router();
 
@@ -944,41 +946,10 @@ router.get(
     }
 );
 
-router.get(
-    '/alerts/recent',
-    adminLimiterChain,
-    parseAdminToken,
-    auditContext,
-    auditFlush,
-    async (request, response) => {
-        let statusCode = 200;
-        let payload = { success: false, data: [], message: 'Belso hiba a riasztasok lekerdezese soran.' };
-        try {
-            const limit = Number(request.query.limit) || 50;
-            const rows = await adminRepo.getRecentAlerts(limit);
-            payload = {
-                success: true,
-                message: `${rows.length} riasztas.`,
-                data: rows.map((row) => ({
-                    alertId: row.id,
-                    kind: row.kind,
-                    severity: row.severity,
-                    userId: row.user_id,
-                    ip: row.ip_address,
-                    endpoint: row.endpoint,
-                    detail: row.detail,
-                    occurredAt: row.occurred_at
-                }))
-            };
-            response.locals.adminAudit.skip = true;
-        } catch (error) {
-            console.error('admin/alerts/recent hiba:', error.message);
-            statusCode = 500;
-            payload = { success: false, data: [], message: error.message || payload.message };
-        }
-        return response.status(statusCode).json(payload);
-    }
-);
+// Megj.: a regi /alerts/recent endpoint torolve — duplikatum volt, az alabbi
+// (Riasztasok admin oldal) `GET /admin/alerts/recent` szuro+dismissal-tudo verzio
+// vegezi a feladatot. A regi verzio `alertId` mezot kuldott, ami inkonzisztens
+// volt a frontend `a.id` lekeresevel — emiatt az Elutasit gomb null-t kapott.
 
 // Presence-snapshotbol egy lookup map: userId -> { online, tabCount, socketCount, lastSeenAt, currentPage }
 function buildPresenceMap(socketHub) {
@@ -1489,28 +1460,25 @@ router.post(
             response.locals.adminAudit.targetId = userId;
             response.locals.adminAudit.success = true;
 
-            // Riasztas log: a kritikus admin akciok megjelennek a Vezerlopult "24h riasztas"
-            // szamlaloban es a Riasztasok listaban.
-            try {
-                await adminRepo.insertAlertEntry({
-                    kind: 'user_banned',
-                    severity: 'warning',
-                    userId,
-                    ipAddress: request.adminAuth?.ipAddress || request.ip,
-                    userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
-                    endpoint: '/admin/users/:id/ban',
-                    detail: {
-                        actorUserId: adminUserId,
-                        actorUsername: request.adminAuth?.username,
-                        banType,
-                        durationHours: banType === 'Végleges' ? null : durationHours,
-                        bannedUntil: bannedUntil ? bannedUntil.toISOString() : null,
-                        reason
-                    }
-                });
-            } catch (alertErr) {
-                console.warn('ban: alert log hiba:', alertErr.message);
-            }
+            // Riasztas log + live broadcast: a kritikus admin akciok megjelennek a
+            // Vezerlopult "24h riasztas" szamlaloban, a Riasztasok listaban, es real-time
+            // push-olnak a tobbi admin browser tab-ra.
+            await alertingService.recordAdminAction({
+                kind: 'user_banned',
+                severity: 'warning',
+                userId,
+                ipAddress: request.adminAuth?.ipAddress || request.ip,
+                userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
+                endpoint: '/admin/users/:id/ban',
+                detail: {
+                    actorUserId: adminUserId,
+                    actorUsername: request.adminAuth?.username,
+                    banType,
+                    durationHours: banType === 'Végleges' ? null : durationHours,
+                    bannedUntil: bannedUntil ? bannedUntil.toISOString() : null,
+                    reason
+                }
+            });
 
             payload = { success: true, message: 'A felhasználó sikeresen tiltva lett.' };
         } catch (error) {
@@ -1551,23 +1519,19 @@ router.post(
             response.locals.adminAudit.targetId = userId;
             response.locals.adminAudit.success = true;
 
-            try {
-                await adminRepo.insertAlertEntry({
-                    kind: 'user_unbanned',
-                    severity: 'info',
-                    userId,
-                    ipAddress: request.adminAuth?.ipAddress || request.ip,
-                    userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
-                    endpoint: '/admin/users/:id/unban',
-                    detail: {
-                        actorUserId: Number(request.adminAuth?.userId) || null,
-                        actorUsername: request.adminAuth?.username,
-                        reason: request.adminReason || null
-                    }
-                });
-            } catch (alertErr) {
-                console.warn('unban: alert log hiba:', alertErr.message);
-            }
+            await alertingService.recordAdminAction({
+                kind: 'user_unbanned',
+                severity: 'info',
+                userId,
+                ipAddress: request.adminAuth?.ipAddress || request.ip,
+                userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
+                endpoint: '/admin/users/:id/unban',
+                detail: {
+                    actorUserId: Number(request.adminAuth?.userId) || null,
+                    actorUsername: request.adminAuth?.username,
+                    reason: request.adminReason || null
+                }
+            });
 
             payload = { success: true, message: 'A tiltás sikeresen feloldva.' };
         } catch (error) {
@@ -1681,7 +1645,7 @@ router.post(
             response.locals.adminAudit.success = true;
 
             try {
-                await adminRepo.insertAlertEntry({
+                await alertingService.recordAdminAction({
                     kind: 'user_deleted',
                     severity: 'critical',
                     userId: targetUserId,
@@ -1722,6 +1686,324 @@ router.post(
                 : statusCode === 403 ? 'FORBIDDEN'
                 : statusCode === 404 ? 'NOT_FOUND'
                 : 'DELETE_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// =====================================================================
+// ALERT MANAGEMENT (Riasztasok admin oldal)
+// =====================================================================
+
+// GET /admin/alerts/recent — flexibilis lekerdezes szurokkel.
+router.get(
+    '/alerts/recent',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, data: [], message: 'Belso hiba az alert lekerdezeskor.' };
+        try {
+            const q = request.query || {};
+            const options = {
+                limit: Math.min(Math.max(Number(q.limit) || 100, 1), 500),
+                includeDismissed: String(q.includeDismissed || '').toLowerCase() === 'true',
+                kind: q.kind ? String(q.kind).slice(0, 64) : null,
+                severity: q.severity ? String(q.severity) : null,
+                sinceDate: q.since ? new Date(q.since) : null,
+                untilDate: q.until ? new Date(q.until) : null,
+                ipAddress: q.ip ? String(q.ip).slice(0, 45) : null,
+                userId: q.userId ? Number(q.userId) : null
+            };
+            const rows = await adminRepo.listAlertsForAdmin(options);
+            payload = {
+                success: true,
+                data: rows.map((row) => ({
+                    id: row.id,
+                    kind: row.kind,
+                    severity: row.severity,
+                    userId: row.user_id,
+                    ip: row.ip_address,
+                    endpoint: row.endpoint,
+                    userAgent: row.user_agent,
+                    detail: row.detail,
+                    dismissedAt: row.dismissed_at,
+                    dismissedByUserId: row.dismissed_by_user_id,
+                    occurredAt: row.occurred_at
+                }))
+            };
+            response.locals.adminAudit.skip = true;
+        } catch (error) {
+            statusCode = 500;
+            payload = { success: false, data: [], message: error.message || payload.message };
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// POST /admin/alerts/:id/dismiss — egyetlen alert elrejtese (sor megmarad, dismissed_at kitoltodik).
+router.post(
+    '/alerts/:id/dismiss',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Belso hiba az elrejteskor.' };
+        const adminUserId = Number(request.adminAuth?.userId) || 0;
+        const alertId = Number(request.params?.id) || 0;
+        try {
+            if (!alertId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen alert azonosito.');
+            }
+            const affected = await adminRepo.markAlertDismissed(alertId, adminUserId);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.ALERTS_DISMISS;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'alert';
+            response.locals.adminAudit.targetId = alertId;
+            response.locals.adminAudit.success = true;
+
+            // Live broadcast a tobbi admin tabnak.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:alert:dismissed', {
+                        alertId,
+                        dismissedByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('alert dismiss: broadcast hiba:', broadcastErr.message);
+            }
+
+            payload = { success: true, message: affected > 0 ? 'Riasztás elrejtve.' : 'A riasztás már el volt rejtve.', affected };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.ALERTS_DISMISS;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'DISMISS_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// POST /admin/alerts/dismiss-all — osszes nem-elrejtett riasztas elrejtese (tomeges).
+router.post(
+    '/alerts/dismiss-all',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Belso hiba.' };
+        const adminUserId = Number(request.adminAuth?.userId) || 0;
+        try {
+            const affected = await adminRepo.markAllAlertsDismissed(adminUserId);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.ALERTS_DISMISS_ALL;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'alerts';
+            response.locals.adminAudit.success = true;
+
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:alert:dismissed-all', {
+                        dismissedByUserId: adminUserId,
+                        count: affected,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('alert dismiss-all: broadcast hiba:', broadcastErr.message);
+            }
+
+            payload = { success: true, message: `${affected} riasztás elrejtve.`, affected };
+        } catch (error) {
+            statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.ALERTS_DISMISS_ALL;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'DISMISS_ALL_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// POST /admin/alerts/:id/restore — egy elrejtett riasztas visszaallitasa (dismissed_at -> NULL).
+router.post(
+    '/alerts/:id/restore',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Belso hiba a visszaallitaskor.' };
+        const adminUserId = Number(request.adminAuth?.userId) || 0;
+        const alertId = Number(request.params?.id) || 0;
+        try {
+            if (!alertId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen alert azonosito.');
+            }
+            const affected = await adminRepo.restoreAlert(alertId);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.ALERTS_RESTORE;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'alert';
+            response.locals.adminAudit.targetId = alertId;
+            response.locals.adminAudit.success = true;
+
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:alert:restored', {
+                        alertId,
+                        restoredByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('alert restore: broadcast hiba:', broadcastErr.message);
+            }
+
+            payload = { success: true, message: affected > 0 ? 'Riasztás visszaállítva.' : 'A riasztás már aktív volt.', affected };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.ALERTS_RESTORE;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'RESTORE_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// =====================================================================
+// IP BLOCK MANAGEMENT
+// =====================================================================
+
+// POST /admin/ip-blocks — uj/frissitett blokk az ip_blocks tablaba.
+// body: { ipAddress, blockedUntil?, reason }
+router.post(
+    '/ip-blocks',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Belso hiba az IP blokk soran.' };
+        const adminUserId = Number(request.adminAuth?.userId) || 0;
+        const adminUsername = request.adminAuth?.username || null;
+        try {
+            const body = request.body || {};
+            const ipAddress = String(body.ipAddress || '').trim();
+            const blockedUntilRaw = body.blockedUntil || null;
+            const reason = body.reason ? String(body.reason).trim() : null;
+
+            if (!ipAddress || ipAddress.length > 45) {
+                statusCode = 400;
+                throw new Error('Ervenytelen IP cim.');
+            }
+            // Egyszeru sanity check IPv4/IPv6 formara
+            if (!/^[0-9a-fA-F:.]+$/.test(ipAddress)) {
+                statusCode = 400;
+                throw new Error('Ervenytelen IP cim formatum.');
+            }
+            // Loopback (127.0.0.1, ::1, localhost) blokkolasat tiltjuk — az admin nem
+            // tudna magat kizarni dev kornyezetbol amugy is (whitelist a guard-ban),
+            // szoval a sor csak felrevezeto lenne ("blokkolva van de meg mukodik?").
+            const loopbackPatterns = ['127.0.0.1', '::1', '::ffff:127.0.0.1', 'localhost'];
+            if (loopbackPatterns.includes(ipAddress.toLowerCase()) || ipAddress.startsWith('127.')) {
+                statusCode = 400;
+                throw new Error('Loopback IP cimet (localhost) nem lehet blokkolni.');
+            }
+
+            let blockedUntil = null;
+            if (blockedUntilRaw) {
+                const parsed = new Date(blockedUntilRaw);
+                if (Number.isNaN(parsed.getTime())) {
+                    statusCode = 400;
+                    throw new Error('Ervenytelen lejarati datum.');
+                }
+                blockedUntil = parsed;
+            }
+
+            await adminRepo.upsertIpBlock(ipAddress, blockedUntil, reason, adminUserId, adminUsername);
+            invalidateIpBlockCache(ipAddress);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.IP_BLOCK_CREATE;
+            response.locals.adminAudit.severity = 'critical';
+            response.locals.adminAudit.targetType = 'ip';
+            response.locals.adminAudit.targetKey = ipAddress;
+            response.locals.adminAudit.targetLabel = ipAddress;
+            response.locals.adminAudit.reason = reason;
+            response.locals.adminAudit.success = true;
+
+            payload = {
+                success: true,
+                message: `IP ${ipAddress} blokkolva.`,
+                ipAddress,
+                blockedUntil: blockedUntil ? blockedUntil.toISOString() : null
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.IP_BLOCK_CREATE;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'IP_BLOCK_CREATE_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// DELETE /admin/ip-blocks/:ip — blokk feloldasa.
+router.delete(
+    '/ip-blocks/:ip',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Belso hiba az IP blokk feloldasa soran.' };
+        try {
+            const ipAddress = String(request.params?.ip || '').trim();
+            if (!ipAddress) {
+                statusCode = 400;
+                throw new Error('Ervenytelen IP cim.');
+            }
+            const affected = await adminRepo.removeIpBlock(ipAddress);
+            invalidateIpBlockCache(ipAddress);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.IP_BLOCK_REMOVE;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'ip';
+            response.locals.adminAudit.targetKey = ipAddress;
+            response.locals.adminAudit.targetLabel = ipAddress;
+            response.locals.adminAudit.success = true;
+
+            payload = { success: true, message: `IP ${ipAddress} feloldva.`, affected };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.IP_BLOCK_REMOVE;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'IP_BLOCK_REMOVE_FAILED';
         }
         return response.status(statusCode).json(payload);
     }

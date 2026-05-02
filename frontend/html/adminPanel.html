@@ -362,6 +362,61 @@
         </div>
     </div>
 
+    <!-- IP blokkolás modal (Riasztások oldal "IP tiltás" gombjáról) -->
+    <div class="modal fade" id="ipBlockModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-ban me-2 text-danger"></i>
+                        IP cím blokkolása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <div>
+                            A blokkolt IP <strong>nem fér hozzá az oldalhoz</strong> egészen a lejáratig (vagy véglegesen).
+                            A művelet <strong>naplózásra kerül</strong> (severity: <code>critical</code>).
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">IP cím</label>
+                        <div class="critical-action-meta font-monospace text-gold" id="ipBlockModalIp">—</div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="ipBlockType">Típus</label>
+                            <select id="ipBlockType" class="form-select" onchange="onIpBlockTypeChange()">
+                                <option value="Ideiglenes">Ideiglenes</option>
+                                <option value="Végleges">Végleges</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="ipBlockDuration">Időtartam (óra)</label>
+                            <input id="ipBlockDuration" class="form-control" type="number" value="24" min="1">
+                        </div>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="ipBlockReason" class="form-label">Indok (opcionális)</label>
+                        <textarea id="ipBlockReason" class="form-control" rows="2"
+                                  placeholder="Például: ismétlődő spam regisztráció, token brute-force..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" onclick="submitIpBlock()">
+                        <i class="bi bi-ban me-1"></i>Blokk alkalmazása
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Admin profilkép szerkesztő modal — a profil oldali editor admin párja (azonnal jóváhagyott) -->
     <div class="modal fade" id="adminProfileImageEditorModal" tabindex="-1" aria-labelledby="adminProfileImageEditorModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">

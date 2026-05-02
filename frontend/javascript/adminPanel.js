@@ -405,6 +405,14 @@ const state = {
     liveStatsAt: null,            // utolsó tick időpontja
     liveAudit: [],                // admin:audit:created események (legújabb elöl)
     liveAlerts: [],               // admin:alert:* események (legújabb elöl)
+    alertsLoaded: false,          // GET /admin/alerts/recent legalabb egyszer lefutott
+    alertsFilter: {               // Riasztasok oldal szuro state
+        kind: '',                 // '' = all
+        severity: '',             // '' = all
+        ipAddress: '',
+        includeDismissed: false
+    },
+    auditFilterIntent: null,      // alert -> audit naviglas: { ip, userId, sinceDate, untilDate }
 
     // Felhasználók szekció (Lista) - REST + szűrés + lazy loading
     users: {
@@ -523,7 +531,13 @@ function liveStatsOrFallback() {
 }
 
 const auditList = () => (state.liveAudit.length ? state.liveAudit : SAMPLE_AUDIT);
-const alertsList = () => (state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS);
+// alertsList: ha mar volt sikeres GET /admin/alerts/recent fetch (state.alertsLoaded),
+// soha tobbet nem mutatjuk a sample data-t — uresen marad ha a DB-ben tenyleg nincs alert.
+// Az elso betoltesig (sample) a placeholder UI elkerulesere mutatjuk a SAMPLE-t.
+const alertsList = () => {
+    if (state.alertsLoaded) return state.liveAlerts;
+    return state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS;
+};
 
 // Egy forras-igazsag a dashboard live-feed-jehez: csak a valos WS bufferbol
 // veszunk adatot. Demo / SAMPLE adat NEM jelenik meg — ha nincs esemeny,
@@ -2069,7 +2083,18 @@ const SECTIONS = {
 
     /* ---------- Naplók > Audit napló ---------- */
     auditLog: () => {
-        const list = auditList();
+        const fullList = auditList();
+        const intent = state.auditFilterIntent;
+        // Alert -> audit pre-fill: kliens oldali szuro a riasztas kontextusara.
+        const list = intent ? fullList.filter((a) => {
+            const t = a.occurredAt ? new Date(a.occurredAt).getTime() : 0;
+            const from = intent.sinceDate ? new Date(intent.sinceDate).getTime() : 0;
+            const to = intent.untilDate ? new Date(intent.untilDate).getTime() : Infinity;
+            if (t && (t < from || t > to)) return false;
+            if (intent.userId && a.target?.id && Number(a.target.id) !== Number(intent.userId)) return false;
+            if (intent.ip && a.actor?.ip && a.actor.ip !== intent.ip) return false;
+            return true;
+        }) : fullList;
         const counts = {
             info: list.filter(a => a.severity === 'info').length,
             warning: list.filter(a => a.severity === 'warning').length,
@@ -2081,6 +2106,22 @@ const SECTIONS = {
             subtitle: 'Admin műveletek append-only nyomvonala — kötelező indok, before/after diff',
             actions: [{ label: 'Audit export', icon: 'bi-download', size: 'sm' }]
         })}
+
+            ${intent ? `
+                <div class="alert alert-info bg-info bg-opacity-10 border-info d-flex align-items-start gap-2 mb-3">
+                    <i class="bi bi-funnel-fill text-info mt-1"></i>
+                    <div class="flex-grow-1">
+                        <strong>Riasztás-szűrés aktív:</strong>
+                        ${intent.ip ? `IP=<code class="text-gold">${escapeHtml(intent.ip)}</code> · ` : ''}
+                        ${intent.userId ? `User=<code class="text-gold">#${intent.userId}</code> · ` : ''}
+                        Időszak: <span class="font-monospace">${escapeHtml(new Date(intent.sinceDate).toLocaleString('hu-HU'))}</span>
+                        — <span class="font-monospace">${escapeHtml(new Date(intent.untilDate).toLocaleString('hu-HU'))}</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="clearAuditFilterIntent()">
+                        <i class="bi bi-x"></i> Szűrő törlése
+                    </button>
+                </div>
+            ` : ''}
 
             <div class="row g-3 mb-4">
                 ${[
@@ -2122,11 +2163,14 @@ const SECTIONS = {
         const list = alertsList();
         const byKind = {};
         Object.keys(ALERT_KIND).forEach(k => byKind[k] = list.filter(a => a.kind === k).length);
+        const f = state.alertsFilter || {};
         return `
             ${h.header({
             icon: 'bi-exclamation-octagon-fill', title: 'Riasztások',
-            subtitle: 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
-            actions: [{ label: 'Mind elolvasva', icon: 'bi-check-all', size: 'sm' }]
+            subtitle: state.alertsLoaded
+                ? `${list.length} bejegyzés${f.includeDismissed ? ' (elrejtettek is)' : ''}`
+                : 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
+            actions: [{ label: 'Mind elrejtése', icon: 'bi-eye-slash-fill', size: 'sm', onclick: 'dismissAllAlerts()' }]
         })}
 
             <div class="row g-3 mb-4">
@@ -2148,8 +2192,37 @@ const SECTIONS = {
                 `).join('')}
             </div>
 
+            <div class="alerts-filter-bar">
+                <select id="alertsFilterKind" class="form-select form-select-sm" onchange="onAlertsFilterChange()">
+                    <option value="">Minden kategória</option>
+                    ${Object.entries(ALERT_KIND).map(([k, v]) => `
+                        <option value="${k}" ${f.kind === k ? 'selected' : ''}>${v.label}</option>
+                    `).join('')}
+                </select>
+                <select id="alertsFilterSeverity" class="form-select form-select-sm" onchange="onAlertsFilterChange()">
+                    <option value="">Minden severity</option>
+                    <option value="info"     ${f.severity === 'info' ? 'selected' : ''}>Info</option>
+                    <option value="warning"  ${f.severity === 'warning' ? 'selected' : ''}>Warning</option>
+                    <option value="critical" ${f.severity === 'critical' ? 'selected' : ''}>Critical</option>
+                </select>
+                <input id="alertsFilterIp" type="text" class="form-control form-control-sm"
+                       placeholder="IP cím szűrés..." value="${escapeHtml(f.ipAddress || '')}"
+                       onchange="onAlertsFilterChange()">
+                <label class="alerts-filter-toggle">
+                    <input type="checkbox" id="alertsFilterIncludeDismissed"
+                           ${f.includeDismissed ? 'checked' : ''}
+                           onchange="onAlertsFilterChange()">
+                    <span>Elrejtettek mutatása</span>
+                </label>
+                <button type="button" class="btn btn-outline-light btn-sm" onclick="resetAlertsFilter()">
+                    <i class="bi bi-x"></i> Szűrők törlése
+                </button>
+            </div>
+
             ${h.card({
-                body: `<div class="alert-list">${list.map(renderAlertRow).join('')}</div>`,
+                body: `<div class="alert-list">${list.length === 0
+                    ? '<div class="text-center text-secondary py-5"><i class="bi bi-check2-circle me-2"></i>Nincs aktív riasztás.</div>'
+                    : list.map(renderAlertRow).join('')}</div>`,
                 noBodyPadding: true
             })}
         `;
@@ -2441,13 +2514,17 @@ function renderAlertRow(a) {
     const sev = a.severity || 'warning';
     const time = formatAuditTime(a.occurredAt);
     const userLabel = a.userId ? `#${a.userId}` : (a.user || '—');
+    const isDismissed = Boolean(a.dismissedAt);
+    const ipEsc = escapeHtml(a.ip || '');
+    const occurredEsc = escapeHtml(a.occurredAt || '');
     return `
-        <article class="alert-row sev-${sev}">
+        <article class="alert-row sev-${sev}${isDismissed ? ' is-dismissed' : ''}" data-alert-id="${a.id || ''}">
             <div class="alert-row-icon"><i class="bi ${ALERT_KIND[kind]?.icon || 'bi-question'}"></i></div>
             <div class="alert-row-body">
                 <div class="alert-row-head">
                     ${alertKindLabel(kind)}
                     ${severityPill(sev)}
+                    ${isDismissed ? '<span class="badge bg-secondary ms-2"><i class="bi bi-eye-slash me-1"></i>Elrejtett</span>' : ''}
                     <span class="alert-row-time font-monospace ms-auto">${time}</span>
                 </div>
                 <div class="alert-row-meta">
@@ -2457,9 +2534,15 @@ function renderAlertRow(a) {
                 </div>
                 <div class="alert-row-detail">${formatJSON(a.detail)}</div>
                 <div class="alert-row-actions">
-                    ${h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm' })}
-                    ${h.btn({ label: 'Audit nyitás', icon: 'bi-journal-text', variant: 'outline-gold', size: 'sm', onclick: "showSection('auditLog')" })}
-                    ${h.btn({ label: 'Elutasít', icon: 'bi-x-circle', variant: 'outline-secondary', size: 'sm' })}
+                    ${a.ip && a.ip !== 'ismeretlen'
+                        ? h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm', onclick: `openIpBlockModal('${ipEsc.replace(/'/g, "\\'")}', ${a.id || 'null'})` })
+                        : h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm', attrs: 'disabled title="Nincs IP cim"' })
+                    }
+                    ${h.btn({ label: 'Audit nyitás', icon: 'bi-journal-text', variant: 'outline-gold', size: 'sm', onclick: `openAuditFromAlert(${a.id || 'null'}, '${ipEsc.replace(/'/g, "\\'")}', ${a.userId || 'null'}, '${occurredEsc.replace(/'/g, "\\'")}')` })}
+                    ${isDismissed
+                        ? h.btn({ label: 'Visszaállít', icon: 'bi-arrow-counterclockwise', variant: 'outline-success', size: 'sm', onclick: `restoreOneAlert(${a.id || 'null'})` })
+                        : h.btn({ label: 'Elrejtés', icon: 'bi-eye-slash', variant: 'outline-secondary', size: 'sm', onclick: `dismissOneAlert(${a.id || 'null'})` })
+                    }
                 </div>
             </div>
         </article>
@@ -2557,7 +2640,7 @@ function showSection(sectionId, event, options = {}) {
         bindAdminUserDetailValidation();
         bindAdminImageEditorEvents();
     }
-    if (sectionId === 'userBan') {
+    if (sectionId === 'userBan' && !silent) {
         if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
             // A userBan view a state.users.list-bol szuri ki az aktiv tiltasokat — ha
             // ures, betoltjuk, MAJD ujrarendereljuk hogy az aktiv tiltasok megjelenjenek.
@@ -2567,6 +2650,12 @@ function showSection(sectionId, event, options = {}) {
                 }
             });
         }
+    }
+    if (sectionId === 'alerts' && !silent) {
+        // Csak NEM-silent renderelesnel toltsuk ujra az alerteket (initial nav, manual frissites).
+        // Silent re-render-t a socket eventek vagy a loadAlerts fetch-utan trigger-eli, azoknak
+        // mar friss adatuk van — uj fetch infinit loopot okozna.
+        loadAlerts();
     }
 
     if (window.innerWidth < 992) {
@@ -2974,14 +3063,73 @@ function connectAdminSocket() {
                 }
             });
 
-            ['admin:alert:unauthorized', 'admin:alert:rate_escalated', 'admin:alert:token_invalid', 'admin:alert:suspicious_pattern'].forEach((eventName) => {
+            [
+                'admin:alert:unauthorized',
+                'admin:alert:rate_escalated',
+                'admin:alert:token_invalid',
+                'admin:alert:suspicious_pattern',
+                'admin:alert:user_banned',
+                'admin:alert:user_unbanned',
+                'admin:alert:user_deleted'
+            ].forEach((eventName) => {
                 sock.on(eventName, (payload = {}) => {
                     const kind = eventName.replace('admin:alert:', '');
-                    const enriched = { ...payload, kind, severity: payload.severity || (kind === 'suspicious_pattern' ? 'critical' : 'warning') };
+                    const enriched = {
+                        // A backend payload-ja: { alertId, occurredAt, kind, severity, ip, userId, endpoint, detail }
+                        // A frontend renderAlertRow ezt varja: { id, occurredAt, kind, severity, ip, userId, endpoint, detail, dismissedAt }
+                        id: payload.alertId || payload.id || null,
+                        occurredAt: payload.occurredAt || new Date().toISOString(),
+                        kind,
+                        severity: payload.severity || (kind === 'suspicious_pattern' || kind === 'user_deleted' ? 'critical' : kind === 'user_unbanned' ? 'info' : 'warning'),
+                        ip: payload.ip || payload.ipAddress || null,
+                        userId: payload.userId || null,
+                        endpoint: payload.endpoint || null,
+                        detail: payload.detail || null,
+                        dismissedAt: null
+                    };
                     state.liveAlerts.unshift(enriched);
                     if (state.liveAlerts.length > MAX_LIVE_BUFFER) state.liveAlerts.length = MAX_LIVE_BUFFER;
                     onLiveAlertUpdate(enriched);
                 });
+            });
+
+            // Multi-admin sync: ha egy mas admin kioltott alert(eke)t, frissitsuk a sajat listankat is.
+            sock.on('admin:alert:dismissed', (payload = {}) => {
+                const alertId = Number(payload.alertId) || 0;
+                if (!alertId) return;
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === alertId ? { ...a, dismissedAt: payload.at || new Date().toISOString() } : a
+                );
+                if (!state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.filter((a) => Number(a.id) !== alertId);
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+            });
+
+            sock.on('admin:alert:dismissed-all', () => {
+                if (state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.map((a) =>
+                        a.dismissedAt ? a : { ...a, dismissedAt: new Date().toISOString() }
+                    );
+                } else {
+                    state.liveAlerts = [];
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+            });
+
+            sock.on('admin:alert:restored', (payload = {}) => {
+                const alertId = Number(payload.alertId) || 0;
+                if (!alertId) return;
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === alertId ? { ...a, dismissedAt: null, dismissedByUserId: null } : a
+                );
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
             });
 
             sock.on('admin:stats:tick', (payload) => {
@@ -3868,6 +4016,260 @@ function banAdminUser(userId) {
 
 function deleteAdminUser(userId) {
     return selectAdminUser(userId, 'userDelete');
+}
+
+/* =============================================================
+   Riasztások oldal: loadAlerts, szűrők, dismiss, IP-blokk, audit nyitás
+   ============================================================= */
+
+async function loadAlerts() {
+    return runSafelyAsync('loadAlerts', async () => {
+        if (!state.adminToken) return;
+        const f = state.alertsFilter || {};
+        const params = new URLSearchParams();
+        params.set('limit', '200');
+        if (f.includeDismissed) params.set('includeDismissed', 'true');
+        if (f.kind) params.set('kind', f.kind);
+        if (f.severity) params.set('severity', f.severity);
+        if (f.ipAddress) params.set('ip', f.ipAddress);
+        try {
+            const res = await fetch(`/api/admin/alerts/recent?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ Accept: 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                state.liveAlerts = Array.isArray(data.data) ? data.data : [];
+                state.alertsLoaded = true;
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az alertek betöltésekor.', 'danger');
+            }
+        } catch (err) {
+            console.error('loadAlerts hiba:', err);
+            showToast('Hálózati hiba az alertek betöltésekor.', 'danger');
+        }
+    });
+}
+
+function onAlertsFilterChange() {
+    state.alertsFilter = {
+        kind: document.getElementById('alertsFilterKind')?.value || '',
+        severity: document.getElementById('alertsFilterSeverity')?.value || '',
+        ipAddress: (document.getElementById('alertsFilterIp')?.value || '').trim(),
+        includeDismissed: Boolean(document.getElementById('alertsFilterIncludeDismissed')?.checked)
+    };
+    loadAlerts();
+}
+
+function resetAlertsFilter() {
+    state.alertsFilter = { kind: '', severity: '', ipAddress: '', includeDismissed: false };
+    loadAlerts();
+}
+
+async function dismissOneAlert(alertId) {
+    if (!alertId) return;
+    return runSafelyAsync('dismissOneAlert', async () => {
+        try {
+            const res = await fetch(`/api/admin/alerts/${alertId}/dismiss`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                // Optimisztikus lokális frissítés — a broadcast a többi tab-ot is meghívja
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === Number(alertId)
+                        ? { ...a, dismissedAt: new Date().toISOString() }
+                        : a
+                );
+                if (!state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.filter((a) => Number(a.id) !== Number(alertId));
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+                showToast('Riasztás elrejtve.', 'success', 'bi-eye-slash');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az elrejtéskor.', 'danger');
+            }
+        } catch (err) {
+            console.error('dismissOneAlert hiba:', err);
+            showToast('Hálózati hiba az elrejtéskor.', 'danger');
+        }
+    });
+}
+
+async function restoreOneAlert(alertId) {
+    if (!alertId) return;
+    return runSafelyAsync('restoreOneAlert', async () => {
+        try {
+            const res = await fetch(`/api/admin/alerts/${alertId}/restore`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                // Optimisztikus lokalis frissites: dismissedAt = null
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === Number(alertId) ? { ...a, dismissedAt: null, dismissedByUserId: null } : a
+                );
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+                showToast('Riasztás visszaállítva.', 'success', 'bi-arrow-counterclockwise');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a visszaállításkor.', 'danger');
+            }
+        } catch (err) {
+            console.error('restoreOneAlert hiba:', err);
+            showToast('Hálózati hiba a visszaállításkor.', 'danger');
+        }
+    });
+}
+
+async function dismissAllAlerts() {
+    const undismissedCount = (state.liveAlerts || []).filter((a) => !a.dismissedAt).length;
+    if (undismissedCount === 0) {
+        showToast('Nincs elrejtendő riasztás.', 'info', 'bi-info-circle');
+        return;
+    }
+    if (!confirm(`Biztosan elrejti az összes (${undismissedCount}) aktív riasztást? Az adatok megmaradnak — az "Elrejtettek mutatása" szűrővel bármikor visszanézheted.`)) return;
+    return runSafelyAsync('dismissAllAlerts', async () => {
+        try {
+            const res = await fetch(`/api/admin/alerts/dismiss-all`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                if (state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.map((a) =>
+                        a.dismissedAt ? a : { ...a, dismissedAt: new Date().toISOString() }
+                    );
+                } else {
+                    state.liveAlerts = [];
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+                showToast(`${data.affected || 0} riasztás elrejtve.`, 'success', 'bi-eye-slash-fill');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az elrejtéskor.', 'danger');
+            }
+        } catch (err) {
+            console.error('dismissAllAlerts hiba:', err);
+            showToast('Hálózati hiba az elrejtéskor.', 'danger');
+        }
+    });
+}
+
+function openAuditFromAlert(alertId, ip, userId, occurredAt) {
+    try {
+        const occurredTs = occurredAt ? new Date(occurredAt).getTime() : Date.now();
+        state.auditFilterIntent = {
+            ip: ip || '',
+            userId: userId || null,
+            sinceDate: new Date(occurredTs - 60 * 60 * 1000).toISOString(),
+            untilDate: new Date(occurredTs + 60 * 60 * 1000).toISOString()
+        };
+        showSection('auditLog');
+    } catch (err) {
+        console.warn('openAuditFromAlert hiba:', err);
+        showSection('auditLog');
+    }
+}
+
+function clearAuditFilterIntent() {
+    state.auditFilterIntent = null;
+    if (state.currentSectionId === 'auditLog') {
+        showSection('auditLog', null, { silent: true });
+    }
+}
+
+function openIpBlockModal(ipAddress, alertId) {
+    if (!ipAddress) {
+        showToast('Nincs IP cím a blokkoláshoz.', 'warning');
+        return;
+    }
+    const modalEl = document.getElementById('ipBlockModal');
+    if (!modalEl || !window.bootstrap?.Modal) {
+        showToast('IP blokk modal nem elérhető.', 'warning');
+        return;
+    }
+    setText('ipBlockModalIp', ipAddress);
+    const reasonField = document.getElementById('ipBlockReason');
+    const durationField = document.getElementById('ipBlockDuration');
+    const typeField = document.getElementById('ipBlockType');
+    if (reasonField) reasonField.value = '';
+    if (durationField) durationField.value = '24';
+    if (typeField) typeField.value = 'Ideiglenes';
+    state.ipBlockData = { ipAddress, alertId };
+    new window.bootstrap.Modal(modalEl).show();
+}
+
+function onIpBlockTypeChange() {
+    const type = document.getElementById('ipBlockType')?.value;
+    const duration = document.getElementById('ipBlockDuration');
+    if (!duration) return;
+    if (type === 'Végleges') {
+        duration.disabled = true;
+        duration.value = '';
+        duration.placeholder = 'Nincs lejárat';
+    } else {
+        duration.disabled = false;
+        duration.placeholder = '';
+        if (!duration.value) duration.value = '24';
+    }
+}
+
+async function submitIpBlock() {
+    return runSafelyAsync('submitIpBlock', async () => {
+        const { ipAddress } = state.ipBlockData || {};
+        if (!ipAddress) { showToast('Nincs IP cím.', 'danger'); return; }
+
+        const type = document.getElementById('ipBlockType')?.value || 'Ideiglenes';
+        const durationHours = Number(document.getElementById('ipBlockDuration')?.value) || 24;
+        const reason = (document.getElementById('ipBlockReason')?.value || '').trim();
+
+        let blockedUntil = null;
+        if (type !== 'Végleges') {
+            const until = new Date();
+            until.setHours(until.getHours() + Math.max(1, durationHours));
+            blockedUntil = until.toISOString();
+        }
+
+        try {
+            const res = await fetch('/api/admin/ip-blocks', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ ipAddress, blockedUntil, reason: reason || null })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                const modalEl = document.getElementById('ipBlockModal');
+                if (modalEl) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                showToast(data.message || `IP ${ipAddress} blokkolva.`, 'success', 'bi-shield-fill-check');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az IP blokkolásánál.', 'danger');
+            }
+        } catch (err) {
+            console.error('submitIpBlock hiba:', err);
+            showToast('Hálózati hiba az IP blokkolásánál.', 'danger');
+        }
+    });
 }
 
 /* =============================================================

@@ -362,18 +362,35 @@ async function createTables() {
 
         `CREATE TABLE IF NOT EXISTS admin_alert_log (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
-            kind ENUM('unauthorized', 'rate_escalated', 'token_invalid', 'suspicious_pattern') NOT NULL,
-            severity ENUM('warning', 'critical') DEFAULT 'warning',
+            kind VARCHAR(64) NOT NULL,
+            severity ENUM('info', 'warning', 'critical') DEFAULT 'warning',
             user_id INT NULL,
             ip_address VARCHAR(45) NOT NULL,
             endpoint VARCHAR(255) NULL,
             user_agent VARCHAR(255) NULL,
             detail JSON NULL,
+            dismissed_at TIMESTAMP NULL DEFAULT NULL,
+            dismissed_by_user_id INT NULL DEFAULT NULL,
             occurred_at TIMESTAMP(3) DEFAULT CURRENT_TIMESTAMP(3),
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
             INDEX idx_aalert_time (occurred_at),
             INDEX idx_aalert_kind_time (kind, occurred_at),
-            INDEX idx_aalert_ip_time (ip_address, occurred_at)
+            INDEX idx_aalert_ip_time (ip_address, occurred_at),
+            INDEX idx_aalert_dismissed (dismissed_at, occurred_at)
+        )`,
+
+        // Hard IP block tabla — a request-szintu ipBlockGuard middleware ezt nezi.
+        // Az admin a Riasztasok felulrol tud blokkot felvinni egy alert IP-jere.
+        `CREATE TABLE IF NOT EXISTS ip_blocks (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            ip_address VARCHAR(45) NOT NULL,
+            blocked_until TIMESTAMP NULL DEFAULT NULL,
+            reason VARCHAR(500) DEFAULT NULL,
+            blocked_by_user_id INT NULL DEFAULT NULL,
+            blocked_by_username VARCHAR(50) DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_ip_blocks_ip (ip_address),
+            INDEX idx_ip_blocks_until (blocked_until)
         )`,
 
         `CREATE TABLE IF NOT EXISTS admin_rate_escalations (
@@ -517,6 +534,71 @@ async function runMigrations() {
         } catch (err) {
             console.warn(`[Migration] users.${colName} hozzáadás kihagyva: ${err.message}`);
         }
+    }
+
+    // admin_alert_log: kind ENUM → VARCHAR(64) (régi DB-ken ENUM volt; az új user_banned/
+    // user_deleted/user_unbanned kindek elutasítva lennének).
+    try {
+        const [rows] = await pool.execute(
+            `SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_alert_log' AND COLUMN_NAME = 'kind'`
+        );
+        if (rows.length > 0 && String(rows[0].DATA_TYPE).toLowerCase() === 'enum') {
+            await pool.execute(`ALTER TABLE admin_alert_log MODIFY COLUMN kind VARCHAR(64) NOT NULL`);
+            console.log('[Migration] admin_alert_log.kind ENUM → VARCHAR(64).');
+        }
+    } catch (err) {
+        console.warn(`[Migration] admin_alert_log.kind ENUM modify kihagyva: ${err.message}`);
+    }
+
+    // admin_alert_log: severity ENUM bővítés (régi: warning|critical, új: info|warning|critical).
+    try {
+        const [rows] = await pool.execute(
+            `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_alert_log' AND COLUMN_NAME = 'severity'`
+        );
+        if (rows.length > 0 && !String(rows[0].COLUMN_TYPE || '').includes("'info'")) {
+            await pool.execute(`ALTER TABLE admin_alert_log MODIFY COLUMN severity ENUM('info', 'warning', 'critical') DEFAULT 'warning'`);
+            console.log('[Migration] admin_alert_log.severity ENUM kibővítve info-val.');
+        }
+    } catch (err) {
+        console.warn(`[Migration] admin_alert_log.severity ENUM bővítés kihagyva: ${err.message}`);
+    }
+
+    // admin_alert_log: új oszlopok (dismissed_at, dismissed_by_user_id) régi DB-knél.
+    const alertNewColumns = [
+        ['dismissed_at',         'TIMESTAMP NULL DEFAULT NULL'],
+        ['dismissed_by_user_id', 'INT NULL DEFAULT NULL']
+    ];
+    for (const [colName, colDef] of alertNewColumns) {
+        try {
+            const [rows] = await pool.execute(
+                `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_alert_log' AND COLUMN_NAME = ?`,
+                [colName]
+            );
+            if (rows.length === 0) {
+                await pool.execute(`ALTER TABLE admin_alert_log ADD COLUMN \`${colName}\` ${colDef}`);
+                console.log(`[Migration] admin_alert_log.${colName} hozzáadva.`);
+            }
+        } catch (err) {
+            console.warn(`[Migration] admin_alert_log.${colName} hozzáadás kihagyva: ${err.message}`);
+        }
+    }
+
+    // admin_alert_log: dismissed index (gyors filter undismissed-only listara).
+    try {
+        const [idxRows] = await pool.execute(
+            `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'admin_alert_log' AND INDEX_NAME = 'idx_aalert_dismissed'
+             LIMIT 1`
+        );
+        if (idxRows.length === 0) {
+            await pool.execute(`ALTER TABLE admin_alert_log ADD INDEX idx_aalert_dismissed (dismissed_at, occurred_at)`);
+            console.log('[Migration] admin_alert_log idx_aalert_dismissed hozzáadva.');
+        }
+    } catch (err) {
+        console.warn(`[Migration] admin_alert_log idx_aalert_dismissed kihagyva: ${err.message}`);
     }
 }
 
