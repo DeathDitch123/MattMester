@@ -105,8 +105,10 @@ describe('requireReasonOnMutate', () => {
         expect(req.adminReason).toBe('1234567890');
     });
 
+    // USERS_BAN szandekosan NEM kritikus (constants.js: 10 char min eleg + inline
+    // hold-to-confirm + admin password). A kritikus path-ot itt USERS_DELETE-tel teszteljuk.
     test('POST + 29 char reason kritikus -> 400 too short', () => {
-        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_BAN);
+        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_DELETE);
         const req = { method: 'POST', body: { reason: 'a'.repeat(29) } };
         const res = makeRes();
         mw(req, res, () => {});
@@ -115,7 +117,7 @@ describe('requireReasonOnMutate', () => {
     });
 
     test('POST + 30 char reason kritikus -> next', () => {
-        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_BAN);
+        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_DELETE);
         const req = { method: 'POST', body: { reason: 'a'.repeat(30) } };
         const res = makeRes();
         let nextCalled = false;

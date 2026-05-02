@@ -27,6 +27,7 @@
     <script src="../javascript/chessInviteGlobal.js" defer></script>
     <script src="../javascript/requestControl.js" defer></script>
     <script src="../javascript/index.js" defer></script>
+    <script src="../javascript/shared/houseRules.js" defer></script>
 </head>
 
 <body>
@@ -248,6 +249,9 @@
         <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
             <div><span class="brand">MATTMESTER</span> &middot; Modern sakkélmény</div>
             <div class="small"><a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener" class="text-secondary text-decoration-none">mattmester.support@gmail.com</a></div>
+            <button type="button" class="house-rules-footer-link" onclick="MattMesterHouseRules.open()" title="Sakk szabályok, házirend, tudnivalók">
+                <i class="bi bi-info-circle"></i> Szabályok
+            </button>
             <small>2026 MattMester</small>
         </div>
     </footer>

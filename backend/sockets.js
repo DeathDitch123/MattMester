@@ -6,7 +6,10 @@ const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit 
 const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
 const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
 const CHAT_MAX_MESSAGE_LENGTH = 1000;
-const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'hard_block').trim().toLowerCase();
+// Default 'soft_mask' — a blocked-word uzenetek is mentodnek (maszkolva), igy az
+// admin chat moderalas panel latja oket es bannolhatja a szabalysertoket.
+// 'hard_block' eseten a uzenet nem mentodne, csak elutasitva lenne.
+const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'soft_mask').trim().toLowerCase();
 
 const SOCKET_ROOMS = Object.freeze({
     general: 'general-room',
@@ -795,6 +798,73 @@ function createSocketHub(io) {
                         });
                     } catch (adminEmitErr) {
                         console.warn('[sockets] admin:chat:flagged emit hiba:', adminEmitErr.message);
+                    }
+
+                    // 3-csapas auto-ban: a tragar uzenet kuldoje strike-ot kap;
+                    // 1. csapas -> 1 napos ban, 2. csapas -> 10 napos ban, 3+ -> perma.
+                    // Az auto-mask trigger-elte → source='auto'. Adminokra is vonatkozik.
+                    try {
+                        const senderUserId = Number(insertedMessage.senderId) || 0;
+                        if (senderUserId) {
+                            const strikeResult = await sql.recordProfanityStrikeAndMaybeBan(
+                                senderUserId,
+                                insertedMessage.id,
+                                'auto'
+                            );
+                            if (strikeResult.banApplied) {
+                                // Account-ban event + esetleges IP-ban escalation. A user IP-jet
+                                // a socket handshake-bol vesszuk (X-Forwarded-For vagy remoteAddress).
+                                let ipEscalation = null;
+                                try {
+                                    const forwarded = String(socket.handshake?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+                                    const remote = socket.handshake?.address || null;
+                                    const senderIp = forwarded || remote || null;
+                                    ipEscalation = await sql.recordAccountBanEvent({
+                                        userId: senderUserId,
+                                        ipAddress: senderIp,
+                                        source: 'profanity_strike',
+                                        reason: strikeResult.banReason
+                                    });
+                                } catch (escErr) {
+                                    console.warn('[sockets] account-ban event hiba:', escErr.message);
+                                }
+
+                                // Real-time push az admin panelnek hogy auto-ban tortent.
+                                try {
+                                    io.of('/admin').to('admin:room').emit('admin:chat:auto-ban', {
+                                        userId: senderUserId,
+                                        username: insertedMessage.senderUsername,
+                                        strikeCount: strikeResult.strikeCount,
+                                        banType: strikeResult.banType,
+                                        bannedUntil: strikeResult.bannedUntil,
+                                        reason: strikeResult.banReason,
+                                        source: 'auto',
+                                        ipBlock: ipEscalation && ipEscalation.triggeredIpBlock ? {
+                                            ipAddress: ipEscalation.ipAddress,
+                                            blockType: ipEscalation.blockType,
+                                            blockedUntil: ipEscalation.blockedUntil
+                                        } : null,
+                                        at: new Date().toISOString()
+                                    });
+                                } catch (_) {}
+                                // Force-disconnect a kuldot — a mar nyitott socketjeit lebontjuk,
+                                // hogy ne tudjon tovabbi uzenetet kuldeni a ban alatt.
+                                try {
+                                    const targetSockets = await io.in(`user-room:${senderUserId}`).fetchSockets();
+                                    for (const s of targetSockets) {
+                                        try {
+                                            s.emit('user:force-logout', {
+                                                reason: 'profanity_strike_ban',
+                                                at: new Date().toISOString()
+                                            });
+                                            s.disconnect(true);
+                                        } catch (_) {}
+                                    }
+                                } catch (_) {}
+                            }
+                        }
+                    } catch (strikeErr) {
+                        console.warn('[sockets] profanity strike hiba:', strikeErr.message);
                     }
                 }
             } catch (error) {

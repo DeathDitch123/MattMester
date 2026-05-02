@@ -73,6 +73,9 @@ module.exports = {
     unbanUser: bans.unbanUser,
     checkUserBanStatus: bans.checkUserBanStatus,
     isEmailBanned: bans.isEmailBanned,
+    recordAccountBanEvent: bans.recordAccountBanEvent,
+    getUserLastLoginIp: bans.getUserLastLoginIp,
+    setUserLastLoginIp: bans.setUserLastLoginIp,
 
     // userLogs
     insertUserLog: userLogs.insertUserLog,
@@ -108,6 +111,14 @@ module.exports = {
     reportChatMessage: chat.reportChatMessage,
     dismissReportsForMessage: chat.dismissReportsForMessage,
     deleteChatMessageById: chat.deleteChatMessageById,
+    getChatReportMuteUntil: chat.getChatReportMuteUntil,
+    setChatReportMuteForUsers: chat.setChatReportMuteForUsers,
+    CHAT_REPORT_MUTE_HOURS: chat.CHAT_REPORT_MUTE_HOURS,
+    addDynamicBlockedWords: chat.addDynamicBlockedWords,
+    refreshDynamicBlockedWords: chat.refreshDynamicBlockedWords,
+    getDynamicBlockedWordsSnapshot: chat.getDynamicBlockedWordsSnapshot,
+    recordProfanityStrikeAndMaybeBan: chat.recordProfanityStrikeAndMaybeBan,
+    getProfanityStrikeCountForUser: chat.getProfanityStrikeCountForUser,
 
     // emailVerification
     saveEmailVerificationToken: emailVerification.saveEmailVerificationToken,

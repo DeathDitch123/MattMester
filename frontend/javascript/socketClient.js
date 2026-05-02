@@ -872,6 +872,21 @@
             }
         });
 
+        socket.on('chat:report:muted', (payload = {}) => {
+            // Az admin elutasitotta a felhasznalo egy bejelenteset → 5 oraig nem tud ujabbat tenni.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:chat:report:muted', {
+                    detail: {
+                        messageId: payload?.messageId || null,
+                        muteUntil: payload?.muteUntil || null,
+                        hours: payload?.hours || 5
+                    }
+                }));
+            } catch (forwardErr) {
+                console.warn('[socketClient] chat:report:muted forward hiba:', forwardErr.message);
+            }
+        });
+
         socket.on('user:profile:imageReviewed', (payload = {}) => {
             // Admin jovahagyta / elutasitotta a fuggo profilkepet — a profil oldal
             // azonnal frissitse az avatart es a status pill-t (re-fetch sessionInfo).

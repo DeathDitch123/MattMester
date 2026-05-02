@@ -23,6 +23,8 @@ CREATE TABLE
         email_verified_at TIMESTAMP NULL,
         reset_password_token VARCHAR(255),
         reset_token_expires TIMESTAMP NULL,
+        chat_report_mute_until TIMESTAMP NULL DEFAULT NULL,
+        last_login_ip VARCHAR(45) NULL DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
     );
@@ -327,6 +329,45 @@ CREATE TABLE
         INDEX idx_chat_message_reports_status (status, created_at),
         INDEX idx_chat_message_reports_message (message_id),
         INDEX idx_chat_message_reports_reporter (reporter_user_id)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS chat_blocked_words_dynamic (
+        word VARCHAR(255) NOT NULL PRIMARY KEY,
+        added_by_admin_id INT NULL,
+        source_message_id INT NULL,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (added_by_admin_id) REFERENCES users (id) ON DELETE SET NULL,
+        FOREIGN KEY (source_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL,
+        INDEX idx_chat_blocked_words_added_at (added_at)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS chat_profanity_strikes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        message_id INT NULL,
+        source ENUM ('auto', 'admin_delete') NOT NULL,
+        ban_type ENUM ('temp_1d', 'temp_10d', 'perma', 'none') NOT NULL DEFAULT 'none',
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_message (message_id),
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_chat_profanity_strikes_user (user_id, recorded_at)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS account_ban_events (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        ip_address VARCHAR(45) NULL,
+        source ENUM ('profanity_strike', 'admin_manual', 'admin_critical', 'other') NOT NULL DEFAULT 'other',
+        reason VARCHAR(500) NULL,
+        triggered_ip_block BOOLEAN NOT NULL DEFAULT FALSE,
+        ip_block_type ENUM ('temp_1d', 'perma', 'none') NOT NULL DEFAULT 'none',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_account_ban_events_ip (ip_address, created_at),
+        INDEX idx_account_ban_events_user (user_id, created_at)
     );
 
 -- Universal notifications table (single source of truth for badge + history)

@@ -89,7 +89,11 @@
 
     <footer class="admin-footer">
         <div class="admin-footer-brand"><i class="bi bi-king-fill me-1"></i> MattAdmin</div>
-        <div class="admin-footer-text">&copy; 2026 MattMester &middot; Admin Vezérlőpult &middot; <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener" class="text-secondary text-decoration-none">mattmester.support@gmail.com</a></div>
+        <div class="admin-footer-text">&copy; 2026 MattMester &middot; Admin Vezérlőpult &middot; <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener" class="text-secondary text-decoration-none">mattmester.support@gmail.com</a> &middot;
+            <button type="button" class="house-rules-footer-link" onclick="MattMesterHouseRules.open()" title="Sakk szabályok, házirend, tudnivalók">
+                <i class="bi bi-info-circle"></i> Szabályok
+            </button>
+        </div>
     </footer>
 
     <!-- Admin User View Modal — megtekintés audit log-okkal -->
@@ -452,6 +456,64 @@
         </div>
     </div>
 
+    <!-- Tiltott szavak listájához hozzáadás modal — a Moderáció > Chat moderálás view
+         "Tiltott szavakhoz" gombjából nyílik. Az admin checkbox-okkal választja ki, hogy
+         az üzenet mely szavait adja a dinamikus blocklisthez. Reason kötelező, ≥30 char. -->
+    <div class="modal fade" id="chatBlocklistAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-shield-fill-exclamation me-2 text-danger"></i>
+                        Hozzáadás a tiltott szavak listájához
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div>
+                            A kiválasztott szavak <strong>azonnal</strong> bekerülnek a dinamikus blocklist-be (perzisztens, runtime-cache).
+                            Ezután minden új chat üzenet, amely ezen szavak valamelyikét tartalmazza,
+                            <strong>automatikusan maszkolva</strong> kerül mentésre. Ez naplózásra kerül (severity: critical).
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white">Forrás üzenet:</strong>
+                        <span class="text-gold font-monospace" id="chatBlocklistAddSourceMessageId">—</span>
+                        <div id="chatBlocklistAddSourceBody" class="mt-1 text-secondary" style="font-style:italic;">—</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Szavak az üzenetből</label>
+                        <div id="chatBlocklistAddWordsContainer" class="d-flex flex-wrap gap-2">
+                            <span class="text-secondary small">Nincs választható szó.</span>
+                        </div>
+                        <small class="text-secondary mt-1 d-block">A 3 karakternél rövidebb szavak és a már listán lévők ki vannak hagyva. Pipáld be amelyiket trágárnak ítéled.</small>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="chatBlocklistAddReason" class="form-label">
+                            Indok <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="chatBlocklistAddReasonCount">0</span> / 30
+                            </span>
+                        </label>
+                        <textarea id="chatBlocklistAddReason" class="form-control" rows="3"
+                            placeholder="Min. 30 karakter — pl. ismétlődő szabálysértés, sértő tartalom, közösségi normák megsértése..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="chatBlocklistAddConfirmBtn" disabled>
+                        <i class="bi bi-shield-plus me-1"></i>Hozzáadás a blocklisthez
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Chat üzenet engedélyezése (unmask) modal — a Moderáció > Chat moderálás view "Engedélyezés"
          gombjából nyílik. Indok kötelező, min. 10 karakter (chat.view_any normal action). -->
     <div class="modal fade" id="chatAllowModal" tabindex="-1" aria-hidden="true">
@@ -602,6 +664,7 @@
     <script src="../javascript/chatModal.js"></script>
     <script src="../javascript/requestControl.js"></script>
     <script src="../javascript/shared/adminAuthFlow.js"></script>
+    <script src="../javascript/shared/houseRules.js"></script>
     <script src="../javascript/adminPanel.js"></script>
 </body>
 

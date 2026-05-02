@@ -208,13 +208,94 @@ function normalizeTextForModeration(message) {
         .trim();
 }
 
+// Dinamikus blocklist (admin altal hozzadott szavak) — in-memory cache.
+// Az ensureChatBlockedWordsDynamicTable + refreshDynamicBlockedWords() tolti fel.
+const DYNAMIC_BLOCKED_WORDS = new Set();
+let dynamicBlockedWordsLoaded = false;
+
+async function ensureChatBlockedWordsDynamicTable(executor) {
+    await executor.execute(`
+        CREATE TABLE IF NOT EXISTS chat_blocked_words_dynamic (
+            word VARCHAR(255) NOT NULL PRIMARY KEY,
+            added_by_admin_id INT NULL,
+            source_message_id INT NULL,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (added_by_admin_id) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (source_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL,
+            INDEX idx_chat_blocked_words_added_at (added_at)
+        )
+    `);
+}
+
+async function refreshDynamicBlockedWords() {
+    try {
+        const pool = getPool();
+        await ensureChatBlockedWordsDynamicTable(pool);
+        const [rows] = await pool.execute(`SELECT word FROM chat_blocked_words_dynamic`);
+        DYNAMIC_BLOCKED_WORDS.clear();
+        for (const row of rows) {
+            const w = String(row.word || '').trim().toLowerCase();
+            if (w) DYNAMIC_BLOCKED_WORDS.add(w);
+        }
+        dynamicBlockedWordsLoaded = true;
+        return DYNAMIC_BLOCKED_WORDS.size;
+    } catch (error) {
+        console.warn('refreshDynamicBlockedWords hiba:', error.message);
+        return 0;
+    }
+}
+
+async function addDynamicBlockedWords(words, adminUserId, sourceMessageId = null) {
+    const pool = getPool();
+    await ensureChatBlockedWordsDynamicTable(pool);
+
+    const cleaned = (Array.isArray(words) ? words : [words])
+        .map((w) => String(w || '').trim().toLowerCase())
+        .filter((w) => w.length > 0 && w.length <= 255)
+        .filter((w, idx, arr) => arr.indexOf(w) === idx); // dedup
+
+    if (!cleaned.length) {
+        return { added: 0, skipped: 0, words: [] };
+    }
+
+    let added = 0;
+    let skipped = 0;
+    for (const word of cleaned) {
+        try {
+            const [result] = await pool.execute(
+                `INSERT IGNORE INTO chat_blocked_words_dynamic (word, added_by_admin_id, source_message_id)
+                 VALUES (?, ?, ?)`,
+                [word, Number(adminUserId) || null, Number(sourceMessageId) || null]
+            );
+            if (result.affectedRows > 0) {
+                added += 1;
+                DYNAMIC_BLOCKED_WORDS.add(word);
+            } else {
+                skipped += 1;
+            }
+        } catch (error) {
+            console.warn(`addDynamicBlockedWords (${word}) hiba:`, error.message);
+            skipped += 1;
+        }
+    }
+
+    return { added, skipped, words: cleaned };
+}
+
+function getDynamicBlockedWordsSnapshot() {
+    return Array.from(DYNAMIC_BLOCKED_WORDS);
+}
+
 function containsBlockedWord(message) {
     const normalizedMessage = normalizeTextForModeration(message);
     if (!normalizedMessage) {
         return false;
     }
 
-    return CHAT_BLOCKED_WORDS.some((term) => {
+    // Hardcoded blocklist (CHAT_BLOCKED_WORDS) + dinamikus DB-bol toltott blocklist.
+    const allTerms = [...CHAT_BLOCKED_WORDS, ...DYNAMIC_BLOCKED_WORDS];
+
+    return allTerms.some((term) => {
         const normalizedWord = normalizeTextForModeration(term);
         if (!normalizedWord) {
             return false;
@@ -1206,6 +1287,233 @@ async function getFlaggedChatMessageCount() {
     return Number(rows[0]?.total || 0);
 }
 
+// Spam-protection: ha az admin "Engedelyezes"-t (= bejelentes elutasitas) hasznal egy bejelenten,
+// a bejelento(k) 5 oraig nem tudnak ujabb bejelentest tenni. A users.chat_report_mute_until
+// oszlop tartalmazza a lejaratot.
+const CHAT_REPORT_MUTE_HOURS = 5;
+
+async function getChatReportMuteUntil(userId) {
+    const pool = getPool();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    if (!normalizedUserId) return null;
+    try {
+        const [rows] = await pool.execute(
+            `SELECT chat_report_mute_until FROM users WHERE id = ? LIMIT 1`,
+            [normalizedUserId]
+        );
+        const value = rows[0]?.chat_report_mute_until || null;
+        if (!value) return null;
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime()) || date.getTime() <= Date.now()) {
+            return null;
+        }
+        return date;
+    } catch (error) {
+        console.warn('getChatReportMuteUntil hiba:', error.message);
+        return null;
+    }
+}
+
+async function setChatReportMuteForUsers(userIds, hours = CHAT_REPORT_MUTE_HOURS) {
+    const pool = getPool();
+    const ids = (Array.isArray(userIds) ? userIds : [userIds])
+        .map((id) => normalizePositiveInt(id, 0))
+        .filter((id) => id > 0)
+        .filter((id, idx, arr) => arr.indexOf(id) === idx);
+    if (!ids.length) return { affected: 0, until: null };
+    const safeHours = Math.max(1, Math.min(Number(hours) || CHAT_REPORT_MUTE_HOURS, 24 * 30));
+    try {
+        const placeholders = ids.map(() => '?').join(',');
+        // GREATEST: ha mar egy hosszabb mute van rajta, ne kurtítsuk le.
+        const [result] = await pool.execute(
+            `UPDATE users
+             SET chat_report_mute_until = GREATEST(
+                 COALESCE(chat_report_mute_until, NOW()),
+                 DATE_ADD(NOW(), INTERVAL ? HOUR)
+             )
+             WHERE id IN (${placeholders})`,
+            [safeHours, ...ids]
+        );
+        // A friss mute_until-t visszaolvassuk az elso erintett user-rol (mind ugyanaz lesz +/- mp).
+        const [readBack] = await pool.execute(
+            `SELECT chat_report_mute_until FROM users WHERE id = ? LIMIT 1`,
+            [ids[0]]
+        );
+        return {
+            affected: result.affectedRows,
+            until: readBack[0]?.chat_report_mute_until || null
+        };
+    } catch (error) {
+        console.warn('setChatReportMuteForUsers hiba:', error.message);
+        return { affected: 0, until: null };
+    }
+}
+
+async function ensureChatProfanityStrikesTable(executor) {
+    await executor.execute(`
+        CREATE TABLE IF NOT EXISTS chat_profanity_strikes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            message_id INT NULL,
+            source ENUM('auto', 'admin_delete') NOT NULL,
+            ban_type ENUM('temp_1d', 'temp_10d', 'perma', 'none') NOT NULL DEFAULT 'none',
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_message (message_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_chat_profanity_strikes_user (user_id, recorded_at)
+        )
+    `);
+}
+
+// 3-csapas tragarsag auto-ban rendszer. A hivo NEM hivja kulon a banUser-t — ez itt
+// atomi modon: insert strike + count + ban application.
+//   strike 1 -> 1 napos ban
+//   strike 2 -> 10 napos ban
+//   strike 3+ -> perma ban
+// A UNIQUE(message_id) megakadalyozza, hogy egy uzenet ketszer kapjon strike-ot
+// (pl. ha auto-mask + admin delete is bejon ugyanahhoz). INSERT IGNORE-zal kezeljuk.
+// A hivot NEM erdekli a ban applikalt vagy sem (pl. ha mar perma-ban van) — itt
+// vegezzuk az "el ne hozzuk romlobb statebol" logikat.
+async function recordProfanityStrikeAndMaybeBan(userId, messageId, source = 'auto') {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    const normalizedMessageId = messageId ? normalizePositiveInt(messageId, 0) : null;
+
+    if (!normalizedUserId) {
+        connection.release();
+        return { strikeRecorded: false, strikeCount: 0, banApplied: false, banType: 'none', bannedUntil: null };
+    }
+
+    const safeSource = (source === 'admin_delete') ? 'admin_delete' : 'auto';
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatProfanityStrikesTable(connection);
+
+        // INSERT IGNORE: ha mar van strike erre a message_id-re, dedup.
+        let strikeRecorded = false;
+        try {
+            const [insertResult] = await connection.execute(
+                `INSERT IGNORE INTO chat_profanity_strikes (user_id, message_id, source, ban_type)
+                 VALUES (?, ?, ?, 'none')`,
+                [normalizedUserId, normalizedMessageId, safeSource]
+            );
+            strikeRecorded = insertResult.affectedRows > 0;
+        } catch (insertErr) {
+            console.warn('recordProfanityStrike insert hiba:', insertErr.message);
+        }
+
+        if (!strikeRecorded) {
+            // Mar van strike erre az uzenetre — nem szamoljuk ujra, nem applikalunk ujabb bant.
+            await connection.commit();
+            return { strikeRecorded: false, strikeCount: 0, banApplied: false, banType: 'none', bannedUntil: null };
+        }
+
+        // Strike count szamolasa: hany strike-ja van a usernek osszesen.
+        const [countRows] = await connection.execute(
+            `SELECT COUNT(*) AS total FROM chat_profanity_strikes WHERE user_id = ?`,
+            [normalizedUserId]
+        );
+        const strikeCount = Number(countRows[0]?.total || 0);
+
+        // A user mar perma banolva van? Ha igen, NEM allitjuk vissza temp ban-ra.
+        const [userRows] = await connection.execute(
+            `SELECT is_banned, banned_until FROM users WHERE id = ? LIMIT 1`,
+            [normalizedUserId]
+        );
+        const currentlyBanned = Boolean(Number(userRows[0]?.is_banned || 0));
+        const currentBannedUntilRaw = userRows[0]?.banned_until || null;
+        const currentlyPermaBanned = currentlyBanned && currentBannedUntilRaw === null;
+
+        // Strike szam alapjan a celzott ban-tipus.
+        let banType = 'none';
+        let bannedUntil = null;
+        let banReason = null;
+        if (strikeCount >= 3) {
+            banType = 'perma';
+            bannedUntil = null;
+            banReason = `Tragarsag (${strikeCount}. csapas) - automatikus vegleges tiltas`;
+        } else if (strikeCount === 2) {
+            banType = 'temp_10d';
+            bannedUntil = new Date(Date.now() + 10 * 24 * 3600 * 1000);
+            banReason = `Tragarsag (2. csapas) - automatikus 10 napos tiltas`;
+        } else if (strikeCount === 1) {
+            banType = 'temp_1d';
+            bannedUntil = new Date(Date.now() + 1 * 24 * 3600 * 1000);
+            banReason = `Tragarsag (1. csapas) - automatikus 1 napos tiltas`;
+        }
+
+        // Strike-on rogzitjuk a celzott ban-tipust auditabilitas miatt.
+        await connection.execute(
+            `UPDATE chat_profanity_strikes
+             SET ban_type = ?
+             WHERE user_id = ? AND message_id <=> ? AND source = ?
+             ORDER BY id DESC LIMIT 1`,
+            [banType, normalizedUserId, normalizedMessageId, safeSource]
+        );
+
+        // Ban applikalas: csak akkor, ha a uj allapot szigorubb (vagy ugyanolyan strict)
+        // mint a jelenlegi. Perma-bannolt user-en nem variálunk.
+        let banApplied = false;
+        if (banType === 'none') {
+            // (Nem fordulhat elo strikeRecorded=true mellett, vedelem)
+        } else if (currentlyPermaBanned) {
+            // Mar perma — semmi tennivalo.
+        } else if (banType === 'perma') {
+            await connection.execute(
+                `UPDATE users SET is_banned = TRUE, ban_reason = ?, banned_until = NULL WHERE id = ?`,
+                [banReason, normalizedUserId]
+            );
+            banApplied = true;
+        } else {
+            // Temp ban: ne rovidítsuk le a meglevo (esetleg hosszabb) bant.
+            const currentExpiry = currentBannedUntilRaw ? new Date(currentBannedUntilRaw) : null;
+            const proposedExpiry = bannedUntil;
+            if (!currentExpiry || proposedExpiry > currentExpiry) {
+                await connection.execute(
+                    `UPDATE users SET is_banned = TRUE, ban_reason = ?, banned_until = ? WHERE id = ?`,
+                    [banReason, proposedExpiry, normalizedUserId]
+                );
+                banApplied = true;
+            }
+        }
+
+        await connection.commit();
+        return {
+            strikeRecorded: true,
+            strikeCount,
+            banApplied,
+            banType,
+            bannedUntil: bannedUntil ? bannedUntil.toISOString() : null,
+            banReason
+        };
+    } catch (error) {
+        try { await connection.rollback(); } catch (_) {}
+        console.warn('recordProfanityStrikeAndMaybeBan hiba:', error.message);
+        return { strikeRecorded: false, strikeCount: 0, banApplied: false, banType: 'none', bannedUntil: null };
+    } finally {
+        connection.release();
+    }
+}
+
+async function getProfanityStrikeCountForUser(userId) {
+    const pool = getPool();
+    const normalizedUserId = normalizePositiveInt(userId, 0);
+    if (!normalizedUserId) return 0;
+    try {
+        await ensureChatProfanityStrikesTable(pool);
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS total FROM chat_profanity_strikes WHERE user_id = ?`,
+            [normalizedUserId]
+        );
+        return Number(rows[0]?.total || 0);
+    } catch (error) {
+        console.warn('getProfanityStrikeCountForUser hiba:', error.message);
+        return 0;
+    }
+}
+
 // Felhasznaloi bejelentes egy chat uzenetrol. UNIQUE(message_id, reporter_user_id) miatt
 // egy felhasznalo egy uzenetet csak egyszer jelenthet — a duplikatumot externalisan jelezzuk.
 async function reportChatMessage(messageId, reporterUserId, reason = null) {
@@ -1225,6 +1533,26 @@ async function reportChatMessage(messageId, reporterUserId, reason = null) {
         await connection.beginTransaction();
         await ensureChatTables(connection);
         await ensureChatReportsTable(connection);
+
+        // Spam-protection: ha az adminok mar lenemitottak a bejelento-jogot, blokk.
+        // (A users.chat_report_mute_until oszlop tartalmazza a lejaratot.)
+        const [muteRows] = await connection.execute(
+            `SELECT chat_report_mute_until FROM users WHERE id = ? LIMIT 1`,
+            [normalizedReporterId]
+        );
+        const muteUntilRaw = muteRows[0]?.chat_report_mute_until || null;
+        if (muteUntilRaw) {
+            const muteUntil = new Date(muteUntilRaw);
+            if (!Number.isNaN(muteUntil.getTime()) && muteUntil.getTime() > Date.now()) {
+                const err = new Error(
+                    'A fejlesztők nem találták relevánsnak a korábbi bejelentésedet, ezért lenémítottak ' +
+                    `${CHAT_REPORT_MUTE_HOURS} órára. Új bejelentést ${muteUntil.toLocaleString('hu-HU')} után tudsz tenni.`
+                );
+                err.code = 'CHAT_REPORT_MUTED';
+                err.muteUntil = muteUntil.toISOString();
+                throw err;
+            }
+        }
 
         // Ellenorizzuk hogy az uzenet letezik es a bejelento NEM a sajat uzenetet jelenti.
         const [messageRows] = await connection.execute(
@@ -1311,6 +1639,17 @@ async function dismissReportsForMessage(messageId, adminUserId, reviewNote = nul
             throw new Error('Az uzenet nem talalhato.');
         }
 
+        // A bejelento(k) listajat kiszedjuk MEG az UPDATE elott — kesobb 5 oras
+        // mute-ot rakunk rajuk (spam-protection: aki feleslegesen reportolgat).
+        const [reporterRows] = await connection.execute(
+            `SELECT reporter_user_id FROM chat_message_reports
+             WHERE message_id = ? AND status = 'pending'`,
+            [normalizedMessageId]
+        );
+        const reporterUserIds = reporterRows
+            .map((row) => Number(row.reporter_user_id))
+            .filter((id) => id > 0);
+
         const [updateResult] = await connection.execute(
             `UPDATE chat_message_reports
              SET status = 'allowed', reviewed_by = ?, reviewed_at = NOW(), review_note = ?
@@ -1333,6 +1672,7 @@ async function dismissReportsForMessage(messageId, adminUserId, reviewNote = nul
             conversationId: messageRows[0].conversation_id,
             senderId: messageRows[0].sender_id,
             dismissedReports: updateResult.affectedRows,
+            reporterUserIds,
             participantUserIds: participantRows.map((row) => Number(row.user_id)).filter((id) => id > 0)
         };
     } catch (error) {
@@ -1470,5 +1810,13 @@ module.exports = {
     getFlaggedChatMessageCount,
     reportChatMessage,
     dismissReportsForMessage,
-    deleteChatMessageById
+    deleteChatMessageById,
+    getChatReportMuteUntil,
+    setChatReportMuteForUsers,
+    CHAT_REPORT_MUTE_HOURS,
+    addDynamicBlockedWords,
+    refreshDynamicBlockedWords,
+    getDynamicBlockedWordsSnapshot,
+    recordProfanityStrikeAndMaybeBan,
+    getProfanityStrikeCountForUser
 };

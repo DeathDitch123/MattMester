@@ -10,7 +10,9 @@ const router = express.Router();
 
 const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
 const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
-const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'hard_block').trim().toLowerCase();
+// Default 'soft_mask' — l. backend/sockets.js azonos kommentet. Az admin moderalas
+// panelnek latnia kell a tartalmilag szabalysertő üzeneteket, hogy bannolhatóak legyenek.
+const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'soft_mask').trim().toLowerCase();
 const chatRateLimitByUserId = new Map();
 
 function parseChatListLimit(value, fallback = 30, min = 1, max = 50) {
@@ -445,6 +447,16 @@ router.post('/chat/messages/:messageId/report', isAuthenticated, async (request,
     } catch (error) {
         statusCode = resolveStatusCodeByError(error, 500);
         const messageLower = String(error?.message || '').toLowerCase();
+        if (error?.code === 'CHAT_REPORT_MUTED') {
+            statusCode = 403;
+            payload = {
+                success: false,
+                code: 'CHAT_REPORT_MUTED',
+                muteUntil: error.muteUntil || null,
+                message: error.message
+            };
+            return response.status(statusCode).json(payload);
+        }
         if (messageLower.includes('nem talalhato') || messageLower.includes('nem található')) {
             statusCode = 404;
         } else if (messageLower.includes('sajat uzenet') || messageLower.includes('saját üzenet')) {

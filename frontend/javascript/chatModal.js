@@ -614,46 +614,6 @@
             const wrapper = globalScope.document.createElement('div');
             wrapper.id = 'chatModalRoot';
             wrapper.innerHTML = `
-            <div class="modal fade" id="chatReportModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-dialog-centered">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">
-                                <span style="color:#ef4444;">&#9873;</span>
-                                Üzenet bejelentése
-                            </h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezarás"></button>
-                        </div>
-                        <div class="modal-body">
-                            <p class="mb-2" style="font-size: 13px; color:#94a3b8;">
-                                Ha az üzenetet trágárnak vagy nem odaillőnek érzed, küldd el az adminisztrátoroknak felülvizsgálatra. Az indok megadása ajánlott (max. 500 karakter).
-                            </p>
-                            <div class="mb-3">
-                                <label class="form-label" style="font-size:12px; color:#94a3b8;">Bejelentett üzenet</label>
-                                <div id="chatReportTargetBody" class="chat-report-quote">—</div>
-                                <small id="chatReportTargetMeta" style="display:block; margin-top:4px; color:#64748b; font-size:11px;">—</small>
-                            </div>
-                            <div class="mb-1">
-                                <label for="chatReportReason" class="form-label" style="font-size:12px; color:#cbd5e1;">
-                                    Indok (opcionális)
-                                    <span class="chat-report-counter ms-2">
-                                        <span id="chatReportReasonCount">0</span> / 500
-                                    </span>
-                                </label>
-                                <textarea id="chatReportReason" class="form-control" rows="3" maxlength="500"
-                                    placeholder="Pl. trágár, sértő, spam, fenyegetés..."></textarea>
-                            </div>
-                            <div id="chatReportFeedback" class="alert d-none mt-2 mb-0" role="alert" style="font-size:13px;"></div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
-                            <button type="button" class="btn btn-danger" id="chatReportConfirmBtn">
-                                Bejelentés elküldése
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
             <div class="modal fade" id="chatModal" tabindex="-1" aria-hidden="true">
                 <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down chat-modal-dialog">
                     <div class="modal-content chat-modal-content">
@@ -699,6 +659,46 @@
                                     </div>
                                 </div>
                             </section>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal fade" id="chatReportModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <span style="color:#ef4444;">&#9873;</span>
+                                Üzenet bejelentése
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezarás"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-2" style="font-size: 13px; color:#94a3b8;">
+                                Ha az üzenetet trágárnak vagy nem odaillőnek érzed, küldd el az adminisztrátoroknak felülvizsgálatra. Az indok megadása ajánlott (max. 500 karakter).
+                            </p>
+                            <div class="mb-3">
+                                <label class="form-label" style="font-size:12px; color:#94a3b8;">Bejelentett üzenet</label>
+                                <div id="chatReportTargetBody" class="chat-report-quote">—</div>
+                                <small id="chatReportTargetMeta" style="display:block; margin-top:4px; color:#64748b; font-size:11px;">—</small>
+                            </div>
+                            <div class="mb-1">
+                                <label for="chatReportReason" class="form-label" style="font-size:12px; color:#cbd5e1;">
+                                    Indok (opcionális)
+                                    <span class="chat-report-counter ms-2">
+                                        <span id="chatReportReasonCount">0</span> / 500
+                                    </span>
+                                </label>
+                                <textarea id="chatReportReason" class="form-control" rows="3" maxlength="500"
+                                    placeholder="Pl. trágár, sértő, spam, fenyegetés..."></textarea>
+                            </div>
+                            <div id="chatReportFeedback" class="alert d-none mt-2 mb-0" role="alert" style="font-size:13px;"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                            <button type="button" class="btn btn-danger" id="chatReportConfirmBtn">
+                                Bejelentés elküldése
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1708,6 +1708,41 @@
     function bindReportModalEvents() {
         const reasonField = globalScope.document.getElementById('chatReportReason');
         const confirmBtn = globalScope.document.getElementById('chatReportConfirmBtn');
+        const reportModalEl = globalScope.document.getElementById('chatReportModal');
+
+        // Stacking-aware z-index bump: ha mar nyitva van egy modal (pl. a chat modal),
+        // a sajat modalt a Bootstrap default z-indexe nem rakja folé. Manualisan bumpoljuk
+        // a sajat z-indexet (es a backdropet is) az osszes nyitott modal fölé.
+        if (reportModalEl) {
+            reportModalEl.addEventListener('show.bs.modal', () => {
+                try {
+                    const openCount = globalScope.document.querySelectorAll('.modal.show').length;
+                    const baseZ = 1060;
+                    const bumpedZ = baseZ + (openCount * 20);
+                    reportModalEl.style.zIndex = String(bumpedZ);
+                    setTimeout(() => {
+                        const backdrops = globalScope.document.querySelectorAll('.modal-backdrop');
+                        if (backdrops.length) {
+                            const lastBackdrop = backdrops[backdrops.length - 1];
+                            lastBackdrop.style.zIndex = String(bumpedZ - 5);
+                        }
+                    }, 0);
+                } catch (_) {}
+            });
+            // Hidden esemenyre tisztitsuk a body 'modal-open' osztalyt — Bootstrap leveszi
+            // ha az osszes modal becsukodott; itt csak a sajat z-indexet visszaresetelni.
+            reportModalEl.addEventListener('hidden.bs.modal', () => {
+                try {
+                    reportModalEl.style.zIndex = '';
+                    if (globalScope.document.querySelector('.modal.show')) {
+                        // Ha van mas modal nyitva (pl. a chat modal mogottunk), Bootstrap
+                        // leveheti a body.modal-open osztalyt — visszarakjuk hogy a scroll
+                        // lock megmaradjon.
+                        globalScope.document.body.classList.add('modal-open');
+                    }
+                } catch (_) {}
+            });
+        }
 
         if (reasonField) {
             reasonField.addEventListener('input', updateReportCounter);

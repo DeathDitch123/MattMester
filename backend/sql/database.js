@@ -282,6 +282,52 @@ async function createTables() {
             INDEX idx_chat_message_reports_reporter (reporter_user_id)
         )`,
 
+        `CREATE TABLE IF NOT EXISTS chat_blocked_words_dynamic (
+            word VARCHAR(255) NOT NULL PRIMARY KEY,
+            added_by_admin_id INT NULL,
+            source_message_id INT NULL,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (added_by_admin_id) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (source_message_id) REFERENCES chat_messages(id) ON DELETE SET NULL,
+            INDEX idx_chat_blocked_words_added_at (added_at)
+        )`,
+
+        // 3-csapas tragarsag auto-ban rendszer. Egy strike akkor keletkezik:
+        //   - 'auto' source: a profanity-filter (soft_mask) maszkolta az uzenetet
+        //   - 'admin_delete' source: az admin torolt egy bejelentett uzenetet
+        // UNIQUE(message_id) megakadalyozza a duplikalast, ha auto + admin egyazon uzenethez.
+        // Strike count alapjan: 1 -> 1 napos ban, 2 -> 10 napos ban, 3+ -> perma ban.
+        // FK NINCS chat_messages-re (ha a uzenetet kesobb kitorli a CASCADE, az audit megmarad).
+        `CREATE TABLE IF NOT EXISTS chat_profanity_strikes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            message_id INT NULL,
+            source ENUM('auto', 'admin_delete') NOT NULL,
+            ban_type ENUM('temp_1d', 'temp_10d', 'perma', 'none') NOT NULL DEFAULT 'none',
+            recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_message (message_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_chat_profanity_strikes_user (user_id, recorded_at)
+        )`,
+
+        // Account ban események + IP szerinti escalation. Minden account-ban (auto vagy admin)
+        // ide naplózódik a banolt user IP-jével együtt; a recordAccountBanEvent fn megnezi:
+        // ha ugyanarrol az IP-rol mar mas user is volt banolva, akkor IP-blokkot is kioszt
+        // (1 napos első alkalommal, perma ha az IP-nek mar van ip_blocks history-ja).
+        `CREATE TABLE IF NOT EXISTS account_ban_events (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            ip_address VARCHAR(45) NULL,
+            source ENUM('profanity_strike', 'admin_manual', 'admin_critical', 'other') NOT NULL DEFAULT 'other',
+            reason VARCHAR(500) NULL,
+            triggered_ip_block BOOLEAN NOT NULL DEFAULT FALSE,
+            ip_block_type ENUM('temp_1d', 'perma', 'none') NOT NULL DEFAULT 'none',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_account_ban_events_ip (ip_address, created_at),
+            INDEX idx_account_ban_events_user (user_id, created_at)
+        )`,
+
         `CREATE TABLE IF NOT EXISTS notifications (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             type VARCHAR(64) NOT NULL,
@@ -540,7 +586,13 @@ async function runMigrations() {
         // pending_deletion_until < NOW().
         ['pending_deletion_until',  'TIMESTAMP NULL DEFAULT NULL'],
         ['deleted_by_admin_id',     'INT NULL DEFAULT NULL'],
-        ['deleted_reason',          'VARCHAR(500) NULL DEFAULT NULL']
+        ['deleted_reason',          'VARCHAR(500) NULL DEFAULT NULL'],
+        // Chat report mute: ha az admin "Engedelyezes" gombra kattint egy bejelenten,
+        // a bejelento(k) 5 oraig nem tudnak ujabb chat uzenetet bejelenteni.
+        ['chat_report_mute_until',  'TIMESTAMP NULL DEFAULT NULL'],
+        // Az utolsó sikeres bejelentkezés IP-je. Az auto IP-ban escalation lekérdezi
+        // ezt amikor admin manuálisan banol egy usert (a user nem feltétlenül online).
+        ['last_login_ip',           'VARCHAR(45) NULL DEFAULT NULL']
     ];
     for (const [colName, colDef] of newColumns) {
         try {

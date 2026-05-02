@@ -365,6 +365,17 @@ initDatabase()
         // Soft-delete purge scheduler (admin-trigger 24h grace utan hard-delete).
         const { startSoftDeletePurgeScheduler } = require('./api/admin/softDeletePurgeJob.js');
         startSoftDeletePurgeScheduler();
+
+        // Dinamikus chat-blocklist (admin altal hozzadott szavak) betoltese DB-bol
+        // a containsBlockedWord() in-memory cachebe. A cache az admin endpoint-bol
+        // (POST /admin/chat/blocklist/add) van bovitve.
+        try {
+            const sqlFns = require('./sql/sql_funtions.js');
+            const loadedCount = await sqlFns.refreshDynamicBlockedWords();
+            console.log(`[Server] Dynamic chat blocklist loaded: ${loadedCount} word(s).`);
+        } catch (err) {
+            console.warn('[Server] Dynamic chat blocklist betoltesi hiba:', err.message);
+        }
         
         server.on('error', (error) => {
             if (error && error.code === 'EADDRINUSE') {

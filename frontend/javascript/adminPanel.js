@@ -3304,6 +3304,36 @@ function connectAdminSocket() {
                     window.MattMesterAdminChatModeration?.refresh?.();
                 }
             });
+            sock.on('admin:chat:blocklist-updated', (payload = {}) => {
+                if (typeof showToast === 'function' && payload?.added) {
+                    showToast(`Chat blocklist: +${payload.added} szó.`, 'info', 'bi-shield-check');
+                }
+            });
+            // 3-csapas trágárság auto-ban: a rendszer automatikusan tiltott egy felhasznalot.
+            sock.on('admin:chat:auto-ban', (payload = {}) => {
+                if (typeof showToast === 'function') {
+                    const tier = payload?.banType === 'perma'
+                        ? 'végleges (perma)'
+                        : payload?.banType === 'temp_10d'
+                            ? '10 napos'
+                            : payload?.banType === 'temp_1d'
+                                ? '1 napos'
+                                : 'auto';
+                    const username = payload?.username || `#${payload?.userId || '?'}`;
+                    showToast(
+                        `Auto-ban: ${escapeHtml(username)} — ${payload?.strikeCount}. csapás (${tier} tiltás).`,
+                        'warning',
+                        'bi-shield-fill-exclamation'
+                    );
+                }
+                // A user-listat is frissitsuk, mert mostantol "tiltott" allapotban van.
+                if (typeof loadAdminUsersList === 'function') {
+                    loadAdminUsersList({ silent: true });
+                }
+                if (state.currentSectionId === 'chats') {
+                    window.MattMesterAdminChatModeration?.refresh?.();
+                }
+            });
 
             // Soft-delete restore broadcast: a tobbi admin tab user-listja + a userDelete
             // varolista is frissuljon. A 'users', 'userDetail', 'userBan', 'userDelete'
@@ -7029,8 +7059,39 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
    19.1) Chat moderáció - admin tokennel + real-time
    ============================================================= */
 window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
-    const STATE = { loading: false, bound: false, pendingAllowMessageId: 0 };
+    const STATE = {
+        loading: false,
+        bound: false,
+        pendingAllowMessageId: 0,
+        pendingBlocklistMessageId: 0,
+        pendingBlocklistBody: ''
+    };
     let allowModalInstance = null;
+    let blocklistModalInstance = null;
+
+    // A wordSplitter normalizalja az uzenetszoveget: kis-nagybetu, nyelvi diakritikák,
+    // irasjelek leveve — a containsBlockedWord() ugyanezt teszi, igy egyezik a matching.
+    function tokenizeBodyToWords(body) {
+        const raw = String(body || '');
+        const normalized = raw
+            .normalize('NFD')
+            .replace(/[̀-ͯ]/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (!normalized) return [];
+        const tokens = normalized.split(' ').filter((w) => w.length >= 3);
+        const seen = new Set();
+        const result = [];
+        for (const t of tokens) {
+            if (!seen.has(t)) {
+                seen.add(t);
+                result.push(t);
+            }
+        }
+        return result;
+    }
 
     function setMessage(type, message) {
         const el = document.getElementById('chatModerationMessage');
@@ -7141,6 +7202,15 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                         <i class="bi bi-lock me-1"></i>Nem engedélyezhető
                     </button>`;
 
+            // 'Tiltott szavakhoz': csak 'report' kind-on (= felhasznaloi bejelentes), ahol az
+            // admin elismerheti hogy a szoveg tenyleg tragar es bekerulhet a blocklist-be.
+            // Auto-flagged uzeneteknel ez fölösleges (mar a hardcoded listan szerepel).
+            const blocklistBtn = kind === 'report'
+                ? `<button type="button" class="btn btn-outline-danger btn-sm" data-chat-action="add-blocklist" data-message-id="${id}" data-body="${escapeHtml(row.body || '')}">
+                        <i class="bi bi-shield-plus me-1"></i>Tiltott szavakhoz
+                    </button>`
+                : '';
+
             const maskedDisplay = isAutoFlagged
                 ? `<div class="text-secondary small mb-1">A résztvevők ezt látják: <span class="font-monospace text-warning">${safeBodyMasked}</span></div>`
                 : '';
@@ -7164,8 +7234,9 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                         ${maskedDisplay}
                         <div>${isAutoFlagged ? 'Eredeti: ' : ''}<span class="text-white">${safeBody}</span></div>
                     </blockquote>
-                    <div class="d-flex justify-content-end gap-2">
+                    <div class="d-flex justify-content-end gap-2 flex-wrap">
                         ${allowBtn}
+                        ${blocklistBtn}
                         <button type="button" class="btn btn-outline-warning btn-sm" data-chat-action="mute" data-user-id="${senderId}">
                             <i class="bi bi-mic-mute me-1"></i>Némítás
                         </button>
@@ -7294,6 +7365,8 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                 } else {
                     setMessage('warning', 'A felhasználó nézet nem érhető el.');
                 }
+            } else if (action === 'add-blocklist') {
+                openBlocklistAdd(messageId, btn.dataset.body || '');
             }
         });
 
@@ -7317,10 +7390,136 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                 }
             });
         }
+
+        // 'Tiltott szavakhoz' modal eventek
+        const blReasonField = document.getElementById('chatBlocklistAddReason');
+        if (blReasonField) blReasonField.addEventListener('input', updateBlocklistAddState);
+
+        const blContainer = document.getElementById('chatBlocklistAddWordsContainer');
+        if (blContainer) blContainer.addEventListener('change', updateBlocklistAddState);
+
+        const blConfirmBtn = document.getElementById('chatBlocklistAddConfirmBtn');
+        if (blConfirmBtn) {
+            blConfirmBtn.addEventListener('click', async () => {
+                if (blConfirmBtn.disabled) return;
+                const reason = String(blReasonField?.value || '').trim().slice(0, 1000);
+                const id = STATE.pendingBlocklistMessageId;
+                const checkedWords = Array.from(
+                    document.querySelectorAll('#chatBlocklistAddWordsContainer input[type="checkbox"]:checked')
+                ).map((cb) => String(cb.value || '').trim()).filter(Boolean);
+
+                if (!id || reason.length < 30 || !checkedWords.length) return;
+
+                blConfirmBtn.disabled = true;
+                const ok = await performAddBlocklist(id, checkedWords, reason);
+                blConfirmBtn.disabled = false;
+
+                if (ok) {
+                    STATE.pendingBlocklistMessageId = 0;
+                    STATE.pendingBlocklistBody = '';
+                    getBlocklistModalInstance()?.hide();
+                }
+            });
+        }
+    }
+
+    function getBlocklistModalInstance() {
+        if (blocklistModalInstance) return blocklistModalInstance;
+        const el = document.getElementById('chatBlocklistAddModal');
+        if (!el || typeof bootstrap === 'undefined') return null;
+        blocklistModalInstance = bootstrap.Modal.getOrCreateInstance(el);
+        return blocklistModalInstance;
+    }
+
+    function updateBlocklistAddState() {
+        const reasonField = document.getElementById('chatBlocklistAddReason');
+        const counter = document.getElementById('chatBlocklistAddReasonCount');
+        const confirmBtn = document.getElementById('chatBlocklistAddConfirmBtn');
+        if (!reasonField || !counter || !confirmBtn) return;
+
+        const reasonLen = reasonField.value.trim().length;
+        counter.textContent = String(reasonLen);
+        const reasonValid = reasonLen >= 30 && reasonLen <= 1000;
+        counter.parentElement?.classList.toggle('valid', reasonValid);
+
+        const checked = document.querySelectorAll('#chatBlocklistAddWordsContainer input[type="checkbox"]:checked').length;
+        confirmBtn.disabled = !(reasonValid && checked > 0);
+    }
+
+    function openBlocklistAdd(messageId, body) {
+        const id = Number(messageId) || 0;
+        if (!id) return false;
+        STATE.pendingBlocklistMessageId = id;
+        STATE.pendingBlocklistBody = String(body || '');
+
+        const sourceIdEl = document.getElementById('chatBlocklistAddSourceMessageId');
+        if (sourceIdEl) sourceIdEl.textContent = `#${id}`;
+        const sourceBodyEl = document.getElementById('chatBlocklistAddSourceBody');
+        if (sourceBodyEl) sourceBodyEl.textContent = body || '—';
+
+        const container = document.getElementById('chatBlocklistAddWordsContainer');
+        const words = tokenizeBodyToWords(body);
+        if (container) {
+            if (!words.length) {
+                container.innerHTML = '<span class="text-secondary small">Nincs választható szó (mind 3-nál rövidebb).</span>';
+            } else {
+                container.innerHTML = words.map((w, idx) => {
+                    const safe = escapeHtml(w);
+                    return `
+                        <div class="form-check form-check-inline">
+                            <input class="form-check-input" type="checkbox" id="chatBlocklistWordCb_${idx}" value="${safe}">
+                            <label class="form-check-label font-monospace" for="chatBlocklistWordCb_${idx}">${safe}</label>
+                        </div>
+                    `;
+                }).join('');
+            }
+        }
+
+        const reasonField = document.getElementById('chatBlocklistAddReason');
+        if (reasonField) reasonField.value = '';
+        updateBlocklistAddState();
+
+        const modal = getBlocklistModalInstance();
+        if (!modal) {
+            setMessage('danger', 'A modal nem érhető el. Frissítsd az oldalt.');
+            return false;
+        }
+        modal.show();
+        return true;
+    }
+
+    async function performAddBlocklist(messageId, words, reason) {
+        const id = Number(messageId) || 0;
+        if (!id || !Array.isArray(words) || !words.length) return false;
+        let ok = false;
+        try {
+            setMessage(null, '');
+            const response = await fetch('/api/admin/chat/blocklist/add', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ words, sourceMessageId: id, reason })
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.status === 401 && handleAdminAuthError(result?.code || '')) return false;
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'A hozzáadás sikertelen.');
+            }
+            ok = true;
+            setMessage('success', result.message || 'Szavak hozzáadva.');
+            if (typeof showToast === 'function') {
+                showToast('Tiltott szavak hozzáadva.', 'success', 'bi-shield-check');
+            }
+            await refresh();
+        } catch (error) {
+            console.error('admin chat blocklist add hiba:', error);
+            setMessage('danger', error.message || 'A hozzáadás sikertelen.');
+        }
+        return ok;
     }
 
     document.addEventListener('DOMContentLoaded', () => runSafely('admin chat-moderation bind', bind));
-    return { refresh, openAllow };
+    return { refresh, openAllow, openBlocklistAdd };
 })();
 
 /* =============================================================

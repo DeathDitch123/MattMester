@@ -134,6 +134,14 @@ router.post('/login', authLoginLimiter, async (request, response) => {
 
         await saveSessionAsync(request, 'Hiba a munkamenet mentésekor.');
 
+        // Az utolso login IP-t bemashojuk a users tablaba — az auto IP-ban escalation
+        // rendszer ezt hasznalja, ha admin offline usert banol.
+        try {
+            await sql.setUserLastLoginIp(user.id, ipAddress);
+        } catch (ipErr) {
+            console.warn('setUserLastLoginIp hiba (login):', ipErr.message);
+        }
+
         await logAuthenticatedAction(request, user.id, {
             eventType: 'login',
             eventCategory: 'auth',

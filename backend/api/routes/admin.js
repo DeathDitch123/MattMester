@@ -536,11 +536,26 @@ router.post(
 
             const result = await sql.dismissReportsForMessage(messageId, adminUserId, request.adminReason);
 
+            // Spam-protection: a bejelentoke(t) 5 oraig kitiltjuk az ujabb bejelentesektol.
+            // (Ha az admin "Engedelyezes"-t hasznalt = a bejelentes nem volt valid.)
+            let muteResult = { affected: 0, until: null };
+            if (Array.isArray(result.reporterUserIds) && result.reporterUserIds.length) {
+                try {
+                    muteResult = await sql.setChatReportMuteForUsers(result.reporterUserIds, sql.CHAT_REPORT_MUTE_HOURS);
+                } catch (muteErr) {
+                    console.warn('chat allow: report mute set hiba:', muteErr.message);
+                }
+            }
+
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_VIEW_ANY;
             response.locals.adminAudit.severity = 'info';
             response.locals.adminAudit.targetType = 'chat_message';
             response.locals.adminAudit.targetId = messageId;
-            response.locals.adminAudit.afterState = { reportsDismissed: result.dismissedReports };
+            response.locals.adminAudit.afterState = {
+                reportsDismissed: result.dismissedReports,
+                mutedReporterCount: muteResult.affected,
+                muteUntil: muteResult.until
+            };
             response.locals.adminAudit.success = true;
 
             try {
@@ -550,6 +565,7 @@ router.post(
                         messageId,
                         action: 'allowed',
                         reviewedByUserId: adminUserId,
+                        mutedReporterCount: muteResult.affected,
                         at: new Date().toISOString()
                     });
                 }
@@ -557,10 +573,33 @@ router.post(
                 console.warn('chat allow: admin broadcast hiba:', broadcastErr.message);
             }
 
+            // Az erintett bejelentoknek elkuldjuk a notification-szeru push-t is, hogy
+            // ha eppen nyitva van a chat, kapjanak feedbacket.
+            try {
+                const socketHub = request.app?.locals?.socketHub;
+                if (socketHub && typeof socketHub.emitToUser === 'function' && Array.isArray(result.reporterUserIds)) {
+                    for (const uid of result.reporterUserIds) {
+                        socketHub.emitToUser(uid, 'chat:report:muted', {
+                            messageId,
+                            muteUntil: muteResult.until,
+                            hours: sql.CHAT_REPORT_MUTE_HOURS
+                        });
+                    }
+                }
+            } catch (pushErr) {
+                console.warn('chat allow: reporter push hiba:', pushErr.message);
+            }
+
             payload = {
                 success: true,
-                message: `${result.dismissedReports} bejelentes lezarva (allowed). A maszkolas (ha van) erintetlen marad.`,
-                data: { messageId, action: 'allowed', dismissedReports: result.dismissedReports }
+                message: `${result.dismissedReports} bejelentes lezarva (allowed). A maszkolas (ha van) erintetlen marad. ${muteResult.affected} bejelento ${sql.CHAT_REPORT_MUTE_HOURS} oras report-mute-ot kapott.`,
+                data: {
+                    messageId,
+                    action: 'allowed',
+                    dismissedReports: result.dismissedReports,
+                    mutedReporterCount: muteResult.affected,
+                    muteUntil: muteResult.until
+                }
             };
         } catch (error) {
             if (statusCode === 200) statusCode = 500;
@@ -601,6 +640,62 @@ router.post(
 
             const result = await sql.deleteChatMessageById(messageId, adminUserId, request.adminReason);
 
+            // 3-csapas auto-ban: az admin altal torolt uzenet kuldoje strike-ot kap.
+            // UNIQUE(message_id) miatt ha mar volt strike (auto-mask), nem duplikalja.
+            // A torles erdeklodo eset: a uzenet NEM volt auto-flagged, de admin tragarnak
+            // talalta es torolte → strike + esetleges ban.
+            let strikeOutcome = null;
+            let ipEscalationOutcome = null;
+            try {
+                if (result?.senderId) {
+                    strikeOutcome = await sql.recordProfanityStrikeAndMaybeBan(
+                        result.senderId,
+                        messageId,
+                        'admin_delete'
+                    );
+                    if (strikeOutcome?.banApplied) {
+                        // Account-ban event + esetleges IP-ban escalation. A user IP-jet
+                        // a users.last_login_ip-bol vesszuk (offline user-t is bantudunk).
+                        try {
+                            const senderIp = await sql.getUserLastLoginIp(result.senderId);
+                            ipEscalationOutcome = await sql.recordAccountBanEvent({
+                                userId: result.senderId,
+                                ipAddress: senderIp,
+                                source: 'profanity_strike',
+                                reason: strikeOutcome.banReason
+                            });
+                        } catch (escErr) {
+                            console.warn('chat delete: account-ban event hiba:', escErr.message);
+                        }
+
+                        const adminSocketHub = request.app?.locals?.adminSocketHub;
+                        if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                            adminSocketHub.broadcastAdmin('admin:chat:auto-ban', {
+                                userId: result.senderId,
+                                strikeCount: strikeOutcome.strikeCount,
+                                banType: strikeOutcome.banType,
+                                bannedUntil: strikeOutcome.bannedUntil,
+                                reason: strikeOutcome.banReason,
+                                source: 'admin_delete',
+                                triggeredByAdminId: adminUserId,
+                                ipBlock: ipEscalationOutcome && ipEscalationOutcome.triggeredIpBlock ? {
+                                    ipAddress: ipEscalationOutcome.ipAddress,
+                                    blockType: ipEscalationOutcome.blockType,
+                                    blockedUntil: ipEscalationOutcome.blockedUntil
+                                } : null,
+                                at: new Date().toISOString()
+                            });
+                        }
+                        const socketHub = request.app?.locals?.socketHub;
+                        if (socketHub && typeof socketHub.disconnectUser === 'function') {
+                            await socketHub.disconnectUser(result.senderId, 'profanity_strike_ban');
+                        }
+                    }
+                }
+            } catch (strikeErr) {
+                console.warn('chat delete: profanity strike hiba:', strikeErr.message);
+            }
+
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE;
             response.locals.adminAudit.severity = 'critical';
             response.locals.adminAudit.targetType = 'chat_message';
@@ -636,10 +731,15 @@ router.post(
                 console.warn('chat delete: user push hiba:', pushErr.message);
             }
 
+            const strikeMsgPart = strikeOutcome?.banApplied
+                ? ` Auto-ban alkalmazva: ${strikeOutcome.strikeCount}. csapas (${strikeOutcome.banType}).`
+                : (strikeOutcome?.strikeRecorded
+                    ? ` Strike rogzitve: ${strikeOutcome.strikeCount}. csapas.`
+                    : '');
             payload = {
                 success: true,
-                message: 'Az uzenet veglegesen torolve.',
-                data: { messageId, action: 'deleted' }
+                message: `Az uzenet veglegesen torolve.${strikeMsgPart}`,
+                data: { messageId, action: 'deleted', strike: strikeOutcome || null }
             };
         } catch (error) {
             if (statusCode === 200) statusCode = 500;
@@ -651,6 +751,75 @@ router.post(
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE;
             response.locals.adminAudit.success = false;
             response.locals.adminAudit.errorCode = 'CHAT_DELETE_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// Admin: szavakat hozzaad a dinamikus chat blocklist-hoz. A request body egy `words`
+// tomb (vagy egyetlen szo) — opcionalisan egy `sourceMessageId` (a forras-uzenet id-je).
+// reason kotelezo (chat.delete kritikus action min. 30 char).
+router.post(
+    '/chat/blocklist/add',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a blocklist bovites soran.' };
+        try {
+            const adminUserId = Number(request.adminAuth?.userId) || 0;
+            const wordsInput = request.body?.words;
+            const sourceMessageId = Number(request.body?.sourceMessageId) || null;
+
+            const wordsArray = Array.isArray(wordsInput)
+                ? wordsInput
+                : (typeof wordsInput === 'string' ? [wordsInput] : []);
+
+            if (!wordsArray.length) {
+                statusCode = 400;
+                throw new Error('Legalabb egy szot meg kell adni.');
+            }
+
+            const result = await sql.addDynamicBlockedWords(wordsArray, adminUserId, sourceMessageId);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE;
+            response.locals.adminAudit.severity = 'critical';
+            response.locals.adminAudit.targetType = 'chat_blocklist';
+            response.locals.adminAudit.targetId = sourceMessageId;
+            response.locals.adminAudit.afterState = { added: result.added, words: result.words };
+            response.locals.adminAudit.success = true;
+
+            // Live broadcast a tobbi admin tabnak — ha nyitva van a chat moderalas
+            // panel, jelezhetjuk hogy a blocklist bovult.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:chat:blocklist-updated', {
+                        added: result.added,
+                        skipped: result.skipped,
+                        addedByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('chat blocklist add: broadcast hiba:', broadcastErr.message);
+            }
+
+            payload = {
+                success: true,
+                message: `${result.added} szo hozzaadva (${result.skipped} mar letezett vagy kihagyva).`,
+                data: result
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'CHAT_BLOCKLIST_ADD_FAILED';
         }
         return response.status(statusCode).json(payload);
     }
@@ -1664,6 +1833,22 @@ router.post(
 
             await sql.banUser(userId, reason, bannedUntil);
 
+            // Account-ban event + esetleges IP-ban escalation. Ha a banolt user IP-jén
+            // mar volt korabbi banolt user, ez automatikusan IP-blokkot is alkalmaz
+            // (1 napos elsore, perma ha az IP-nek mar van blokk-tortenete).
+            let ipEscalationOutcome = null;
+            try {
+                const targetIp = await sql.getUserLastLoginIp(userId);
+                ipEscalationOutcome = await sql.recordAccountBanEvent({
+                    userId,
+                    ipAddress: targetIp,
+                    source: banType === 'Végleges' ? 'admin_critical' : 'admin_manual',
+                    reason
+                });
+            } catch (escErr) {
+                console.warn('ban: account-ban event hiba:', escErr.message);
+            }
+
             // HTTP session(ok) megsemmisitese a session store-bol — kulonben a banned
             // user a meglevo cookie-javal tovabb tudna hasznalni az oldalt
             // (isAuthenticated middleware csak session.userId-t nez, nem a DB is_banned-et).
@@ -1750,7 +1935,18 @@ router.post(
                 console.warn('ban: target user_logs insert hiba:', logErr.message);
             }
 
-            payload = { success: true, message: 'A felhasználó sikeresen tiltva lett.' };
+            const ipBlockMsgPart = ipEscalationOutcome && ipEscalationOutcome.triggeredIpBlock
+                ? ` Az IP címen (${ipEscalationOutcome.ipAddress}) korábbi ban-history miatt automatikus IP-blokk is alkalmazva (${ipEscalationOutcome.blockType === 'perma' ? 'végleges' : '1 napos'}).`
+                : '';
+            payload = {
+                success: true,
+                message: `A felhasználó sikeresen tiltva lett.${ipBlockMsgPart}`,
+                ipEscalation: ipEscalationOutcome && ipEscalationOutcome.triggeredIpBlock ? {
+                    ipAddress: ipEscalationOutcome.ipAddress,
+                    blockType: ipEscalationOutcome.blockType,
+                    blockedUntil: ipEscalationOutcome.blockedUntil
+                } : null
+            };
         } catch (error) {
             if (statusCode === 200) statusCode = 500;
             payload = { success: false, message: error.message || 'Szerverhiba.' };
