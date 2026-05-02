@@ -489,6 +489,67 @@ async function markAllAlertsDismissed(dismissedByUserId) {
     }
 }
 
+// Bejelentkezesi naplo lekerdezese az admin Bejelentkezesek oldalhoz.
+// SQL-szintu szurok: status (success|failed|all), date range, IP, username (LIKE).
+// A 'location' szurest a hivó (admin endpoint) post-fetch vegzi a classifyIp-vel.
+async function listAdminLoginHistory(options = {}) {
+    const {
+        limit = 100,
+        sinceDate = null,
+        untilDate = null,
+        ipAddress = null,
+        username = null,
+        status = 'all'
+    } = options || {};
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const conditions = [];
+    const params = [];
+
+    if (status === 'success') {
+        conditions.push("ul.event_type = 'login'");
+    } else if (status === 'failed') {
+        conditions.push("ul.event_type = 'login_failed'");
+    } else {
+        conditions.push("ul.event_type IN ('login', 'login_failed')");
+    }
+    if (sinceDate) {
+        conditions.push('ul.occurred_at >= ?');
+        params.push(sinceDate instanceof Date ? sinceDate : new Date(sinceDate));
+    }
+    if (untilDate) {
+        conditions.push('ul.occurred_at <= ?');
+        params.push(untilDate instanceof Date ? untilDate : new Date(untilDate));
+    }
+    if (ipAddress && typeof ipAddress === 'string') {
+        conditions.push('ul.ip_address = ?');
+        params.push(ipAddress.slice(0, 45));
+    }
+    if (username && typeof username === 'string') {
+        conditions.push('u.username LIKE ?');
+        params.push(`%${username.slice(0, 50)}%`);
+    }
+    params.push(safeLimit);
+
+    try {
+        const pool = getPool();
+        const [rows] = await pool.query(
+            `SELECT ul.id, ul.user_id, u.username, ul.event_type, ul.severity, ul.success,
+                    ul.ip_address, ul.user_agent, ul.message, ul.metadata, ul.occurred_at
+             FROM user_logs ul
+             LEFT JOIN users u ON u.id = ul.user_id
+             WHERE ${conditions.join(' AND ')}
+             ORDER BY ul.occurred_at DESC
+             LIMIT ?`,
+            params
+        );
+        return rows || [];
+    } catch (error) {
+        console.error('listAdminLoginHistory hiba:', error.message);
+        throw new Error('Bejelentkezesi naplo lekerdezesi hiba.');
+    }
+}
+
 // Visszaallit egy elrejtett riasztast — dismissed_at + dismissed_by_user_id NULL-ra.
 // Idempotens: ha mar nem elrejtett, 0 affectedRows.
 async function restoreAlert(alertId) {
@@ -960,6 +1021,7 @@ module.exports = {
     markAlertDismissed,
     markAllAlertsDismissed,
     restoreAlert,
+    listAdminLoginHistory,
     // ip blocks
     upsertIpBlock,
     getActiveIpBlock,

@@ -2498,6 +2498,8 @@ const SECURITY_EVENT_LABELS = {
     profile_delete: { label: 'Profil törölve', icon: 'user-x', category: 'security' },
     login_failed: { label: 'Sikertelen bejelentkezés', icon: 'shield-alert', category: 'security' },
     current_password_verify_failed: { label: 'Hibás jelszó ellenőrzés', icon: 'shield-alert', category: 'security' },
+    banned: { label: 'Admin tiltás alkalmazva', icon: 'shield-x', category: 'security' },
+    unbanned: { label: 'Admin tiltás feloldva', icon: 'shield-check', category: 'security' },
     friend_request_sent: { label: 'Barát kérelem küldve', icon: 'user-plus', category: 'social' },
     friend_request_accepted: { label: 'Barát kérelem elfogadva', icon: 'user-check', category: 'social' },
     friend_request_rejected: { label: 'Barát kérelem elutasítva', icon: 'user-minus', category: 'social' },

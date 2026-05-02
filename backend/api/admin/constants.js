@@ -79,7 +79,9 @@ const ADMIN_PERMISSIONS = Object.freeze({
     ALERTS_DISMISS_ALL: 'alerts.dismiss_all',
     ALERTS_RESTORE:     'alerts.restore',
     IP_BLOCK_CREATE:    'ip_blocks.create',
-    IP_BLOCK_REMOVE:    'ip_blocks.remove'
+    IP_BLOCK_REMOVE:    'ip_blocks.remove',
+    SECURITY_LOGINS_VIEW:   'security.logins.view',
+    SECURITY_LOGINS_EXPORT: 'security.logins.export'
 });
 
 const SUPER_ONLY_PERMISSIONS = Object.freeze(new Set([

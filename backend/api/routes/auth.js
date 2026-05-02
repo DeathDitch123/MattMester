@@ -25,6 +25,7 @@ const {
     saveSessionAsync,
     destroySessionAsync
 } = require('./_shared.js');
+const networkClassifier = require('../admin/networkClassifier.js');
 
 const router = express.Router();
 
@@ -74,6 +75,27 @@ router.post('/login', authLoginLimiter, async (request, response) => {
                 success: false,
                 message: 'Sikertelen bejelentkezési kísérlet (hibás jelszó).'
             });
+            // Live broadcast az admin Bejelentkezesek oldal feedjebe.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    const failedIp = getRequestIpAddress(request);
+                    const failedUa = request.headers['user-agent'] || null;
+                    adminSocketHub.broadcastAdmin('admin:security:login', {
+                        userId: user.id,
+                        username: user.username,
+                        eventType: 'login_failed',
+                        success: false,
+                        ip: failedIp,
+                        userAgent: failedUa,
+                        location: networkClassifier.classifyIp(failedIp),
+                        device: networkClassifier.parseUserAgent(failedUa),
+                        occurredAt: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('login_failed broadcast hiba:', broadcastErr.message);
+            }
             throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
         }
 
@@ -111,6 +133,26 @@ router.post('/login', authLoginLimiter, async (request, response) => {
             message: 'Sikeres bejelentkezés.',
             metadata: { remember: Boolean(remember) }
         });
+
+        // Live broadcast az admin Bejelentkezesek oldal feedjebe.
+        try {
+            const adminSocketHub = request.app?.locals?.adminSocketHub;
+            if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                adminSocketHub.broadcastAdmin('admin:security:login', {
+                    userId: user.id,
+                    username: user.username,
+                    eventType: 'login',
+                    success: true,
+                    ip: ipAddress,
+                    userAgent,
+                    location: networkClassifier.classifyIp(ipAddress),
+                    device: networkClassifier.parseUserAgent(userAgent),
+                    occurredAt: new Date().toISOString()
+                });
+            }
+        } catch (broadcastErr) {
+            console.warn('login broadcast hiba:', broadcastErr.message);
+        }
 
         payload = {
             success: true,

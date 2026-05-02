@@ -413,6 +413,16 @@ const state = {
         includeDismissed: false
     },
     auditFilterIntent: null,      // alert -> audit naviglas: { ip, userId, sinceDate, untilDate }
+    liveLogins: [],               // admin:security:login események + REST initial fetch (legújabb elöl)
+    loginsLoaded: false,          // GET /admin/security/logins legalabb egyszer lefutott
+    loginsFilter: {               // Bejelentkezesek oldal szuro state
+        username: '',
+        status: 'all',            // 'all' | 'success' | 'failed'
+        ipAddress: '',
+        country: '',              // '' = mind; ISO orszagkod (pl. 'HU', 'US') — geoip-lite altal felismert orszagok
+        sinceDate: '',
+        untilDate: ''
+    },
 
     // Felhasználók szekció (Lista) - REST + szűrés + lazy loading
     users: {
@@ -2062,24 +2072,78 @@ const SECTIONS = {
     `,
 
     /* ---------- Naplók > Bejelentkezések ---------- */
-    security: () => `
+    security: () => {
+        const list = state.loginsLoaded ? state.liveLogins : [];
+        const f = state.loginsFilter || {};
+        const subtitle = state.loginsLoaded
+            ? `${list.length} bejelentkezési bejegyzés`
+            : 'Sikeres és sikertelen bejelentkezési kísérletek';
+        // Dinamikus orszag-lista a mar betoltott sorokbol — egyedi, abc-rendezve.
+        // Csak az ISO kod kerul a value-ba, a label is a kod (geoip-lite csak ezt adja).
+        const countriesSet = new Set();
+        for (const l of list) {
+            const c = l.location?.country;
+            if (c) countriesSet.add(c);
+        }
+        const countries = [...countriesSet].sort();
+        const tableRows = list.map(l => [
+            `<span class="fw-semibold text-white">${escapeHtml(l.username || '—')}</span>`,
+            `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${escapeHtml(l.ip || '—')}</span>`,
+            `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.location?.label || '—')}</span>`,
+            `<span class="text-secondary"><i class="bi ${l.device?.icon || 'bi-question-circle'} me-1"></i>${escapeHtml(l.device?.display || '—')}</span>`,
+            `<span class="text-secondary" title="${escapeHtml(l.occurredAt || '')}">${escapeHtml(formatRelative(l.occurredAt))}</span>`,
+            riskPill(l.risk || 'low')
+        ]);
+        return `
         ${h.header({
-        icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
-        subtitle: 'Sikeres és sikertelen bejelentkezési kísérletek',
-        actions: [{ label: 'Napló export', icon: 'bi-download', size: 'sm' }]
-    })}
-        ${h.table({
-        headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
-        rows: SAMPLE.logins.map(l => [
-            `<span class="fw-semibold text-white">${l.user}</span>`,
-            `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${l.ip}</span>`,
-            `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${l.location}</span>`,
-            `<span class="text-secondary"><i class="bi ${l.deviceIcon} me-1"></i>${l.device}</span>`,
-            `<span class="text-secondary">${l.time}</span>`,
-            riskPill(l.risk)
-        ])
-    })}
-    `,
+            icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
+            subtitle,
+            actions: [
+                { label: 'Napló export', icon: 'bi-download', size: 'sm', onclick: 'exportLoginsCsv()' }
+            ]
+        })}
+
+        <div class="alerts-filter-bar">
+            <input id="loginsFilterUsername" type="text" class="form-control form-control-sm"
+                   placeholder="Felhasználónév..." value="${escapeHtml(f.username || '')}"
+                   onchange="onLoginsFilterChange()">
+            <select id="loginsFilterStatus" class="form-select form-select-sm" onchange="onLoginsFilterChange()">
+                <option value="all"     ${f.status === 'all' ? 'selected' : ''}>Minden státusz</option>
+                <option value="success" ${f.status === 'success' ? 'selected' : ''}>Sikeres</option>
+                <option value="failed"  ${f.status === 'failed' ? 'selected' : ''}>Sikertelen</option>
+            </select>
+            <input id="loginsFilterIp" type="text" class="form-control form-control-sm"
+                   placeholder="IP cím..." value="${escapeHtml(f.ipAddress || '')}"
+                   onchange="onLoginsFilterChange()">
+            <select id="loginsFilterCountry" class="form-select form-select-sm" onchange="onLoginsFilterChange()"
+                    title="${countries.length === 0 ? 'Csak akkor jelennek meg orszagok, ha mar voltak publikus IP-rol bejelentkezesek' : ''}">
+                <option value="" ${!f.country ? 'selected' : ''}>Minden ország (lokálisak is)</option>
+                ${countries.map((c) => `
+                    <option value="${escapeHtml(c)}" ${f.country === c ? 'selected' : ''}>${escapeHtml(c)}</option>
+                `).join('')}
+                ${countries.length === 0 ? '<option disabled>— még nincs publikus IP-s bejelentkezés —</option>' : ''}
+            </select>
+            <input id="loginsFilterSince" type="datetime-local" class="form-control form-control-sm"
+                   value="${escapeHtml(f.sinceDate || '')}" onchange="onLoginsFilterChange()" title="Dátum-tól">
+            <input id="loginsFilterUntil" type="datetime-local" class="form-control form-control-sm"
+                   value="${escapeHtml(f.untilDate || '')}" onchange="onLoginsFilterChange()" title="Dátum-ig">
+            <button type="button" class="btn btn-outline-light btn-sm" onclick="resetLoginsFilter()">
+                <i class="bi bi-x"></i> Szűrők törlése
+            </button>
+        </div>
+
+        ${list.length === 0 && state.loginsLoaded
+            ? `<div class="content-card text-center py-5">
+                  <i class="bi bi-shield-check display-6 text-secondary mb-2"></i>
+                  <div class="text-secondary">Nincs bejelentkezési bejegyzés a megadott szűrőkre.</div>
+               </div>`
+            : h.table({
+                headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
+                rows: tableRows
+            })
+        }
+    `;
+    },
 
     /* ---------- Naplók > Audit napló ---------- */
     auditLog: () => {
@@ -2657,6 +2721,11 @@ function showSection(sectionId, event, options = {}) {
         // mar friss adatuk van — uj fetch infinit loopot okozna.
         loadAlerts();
     }
+    if (sectionId === 'security' && !silent) {
+        // Bejelentkezesek: auto-load nem-silent navigation-on. (Silent re-render = socket
+        // event vagy fetch-after callback, nem trigger-elhet ujabb fetch-et.)
+        loadLogins();
+    }
 
     if (window.innerWidth < 992) {
         const sidebar = document.getElementById('sidebar');
@@ -3129,6 +3198,30 @@ function connectAdminSocket() {
                 );
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
+                }
+            });
+
+            // Bejelentkezesi feed real-time push (login + login_failed event-ek).
+            // A backend a payload-ban mar `location` (geoip + kategoria) es `device` mezovel
+            // kuldi az enriched adatot — a frontendnek nincs sajat geoIP DB-je.
+            sock.on('admin:security:login', (payload = {}) => {
+                const enriched = {
+                    id: payload.id || null,
+                    userId: payload.userId || null,
+                    username: payload.username || '—',
+                    eventType: payload.eventType || 'login',
+                    success: payload.success === true,
+                    ip: payload.ip || null,
+                    userAgent: payload.userAgent || null,
+                    device: payload.device || parseUserAgentClient(payload.userAgent),
+                    location: payload.location || classifyIpClient(payload.ip),
+                    risk: payload.eventType === 'login_failed' ? 'high' : 'low',
+                    occurredAt: payload.occurredAt || new Date().toISOString()
+                };
+                state.liveLogins.unshift(enriched);
+                if (state.liveLogins.length > 200) state.liveLogins.length = 200;
+                if (state.currentSectionId === 'security') {
+                    showSection('security', null, { silent: true });
                 }
             });
 
@@ -4132,6 +4225,150 @@ async function restoreOneAlert(alertId) {
         } catch (err) {
             console.error('restoreOneAlert hiba:', err);
             showToast('Hálózati hiba a visszaállításkor.', 'danger');
+        }
+    });
+}
+
+/* =============================================================
+   Bejelentkezesek (security) oldal: kliens-szintu classifier-ek + handler-ek
+   ============================================================= */
+
+// A backend networkClassifier.js mini-masolata frontend-szintre. A socket broadcast
+// payload-ja nem tartalmazza az enrichment mezoket, ezert kliens-szinten szamoljuk.
+function classifyIpClient(ip) {
+    if (!ip || ip === 'ismeretlen') return { category: 'unknown', label: '—' };
+    const lower = String(ip).toLowerCase().trim();
+    if (lower === '127.0.0.1' || lower === '::1' || lower === '::ffff:127.0.0.1' ||
+        lower.startsWith('127.') || lower === 'localhost') {
+        return { category: 'loopback', label: 'Localhost' };
+    }
+    if (/^169\.254\./.test(lower)) return { category: 'link-local', label: 'Link-local (APIPA)' };
+    if (/^10\./.test(lower)) return { category: 'private', label: 'Belső hálózat (10.x)' };
+    if (/^192\.168\./.test(lower)) return { category: 'private', label: 'Belső hálózat (LAN)' };
+    if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)) {
+        if (/^172\.17\./.test(lower)) return { category: 'docker', label: 'Docker hálózat' };
+        return { category: 'private', label: 'Belső hálózat (172.x)' };
+    }
+    if (/^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./.test(lower)) {
+        return { category: 'cgnat', label: 'Mobilhálózat (CGNAT)' };
+    }
+    if (/^fe[89ab][0-9a-f]:/i.test(lower)) return { category: 'link-local', label: 'IPv6 link-local' };
+    if (/^f[cd][0-9a-f]{2}:/i.test(lower)) return { category: 'private', label: 'Belső IPv6' };
+    if (lower.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(lower)) {
+        return { category: 'public', label: 'Külső IP' };
+    }
+    return { category: 'unknown', label: '—' };
+}
+
+function parseUserAgentClient(ua) {
+    if (!ua) return { browser: '—', os: '—', display: '—', icon: 'bi-question-circle' };
+    const u = String(ua);
+    let browser = 'Egyéb', icon = 'bi-globe';
+    if (/Edg\//i.test(u)) { browser = 'Edge'; icon = 'bi-browser-edge'; }
+    else if (/OPR\/|Opera/i.test(u)) { browser = 'Opera'; icon = 'bi-globe'; }
+    else if (/Chrome\//i.test(u)) { browser = 'Chrome'; icon = 'bi-browser-chrome'; }
+    else if (/Firefox\//i.test(u)) { browser = 'Firefox'; icon = 'bi-browser-firefox'; }
+    else if (/Safari\//i.test(u) && !/Chrome|Edg|OPR/i.test(u)) { browser = 'Safari'; icon = 'bi-browser-safari'; }
+    let os = 'Egyéb';
+    if (/Windows NT/i.test(u)) os = 'Windows';
+    else if (/Android/i.test(u)) os = 'Android';
+    else if (/iPhone|iPad|iOS/i.test(u)) os = 'iOS';
+    else if (/Mac OS X/i.test(u)) os = 'macOS';
+    else if (/Linux/i.test(u)) os = 'Linux';
+    return { browser, os, display: `${browser} / ${os}`, icon };
+}
+
+async function loadLogins() {
+    return runSafelyAsync('loadLogins', async () => {
+        if (!state.adminToken) return;
+        const f = state.loginsFilter || {};
+        const params = new URLSearchParams();
+        params.set('limit', '200');
+        if (f.username) params.set('username', f.username);
+        if (f.status && f.status !== 'all') params.set('status', f.status);
+        if (f.ipAddress) params.set('ip', f.ipAddress);
+        if (f.country) params.set('country', f.country);
+        if (f.sinceDate) params.set('since', new Date(f.sinceDate).toISOString());
+        if (f.untilDate) params.set('until', new Date(f.untilDate).toISOString());
+        try {
+            const res = await fetch(`/api/admin/security/logins?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ Accept: 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                state.liveLogins = Array.isArray(data.data) ? data.data : [];
+                state.loginsLoaded = true;
+                if (state.currentSectionId === 'security') {
+                    showSection('security', null, { silent: true });
+                }
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a bejelentkezések betöltésekor.', 'danger');
+            }
+        } catch (err) {
+            console.error('loadLogins hiba:', err);
+            showToast('Hálózati hiba a bejelentkezések betöltésekor.', 'danger');
+        }
+    });
+}
+
+function onLoginsFilterChange() {
+    state.loginsFilter = {
+        username: (document.getElementById('loginsFilterUsername')?.value || '').trim(),
+        status: document.getElementById('loginsFilterStatus')?.value || 'all',
+        ipAddress: (document.getElementById('loginsFilterIp')?.value || '').trim(),
+        country: document.getElementById('loginsFilterCountry')?.value || '',
+        sinceDate: document.getElementById('loginsFilterSince')?.value || '',
+        untilDate: document.getElementById('loginsFilterUntil')?.value || ''
+    };
+    loadLogins();
+}
+
+function resetLoginsFilter() {
+    state.loginsFilter = { username: '', status: 'all', ipAddress: '', country: '', sinceDate: '', untilDate: '' };
+    loadLogins();
+}
+
+function exportLoginsCsv() {
+    const f = state.loginsFilter || {};
+    const params = new URLSearchParams();
+    params.set('limit', '500');
+    if (f.username) params.set('username', f.username);
+    if (f.status && f.status !== 'all') params.set('status', f.status);
+    if (f.ipAddress) params.set('ip', f.ipAddress);
+    if (f.location) params.set('location', f.location);
+    if (f.sinceDate) params.set('since', new Date(f.sinceDate).toISOString());
+    if (f.untilDate) params.set('until', new Date(f.untilDate).toISOString());
+
+    // Bearer admin token kell — fetch + Blob download (window.open nem visz headert).
+    runSafelyAsync('exportLoginsCsv', async () => {
+        try {
+            const res = await fetch(`/api/admin/security/logins.csv?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ Accept: 'text/csv' })
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || `CSV export hiba (HTTP ${res.status}).`, 'danger');
+                return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `bejelentkezesek-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('CSV export elkészült.', 'success', 'bi-download');
+        } catch (err) {
+            console.error('exportLoginsCsv hiba:', err);
+            showToast('Hálózati hiba a CSV exportnál.', 'danger');
         }
     });
 }
