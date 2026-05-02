@@ -5,11 +5,34 @@ function isAdmin(request, response, next) {
     return response.status(403).json({ message: 'Nincs jogosultságod ehhez a művelethez.' });
 }
 
-function isAuthenticated(request, response, next) {
-    if (request.session && request.session.userId) {
-        return next();
+async function isAuthenticated(request, response, next) {
+    if (!request.session || !request.session.userId) {
+        return response.status(401).json({ success: false, message: 'Bejelentkezés szükséges a kereséshez.' });
     }
-    return response.status(401).json({ success: false, message: 'Bejelentkezés szükséges a kereséshez.' });
+    // Ban-check: ha a user kozben bannolva lett, a sessiona elavult — destroy + 403.
+    // Ez vedi a direkt /chess, /profile stb. navigaciot is, nem csak a sessionInfo-t.
+    try {
+        const sql = require('../sql/sql_funtions.js');
+        const banRow = await sql.checkUserBanStatus(request.session.userId);
+        if (banRow && banRow.is_banned) {
+            await new Promise((resolve) => {
+                request.session.destroy((err) => {
+                    if (err) console.warn('isAuthenticated: ban-eviction destroy hiba:', err.message);
+                    resolve();
+                });
+            });
+            response.clearCookie('connect.sid');
+            return response.status(403).json({
+                success: false,
+                code: 'account_banned',
+                message: 'A fiók tiltva lett.'
+            });
+        }
+    } catch (error) {
+        console.error('isAuthenticated ban-check hiba:', error.message);
+        // Ha a DB kerdezes hibazik, ne blokkoljuk a kerest — fail-open egy index lookup hibajanal.
+    }
+    return next();
 }
 
 const EMAIL_VERIFICATION_REQUIRED_MESSAGE = 'Ez a funkció csak megerősített email cím után érhető el. Ellenőrizd az email fiókod vagy kérj új verifikációs emailt.';

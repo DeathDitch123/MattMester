@@ -340,7 +340,20 @@ router.post('/profile/delete', profileDeleteLimiter, isAuthenticated, async (req
             message: 'Profil törlése.'
         });
 
-        const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
+        const deletedUserId = request.session.userId;
+        const deleteResult = await sql.deleteUserProfileWithTransaction(deletedUserId);
+
+        // A tobbi eszkoz (ahol szinten be van jelentkezve a user) is kapja meg az event-et
+        // -> redirect deleted.html-re, hogy ne maradjon stale session.
+        try {
+            const socketHub = request.app?.locals?.socketHub;
+            if (socketHub && typeof socketHub.notifyUserDeleted === 'function') {
+                await socketHub.notifyUserDeleted(deletedUserId);
+            }
+        } catch (kickErr) {
+            console.warn('self-delete: socket notify hiba:', kickErr.message);
+        }
+
         await destroySessionAsync(request, 'Session törlési hiba profil törlés után.');
         response.clearCookie('connect.sid');
 

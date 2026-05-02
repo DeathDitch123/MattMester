@@ -494,6 +494,12 @@ function createSocketHub(io) {
         }
 
         const clientRecord = clientsById.get(context.clientId);
+        // VEDELEM: ha a context userId NULL (session nem toltodott be valamiert), de a meglevo
+        // record-ban van userId, NE allitsuk vissza NULL-ra. A regi bug: anonim reconnect
+        // ujraregisztralasa felulirta a logged-in userId-t -> "Offline" megjeleneses.
+        if (context.userId) {
+            clientRecord.userId = context.userId;
+        }
         clientRecord.username = context.username;
         clientRecord.role = context.role;
         clientRecord.profile_image = context.profile_image || '/profile_pictures/default.png';
@@ -1079,6 +1085,28 @@ function createSocketHub(io) {
                 try { s.disconnect(true); } catch (_) { }
             });
             return true;
+        },
+        async notifyUserDeleted(targetUserId) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            io.to(`user-room:${normalized}`).emit('user:deleted', {
+                at: new Date().toISOString()
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
+        },
+        // Az admin szobaban levo (role==='admin') klienseknek kuldott broadcast.
+        // Az alertingService.js (safeBroadcast) ezt hivja a real-time alert push-hoz,
+        // tovabba az admin endpointok dismissal/IP blokk emit-jeihez is.
+        broadcastAdmin(eventName, payload) {
+            try {
+                io.to(SOCKET_ROOMS.admin).emit(String(eventName), payload || {});
+            } catch (error) {
+                console.warn('broadcastAdmin hiba:', error.message);
+            }
         }
     };
 }

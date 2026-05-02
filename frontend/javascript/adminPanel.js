@@ -293,7 +293,10 @@ const ALERT_KIND = {
     unauthorized: { label: 'Jogosulatlan próba', icon: 'bi-shield-fill-x' },
     rate_escalated: { label: 'Rate limit szigorítás', icon: 'bi-speedometer2' },
     token_invalid: { label: 'Token hiba', icon: 'bi-key-fill' },
-    suspicious_pattern: { label: 'Gyanús minta', icon: 'bi-bug-fill' }
+    suspicious_pattern: { label: 'Gyanús minta', icon: 'bi-bug-fill' },
+    user_banned:   { label: 'Felhasználó tiltva',   icon: 'bi-slash-circle-fill' },
+    user_unbanned: { label: 'Tiltás feloldva',      icon: 'bi-check-circle-fill' },
+    user_deleted:  { label: 'Felhasználó törölve',  icon: 'bi-trash3-fill' }
 };
 const severityPill = (key) => {
     const s = SEVERITY[key] || SEVERITY.info;
@@ -402,6 +405,24 @@ const state = {
     liveStatsAt: null,            // utolsó tick időpontja
     liveAudit: [],                // admin:audit:created események (legújabb elöl)
     liveAlerts: [],               // admin:alert:* események (legújabb elöl)
+    alertsLoaded: false,          // GET /admin/alerts/recent legalabb egyszer lefutott
+    alertsFilter: {               // Riasztasok oldal szuro state
+        kind: '',                 // '' = all
+        severity: '',             // '' = all
+        ipAddress: '',
+        includeDismissed: false
+    },
+    auditFilterIntent: null,      // alert -> audit naviglas: { ip, userId, sinceDate, untilDate }
+    liveLogins: [],               // admin:security:login események + REST initial fetch (legújabb elöl)
+    loginsLoaded: false,          // GET /admin/security/logins legalabb egyszer lefutott
+    loginsFilter: {               // Bejelentkezesek oldal szuro state
+        username: '',
+        status: 'all',            // 'all' | 'success' | 'failed'
+        ipAddress: '',
+        country: '',              // '' = mind; ISO orszagkod (pl. 'HU', 'US') — geoip-lite altal felismert orszagok
+        sinceDate: '',
+        untilDate: ''
+    },
 
     // Felhasználók szekció (Lista) - REST + szűrés + lazy loading
     users: {
@@ -520,7 +541,13 @@ function liveStatsOrFallback() {
 }
 
 const auditList = () => (state.liveAudit.length ? state.liveAudit : SAMPLE_AUDIT);
-const alertsList = () => (state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS);
+// alertsList: ha mar volt sikeres GET /admin/alerts/recent fetch (state.alertsLoaded),
+// soha tobbet nem mutatjuk a sample data-t — uresen marad ha a DB-ben tenyleg nincs alert.
+// Az elso betoltesig (sample) a placeholder UI elkerulesere mutatjuk a SAMPLE-t.
+const alertsList = () => {
+    if (state.alertsLoaded) return state.liveAlerts;
+    return state.liveAlerts.length ? state.liveAlerts : SAMPLE_ALERTS;
+};
 
 // Egy forras-igazsag a dashboard live-feed-jehez: csak a valos WS bufferbol
 // veszunk adatot. Demo / SAMPLE adat NEM jelenik meg — ha nincs esemeny,
@@ -926,7 +953,8 @@ const NAV_TREE = [
         items: [
             { id: 'users', label: 'Lista', icon: 'bi-list-ul' },
             { id: 'userDetail', label: 'Részletek és szerkesztés', icon: 'bi-person-vcard' },
-            { id: 'userBan', label: 'Tiltások', icon: 'bi-slash-circle' }
+            { id: 'userBan', label: 'Tiltások', icon: 'bi-slash-circle' },
+            { id: 'userDelete', label: 'Felhasználó törlése', icon: 'bi-trash3-fill' }
         ]
     },
 
@@ -1650,6 +1678,16 @@ const SECTIONS = {
                             </div>
                             ${h.btn({ label: 'Kijelentkeztetés', icon: 'bi-box-arrow-right', variant: 'outline-warning', size: 'sm', onclick: `adminRevokeUserSessions(${u.id}, event)` })}
                         </div>
+                        <div class="danger-action">
+                            <div>
+                                <div class="fw-semibold text-white">Profil törlése <span class="badge bg-danger ms-1">kritikus</span></div>
+                                <small class="text-secondary">Véglegesen eltávolítja a felhasználót — jelszó megerősítés szükséges.</small>
+                            </div>
+                            ${h.btn({
+                    label: 'Törlés kezelése', icon: 'bi-trash3-fill', variant: 'outline-danger', size: 'sm',
+                    onclick: `deleteAdminUser(${u.id})`
+                })}
+                        </div>
                     </div>
                 </div>
 
@@ -1702,23 +1740,54 @@ const SECTIONS = {
                                 <a href="#" class="text-gold" onclick="showSection('users', event)">listából</a>.
                             </div>
                         `}
-                        ${h.form({
-                fields: [
-                    {
-                        id: 'banType', label: 'Típus', col: 6, type: 'select',
-                        options: ['Ideiglenes', 'Végleges', 'Csak chat']
-                    },
-                    { id: 'banDuration', label: 'Időtartam (óra)', col: 6, type: 'number', value: '24' },
-                    {
-                        id: 'banReason', label: 'Indok (min. 30 char)', col: 12, type: 'textarea',
-                        placeholder: 'Részletes indok — naplózásra kerül.'
-                    }
-                ],
-                submit: {
-                    label: 'Tiltás alkalmazása', icon: 'bi-shield-fill-check', variant: 'danger',
-                    onclick: `openCriticalAction('users.ban', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')`
-                }
-            })}
+                        <form class="row g-3" onsubmit="event.preventDefault();">
+                            <div class="col-md-6">
+                                <label class="form-label" for="banType">Típus</label>
+                                <select id="banType" class="form-select" onchange="onBanTypeChange()">
+                                    <option value="Ideiglenes">Ideiglenes</option>
+                                    <option value="Végleges">Végleges</option>
+                                    <option value="Csak chat">Csak chat</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="banDuration">Időtartam (óra)</label>
+                                <input id="banDuration" class="form-control" type="number" value="24" min="1">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="banReason">
+                                    Indok <span class="text-danger">*</span>
+                                    <span class="critical-reason-counter ms-2">
+                                        <span id="banReasonCount">0</span> / 30
+                                    </span>
+                                </label>
+                                <textarea id="banReason" class="form-control" rows="3" placeholder="Részletes indok — naplózásra kerül." oninput="onBanReasonInput(this)"></textarea>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="banPassword">Saját admin jelszó <span class="text-danger">*</span></label>
+                                <input id="banPassword" class="form-control" type="password" autocomplete="current-password" placeholder="Saját admin jelszavad megerősítésre">
+                            </div>
+                            ${hasUser ? `
+                                <div class="col-12 mt-2">
+                                    <button type="button" id="banHoldBtn" class="ban-hold-btn"
+                                            data-target-id="${u.id}"
+                                            onmousedown="startBanHold(this)"
+                                            onmouseup="cancelBanHold(this)"
+                                            onmouseleave="cancelBanHold(this)"
+                                            ontouchstart="event.preventDefault(); startBanHold(this)"
+                                            ontouchend="cancelBanHold(this)">
+                                        <span class="ban-hold-label"><i class="bi bi-shield-fill-check me-2"></i>Tiltás alkalmazása</span>
+                                        <small class="ban-hold-sub">Tartsd nyomva 5 másodpercig</small>
+                                    </button>
+                                </div>
+                            ` : `
+                                <div class="col-12 mt-2">
+                                    <button type="button" class="ban-hold-btn" disabled>
+                                        <span class="ban-hold-label"><i class="bi bi-shield-fill-check me-2"></i>Tiltás alkalmazása</span>
+                                        <small class="ban-hold-sub">Először válassz felhasználót</small>
+                                    </button>
+                                </div>
+                            `}
+                        </form>
                     `
         })}
             </div>
@@ -1744,6 +1813,80 @@ const SECTIONS = {
                                     `).join('')}
                             </tbody>
                         </table>
+                    `
+        })}
+            </div>
+        </div>
+    `;
+    },
+
+    /* ---------- Felhasználók > Felhasználó törlése ---------- */
+    userDelete: () => {
+        const u = state.selectedUser;
+        const hasUser = Boolean(u);
+        const targetLabel = hasUser ? (u.username || `#${u.id}`) : 'kiválasztott felhasználó';
+        const isAdminTarget = hasUser && u.role === 'admin';
+
+        return `
+        ${h.header({
+            icon: 'bi-trash3-fill', title: 'Felhasználó törlése',
+            subtitle: hasUser
+                ? `${targetLabel} — előre kiválasztva törléshez`
+                : 'Profil végleges törlése admin oldalról',
+            actions: hasUser
+                ? [{ label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }]
+                : []
+        })}
+        <div class="row g-4 mb-4">
+            <div class="col-lg-7">
+                ${h.card({
+            title: hasUser ? `Profil törlése — ${escapeHtml(targetLabel)}` : 'Profil törlése',
+            icon: 'bi-trash3-fill',
+            headerExtra: h.badge('kritikus művelet', 'danger'),
+            body: `
+                        <div class="alert alert-danger bg-danger bg-opacity-10 border-danger small mb-3">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            <strong>Véglegesen eltávolítja</strong> a felhasználót. A meccsadatok megmaradnak az ellenfelek számára (felhasználói nevek <em>Törölt felhasználó</em>-ra cserélődnek), de a profil, barátok, chat üzenetek, képességek naplói <strong>minden eltűnik</strong>. A művelet <strong>nem visszavonható</strong>.
+                        </div>
+                        <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Megerősítéshez a saját <strong>admin jelszavadat</strong> kell megadnod a következő ablakban. Az indok <strong>opcionális</strong>, de javasolt audit célokra.
+                        </div>
+                        ${hasUser ? `
+                            <div class="ban-target-card mb-3">
+                                ${h.user({ name: u.username, email: u.email, profile_image: u.profileImage, username: u.username })}
+                                <div class="ban-target-meta">
+                                    ${rolePill(u.role === 'admin' ? 'admin' : 'player')}
+                                    ${u.isBanned ? statusPill('banned') : renderPresenceStatusBadgeInline(u)}
+                                </div>
+                            </div>
+                            ${isAdminTarget ? `
+                                <div class="alert alert-warning bg-warning bg-opacity-10 border-warning small mb-3">
+                                    <i class="bi bi-shield-fill-exclamation me-1"></i>
+                                    <strong>Admin profil nem törölhető</strong> ezen a felületen. Ehhez super-admin műveletre van szükség.
+                                </div>
+                            ` : ''}
+                        ` : `
+                            <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Nincs kiválasztott felhasználó — válassz egyet a
+                                <a href="#" class="text-gold" onclick="showSection('users', event)">listából</a>.
+                            </div>
+                        `}
+                        ${h.form({
+                fields: [
+                    {
+                        id: 'deleteReason', label: 'Indok (opcionális, max 1000 char)', col: 12, type: 'textarea',
+                        placeholder: 'Részletes indok — naplózásra kerül. Lehet üres is.'
+                    }
+                ],
+                submit: {
+                    label: 'Profil törlése', icon: 'bi-trash3-fill', variant: 'danger',
+                    onclick: hasUser && !isAdminTarget
+                        ? `openCriticalAction('users.delete', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')`
+                        : `showToast('${isAdminTarget ? 'Admin profil nem törölhető' : 'Először válassz felhasználót'}.', 'warning')`
+                }
+            })}
                     `
         })}
             </div>
@@ -1929,28 +2072,93 @@ const SECTIONS = {
     `,
 
     /* ---------- Naplók > Bejelentkezések ---------- */
-    security: () => `
+    security: () => {
+        const list = state.loginsLoaded ? state.liveLogins : [];
+        const f = state.loginsFilter || {};
+        const subtitle = state.loginsLoaded
+            ? `${list.length} bejelentkezési bejegyzés`
+            : 'Sikeres és sikertelen bejelentkezési kísérletek';
+        // Dinamikus orszag-lista a mar betoltott sorokbol — egyedi, abc-rendezve.
+        // Csak az ISO kod kerul a value-ba, a label is a kod (geoip-lite csak ezt adja).
+        const countriesSet = new Set();
+        for (const l of list) {
+            const c = l.location?.country;
+            if (c) countriesSet.add(c);
+        }
+        const countries = [...countriesSet].sort();
+        const tableRows = list.map(l => [
+            `<span class="fw-semibold text-white">${escapeHtml(l.username || '—')}</span>`,
+            `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${escapeHtml(l.ip || '—')}</span>`,
+            `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.location?.label || '—')}</span>`,
+            `<span class="text-secondary"><i class="bi ${l.device?.icon || 'bi-question-circle'} me-1"></i>${escapeHtml(l.device?.display || '—')}</span>`,
+            `<span class="text-secondary" title="${escapeHtml(l.occurredAt || '')}">${escapeHtml(formatRelative(l.occurredAt))}</span>`,
+            riskPill(l.risk || 'low')
+        ]);
+        return `
         ${h.header({
-        icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
-        subtitle: 'Sikeres és sikertelen bejelentkezési kísérletek',
-        actions: [{ label: 'Napló export', icon: 'bi-download', size: 'sm' }]
-    })}
-        ${h.table({
-        headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
-        rows: SAMPLE.logins.map(l => [
-            `<span class="fw-semibold text-white">${l.user}</span>`,
-            `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${l.ip}</span>`,
-            `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${l.location}</span>`,
-            `<span class="text-secondary"><i class="bi ${l.deviceIcon} me-1"></i>${l.device}</span>`,
-            `<span class="text-secondary">${l.time}</span>`,
-            riskPill(l.risk)
-        ])
-    })}
-    `,
+            icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
+            subtitle,
+            actions: [
+                { label: 'Napló export', icon: 'bi-download', size: 'sm', onclick: 'exportLoginsCsv()' }
+            ]
+        })}
+
+        <div class="alerts-filter-bar">
+            <input id="loginsFilterUsername" type="text" class="form-control form-control-sm"
+                   placeholder="Felhasználónév..." value="${escapeHtml(f.username || '')}"
+                   onchange="onLoginsFilterChange()">
+            <select id="loginsFilterStatus" class="form-select form-select-sm" onchange="onLoginsFilterChange()">
+                <option value="all"     ${f.status === 'all' ? 'selected' : ''}>Minden státusz</option>
+                <option value="success" ${f.status === 'success' ? 'selected' : ''}>Sikeres</option>
+                <option value="failed"  ${f.status === 'failed' ? 'selected' : ''}>Sikertelen</option>
+            </select>
+            <input id="loginsFilterIp" type="text" class="form-control form-control-sm"
+                   placeholder="IP cím..." value="${escapeHtml(f.ipAddress || '')}"
+                   onchange="onLoginsFilterChange()">
+            <select id="loginsFilterCountry" class="form-select form-select-sm" onchange="onLoginsFilterChange()"
+                    title="${countries.length === 0 ? 'Csak akkor jelennek meg orszagok, ha mar voltak publikus IP-rol bejelentkezesek' : ''}">
+                <option value="" ${!f.country ? 'selected' : ''}>Minden ország (lokálisak is)</option>
+                ${countries.map((c) => `
+                    <option value="${escapeHtml(c)}" ${f.country === c ? 'selected' : ''}>${escapeHtml(c)}</option>
+                `).join('')}
+                ${countries.length === 0 ? '<option disabled>— még nincs publikus IP-s bejelentkezés —</option>' : ''}
+            </select>
+            <input id="loginsFilterSince" type="datetime-local" class="form-control form-control-sm"
+                   value="${escapeHtml(f.sinceDate || '')}" onchange="onLoginsFilterChange()" title="Dátum-tól">
+            <input id="loginsFilterUntil" type="datetime-local" class="form-control form-control-sm"
+                   value="${escapeHtml(f.untilDate || '')}" onchange="onLoginsFilterChange()" title="Dátum-ig">
+            <button type="button" class="btn btn-outline-light btn-sm" onclick="resetLoginsFilter()">
+                <i class="bi bi-x"></i> Szűrők törlése
+            </button>
+        </div>
+
+        ${list.length === 0 && state.loginsLoaded
+            ? `<div class="content-card text-center py-5">
+                  <i class="bi bi-shield-check display-6 text-secondary mb-2"></i>
+                  <div class="text-secondary">Nincs bejelentkezési bejegyzés a megadott szűrőkre.</div>
+               </div>`
+            : h.table({
+                headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
+                rows: tableRows
+            })
+        }
+    `;
+    },
 
     /* ---------- Naplók > Audit napló ---------- */
     auditLog: () => {
-        const list = auditList();
+        const fullList = auditList();
+        const intent = state.auditFilterIntent;
+        // Alert -> audit pre-fill: kliens oldali szuro a riasztas kontextusara.
+        const list = intent ? fullList.filter((a) => {
+            const t = a.occurredAt ? new Date(a.occurredAt).getTime() : 0;
+            const from = intent.sinceDate ? new Date(intent.sinceDate).getTime() : 0;
+            const to = intent.untilDate ? new Date(intent.untilDate).getTime() : Infinity;
+            if (t && (t < from || t > to)) return false;
+            if (intent.userId && a.target?.id && Number(a.target.id) !== Number(intent.userId)) return false;
+            if (intent.ip && a.actor?.ip && a.actor.ip !== intent.ip) return false;
+            return true;
+        }) : fullList;
         const counts = {
             info: list.filter(a => a.severity === 'info').length,
             warning: list.filter(a => a.severity === 'warning').length,
@@ -1962,6 +2170,22 @@ const SECTIONS = {
             subtitle: 'Admin műveletek append-only nyomvonala — kötelező indok, before/after diff',
             actions: [{ label: 'Audit export', icon: 'bi-download', size: 'sm' }]
         })}
+
+            ${intent ? `
+                <div class="alert alert-info bg-info bg-opacity-10 border-info d-flex align-items-start gap-2 mb-3">
+                    <i class="bi bi-funnel-fill text-info mt-1"></i>
+                    <div class="flex-grow-1">
+                        <strong>Riasztás-szűrés aktív:</strong>
+                        ${intent.ip ? `IP=<code class="text-gold">${escapeHtml(intent.ip)}</code> · ` : ''}
+                        ${intent.userId ? `User=<code class="text-gold">#${intent.userId}</code> · ` : ''}
+                        Időszak: <span class="font-monospace">${escapeHtml(new Date(intent.sinceDate).toLocaleString('hu-HU'))}</span>
+                        — <span class="font-monospace">${escapeHtml(new Date(intent.untilDate).toLocaleString('hu-HU'))}</span>
+                    </div>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="clearAuditFilterIntent()">
+                        <i class="bi bi-x"></i> Szűrő törlése
+                    </button>
+                </div>
+            ` : ''}
 
             <div class="row g-3 mb-4">
                 ${[
@@ -2003,11 +2227,14 @@ const SECTIONS = {
         const list = alertsList();
         const byKind = {};
         Object.keys(ALERT_KIND).forEach(k => byKind[k] = list.filter(a => a.kind === k).length);
+        const f = state.alertsFilter || {};
         return `
             ${h.header({
             icon: 'bi-exclamation-octagon-fill', title: 'Riasztások',
-            subtitle: 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
-            actions: [{ label: 'Mind elolvasva', icon: 'bi-check-all', size: 'sm' }]
+            subtitle: state.alertsLoaded
+                ? `${list.length} bejegyzés${f.includeDismissed ? ' (elrejtettek is)' : ''}`
+                : 'Jogosulatlan próbák, rate limit szigorítások, gyanús minták',
+            actions: [{ label: 'Mind elrejtése', icon: 'bi-eye-slash-fill', size: 'sm', onclick: 'dismissAllAlerts()' }]
         })}
 
             <div class="row g-3 mb-4">
@@ -2015,9 +2242,11 @@ const SECTIONS = {
                 { icon: 'bi-shield-fill-x', label: 'Unauthorized', value: byKind.unauthorized || 0, color: 'warning' },
                 { icon: 'bi-key-fill', label: 'Token hiba', value: byKind.token_invalid || 0, color: 'warning' },
                 { icon: 'bi-speedometer2', label: 'Rate escalated', value: byKind.rate_escalated || 0, color: 'warning' },
-                { icon: 'bi-bug-fill', label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger' }
+                { icon: 'bi-bug-fill', label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger' },
+                { icon: 'bi-slash-circle-fill', label: 'Tiltások', value: byKind.user_banned || 0, color: 'danger' },
+                { icon: 'bi-trash3-fill', label: 'Törlések', value: byKind.user_deleted || 0, color: 'danger' }
             ].map(item => `
-                    <div class="col-6 col-md-3">
+                    <div class="col-6 col-md-4 col-lg-2">
                         <div class="mini-stat">
                             <i class="bi ${item.icon} text-${item.color}"></i>
                             <div class="mini-stat-value">${item.value}</div>
@@ -2027,8 +2256,37 @@ const SECTIONS = {
                 `).join('')}
             </div>
 
+            <div class="alerts-filter-bar">
+                <select id="alertsFilterKind" class="form-select form-select-sm" onchange="onAlertsFilterChange()">
+                    <option value="">Minden kategória</option>
+                    ${Object.entries(ALERT_KIND).map(([k, v]) => `
+                        <option value="${k}" ${f.kind === k ? 'selected' : ''}>${v.label}</option>
+                    `).join('')}
+                </select>
+                <select id="alertsFilterSeverity" class="form-select form-select-sm" onchange="onAlertsFilterChange()">
+                    <option value="">Minden severity</option>
+                    <option value="info"     ${f.severity === 'info' ? 'selected' : ''}>Info</option>
+                    <option value="warning"  ${f.severity === 'warning' ? 'selected' : ''}>Warning</option>
+                    <option value="critical" ${f.severity === 'critical' ? 'selected' : ''}>Critical</option>
+                </select>
+                <input id="alertsFilterIp" type="text" class="form-control form-control-sm"
+                       placeholder="IP cím szűrés..." value="${escapeHtml(f.ipAddress || '')}"
+                       onchange="onAlertsFilterChange()">
+                <label class="alerts-filter-toggle">
+                    <input type="checkbox" id="alertsFilterIncludeDismissed"
+                           ${f.includeDismissed ? 'checked' : ''}
+                           onchange="onAlertsFilterChange()">
+                    <span>Elrejtettek mutatása</span>
+                </label>
+                <button type="button" class="btn btn-outline-light btn-sm" onclick="resetAlertsFilter()">
+                    <i class="bi bi-x"></i> Szűrők törlése
+                </button>
+            </div>
+
             ${h.card({
-                body: `<div class="alert-list">${list.map(renderAlertRow).join('')}</div>`,
+                body: `<div class="alert-list">${list.length === 0
+                    ? '<div class="text-center text-secondary py-5"><i class="bi bi-check2-circle me-2"></i>Nincs aktív riasztás.</div>'
+                    : list.map(renderAlertRow).join('')}</div>`,
                 noBodyPadding: true
             })}
         `;
@@ -2320,13 +2578,17 @@ function renderAlertRow(a) {
     const sev = a.severity || 'warning';
     const time = formatAuditTime(a.occurredAt);
     const userLabel = a.userId ? `#${a.userId}` : (a.user || '—');
+    const isDismissed = Boolean(a.dismissedAt);
+    const ipEsc = escapeHtml(a.ip || '');
+    const occurredEsc = escapeHtml(a.occurredAt || '');
     return `
-        <article class="alert-row sev-${sev}">
+        <article class="alert-row sev-${sev}${isDismissed ? ' is-dismissed' : ''}" data-alert-id="${a.id || ''}">
             <div class="alert-row-icon"><i class="bi ${ALERT_KIND[kind]?.icon || 'bi-question'}"></i></div>
             <div class="alert-row-body">
                 <div class="alert-row-head">
                     ${alertKindLabel(kind)}
                     ${severityPill(sev)}
+                    ${isDismissed ? '<span class="badge bg-secondary ms-2"><i class="bi bi-eye-slash me-1"></i>Elrejtett</span>' : ''}
                     <span class="alert-row-time font-monospace ms-auto">${time}</span>
                 </div>
                 <div class="alert-row-meta">
@@ -2336,9 +2598,15 @@ function renderAlertRow(a) {
                 </div>
                 <div class="alert-row-detail">${formatJSON(a.detail)}</div>
                 <div class="alert-row-actions">
-                    ${h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm' })}
-                    ${h.btn({ label: 'Audit nyitás', icon: 'bi-journal-text', variant: 'outline-gold', size: 'sm', onclick: "showSection('auditLog')" })}
-                    ${h.btn({ label: 'Elutasít', icon: 'bi-x-circle', variant: 'outline-secondary', size: 'sm' })}
+                    ${a.ip && a.ip !== 'ismeretlen'
+                        ? h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm', onclick: `openIpBlockModal('${ipEsc.replace(/'/g, "\\'")}', ${a.id || 'null'})` })
+                        : h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm', attrs: 'disabled title="Nincs IP cim"' })
+                    }
+                    ${h.btn({ label: 'Audit nyitás', icon: 'bi-journal-text', variant: 'outline-gold', size: 'sm', onclick: `openAuditFromAlert(${a.id || 'null'}, '${ipEsc.replace(/'/g, "\\'")}', ${a.userId || 'null'}, '${occurredEsc.replace(/'/g, "\\'")}')` })}
+                    ${isDismissed
+                        ? h.btn({ label: 'Visszaállít', icon: 'bi-arrow-counterclockwise', variant: 'outline-success', size: 'sm', onclick: `restoreOneAlert(${a.id || 'null'})` })
+                        : h.btn({ label: 'Elrejtés', icon: 'bi-eye-slash', variant: 'outline-secondary', size: 'sm', onclick: `dismissOneAlert(${a.id || 'null'})` })
+                    }
                 </div>
             </div>
         </article>
@@ -2436,10 +2704,27 @@ function showSection(sectionId, event, options = {}) {
         bindAdminUserDetailValidation();
         bindAdminImageEditorEvents();
     }
-    if (sectionId === 'userBan') {
+    if (sectionId === 'userBan' && !silent) {
         if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
-            loadAdminUsersList({ silent: true });
+            // A userBan view a state.users.list-bol szuri ki az aktiv tiltasokat — ha
+            // ures, betoltjuk, MAJD ujrarendereljuk hogy az aktiv tiltasok megjelenjenek.
+            loadAdminUsersList({ silent: true }).then(() => {
+                if (state.currentSectionId === 'userBan') {
+                    showSection('userBan', null, { silent: true });
+                }
+            });
         }
+    }
+    if (sectionId === 'alerts' && !silent) {
+        // Csak NEM-silent renderelesnel toltsuk ujra az alerteket (initial nav, manual frissites).
+        // Silent re-render-t a socket eventek vagy a loadAlerts fetch-utan trigger-eli, azoknak
+        // mar friss adatuk van — uj fetch infinit loopot okozna.
+        loadAlerts();
+    }
+    if (sectionId === 'security' && !silent) {
+        // Bejelentkezesek: auto-load nem-silent navigation-on. (Silent re-render = socket
+        // event vagy fetch-after callback, nem trigger-elhet ujabb fetch-et.)
+        loadLogins();
     }
 
     if (window.innerWidth < 992) {
@@ -2847,14 +3132,97 @@ function connectAdminSocket() {
                 }
             });
 
-            ['admin:alert:unauthorized', 'admin:alert:rate_escalated', 'admin:alert:token_invalid', 'admin:alert:suspicious_pattern'].forEach((eventName) => {
+            [
+                'admin:alert:unauthorized',
+                'admin:alert:rate_escalated',
+                'admin:alert:token_invalid',
+                'admin:alert:suspicious_pattern',
+                'admin:alert:user_banned',
+                'admin:alert:user_unbanned',
+                'admin:alert:user_deleted'
+            ].forEach((eventName) => {
                 sock.on(eventName, (payload = {}) => {
                     const kind = eventName.replace('admin:alert:', '');
-                    const enriched = { ...payload, kind, severity: payload.severity || (kind === 'suspicious_pattern' ? 'critical' : 'warning') };
+                    const enriched = {
+                        // A backend payload-ja: { alertId, occurredAt, kind, severity, ip, userId, endpoint, detail }
+                        // A frontend renderAlertRow ezt varja: { id, occurredAt, kind, severity, ip, userId, endpoint, detail, dismissedAt }
+                        id: payload.alertId || payload.id || null,
+                        occurredAt: payload.occurredAt || new Date().toISOString(),
+                        kind,
+                        severity: payload.severity || (kind === 'suspicious_pattern' || kind === 'user_deleted' ? 'critical' : kind === 'user_unbanned' ? 'info' : 'warning'),
+                        ip: payload.ip || payload.ipAddress || null,
+                        userId: payload.userId || null,
+                        endpoint: payload.endpoint || null,
+                        detail: payload.detail || null,
+                        dismissedAt: null
+                    };
                     state.liveAlerts.unshift(enriched);
                     if (state.liveAlerts.length > MAX_LIVE_BUFFER) state.liveAlerts.length = MAX_LIVE_BUFFER;
                     onLiveAlertUpdate(enriched);
                 });
+            });
+
+            // Multi-admin sync: ha egy mas admin kioltott alert(eke)t, frissitsuk a sajat listankat is.
+            sock.on('admin:alert:dismissed', (payload = {}) => {
+                const alertId = Number(payload.alertId) || 0;
+                if (!alertId) return;
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === alertId ? { ...a, dismissedAt: payload.at || new Date().toISOString() } : a
+                );
+                if (!state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.filter((a) => Number(a.id) !== alertId);
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+            });
+
+            sock.on('admin:alert:dismissed-all', () => {
+                if (state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.map((a) =>
+                        a.dismissedAt ? a : { ...a, dismissedAt: new Date().toISOString() }
+                    );
+                } else {
+                    state.liveAlerts = [];
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+            });
+
+            sock.on('admin:alert:restored', (payload = {}) => {
+                const alertId = Number(payload.alertId) || 0;
+                if (!alertId) return;
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === alertId ? { ...a, dismissedAt: null, dismissedByUserId: null } : a
+                );
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+            });
+
+            // Bejelentkezesi feed real-time push (login + login_failed event-ek).
+            // A backend a payload-ban mar `location` (geoip + kategoria) es `device` mezovel
+            // kuldi az enriched adatot — a frontendnek nincs sajat geoIP DB-je.
+            sock.on('admin:security:login', (payload = {}) => {
+                const enriched = {
+                    id: payload.id || null,
+                    userId: payload.userId || null,
+                    username: payload.username || '—',
+                    eventType: payload.eventType || 'login',
+                    success: payload.success === true,
+                    ip: payload.ip || null,
+                    userAgent: payload.userAgent || null,
+                    device: payload.device || parseUserAgentClient(payload.userAgent),
+                    location: payload.location || classifyIpClient(payload.ip),
+                    risk: payload.eventType === 'login_failed' ? 'high' : 'low',
+                    occurredAt: payload.occurredAt || new Date().toISOString()
+                };
+                state.liveLogins.unshift(enriched);
+                if (state.liveLogins.length > 200) state.liveLogins.length = 200;
+                if (state.currentSectionId === 'security') {
+                    showSection('security', null, { silent: true });
+                }
             });
 
             sock.on('admin:stats:tick', (payload) => {
@@ -3203,6 +3571,12 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId) {
                 'admin.grant': 'Admin szerep kiosztása',
                 'admin.revoke': 'Admin szerep visszavonása'
             };
+            // Pozitiv (zold) styling: a tiltas-feloldas vissza-allitja a hozzaferest, nem destruktiv.
+            const positiveActions = new Set(['users.unban']);
+            const modalContent = modalEl.querySelector('.critical-action-modal');
+            if (modalContent) {
+                modalContent.classList.toggle('is-positive', positiveActions.has(action));
+            }
             setText('criticalActionTitle', titleMap[action] || action);
             const desc = document.getElementById('criticalActionDescription');
             if (desc) {
@@ -3213,18 +3587,26 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId) {
             }
             const reasonField = document.getElementById('criticalReason');
             const counter = document.getElementById('criticalReasonCount');
-            // Ha az inline tiltás panelen már megadta az indokot, vegyük át (nincs duplikáció).
-            const inlineBanReason = document.getElementById('banReason')?.value?.trim() || '';
+            const isOptionalReason = action === 'users.delete';
+            // Ha az inline panelen már megadta az indokot (ban vagy delete), vegyük át (nincs duplikáció).
+            const inlineReason = (document.getElementById('banReason')?.value?.trim()
+                || document.getElementById('deleteReason')?.value?.trim()
+                || '');
             if (reasonField && counter) {
-                reasonField.value = inlineBanReason;
-                const initLen = inlineBanReason.length;
+                reasonField.value = inlineReason;
+                const initLen = inlineReason.length;
                 counter.textContent = String(initLen);
-                counter.parentElement.classList.toggle('valid', initLen >= 30);
+                // users.delete esetén az indok opcionális — a counter mindig "valid" jelleggel
+                const isValid = isOptionalReason ? true : (initLen >= 30);
+                counter.parentElement.classList.toggle('valid', isValid);
                 reasonField.oninput = () => {
                     const len = reasonField.value.length;
                     counter.textContent = String(len);
-                    counter.parentElement.classList.toggle('valid', len >= 30);
+                    counter.parentElement.classList.toggle('valid', isOptionalReason ? true : (len >= 30));
                 };
+                // Counter szöveg: opcionális reason-nél nincs "min" elvárás
+                counter.textContent = String(initLen);
+                if (counter.nextSibling) counter.nextSibling.textContent = isOptionalReason ? '' : ' / 30';
             }
             const passwordField = document.getElementById('criticalPassword');
             if (passwordField) {
@@ -3251,9 +3633,18 @@ async function executeCriticalAction() {
 
         const { action, targetUserId } = state.criticalActionData || {};
         const reason = document.getElementById('criticalReason')?.value?.trim() || '';
+        const currentPassword = document.getElementById('criticalPassword')?.value || '';
 
-        if (reason.length < 30) {
+        // users.delete: indok opcionális; minden más kritikus művelet: min 30 char.
+        const reasonOptional = action === 'users.delete';
+        if (!reasonOptional && reason.length < 30) {
             showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+
+        // users.delete esetén a saját admin jelszó kötelező (a backend bcrypt-tel ellenőrzi).
+        if (action === 'users.delete' && !currentPassword) {
+            showToast('A saját admin jelszó megadása kötelező.', 'warning', 'bi-exclamation-circle');
             return;
         }
 
@@ -3302,6 +3693,36 @@ async function executeCriticalAction() {
             } catch (err) {
                 showToast('Hálózati hiba a tiltás feloldása során.', 'danger');
                 console.error('unban hiba:', err);
+            }
+        } else if (action === 'users.delete') {
+            if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+            try {
+                const res = await fetch(`/api/admin/users/${targetUserId}/delete`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        currentPassword,
+                        reason: reason.length > 0 ? reason : null
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    const name = data.deletedUsername ? escapeHtml(data.deletedUsername) : 'A felhasználó';
+                    showToast(`${name} profilja sikeresen törölve.`, 'success', 'bi-trash3-fill');
+                    // A torolt user-t ki kell venni a state-bol, kulonben a userDelete view 'kijelolve' marad.
+                    if (state.selectedUser && Number(state.selectedUser.id) === Number(targetUserId)) {
+                        state.selectedUser = null;
+                    }
+                    await loadAdminUsersList({ silent: true });
+                    showSection(state.currentSectionId, null, { silent: true });
+                } else {
+                    if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                    showToast(data.message || 'Hiba a profil törlése során.', 'danger');
+                }
+            } catch (err) {
+                showToast('Hálózati hiba a profil törlése során.', 'danger');
+                console.error('user delete hiba:', err);
             }
         } else {
             showToast(`A(z) ${action || 'ismeretlen'} művelet még nincs bekötve.`, 'info', 'bi-cone-striped');
@@ -3684,6 +4105,501 @@ function editAdminUser(userId) {
 
 function banAdminUser(userId) {
     return selectAdminUser(userId, 'userBan');
+}
+
+function deleteAdminUser(userId) {
+    return selectAdminUser(userId, 'userDelete');
+}
+
+/* =============================================================
+   Riasztások oldal: loadAlerts, szűrők, dismiss, IP-blokk, audit nyitás
+   ============================================================= */
+
+async function loadAlerts() {
+    return runSafelyAsync('loadAlerts', async () => {
+        if (!state.adminToken) return;
+        const f = state.alertsFilter || {};
+        const params = new URLSearchParams();
+        params.set('limit', '200');
+        if (f.includeDismissed) params.set('includeDismissed', 'true');
+        if (f.kind) params.set('kind', f.kind);
+        if (f.severity) params.set('severity', f.severity);
+        if (f.ipAddress) params.set('ip', f.ipAddress);
+        try {
+            const res = await fetch(`/api/admin/alerts/recent?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ Accept: 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                state.liveAlerts = Array.isArray(data.data) ? data.data : [];
+                state.alertsLoaded = true;
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az alertek betöltésekor.', 'danger');
+            }
+        } catch (err) {
+            console.error('loadAlerts hiba:', err);
+            showToast('Hálózati hiba az alertek betöltésekor.', 'danger');
+        }
+    });
+}
+
+function onAlertsFilterChange() {
+    state.alertsFilter = {
+        kind: document.getElementById('alertsFilterKind')?.value || '',
+        severity: document.getElementById('alertsFilterSeverity')?.value || '',
+        ipAddress: (document.getElementById('alertsFilterIp')?.value || '').trim(),
+        includeDismissed: Boolean(document.getElementById('alertsFilterIncludeDismissed')?.checked)
+    };
+    loadAlerts();
+}
+
+function resetAlertsFilter() {
+    state.alertsFilter = { kind: '', severity: '', ipAddress: '', includeDismissed: false };
+    loadAlerts();
+}
+
+async function dismissOneAlert(alertId) {
+    if (!alertId) return;
+    return runSafelyAsync('dismissOneAlert', async () => {
+        try {
+            const res = await fetch(`/api/admin/alerts/${alertId}/dismiss`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                // Optimisztikus lokális frissítés — a broadcast a többi tab-ot is meghívja
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === Number(alertId)
+                        ? { ...a, dismissedAt: new Date().toISOString() }
+                        : a
+                );
+                if (!state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.filter((a) => Number(a.id) !== Number(alertId));
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+                showToast('Riasztás elrejtve.', 'success', 'bi-eye-slash');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az elrejtéskor.', 'danger');
+            }
+        } catch (err) {
+            console.error('dismissOneAlert hiba:', err);
+            showToast('Hálózati hiba az elrejtéskor.', 'danger');
+        }
+    });
+}
+
+async function restoreOneAlert(alertId) {
+    if (!alertId) return;
+    return runSafelyAsync('restoreOneAlert', async () => {
+        try {
+            const res = await fetch(`/api/admin/alerts/${alertId}/restore`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                // Optimisztikus lokalis frissites: dismissedAt = null
+                state.liveAlerts = state.liveAlerts.map((a) =>
+                    Number(a.id) === Number(alertId) ? { ...a, dismissedAt: null, dismissedByUserId: null } : a
+                );
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+                showToast('Riasztás visszaállítva.', 'success', 'bi-arrow-counterclockwise');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a visszaállításkor.', 'danger');
+            }
+        } catch (err) {
+            console.error('restoreOneAlert hiba:', err);
+            showToast('Hálózati hiba a visszaállításkor.', 'danger');
+        }
+    });
+}
+
+/* =============================================================
+   Bejelentkezesek (security) oldal: kliens-szintu classifier-ek + handler-ek
+   ============================================================= */
+
+// A backend networkClassifier.js mini-masolata frontend-szintre. A socket broadcast
+// payload-ja nem tartalmazza az enrichment mezoket, ezert kliens-szinten szamoljuk.
+function classifyIpClient(ip) {
+    if (!ip || ip === 'ismeretlen') return { category: 'unknown', label: '—' };
+    const lower = String(ip).toLowerCase().trim();
+    if (lower === '127.0.0.1' || lower === '::1' || lower === '::ffff:127.0.0.1' ||
+        lower.startsWith('127.') || lower === 'localhost') {
+        return { category: 'loopback', label: 'Localhost' };
+    }
+    if (/^169\.254\./.test(lower)) return { category: 'link-local', label: 'Link-local (APIPA)' };
+    if (/^10\./.test(lower)) return { category: 'private', label: 'Belső hálózat (10.x)' };
+    if (/^192\.168\./.test(lower)) return { category: 'private', label: 'Belső hálózat (LAN)' };
+    if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)) {
+        if (/^172\.17\./.test(lower)) return { category: 'docker', label: 'Docker hálózat' };
+        return { category: 'private', label: 'Belső hálózat (172.x)' };
+    }
+    if (/^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./.test(lower)) {
+        return { category: 'cgnat', label: 'Mobilhálózat (CGNAT)' };
+    }
+    if (/^fe[89ab][0-9a-f]:/i.test(lower)) return { category: 'link-local', label: 'IPv6 link-local' };
+    if (/^f[cd][0-9a-f]{2}:/i.test(lower)) return { category: 'private', label: 'Belső IPv6' };
+    if (lower.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(lower)) {
+        return { category: 'public', label: 'Külső IP' };
+    }
+    return { category: 'unknown', label: '—' };
+}
+
+function parseUserAgentClient(ua) {
+    if (!ua) return { browser: '—', os: '—', display: '—', icon: 'bi-question-circle' };
+    const u = String(ua);
+    let browser = 'Egyéb', icon = 'bi-globe';
+    if (/Edg\//i.test(u)) { browser = 'Edge'; icon = 'bi-browser-edge'; }
+    else if (/OPR\/|Opera/i.test(u)) { browser = 'Opera'; icon = 'bi-globe'; }
+    else if (/Chrome\//i.test(u)) { browser = 'Chrome'; icon = 'bi-browser-chrome'; }
+    else if (/Firefox\//i.test(u)) { browser = 'Firefox'; icon = 'bi-browser-firefox'; }
+    else if (/Safari\//i.test(u) && !/Chrome|Edg|OPR/i.test(u)) { browser = 'Safari'; icon = 'bi-browser-safari'; }
+    let os = 'Egyéb';
+    if (/Windows NT/i.test(u)) os = 'Windows';
+    else if (/Android/i.test(u)) os = 'Android';
+    else if (/iPhone|iPad|iOS/i.test(u)) os = 'iOS';
+    else if (/Mac OS X/i.test(u)) os = 'macOS';
+    else if (/Linux/i.test(u)) os = 'Linux';
+    return { browser, os, display: `${browser} / ${os}`, icon };
+}
+
+async function loadLogins() {
+    return runSafelyAsync('loadLogins', async () => {
+        if (!state.adminToken) return;
+        const f = state.loginsFilter || {};
+        const params = new URLSearchParams();
+        params.set('limit', '200');
+        if (f.username) params.set('username', f.username);
+        if (f.status && f.status !== 'all') params.set('status', f.status);
+        if (f.ipAddress) params.set('ip', f.ipAddress);
+        if (f.country) params.set('country', f.country);
+        if (f.sinceDate) params.set('since', new Date(f.sinceDate).toISOString());
+        if (f.untilDate) params.set('until', new Date(f.untilDate).toISOString());
+        try {
+            const res = await fetch(`/api/admin/security/logins?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ Accept: 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                state.liveLogins = Array.isArray(data.data) ? data.data : [];
+                state.loginsLoaded = true;
+                if (state.currentSectionId === 'security') {
+                    showSection('security', null, { silent: true });
+                }
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a bejelentkezések betöltésekor.', 'danger');
+            }
+        } catch (err) {
+            console.error('loadLogins hiba:', err);
+            showToast('Hálózati hiba a bejelentkezések betöltésekor.', 'danger');
+        }
+    });
+}
+
+function onLoginsFilterChange() {
+    state.loginsFilter = {
+        username: (document.getElementById('loginsFilterUsername')?.value || '').trim(),
+        status: document.getElementById('loginsFilterStatus')?.value || 'all',
+        ipAddress: (document.getElementById('loginsFilterIp')?.value || '').trim(),
+        country: document.getElementById('loginsFilterCountry')?.value || '',
+        sinceDate: document.getElementById('loginsFilterSince')?.value || '',
+        untilDate: document.getElementById('loginsFilterUntil')?.value || ''
+    };
+    loadLogins();
+}
+
+function resetLoginsFilter() {
+    state.loginsFilter = { username: '', status: 'all', ipAddress: '', country: '', sinceDate: '', untilDate: '' };
+    loadLogins();
+}
+
+function exportLoginsCsv() {
+    const f = state.loginsFilter || {};
+    const params = new URLSearchParams();
+    params.set('limit', '500');
+    if (f.username) params.set('username', f.username);
+    if (f.status && f.status !== 'all') params.set('status', f.status);
+    if (f.ipAddress) params.set('ip', f.ipAddress);
+    if (f.location) params.set('location', f.location);
+    if (f.sinceDate) params.set('since', new Date(f.sinceDate).toISOString());
+    if (f.untilDate) params.set('until', new Date(f.untilDate).toISOString());
+
+    // Bearer admin token kell — fetch + Blob download (window.open nem visz headert).
+    runSafelyAsync('exportLoginsCsv', async () => {
+        try {
+            const res = await fetch(`/api/admin/security/logins.csv?${params.toString()}`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ Accept: 'text/csv' })
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || `CSV export hiba (HTTP ${res.status}).`, 'danger');
+                return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `bejelentkezesek-${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('CSV export elkészült.', 'success', 'bi-download');
+        } catch (err) {
+            console.error('exportLoginsCsv hiba:', err);
+            showToast('Hálózati hiba a CSV exportnál.', 'danger');
+        }
+    });
+}
+
+async function dismissAllAlerts() {
+    const undismissedCount = (state.liveAlerts || []).filter((a) => !a.dismissedAt).length;
+    if (undismissedCount === 0) {
+        showToast('Nincs elrejtendő riasztás.', 'info', 'bi-info-circle');
+        return;
+    }
+    if (!confirm(`Biztosan elrejti az összes (${undismissedCount}) aktív riasztást? Az adatok megmaradnak — az "Elrejtettek mutatása" szűrővel bármikor visszanézheted.`)) return;
+    return runSafelyAsync('dismissAllAlerts', async () => {
+        try {
+            const res = await fetch(`/api/admin/alerts/dismiss-all`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                if (state.alertsFilter?.includeDismissed) {
+                    state.liveAlerts = state.liveAlerts.map((a) =>
+                        a.dismissedAt ? a : { ...a, dismissedAt: new Date().toISOString() }
+                    );
+                } else {
+                    state.liveAlerts = [];
+                }
+                if (state.currentSectionId === 'alerts') {
+                    showSection('alerts', null, { silent: true });
+                }
+                showToast(`${data.affected || 0} riasztás elrejtve.`, 'success', 'bi-eye-slash-fill');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az elrejtéskor.', 'danger');
+            }
+        } catch (err) {
+            console.error('dismissAllAlerts hiba:', err);
+            showToast('Hálózati hiba az elrejtéskor.', 'danger');
+        }
+    });
+}
+
+function openAuditFromAlert(alertId, ip, userId, occurredAt) {
+    try {
+        const occurredTs = occurredAt ? new Date(occurredAt).getTime() : Date.now();
+        state.auditFilterIntent = {
+            ip: ip || '',
+            userId: userId || null,
+            sinceDate: new Date(occurredTs - 60 * 60 * 1000).toISOString(),
+            untilDate: new Date(occurredTs + 60 * 60 * 1000).toISOString()
+        };
+        showSection('auditLog');
+    } catch (err) {
+        console.warn('openAuditFromAlert hiba:', err);
+        showSection('auditLog');
+    }
+}
+
+function clearAuditFilterIntent() {
+    state.auditFilterIntent = null;
+    if (state.currentSectionId === 'auditLog') {
+        showSection('auditLog', null, { silent: true });
+    }
+}
+
+function openIpBlockModal(ipAddress, alertId) {
+    if (!ipAddress) {
+        showToast('Nincs IP cím a blokkoláshoz.', 'warning');
+        return;
+    }
+    const modalEl = document.getElementById('ipBlockModal');
+    if (!modalEl || !window.bootstrap?.Modal) {
+        showToast('IP blokk modal nem elérhető.', 'warning');
+        return;
+    }
+    setText('ipBlockModalIp', ipAddress);
+    const reasonField = document.getElementById('ipBlockReason');
+    const durationField = document.getElementById('ipBlockDuration');
+    const typeField = document.getElementById('ipBlockType');
+    if (reasonField) reasonField.value = '';
+    if (durationField) durationField.value = '24';
+    if (typeField) typeField.value = 'Ideiglenes';
+    state.ipBlockData = { ipAddress, alertId };
+    new window.bootstrap.Modal(modalEl).show();
+}
+
+function onIpBlockTypeChange() {
+    const type = document.getElementById('ipBlockType')?.value;
+    const duration = document.getElementById('ipBlockDuration');
+    if (!duration) return;
+    if (type === 'Végleges') {
+        duration.disabled = true;
+        duration.value = '';
+        duration.placeholder = 'Nincs lejárat';
+    } else {
+        duration.disabled = false;
+        duration.placeholder = '';
+        if (!duration.value) duration.value = '24';
+    }
+}
+
+async function submitIpBlock() {
+    return runSafelyAsync('submitIpBlock', async () => {
+        const { ipAddress } = state.ipBlockData || {};
+        if (!ipAddress) { showToast('Nincs IP cím.', 'danger'); return; }
+
+        const type = document.getElementById('ipBlockType')?.value || 'Ideiglenes';
+        const durationHours = Number(document.getElementById('ipBlockDuration')?.value) || 24;
+        const reason = (document.getElementById('ipBlockReason')?.value || '').trim();
+
+        let blockedUntil = null;
+        if (type !== 'Végleges') {
+            const until = new Date();
+            until.setHours(until.getHours() + Math.max(1, durationHours));
+            blockedUntil = until.toISOString();
+        }
+
+        try {
+            const res = await fetch('/api/admin/ip-blocks', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ ipAddress, blockedUntil, reason: reason || null })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data?.success) {
+                const modalEl = document.getElementById('ipBlockModal');
+                if (modalEl) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+                showToast(data.message || `IP ${ipAddress} blokkolva.`, 'success', 'bi-shield-fill-check');
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba az IP blokkolásánál.', 'danger');
+            }
+        } catch (err) {
+            console.error('submitIpBlock hiba:', err);
+            showToast('Hálózati hiba az IP blokkolásánál.', 'danger');
+        }
+    });
+}
+
+/* =============================================================
+   Inline ban form: hold-to-confirm + jelszo verifikacio
+   ============================================================= */
+const BAN_HOLD_MS = 5000;
+let banHoldTimer = null;
+
+function onBanTypeChange() {
+    const banType = document.getElementById('banType')?.value;
+    const banDuration = document.getElementById('banDuration');
+    if (!banDuration) return;
+    if (banType === 'Végleges') {
+        banDuration.disabled = true;
+        banDuration.value = '';
+        banDuration.placeholder = 'Nincs lejárat';
+    } else {
+        banDuration.disabled = false;
+        banDuration.placeholder = '';
+        if (!banDuration.value) banDuration.value = '24';
+    }
+}
+
+function onBanReasonInput(textarea) {
+    const counter = document.getElementById('banReasonCount');
+    if (!counter || !textarea) return;
+    const len = textarea.value.length;
+    counter.textContent = String(len);
+    counter.parentElement.classList.toggle('valid', len >= 30);
+}
+
+function startBanHold(btn) {
+    if (!btn || btn.disabled) return;
+    if (banHoldTimer) { clearTimeout(banHoldTimer); banHoldTimer = null; }
+    btn.classList.add('holding');
+    banHoldTimer = setTimeout(async () => {
+        btn.classList.remove('holding');
+        banHoldTimer = null;
+        await submitBanInline(btn);
+    }, BAN_HOLD_MS);
+}
+
+function cancelBanHold(btn) {
+    if (banHoldTimer) {
+        clearTimeout(banHoldTimer);
+        banHoldTimer = null;
+    }
+    if (btn) btn.classList.remove('holding');
+}
+
+async function submitBanInline(btn) {
+    await runSafelyAsync('submitBanInline', async () => {
+        const targetUserId = Number(btn?.dataset?.targetId) || 0;
+        if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+
+        const banType = document.getElementById('banType')?.value || 'Ideiglenes';
+        const durationHours = Number(document.getElementById('banDuration')?.value) || 24;
+        const reason = (document.getElementById('banReason')?.value || '').trim();
+        const currentPassword = document.getElementById('banPassword')?.value || '';
+
+        if (reason.length < 30) {
+            showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+        if (!currentPassword) {
+            showToast('A saját admin jelszó megadása kötelező.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+
+        try {
+            btn.disabled = true;
+            const res = await fetch(`/api/admin/users/${targetUserId}/ban`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ banType, durationHours, reason, currentPassword })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+                showToast('A felhasználó sikeresen tiltva lett.', 'success', 'bi-shield-fill-check');
+                await loadAdminUsersList({ silent: true });
+                showSection(state.currentSectionId, null, { silent: true });
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a tiltás alkalmazásánál.', 'danger');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Hálózati hiba a tiltás során.', 'danger');
+            console.error('inline ban hiba:', err);
+            btn.disabled = false;
+        }
+    });
 }
 
 function applyUserDetailAvatar() {

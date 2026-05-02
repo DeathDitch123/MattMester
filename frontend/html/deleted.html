@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fiók törölve — MattMester</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --gold: #c9a84c;
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --border: #30363d;
+            --text-muted: #8b949e;
+            --accent: #6c757d;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: #e6edf3;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+        .deleted-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 3rem 2.5rem;
+            max-width: 520px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .deleted-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(108, 117, 125, 0.15);
+            border: 2px solid rgba(108, 117, 125, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2.5rem;
+            color: var(--accent);
+        }
+        .deleted-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #e6edf3;
+            margin-bottom: 0.75rem;
+        }
+        .deleted-subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        .deleted-info {
+            background: rgba(201, 168, 76, 0.08);
+            border: 1px solid rgba(201, 168, 76, 0.25);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            color: #c9a84c;
+            text-align: left;
+        }
+        .btn-home {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--gold);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.75rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.1s;
+            cursor: pointer;
+        }
+        .btn-home:hover { background: #b8941f; color: #1a1a1a; transform: translateY(-1px); }
+        .deleted-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; margin-bottom: 1.25rem; }
+        .deleted-support {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 0.5rem;
+        }
+        .deleted-support a {
+            color: var(--text-muted);
+            text-decoration: underline;
+            transition: color 0.2s;
+        }
+        .deleted-support a:hover { color: #e6edf3; }
+        footer {
+            background: var(--bg-card);
+            border-top: 1px solid var(--border);
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        footer a { color: var(--gold); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        .brand { font-weight: 700; color: var(--gold); letter-spacing: 0.05em; }
+    </style>
+</head>
+
+<body>
+    <main>
+        <div class="deleted-card">
+            <div class="deleted-icon">
+                <i class="bi bi-trash3-fill"></i>
+            </div>
+            <h1 class="deleted-title">Fiókod törölve lett</h1>
+            <p class="deleted-subtitle">
+                A fiókod adatai véglegesen eltávolításra kerültek a MattMester rendszeréből.
+                Ezzel az email címmel újra regisztrálhatsz, kivéve ha a fiók tiltott állapotban
+                volt törléskor — ebben az esetben a tiltás idejéig az email blokkolva marad.
+            </p>
+
+            <div class="deleted-info">
+                <i class="bi bi-heart-fill me-2"></i>
+                Köszönjük, hogy nálunk játszottál.
+            </div>
+
+            <div class="deleted-actions">
+                <a class="btn-home" href="/">
+                    <i class="bi bi-house"></i>
+                    Vissza a főoldalra
+                </a>
+            </div>
+            <p class="deleted-support">
+                Ha tévedésnek tartod, vedd fel a kapcsolatot a
+                <a target="_blank" rel="noopener"
+                   href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Profil%20t%C3%B6rl%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AKor%C3%A1bbi%20felhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%5D%0A%0AAz%20al%C3%A1bbi%20miatt%20gondolom%2C%20hogy%20a%20t%C3%B6rl%C3%A9s%20t%C3%A9ved%C3%A9s%20volt%3A%0A%5Bide%20%C3%ADrd%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C">supporttal</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer>
+        <span class="brand">MATTMESTER</span> &middot; Modern sakkélmény &middot;
+        <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>
+        &middot; <small>&copy; 2026 MattMester</small>
+    </footer>
+</body>
+
+</html>

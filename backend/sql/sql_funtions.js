@@ -1402,7 +1402,7 @@ async function deleteUserProfileWithTransaction(userId) {
         await connection.beginTransaction();
 
         const [userRows] = await connection.execute(
-            'SELECT id, username, role FROM users WHERE id = ? LIMIT 1 FOR UPDATE',
+            'SELECT id, username, email, role, is_banned, banned_until, ban_reason FROM users WHERE id = ? LIMIT 1 FOR UPDATE',
             [userId]
         );
 
@@ -1413,6 +1413,20 @@ async function deleteUserProfileWithTransaction(userId) {
         const user = userRows[0];
         if (user.role === 'admin') {
             throw new Error('Admin profil nem torolheto.');
+        }
+
+        // Ha a user banned-allapotban van torleskor, a ban metaadata atkerul a banned_emails-be
+        // hogy ne tudja a ban idejet megkerulni ujraregisztracioval.
+        if (user.is_banned && user.email) {
+            await connection.execute(
+                `INSERT INTO banned_emails (email, banned_until, ban_reason, original_user_id)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                     banned_until = VALUES(banned_until),
+                     ban_reason   = VALUES(ban_reason),
+                     original_user_id = VALUES(original_user_id)`,
+                [user.email, user.banned_until, user.ban_reason, userId]
+            );
         }
 
         // A kapcsolt adatok explicit torlese nem bukik el akkor sem, ha 0 talalat van.
@@ -1463,6 +1477,25 @@ async function deleteUserProfileWithTransaction(userId) {
     } finally {
         connection.release();
     }
+}
+
+
+
+// Visszaadja az aktiv banned_emails rekordot ha az email blokkolva van.
+// banned_until IS NULL = vegleges; banned_until > NOW() = meg aktiv temp ban.
+// Lejart temp bant nem ad vissza (a sor megmarad audit-celra, de nem blokkol).
+async function isEmailBanned(email) {
+    if (!email) return null;
+    const pool = getPool();
+    const [rows] = await pool.execute(
+        `SELECT email, banned_until, ban_reason, original_user_id
+         FROM banned_emails
+         WHERE email = ?
+           AND (banned_until IS NULL OR banned_until > NOW())
+         LIMIT 1`,
+        [email]
+    );
+    return rows[0] || null;
 }
 
 
@@ -3201,6 +3234,22 @@ async function getUserVerificationStatusById(userId) {
     return statusRow;
 }
 
+// Gyors index lookup minden authentikalt request-en — csak a ban-statusz erdekel.
+// Visszaadja: { is_banned: 0|1 } vagy null ha a user nem letezik.
+async function checkUserBanStatus(userId) {
+    const pool = getPool();
+    try {
+        const [rows] = await pool.execute(
+            'SELECT is_banned FROM users WHERE id = ? LIMIT 1',
+            [userId]
+        );
+        return rows[0] || null;
+    } catch (error) {
+        console.warn('checkUserBanStatus hiba:', error.message);
+        return null;
+    }
+}
+
 // =====================
 // Notifications (DB-backed unified notification system)
 // =====================
@@ -3850,6 +3899,7 @@ module.exports = {
     getAllProfileImageReferences,
     searchUsersByUsernameContains,
     deleteUserProfileWithTransaction,
+    isEmailBanned,
     addFriendRequest,
     getFriendStatus,
     getFriendListForUser,
@@ -3875,6 +3925,7 @@ module.exports = {
     markEmailVerified,
     clearEmailVerificationState,
     getUserVerificationStatusById,
+    checkUserBanStatus,
     insertNotification,
     getNotificationsForUser,
     markNotificationRead,

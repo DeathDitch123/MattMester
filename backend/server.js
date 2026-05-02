@@ -70,6 +70,11 @@ const sessionMiddleware = session({
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware); //?Socket.io session kezelés
 
+// ipBlockGuard: hard IP-blokk middleware. A session middleware UTAN, a route-ok ELOTT.
+// Az ip_blocks tablat olvasva 60sec cache-szel; blokkolt IP -> 403.
+const { ipBlockGuard } = require('./api/middleware/ipBlockGuard.js');
+app.use(ipBlockGuard);
+
 //?CORS beállítása production-hez
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
     .split(',')

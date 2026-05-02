@@ -368,6 +368,292 @@ async function countFailedAdminAttemptsByIp(ipAddress, windowSeconds) {
     return result;
 }
 
+// Flexibilis alert lekerdezes a Riasztasok admin oldalrol — szurokkel.
+// Az osszes szuro opcionalis. Default: includeDismissed=false (csak aktiv alertek).
+// Whitelisted oszlopneveket hasznal, parametereket prepared statement-tel.
+async function listAlertsForAdmin(options = {}) {
+    const {
+        limit = 100,
+        includeDismissed = false,
+        kind = null,
+        severity = null,
+        sinceDate = null,
+        untilDate = null,
+        ipAddress = null,
+        userId = null
+    } = options || {};
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const allowedSeverity = new Set(['info', 'warning', 'critical']);
+
+    const conditions = [];
+    const params = [];
+
+    if (!includeDismissed) {
+        conditions.push('dismissed_at IS NULL');
+    }
+    if (kind && typeof kind === 'string') {
+        conditions.push('kind = ?');
+        params.push(kind.slice(0, 64));
+    }
+    if (severity && allowedSeverity.has(String(severity))) {
+        conditions.push('severity = ?');
+        params.push(severity);
+    }
+    if (sinceDate) {
+        conditions.push('occurred_at >= ?');
+        params.push(sinceDate instanceof Date ? sinceDate : new Date(sinceDate));
+    }
+    if (untilDate) {
+        conditions.push('occurred_at <= ?');
+        params.push(untilDate instanceof Date ? untilDate : new Date(untilDate));
+    }
+    if (ipAddress && typeof ipAddress === 'string') {
+        conditions.push('ip_address = ?');
+        params.push(ipAddress.slice(0, 45));
+    }
+    if (userId && Number(userId) > 0) {
+        conditions.push('user_id = ?');
+        params.push(Number(userId));
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(safeLimit);
+
+    try {
+        const pool = getPool();
+        const [rows] = await pool.query(
+            `SELECT id, kind, severity, user_id, ip_address, endpoint, user_agent, detail,
+                    dismissed_at, dismissed_by_user_id, occurred_at
+             FROM admin_alert_log
+             ${whereClause}
+             ORDER BY occurred_at DESC
+             LIMIT ?`,
+            params
+        );
+        return rows || [];
+    } catch (error) {
+        console.error('listAlertsForAdmin hiba:', error.message);
+        throw new Error('Alert lekerdezesi hiba (filtered).');
+    }
+}
+
+async function getAlertById(alertId) {
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, kind, severity, user_id, ip_address, endpoint, user_agent, detail,
+                    dismissed_at, dismissed_by_user_id, occurred_at
+             FROM admin_alert_log
+             WHERE id = ?
+             LIMIT 1`,
+            [alertId]
+        );
+        return rows[0] || null;
+    } catch (error) {
+        console.error('getAlertById hiba:', error.message);
+        throw new Error('Alert lekerdezesi hiba (byId).');
+    }
+}
+
+// Idempotens: ha mar dismissed, 0 affected rows-szal ter vissza.
+async function markAlertDismissed(alertId, dismissedByUserId) {
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `UPDATE admin_alert_log
+             SET dismissed_at = NOW(), dismissed_by_user_id = ?
+             WHERE id = ? AND dismissed_at IS NULL`,
+            [dismissedByUserId || null, alertId]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('markAlertDismissed hiba:', error.message);
+        throw new Error('Alert dismiss hiba.');
+    }
+}
+
+async function markAllAlertsDismissed(dismissedByUserId) {
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `UPDATE admin_alert_log
+             SET dismissed_at = NOW(), dismissed_by_user_id = ?
+             WHERE dismissed_at IS NULL`,
+            [dismissedByUserId || null]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('markAllAlertsDismissed hiba:', error.message);
+        throw new Error('Alert mass dismiss hiba.');
+    }
+}
+
+// Bejelentkezesi naplo lekerdezese az admin Bejelentkezesek oldalhoz.
+// SQL-szintu szurok: status (success|failed|all), date range, IP, username (LIKE).
+// A 'location' szurest a hivó (admin endpoint) post-fetch vegzi a classifyIp-vel.
+async function listAdminLoginHistory(options = {}) {
+    const {
+        limit = 100,
+        sinceDate = null,
+        untilDate = null,
+        ipAddress = null,
+        username = null,
+        status = 'all'
+    } = options || {};
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const conditions = [];
+    const params = [];
+
+    if (status === 'success') {
+        conditions.push("ul.event_type = 'login'");
+    } else if (status === 'failed') {
+        conditions.push("ul.event_type = 'login_failed'");
+    } else {
+        conditions.push("ul.event_type IN ('login', 'login_failed')");
+    }
+    if (sinceDate) {
+        conditions.push('ul.occurred_at >= ?');
+        params.push(sinceDate instanceof Date ? sinceDate : new Date(sinceDate));
+    }
+    if (untilDate) {
+        conditions.push('ul.occurred_at <= ?');
+        params.push(untilDate instanceof Date ? untilDate : new Date(untilDate));
+    }
+    if (ipAddress && typeof ipAddress === 'string') {
+        conditions.push('ul.ip_address = ?');
+        params.push(ipAddress.slice(0, 45));
+    }
+    if (username && typeof username === 'string') {
+        conditions.push('u.username LIKE ?');
+        params.push(`%${username.slice(0, 50)}%`);
+    }
+    params.push(safeLimit);
+
+    try {
+        const pool = getPool();
+        const [rows] = await pool.query(
+            `SELECT ul.id, ul.user_id, u.username, ul.event_type, ul.severity, ul.success,
+                    ul.ip_address, ul.user_agent, ul.message, ul.metadata, ul.occurred_at
+             FROM user_logs ul
+             LEFT JOIN users u ON u.id = ul.user_id
+             WHERE ${conditions.join(' AND ')}
+             ORDER BY ul.occurred_at DESC
+             LIMIT ?`,
+            params
+        );
+        return rows || [];
+    } catch (error) {
+        console.error('listAdminLoginHistory hiba:', error.message);
+        throw new Error('Bejelentkezesi naplo lekerdezesi hiba.');
+    }
+}
+
+// Visszaallit egy elrejtett riasztast — dismissed_at + dismissed_by_user_id NULL-ra.
+// Idempotens: ha mar nem elrejtett, 0 affectedRows.
+async function restoreAlert(alertId) {
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `UPDATE admin_alert_log
+             SET dismissed_at = NULL, dismissed_by_user_id = NULL
+             WHERE id = ? AND dismissed_at IS NOT NULL`,
+            [alertId]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('restoreAlert hiba:', error.message);
+        throw new Error('Alert visszaallitasi hiba.');
+    }
+}
+
+// =====================================================================
+// ip_blocks (hard IP block, az ipBlockGuard middleware nezi)
+// =====================================================================
+
+async function upsertIpBlock(ipAddress, blockedUntil, reason, blockedByUserId, blockedByUsername) {
+    if (!ipAddress) throw new Error('Ervenytelen IP cim.');
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `INSERT INTO ip_blocks (ip_address, blocked_until, reason, blocked_by_user_id, blocked_by_username)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                 blocked_until = VALUES(blocked_until),
+                 reason = VALUES(reason),
+                 blocked_by_user_id = VALUES(blocked_by_user_id),
+                 blocked_by_username = VALUES(blocked_by_username),
+                 created_at = CURRENT_TIMESTAMP`,
+            [
+                String(ipAddress).slice(0, 45),
+                blockedUntil || null,
+                reason ? String(reason).slice(0, 500) : null,
+                blockedByUserId || null,
+                blockedByUsername ? String(blockedByUsername).slice(0, 50) : null
+            ]
+        );
+        return { affectedRows: result.affectedRows || 0, insertId: result.insertId || null };
+    } catch (error) {
+        console.error('upsertIpBlock hiba:', error.message);
+        throw new Error('IP blokk mentesi hiba.');
+    }
+}
+
+// Aktiv blokkot ad vissza (vegleges vagy meg le nem jart). Lejart blokk null.
+async function getActiveIpBlock(ipAddress) {
+    if (!ipAddress) return null;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, ip_address, blocked_until, reason, blocked_by_user_id, blocked_by_username, created_at
+             FROM ip_blocks
+             WHERE ip_address = ?
+               AND (blocked_until IS NULL OR blocked_until > NOW())
+             LIMIT 1`,
+            [String(ipAddress).slice(0, 45)]
+        );
+        return rows[0] || null;
+    } catch (error) {
+        console.error('getActiveIpBlock hiba:', error.message);
+        return null; // fail-open: a middleware ne csukja le az oldalt
+    }
+}
+
+async function removeIpBlock(ipAddress) {
+    if (!ipAddress) throw new Error('Ervenytelen IP cim.');
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `DELETE FROM ip_blocks WHERE ip_address = ?`,
+            [String(ipAddress).slice(0, 45)]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('removeIpBlock hiba:', error.message);
+        throw new Error('IP blokk torlesi hiba.');
+    }
+}
+
+async function listActiveIpBlocks(limit = 200) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 1000);
+    try {
+        const pool = getPool();
+        const [rows] = await pool.query(
+            `SELECT id, ip_address, blocked_until, reason, blocked_by_user_id, blocked_by_username, created_at
+             FROM ip_blocks
+             WHERE blocked_until IS NULL OR blocked_until > NOW()
+             ORDER BY created_at DESC
+             LIMIT ?`,
+            [safeLimit]
+        );
+        return rows || [];
+    } catch (error) {
+        console.error('listActiveIpBlocks hiba:', error.message);
+        throw new Error('IP blokk lista hiba.');
+    }
+}
+
 // =====================================================================
 // admin_rate_escalations
 // =====================================================================
@@ -730,6 +1016,17 @@ module.exports = {
     deleteAlertsOlderThan,
     countAlertsSince,
     countFailedAdminAttemptsByIp,
+    listAlertsForAdmin,
+    getAlertById,
+    markAlertDismissed,
+    markAllAlertsDismissed,
+    restoreAlert,
+    listAdminLoginHistory,
+    // ip blocks
+    upsertIpBlock,
+    getActiveIpBlock,
+    removeIpBlock,
+    listActiveIpBlocks,
     // escalations
     upsertRateEscalation,
     getActiveRateEscalation,

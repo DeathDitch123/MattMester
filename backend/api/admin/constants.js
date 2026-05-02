@@ -73,7 +73,15 @@ const ADMIN_PERMISSIONS = Object.freeze({
 
     ADMIN_GRANT: 'admin.grant',
     ADMIN_REVOKE: 'admin.revoke',
-    ADMIN_LIST: 'admin.list'
+    ADMIN_LIST: 'admin.list',
+
+    ALERTS_DISMISS:     'alerts.dismiss',
+    ALERTS_DISMISS_ALL: 'alerts.dismiss_all',
+    ALERTS_RESTORE:     'alerts.restore',
+    IP_BLOCK_CREATE:    'ip_blocks.create',
+    IP_BLOCK_REMOVE:    'ip_blocks.remove',
+    SECURITY_LOGINS_VIEW:   'security.logins.view',
+    SECURITY_LOGINS_EXPORT: 'security.logins.export'
 });
 
 const SUPER_ONLY_PERMISSIONS = Object.freeze(new Set([
@@ -88,7 +96,8 @@ const CRITICAL_ACTIONS = Object.freeze(new Set([
     ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE,
     ADMIN_PERMISSIONS.NOTIFICATIONS_BROADCAST,
     ADMIN_PERMISSIONS.ADMIN_GRANT,
-    ADMIN_PERMISSIONS.ADMIN_REVOKE
+    ADMIN_PERMISSIONS.ADMIN_REVOKE,
+    ADMIN_PERMISSIONS.IP_BLOCK_CREATE
 ]));
 
 // Egyseges hibakodok az admin response-okhoz.
