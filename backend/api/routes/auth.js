@@ -216,6 +216,15 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
             throw new Error('Az email cím már foglalt!');
         }
 
+        const emailBan = await sql.isEmailBanned(email);
+        if (emailBan) {
+            statusCode = 403;
+            const untilStr = emailBan.banned_until
+                ? `${new Date(emailBan.banned_until).toLocaleDateString('hu-HU')}-ig`
+                : 'véglegesen';
+            throw new Error(`Ezzel az email címmel jelenleg nem lehet új fiókot regisztrálni (${untilStr}).`);
+        }
+
         if (await sql.getUserByUsername(username)) {
             statusCode = 409;
             throw new Error('A felhasználónév már foglalt!');
@@ -331,6 +340,18 @@ router.get('/sessionInfo', async (request, response) => {
                 request.session.destroy(() => {
                     console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
                 });
+            } else if (dbUser.is_banned) {
+                // A banned user session-jet azonnal megsemmisitjuk minden sessionInfo lekereskor
+                // — ez a vegso vedelem hogy ne maradhasson "logged in" allapotban a banned user.
+                // A frontend loggedIn:false-ot lat -> homepage kijelentkezett UI-t mutat.
+                await new Promise((resolve) => {
+                    request.session.destroy((err) => {
+                        if (err) console.warn('sessionInfo: ban-eviction destroy hiba:', err.message);
+                        resolve();
+                    });
+                });
+                response.clearCookie('connect.sid');
+                console.log(`Banned user (${dbUser.username}) session-je evictalva sessionInfo-n.`);
             } else {
                 // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
                 request.session.userId = dbUser.id;

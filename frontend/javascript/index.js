@@ -532,7 +532,7 @@ function bindLoginForm() {
                         if (result.code === 'account_banned') {
                             showFormMessage(
                                 messageElement, 'danger',
-                                'A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20fellebbez%C3%A9s%20%E2%80%94%20MattMester" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                'A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20fellebbez%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AFelhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%20a%20felhaszn%C3%A1l%C3%B3nevedet%5D%0A%0AKifog%C3%A1solom%20a%20r%C3%A1m%20kiszabott%20tilt%C3%A1st%2C%20mert%3A%0A%5Bide%20%C3%ADrd%20az%20indokot%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
                                 true
                             );
                             return;

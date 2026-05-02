@@ -9,11 +9,13 @@
 // kihagyja non-mutating method-okra, de az express.json() sem szukseges).
 
 const express = require('express');
+const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs/promises');
 const sql = require('../../sql/sql_funtions.js');
 const adminRepo = require('../../sql/adminRepo.js');
+const { passwordRegex } = require('../validation.js');
 
 const authRoutes = require('../admin/authRoutes.js');
 const superAdminRoutes = require('../admin/superAdminRoutes.js');
@@ -1402,9 +1404,39 @@ router.post(
             const banType = String(body.banType || 'Ideiglenes').trim();
             const durationHours = Math.max(1, Number(body.durationHours) || 24);
             const reason = String(body.reason || request.adminReason || '').trim();
+            const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
             if (reason.length < 30) {
                 statusCode = 400;
                 throw new Error('Az indoknak legalább 30 karakter hosszúnak kell lennie.');
+            }
+
+            // Admin sajat jelszavanak ellenorzese — a delete-flow mintajara, hogy a hold-button
+            // ne legyen elegendo egyetlen vedelem. (Nem a target user jelszava!)
+            if (!currentPassword) {
+                statusCode = 400;
+                throw new Error('A jelenlegi admin jelszó megadása kötelező.');
+            }
+            if (currentPassword.includes('\\')) {
+                statusCode = 400;
+                throw new Error('A jelszó nem megengedett karaktert tartalmaz.');
+            }
+            if (currentPassword.length < 8) {
+                statusCode = 400;
+                throw new Error('A jelszónak legalább 8 karakter hosszú kell legyen.');
+            }
+            if (!passwordRegex.test(currentPassword)) {
+                statusCode = 400;
+                throw new Error('A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.');
+            }
+            const adminAuthUser = await sql.getUserAuthById(adminUserId);
+            if (!adminAuthUser) {
+                statusCode = 404;
+                throw new Error('Az admin felhasználó nem található.');
+            }
+            const isPasswordValid = await bcrypt.compare(currentPassword, adminAuthUser.password_hash);
+            if (!isPasswordValid) {
+                statusCode = 401;
+                throw new Error('A jelenlegi jelszó hibás.');
             }
 
             let bannedUntil = null;
@@ -1415,6 +1447,28 @@ router.post(
             }
 
             await sql.banUser(userId, reason, bannedUntil);
+
+            // HTTP session(ok) megsemmisitese a session store-bol — kulonben a banned
+            // user a meglevo cookie-javal tovabb tudna hasznalni az oldalt
+            // (isAuthenticated middleware csak session.userId-t nez, nem a DB is_banned-et).
+            try {
+                const sessionStore = request.app?.locals?.sessionStore;
+                if (sessionStore && typeof sessionStore.all === 'function') {
+                    await new Promise((resolve) => {
+                        sessionStore.all((err, sessions) => {
+                            if (err || !sessions) { resolve(); return; }
+                            const destroyPromises = Object.entries(sessions)
+                                .filter(([, s]) => Number(s?.userId) === userId)
+                                .map(([sid]) => new Promise((res) => {
+                                    sessionStore.destroy(sid, () => res());
+                                }));
+                            Promise.all(destroyPromises).then(resolve);
+                        });
+                    });
+                }
+            } catch (sessionErr) {
+                console.warn('ban: session destroy hiba:', sessionErr.message);
+            }
 
             try {
                 const adminSocketHub = request.app?.locals?.adminSocketHub;
@@ -1434,6 +1488,29 @@ router.post(
             response.locals.adminAudit.targetType = 'user';
             response.locals.adminAudit.targetId = userId;
             response.locals.adminAudit.success = true;
+
+            // Riasztas log: a kritikus admin akciok megjelennek a Vezerlopult "24h riasztas"
+            // szamlaloban es a Riasztasok listaban.
+            try {
+                await adminRepo.insertAlertEntry({
+                    kind: 'user_banned',
+                    severity: 'warning',
+                    userId,
+                    ipAddress: request.adminAuth?.ipAddress || request.ip,
+                    userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
+                    endpoint: '/admin/users/:id/ban',
+                    detail: {
+                        actorUserId: adminUserId,
+                        actorUsername: request.adminAuth?.username,
+                        banType,
+                        durationHours: banType === 'Végleges' ? null : durationHours,
+                        bannedUntil: bannedUntil ? bannedUntil.toISOString() : null,
+                        reason
+                    }
+                });
+            } catch (alertErr) {
+                console.warn('ban: alert log hiba:', alertErr.message);
+            }
 
             payload = { success: true, message: 'A felhasználó sikeresen tiltva lett.' };
         } catch (error) {
@@ -1474,6 +1551,24 @@ router.post(
             response.locals.adminAudit.targetId = userId;
             response.locals.adminAudit.success = true;
 
+            try {
+                await adminRepo.insertAlertEntry({
+                    kind: 'user_unbanned',
+                    severity: 'info',
+                    userId,
+                    ipAddress: request.adminAuth?.ipAddress || request.ip,
+                    userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
+                    endpoint: '/admin/users/:id/unban',
+                    detail: {
+                        actorUserId: Number(request.adminAuth?.userId) || null,
+                        actorUsername: request.adminAuth?.username,
+                        reason: request.adminReason || null
+                    }
+                });
+            } catch (alertErr) {
+                console.warn('unban: alert log hiba:', alertErr.message);
+            }
+
             payload = { success: true, message: 'A tiltás sikeresen feloldva.' };
         } catch (error) {
             if (statusCode === 200) statusCode = 500;
@@ -1481,6 +1576,152 @@ router.post(
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_UNBAN;
             response.locals.adminAudit.success = false;
             response.locals.adminAudit.errorCode = 'UNBAN_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// =====================================================================
+// POST /admin/users/:id/delete
+// Hard delete egy felhasznalo profiljat. A self-delete (POST /profile/delete)
+// flow-t hivja meg admin neveben (deleteUserProfileWithTransaction).
+// Vedelem: admin sajat jelszojanak ujra-megerositese kotelezo. Indok opcionalis.
+// =====================================================================
+router.post(
+    '/users/:id/delete',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a felhasznalo torlese soran.' };
+        const adminUserId = Number(request.adminAuth?.userId) || 0;
+        let targetUserId = 0;
+
+        try {
+            targetUserId = Number(request.params?.id) || 0;
+            if (!targetUserId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen felhasznalo azonosito.');
+            }
+
+            if (targetUserId === adminUserId) {
+                statusCode = 400;
+                throw new Error('Sajat accountot nem tudsz admin-kent torolni.');
+            }
+
+            const body = request.body || {};
+            const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+            const rawReason = typeof body.reason === 'string' ? body.reason.trim() : '';
+            const reason = rawReason.length > 0 ? rawReason.slice(0, 1000) : null;
+
+            if (!currentPassword) {
+                statusCode = 400;
+                throw new Error('A jelenlegi jelszo kotelezo.');
+            }
+            if (currentPassword.includes('\\')) {
+                statusCode = 400;
+                throw new Error('A jelszo nem megengedett karaktert tartalmaz.');
+            }
+            if (currentPassword.length < 8) {
+                statusCode = 400;
+                throw new Error('A jelszonak legalabb 8 karakter hosszu kell legyen.');
+            }
+            if (!passwordRegex.test(currentPassword)) {
+                statusCode = 400;
+                throw new Error('A jelszonak tartalmaznia kell nagybetut, kisbetut es szamot.');
+            }
+
+            // Admin sajat jelszavanak ellenorzese (NEM a target user-e!)
+            const adminAuthUser = await sql.getUserAuthById(adminUserId);
+            if (!adminAuthUser) {
+                statusCode = 404;
+                throw new Error('Az admin felhasznalo nem talalhato.');
+            }
+            const isPasswordValid = await bcrypt.compare(currentPassword, adminAuthUser.password_hash);
+            if (!isPasswordValid) {
+                statusCode = 401;
+                throw new Error('A jelenlegi jelszo hibas.');
+            }
+
+            // Audit kontextus elo-feltoltese (delete elott, hogy hiba eseten is megmaradjon).
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_DELETE;
+            response.locals.adminAudit.severity = 'critical';
+            response.locals.adminAudit.targetType = 'user';
+            response.locals.adminAudit.targetId = targetUserId;
+            if (reason) {
+                response.locals.adminAudit.reason = reason;
+            }
+
+            // Hard delete (a sajat self-delete flow ugyanezt a fuggvenyt hasznalja).
+            // A fuggveny dob: 'A felhasznalo nem talalhato.' / 'Admin profil nem torolheto.'
+            const deleteResult = await sql.deleteUserProfileWithTransaction(targetUserId);
+
+            // Sockets / sessions takaritasa - mint a ban-nal.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.disconnectAllForAdminUser === 'function') {
+                    await adminSocketHub.disconnectAllForAdminUser(targetUserId, 'deleted');
+                }
+                const socketHub = request.app?.locals?.socketHub;
+                if (socketHub && typeof socketHub.notifyUserDeleted === 'function') {
+                    // notifyUserDeleted kuld 'user:deleted' eventet -> /html/deleted.html redirect.
+                    // NEM banUser-t hivunk, kulonben a kliens ban.html-re menne (felrevezeto).
+                    // NEM disconnectUser-t hivunk, mert az csak /api/logout-ra dob, ami nem
+                    // mutatja a usernek hogy a fiokja torolve lett.
+                    await socketHub.notifyUserDeleted(targetUserId);
+                }
+            } catch (kickErr) {
+                console.warn('user delete: socket disconnect hiba:', kickErr.message);
+            }
+
+            response.locals.adminAudit.targetLabel = deleteResult.username || null;
+            response.locals.adminAudit.success = true;
+
+            try {
+                await adminRepo.insertAlertEntry({
+                    kind: 'user_deleted',
+                    severity: 'critical',
+                    userId: targetUserId,
+                    ipAddress: request.adminAuth?.ipAddress || request.ip,
+                    userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
+                    endpoint: '/admin/users/:id/delete',
+                    detail: {
+                        actorUserId: adminUserId,
+                        actorUsername: request.adminAuth?.username,
+                        deletedUsername: deleteResult.username,
+                        reason
+                    }
+                });
+            } catch (alertErr) {
+                console.warn('user delete: alert log hiba:', alertErr.message);
+            }
+
+            payload = {
+                success: true,
+                message: 'A felhasznalo profilja sikeresen torolve.',
+                deletedUserId: deleteResult.userId,
+                deletedUsername: deleteResult.username
+            };
+        } catch (error) {
+            if (statusCode === 200) {
+                statusCode = 500;
+                if (error.message === 'A felhasznalo nem talalhato.') statusCode = 404;
+                else if (error.message === 'Admin profil nem torolheto.') statusCode = 403;
+                else if (error.message === 'A jelenlegi jelszo hibas.') statusCode = 401;
+            }
+            payload = { success: false, message: error.message || 'Szerverhiba.' };
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_DELETE;
+            response.locals.adminAudit.targetType = 'user';
+            response.locals.adminAudit.targetId = targetUserId || null;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = statusCode === 401 ? 'AUTH_FAILED'
+                : statusCode === 403 ? 'FORBIDDEN'
+                : statusCode === 404 ? 'NOT_FOUND'
+                : 'DELETE_FAILED';
         }
         return response.status(statusCode).json(payload);
     }

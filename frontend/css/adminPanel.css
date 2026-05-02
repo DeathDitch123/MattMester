@@ -3018,6 +3018,87 @@ i.bi.spin {
     flex-wrap: wrap;
 }
 
+/* Hold-to-confirm gomb a tiltas alkalmazasahoz (5mp nyomva tartas) */
+.ban-hold-btn {
+    width: 100%;
+    padding: 14px 16px;
+    background: var(--accent-red);
+    color: #fff;
+    border: 0;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: background 0.15s;
+}
+.ban-hold-btn:hover:not(:disabled) { background: #d63450; }
+.ban-hold-btn:disabled {
+    background: #4a4a4a;
+    color: #b0b0b0;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.ban-hold-btn .ban-hold-label {
+    display: inline-flex;
+    align-items: center;
+}
+.ban-hold-btn .ban-hold-sub {
+    font-size: 0.78rem;
+    font-weight: 400;
+    opacity: 0.9;
+}
+.ban-hold-btn::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.85);
+    width: 0%;
+    transition: none;
+}
+.ban-hold-btn.holding::after {
+    width: 100%;
+    transition: width 5s linear;
+}
+
+/* Unban (zold) styling a kritikus modalon — pozitiv muvelet */
+.critical-action-modal.is-positive {
+    border: 1px solid rgba(16, 185, 129, 0.45) !important;
+    box-shadow: 0 20px 60px -10px rgba(16, 185, 129, 0.28), 0 0 0 1px rgba(16, 185, 129, 0.12) !important;
+}
+.critical-action-modal.is-positive .modal-header {
+    border-bottom: 1px solid rgba(16, 185, 129, 0.35);
+}
+.critical-action-modal.is-positive .modal-title {
+    color: var(--accent-green);
+}
+.critical-action-modal.is-positive .modal-title i {
+    color: var(--accent-green) !important;
+}
+.critical-action-modal.is-positive .critical-warning {
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: var(--accent-green);
+}
+.critical-action-modal.is-positive .critical-warning i { color: var(--accent-green); }
+.critical-action-modal.is-positive .modal-footer .btn-danger {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+}
+.critical-action-modal.is-positive .modal-footer .btn-danger:hover {
+    background: #0e9e6e;
+    border-color: #0e9e6e;
+}
+
 /* =============================================================
    ADMIN — User View Modal (két-tabos audit log)
    ============================================================= */

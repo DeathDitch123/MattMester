@@ -845,6 +845,16 @@
             }
         });
 
+        socket.on('user:deleted', () => {
+            try {
+                console.warn('[socketClient] user:deleted');
+                try { socket.disconnect(); } catch (_) { }
+                window.location.href = '/html/deleted.html';
+            } catch (_) {
+                window.location.href = '/html/deleted.html';
+            }
+        });
+
         socket.on('user:profile:adminEdit', (payload = {}) => {
             // Admin által módosult a profil — továbbítjuk az oldalaknak,
             // hogy a Security & Activity History és a session-info azonnal frissüljön.

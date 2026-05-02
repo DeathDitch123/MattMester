@@ -494,6 +494,11 @@ function createSocketHub(io) {
         }
 
         const clientRecord = clientsById.get(context.clientId);
+        // FONTOS: a userId-t is frissiteni kell, nem csak elsoreg-konnektnel.
+        // Korabban: ha a kliens elobb anonim kapcsolodott (userId=null), majd login utan
+        // a socket reconnectelt ugyanazzal a clientId-vel, a clientRecord.userId NULL maradt
+        // -> a buildPresenceMap kihagyta -> az admin-panel "Offline"-nak latta a logged-in usert.
+        clientRecord.userId = context.userId;
         clientRecord.username = context.username;
         clientRecord.role = context.role;
         clientRecord.profile_image = context.profile_image || '/profile_pictures/default.png';
@@ -1072,6 +1077,18 @@ function createSocketHub(io) {
             if (!normalized) return false;
             io.to(`user-room:${normalized}`).emit('user:banned', {
                 reason: String(reason || ''),
+                at: new Date().toISOString()
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
+        },
+        async notifyUserDeleted(targetUserId) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            io.to(`user-room:${normalized}`).emit('user:deleted', {
                 at: new Date().toISOString()
             });
             const sockets = await io.in(`user-room:${normalized}`).fetchSockets();

@@ -293,7 +293,10 @@ const ALERT_KIND = {
     unauthorized: { label: 'Jogosulatlan próba', icon: 'bi-shield-fill-x' },
     rate_escalated: { label: 'Rate limit szigorítás', icon: 'bi-speedometer2' },
     token_invalid: { label: 'Token hiba', icon: 'bi-key-fill' },
-    suspicious_pattern: { label: 'Gyanús minta', icon: 'bi-bug-fill' }
+    suspicious_pattern: { label: 'Gyanús minta', icon: 'bi-bug-fill' },
+    user_banned:   { label: 'Felhasználó tiltva',   icon: 'bi-slash-circle-fill' },
+    user_unbanned: { label: 'Tiltás feloldva',      icon: 'bi-check-circle-fill' },
+    user_deleted:  { label: 'Felhasználó törölve',  icon: 'bi-trash3-fill' }
 };
 const severityPill = (key) => {
     const s = SEVERITY[key] || SEVERITY.info;
@@ -926,7 +929,8 @@ const NAV_TREE = [
         items: [
             { id: 'users', label: 'Lista', icon: 'bi-list-ul' },
             { id: 'userDetail', label: 'Részletek és szerkesztés', icon: 'bi-person-vcard' },
-            { id: 'userBan', label: 'Tiltások', icon: 'bi-slash-circle' }
+            { id: 'userBan', label: 'Tiltások', icon: 'bi-slash-circle' },
+            { id: 'userDelete', label: 'Felhasználó törlése', icon: 'bi-trash3-fill' }
         ]
     },
 
@@ -1650,6 +1654,16 @@ const SECTIONS = {
                             </div>
                             ${h.btn({ label: 'Kijelentkeztetés', icon: 'bi-box-arrow-right', variant: 'outline-warning', size: 'sm', onclick: `adminRevokeUserSessions(${u.id}, event)` })}
                         </div>
+                        <div class="danger-action">
+                            <div>
+                                <div class="fw-semibold text-white">Profil törlése <span class="badge bg-danger ms-1">kritikus</span></div>
+                                <small class="text-secondary">Véglegesen eltávolítja a felhasználót — jelszó megerősítés szükséges.</small>
+                            </div>
+                            ${h.btn({
+                    label: 'Törlés kezelése', icon: 'bi-trash3-fill', variant: 'outline-danger', size: 'sm',
+                    onclick: `deleteAdminUser(${u.id})`
+                })}
+                        </div>
                     </div>
                 </div>
 
@@ -1702,23 +1716,54 @@ const SECTIONS = {
                                 <a href="#" class="text-gold" onclick="showSection('users', event)">listából</a>.
                             </div>
                         `}
-                        ${h.form({
-                fields: [
-                    {
-                        id: 'banType', label: 'Típus', col: 6, type: 'select',
-                        options: ['Ideiglenes', 'Végleges', 'Csak chat']
-                    },
-                    { id: 'banDuration', label: 'Időtartam (óra)', col: 6, type: 'number', value: '24' },
-                    {
-                        id: 'banReason', label: 'Indok (min. 30 char)', col: 12, type: 'textarea',
-                        placeholder: 'Részletes indok — naplózásra kerül.'
-                    }
-                ],
-                submit: {
-                    label: 'Tiltás alkalmazása', icon: 'bi-shield-fill-check', variant: 'danger',
-                    onclick: `openCriticalAction('users.ban', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')`
-                }
-            })}
+                        <form class="row g-3" onsubmit="event.preventDefault();">
+                            <div class="col-md-6">
+                                <label class="form-label" for="banType">Típus</label>
+                                <select id="banType" class="form-select" onchange="onBanTypeChange()">
+                                    <option value="Ideiglenes">Ideiglenes</option>
+                                    <option value="Végleges">Végleges</option>
+                                    <option value="Csak chat">Csak chat</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label" for="banDuration">Időtartam (óra)</label>
+                                <input id="banDuration" class="form-control" type="number" value="24" min="1">
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="banReason">
+                                    Indok <span class="text-danger">*</span>
+                                    <span class="critical-reason-counter ms-2">
+                                        <span id="banReasonCount">0</span> / 30
+                                    </span>
+                                </label>
+                                <textarea id="banReason" class="form-control" rows="3" placeholder="Részletes indok — naplózásra kerül." oninput="onBanReasonInput(this)"></textarea>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="banPassword">Saját admin jelszó <span class="text-danger">*</span></label>
+                                <input id="banPassword" class="form-control" type="password" autocomplete="current-password" placeholder="Saját admin jelszavad megerősítésre">
+                            </div>
+                            ${hasUser ? `
+                                <div class="col-12 mt-2">
+                                    <button type="button" id="banHoldBtn" class="ban-hold-btn"
+                                            data-target-id="${u.id}"
+                                            onmousedown="startBanHold(this)"
+                                            onmouseup="cancelBanHold(this)"
+                                            onmouseleave="cancelBanHold(this)"
+                                            ontouchstart="event.preventDefault(); startBanHold(this)"
+                                            ontouchend="cancelBanHold(this)">
+                                        <span class="ban-hold-label"><i class="bi bi-shield-fill-check me-2"></i>Tiltás alkalmazása</span>
+                                        <small class="ban-hold-sub">Tartsd nyomva 5 másodpercig</small>
+                                    </button>
+                                </div>
+                            ` : `
+                                <div class="col-12 mt-2">
+                                    <button type="button" class="ban-hold-btn" disabled>
+                                        <span class="ban-hold-label"><i class="bi bi-shield-fill-check me-2"></i>Tiltás alkalmazása</span>
+                                        <small class="ban-hold-sub">Először válassz felhasználót</small>
+                                    </button>
+                                </div>
+                            `}
+                        </form>
                     `
         })}
             </div>
@@ -1744,6 +1789,80 @@ const SECTIONS = {
                                     `).join('')}
                             </tbody>
                         </table>
+                    `
+        })}
+            </div>
+        </div>
+    `;
+    },
+
+    /* ---------- Felhasználók > Felhasználó törlése ---------- */
+    userDelete: () => {
+        const u = state.selectedUser;
+        const hasUser = Boolean(u);
+        const targetLabel = hasUser ? (u.username || `#${u.id}`) : 'kiválasztott felhasználó';
+        const isAdminTarget = hasUser && u.role === 'admin';
+
+        return `
+        ${h.header({
+            icon: 'bi-trash3-fill', title: 'Felhasználó törlése',
+            subtitle: hasUser
+                ? `${targetLabel} — előre kiválasztva törléshez`
+                : 'Profil végleges törlése admin oldalról',
+            actions: hasUser
+                ? [{ label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }]
+                : []
+        })}
+        <div class="row g-4 mb-4">
+            <div class="col-lg-7">
+                ${h.card({
+            title: hasUser ? `Profil törlése — ${escapeHtml(targetLabel)}` : 'Profil törlése',
+            icon: 'bi-trash3-fill',
+            headerExtra: h.badge('kritikus művelet', 'danger'),
+            body: `
+                        <div class="alert alert-danger bg-danger bg-opacity-10 border-danger small mb-3">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            <strong>Véglegesen eltávolítja</strong> a felhasználót. A meccsadatok megmaradnak az ellenfelek számára (felhasználói nevek <em>Törölt felhasználó</em>-ra cserélődnek), de a profil, barátok, chat üzenetek, képességek naplói <strong>minden eltűnik</strong>. A művelet <strong>nem visszavonható</strong>.
+                        </div>
+                        <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-3">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Megerősítéshez a saját <strong>admin jelszavadat</strong> kell megadnod a következő ablakban. Az indok <strong>opcionális</strong>, de javasolt audit célokra.
+                        </div>
+                        ${hasUser ? `
+                            <div class="ban-target-card mb-3">
+                                ${h.user({ name: u.username, email: u.email, profile_image: u.profileImage, username: u.username })}
+                                <div class="ban-target-meta">
+                                    ${rolePill(u.role === 'admin' ? 'admin' : 'player')}
+                                    ${u.isBanned ? statusPill('banned') : renderPresenceStatusBadgeInline(u)}
+                                </div>
+                            </div>
+                            ${isAdminTarget ? `
+                                <div class="alert alert-warning bg-warning bg-opacity-10 border-warning small mb-3">
+                                    <i class="bi bi-shield-fill-exclamation me-1"></i>
+                                    <strong>Admin profil nem törölhető</strong> ezen a felületen. Ehhez super-admin műveletre van szükség.
+                                </div>
+                            ` : ''}
+                        ` : `
+                            <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                Nincs kiválasztott felhasználó — válassz egyet a
+                                <a href="#" class="text-gold" onclick="showSection('users', event)">listából</a>.
+                            </div>
+                        `}
+                        ${h.form({
+                fields: [
+                    {
+                        id: 'deleteReason', label: 'Indok (opcionális, max 1000 char)', col: 12, type: 'textarea',
+                        placeholder: 'Részletes indok — naplózásra kerül. Lehet üres is.'
+                    }
+                ],
+                submit: {
+                    label: 'Profil törlése', icon: 'bi-trash3-fill', variant: 'danger',
+                    onclick: hasUser && !isAdminTarget
+                        ? `openCriticalAction('users.delete', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')`
+                        : `showToast('${isAdminTarget ? 'Admin profil nem törölhető' : 'Először válassz felhasználót'}.', 'warning')`
+                }
+            })}
                     `
         })}
             </div>
@@ -2015,9 +2134,11 @@ const SECTIONS = {
                 { icon: 'bi-shield-fill-x', label: 'Unauthorized', value: byKind.unauthorized || 0, color: 'warning' },
                 { icon: 'bi-key-fill', label: 'Token hiba', value: byKind.token_invalid || 0, color: 'warning' },
                 { icon: 'bi-speedometer2', label: 'Rate escalated', value: byKind.rate_escalated || 0, color: 'warning' },
-                { icon: 'bi-bug-fill', label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger' }
+                { icon: 'bi-bug-fill', label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger' },
+                { icon: 'bi-slash-circle-fill', label: 'Tiltások', value: byKind.user_banned || 0, color: 'danger' },
+                { icon: 'bi-trash3-fill', label: 'Törlések', value: byKind.user_deleted || 0, color: 'danger' }
             ].map(item => `
-                    <div class="col-6 col-md-3">
+                    <div class="col-6 col-md-4 col-lg-2">
                         <div class="mini-stat">
                             <i class="bi ${item.icon} text-${item.color}"></i>
                             <div class="mini-stat-value">${item.value}</div>
@@ -2438,7 +2559,13 @@ function showSection(sectionId, event, options = {}) {
     }
     if (sectionId === 'userBan') {
         if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
-            loadAdminUsersList({ silent: true });
+            // A userBan view a state.users.list-bol szuri ki az aktiv tiltasokat — ha
+            // ures, betoltjuk, MAJD ujrarendereljuk hogy az aktiv tiltasok megjelenjenek.
+            loadAdminUsersList({ silent: true }).then(() => {
+                if (state.currentSectionId === 'userBan') {
+                    showSection('userBan', null, { silent: true });
+                }
+            });
         }
     }
 
@@ -3203,6 +3330,12 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId) {
                 'admin.grant': 'Admin szerep kiosztása',
                 'admin.revoke': 'Admin szerep visszavonása'
             };
+            // Pozitiv (zold) styling: a tiltas-feloldas vissza-allitja a hozzaferest, nem destruktiv.
+            const positiveActions = new Set(['users.unban']);
+            const modalContent = modalEl.querySelector('.critical-action-modal');
+            if (modalContent) {
+                modalContent.classList.toggle('is-positive', positiveActions.has(action));
+            }
             setText('criticalActionTitle', titleMap[action] || action);
             const desc = document.getElementById('criticalActionDescription');
             if (desc) {
@@ -3213,18 +3346,26 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId) {
             }
             const reasonField = document.getElementById('criticalReason');
             const counter = document.getElementById('criticalReasonCount');
-            // Ha az inline tiltás panelen már megadta az indokot, vegyük át (nincs duplikáció).
-            const inlineBanReason = document.getElementById('banReason')?.value?.trim() || '';
+            const isOptionalReason = action === 'users.delete';
+            // Ha az inline panelen már megadta az indokot (ban vagy delete), vegyük át (nincs duplikáció).
+            const inlineReason = (document.getElementById('banReason')?.value?.trim()
+                || document.getElementById('deleteReason')?.value?.trim()
+                || '');
             if (reasonField && counter) {
-                reasonField.value = inlineBanReason;
-                const initLen = inlineBanReason.length;
+                reasonField.value = inlineReason;
+                const initLen = inlineReason.length;
                 counter.textContent = String(initLen);
-                counter.parentElement.classList.toggle('valid', initLen >= 30);
+                // users.delete esetén az indok opcionális — a counter mindig "valid" jelleggel
+                const isValid = isOptionalReason ? true : (initLen >= 30);
+                counter.parentElement.classList.toggle('valid', isValid);
                 reasonField.oninput = () => {
                     const len = reasonField.value.length;
                     counter.textContent = String(len);
-                    counter.parentElement.classList.toggle('valid', len >= 30);
+                    counter.parentElement.classList.toggle('valid', isOptionalReason ? true : (len >= 30));
                 };
+                // Counter szöveg: opcionális reason-nél nincs "min" elvárás
+                counter.textContent = String(initLen);
+                if (counter.nextSibling) counter.nextSibling.textContent = isOptionalReason ? '' : ' / 30';
             }
             const passwordField = document.getElementById('criticalPassword');
             if (passwordField) {
@@ -3251,9 +3392,18 @@ async function executeCriticalAction() {
 
         const { action, targetUserId } = state.criticalActionData || {};
         const reason = document.getElementById('criticalReason')?.value?.trim() || '';
+        const currentPassword = document.getElementById('criticalPassword')?.value || '';
 
-        if (reason.length < 30) {
+        // users.delete: indok opcionális; minden más kritikus művelet: min 30 char.
+        const reasonOptional = action === 'users.delete';
+        if (!reasonOptional && reason.length < 30) {
             showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+
+        // users.delete esetén a saját admin jelszó kötelező (a backend bcrypt-tel ellenőrzi).
+        if (action === 'users.delete' && !currentPassword) {
+            showToast('A saját admin jelszó megadása kötelező.', 'warning', 'bi-exclamation-circle');
             return;
         }
 
@@ -3302,6 +3452,36 @@ async function executeCriticalAction() {
             } catch (err) {
                 showToast('Hálózati hiba a tiltás feloldása során.', 'danger');
                 console.error('unban hiba:', err);
+            }
+        } else if (action === 'users.delete') {
+            if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+            try {
+                const res = await fetch(`/api/admin/users/${targetUserId}/delete`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({
+                        currentPassword,
+                        reason: reason.length > 0 ? reason : null
+                    })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    const name = data.deletedUsername ? escapeHtml(data.deletedUsername) : 'A felhasználó';
+                    showToast(`${name} profilja sikeresen törölve.`, 'success', 'bi-trash3-fill');
+                    // A torolt user-t ki kell venni a state-bol, kulonben a userDelete view 'kijelolve' marad.
+                    if (state.selectedUser && Number(state.selectedUser.id) === Number(targetUserId)) {
+                        state.selectedUser = null;
+                    }
+                    await loadAdminUsersList({ silent: true });
+                    showSection(state.currentSectionId, null, { silent: true });
+                } else {
+                    if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                    showToast(data.message || 'Hiba a profil törlése során.', 'danger');
+                }
+            } catch (err) {
+                showToast('Hálózati hiba a profil törlése során.', 'danger');
+                console.error('user delete hiba:', err);
             }
         } else {
             showToast(`A(z) ${action || 'ismeretlen'} művelet még nincs bekötve.`, 'info', 'bi-cone-striped');
@@ -3684,6 +3864,103 @@ function editAdminUser(userId) {
 
 function banAdminUser(userId) {
     return selectAdminUser(userId, 'userBan');
+}
+
+function deleteAdminUser(userId) {
+    return selectAdminUser(userId, 'userDelete');
+}
+
+/* =============================================================
+   Inline ban form: hold-to-confirm + jelszo verifikacio
+   ============================================================= */
+const BAN_HOLD_MS = 5000;
+let banHoldTimer = null;
+
+function onBanTypeChange() {
+    const banType = document.getElementById('banType')?.value;
+    const banDuration = document.getElementById('banDuration');
+    if (!banDuration) return;
+    if (banType === 'Végleges') {
+        banDuration.disabled = true;
+        banDuration.value = '';
+        banDuration.placeholder = 'Nincs lejárat';
+    } else {
+        banDuration.disabled = false;
+        banDuration.placeholder = '';
+        if (!banDuration.value) banDuration.value = '24';
+    }
+}
+
+function onBanReasonInput(textarea) {
+    const counter = document.getElementById('banReasonCount');
+    if (!counter || !textarea) return;
+    const len = textarea.value.length;
+    counter.textContent = String(len);
+    counter.parentElement.classList.toggle('valid', len >= 30);
+}
+
+function startBanHold(btn) {
+    if (!btn || btn.disabled) return;
+    if (banHoldTimer) { clearTimeout(banHoldTimer); banHoldTimer = null; }
+    btn.classList.add('holding');
+    banHoldTimer = setTimeout(async () => {
+        btn.classList.remove('holding');
+        banHoldTimer = null;
+        await submitBanInline(btn);
+    }, BAN_HOLD_MS);
+}
+
+function cancelBanHold(btn) {
+    if (banHoldTimer) {
+        clearTimeout(banHoldTimer);
+        banHoldTimer = null;
+    }
+    if (btn) btn.classList.remove('holding');
+}
+
+async function submitBanInline(btn) {
+    await runSafelyAsync('submitBanInline', async () => {
+        const targetUserId = Number(btn?.dataset?.targetId) || 0;
+        if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+
+        const banType = document.getElementById('banType')?.value || 'Ideiglenes';
+        const durationHours = Number(document.getElementById('banDuration')?.value) || 24;
+        const reason = (document.getElementById('banReason')?.value || '').trim();
+        const currentPassword = document.getElementById('banPassword')?.value || '';
+
+        if (reason.length < 30) {
+            showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+        if (!currentPassword) {
+            showToast('A saját admin jelszó megadása kötelező.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+
+        try {
+            btn.disabled = true;
+            const res = await fetch(`/api/admin/users/${targetUserId}/ban`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ banType, durationHours, reason, currentPassword })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+                showToast('A felhasználó sikeresen tiltva lett.', 'success', 'bi-shield-fill-check');
+                await loadAdminUsersList({ silent: true });
+                showSection(state.currentSectionId, null, { silent: true });
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a tiltás alkalmazásánál.', 'danger');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Hálózati hiba a tiltás során.', 'danger');
+            console.error('inline ban hiba:', err);
+            btn.disabled = false;
+        }
+    });
 }
 
 function applyUserDetailAvatar() {

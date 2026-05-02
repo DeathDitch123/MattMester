@@ -79,6 +79,18 @@ async function createTables() {
             SET profile_image = '/profile_pictures/default.png'
             WHERE profile_image IS NULL OR TRIM(profile_image) = ''`,
 
+        // Persistent email-ban tabla: a torolt-de-banned user-ek email cime ide kerul
+        // hogy ne lehessen ujraregisztralni a ban idejere. banned_until NULL = vegleges.
+        `CREATE TABLE IF NOT EXISTS banned_emails (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(100) NOT NULL UNIQUE,
+            banned_until TIMESTAMP NULL DEFAULT NULL,
+            ban_reason VARCHAR(255) DEFAULT NULL,
+            original_user_id INT DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_banned_emails_until (banned_until)
+        )`,
+
         `CREATE TABLE IF NOT EXISTS statistics (
             id INT AUTO_INCREMENT PRIMARY KEY,
             user_id INT UNIQUE NOT NULL,
