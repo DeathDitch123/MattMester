@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="hu">
+
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self';
@@ -10,12 +11,15 @@
             img-src 'self' data: blob:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mattmester</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+        rel="stylesheet">
     <link rel="stylesheet" href="../css/chess.css">
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../../javascript/socketClient.js" defer></script>
     <script type="module" src="../javascript/main.js"></script>
 </head>
+
 <body>
     <!-- JÁTÉKMÓD VÁLASZTÓ MODAL -->
     <div id="mode-modal" class="mode-modal">
@@ -116,6 +120,7 @@
     <div class="app">
         <header class="topbar">
             <div class="player player-black">
+                <div class="captured-pieces" id="captured-by-black"></div>
                 <div class="name" id="name-black">Ellenfél</div>
                 <div class="clock" id="clock-black">10:00</div>
             </div>
@@ -140,13 +145,14 @@
                         <div class="promotion-piece" data-type="knight"></div>
                     </div>
                 </div>
-            </div>
-
-            <aside class="sidebar">
                 <div class="status-row">
                     Aktív: <strong id="turn-name">fehér</strong>
                 </div>
                 <div id="status" class="status">játékon</div>
+            </div>
+
+            <aside class="sidebar">
+
 
                 <!-- KÉPESSÉG BAR -->
                 <div id="ability-bar" class="ability-bar hidden">
@@ -195,6 +201,7 @@
 
         <footer class="bottombar">
             <div class="player player-white">
+                <div class="captured-pieces" id="captured-by-white"></div>
                 <div class="name" id="name-white">Te</div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
@@ -213,4 +220,5 @@
         </div>
     </div>
 </body>
+
 </html>

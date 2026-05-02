@@ -74,6 +74,7 @@ const DRAG_START_THRESHOLD_PX = 6;
 const OLDAL_VAZ = `
         <header class="topbar">
             <div class="player player-black">
+                <div class="captured-pieces" id="captured-by-black"></div>
                 <div class="name" id="name-black">Ellenfél</div>
                 <div class="clock" id="clock-black">10:00</div>
             </div>
@@ -146,6 +147,7 @@ const OLDAL_VAZ = `
 
         <footer class="bottombar">
             <div class="player player-white">
+                <div class="captured-pieces" id="captured-by-white"></div>
                 <div class="name" id="name-white">Te</div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
@@ -966,6 +968,47 @@ function nevekFrissit() {
     }
 }
 
+function utottpiecekFrissit(allapot) {
+    const byWhite = document.getElementById('captured-by-white');
+    const byBlack = document.getElementById('captured-by-black');
+    if (!byWhite || !byBlack || !allapot?.tabla) return;
+
+    const KEZDO = { pawn: 8, rook: 2, knight: 2, bishop: 2, queen: 1, king: 1 };
+    const SORREND = ['queen', 'rook', 'bishop', 'knight', 'pawn'];
+
+    const meglevo = { white: {}, black: {} };
+    for (const m of allapot.tabla) {
+        if (!m.piece) continue;
+        const c = m.piece.color, t = m.piece.type;
+        meglevo[c][t] = (meglevo[c][t] || 0) + 1;
+    }
+
+    function utottLista(utottSzin) {
+        const lista = [];
+        for (const tipus of SORREND) {
+            const meglevoDb = meglevo[utottSzin][tipus] || 0;
+            const hianyzik = KEZDO[tipus] - meglevoDb;
+            for (let i = 0; i < hianyzik; i++) lista.push(tipus);
+        }
+        return lista;
+    }
+
+    function render(el, utottSzin) {
+        const lista = utottLista(utottSzin);
+        el.innerHTML = '';
+        for (const tipus of lista) {
+            const img = document.createElement('div');
+            img.className = 'captured-piece';
+            img.style.backgroundImage = `url('../images/${utottSzin}_${tipus}.png')`;
+            el.appendChild(img);
+        }
+    }
+
+    // fehér játékos ütötte a fekete bábukat → captured-by-white mutatja a fekete bábukat
+    render(byWhite, 'black');
+    render(byBlack, 'white');
+}
+
 // ────────────────────────────────────────────
 // ÁLLAPOT FRISSÍTÉS + RENDERELÉS
 // ────────────────────────────────────────────
@@ -1236,6 +1279,7 @@ function allapotFrissit(allapot, animald = false) {
     huzasHozzaadMinden(allapot);
     esemenyekUjraKot();
     nevekFrissit();
+    utottpiecekFrissit(allapot);
     eloValtozasFrissit(allapot.eloValtozas || null);
     botGondolkodasFrissit(allapot);
     abilitiesAllapotFrissit(allapot);
