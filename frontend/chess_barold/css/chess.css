@@ -3,8 +3,8 @@
 {
     /* Board-specifikus színek — arany & fekete (egységes a brand-palette-tel) */
     --board-size: 560px;
-    --light: #d4af37;          /* világos mező = arany */
-    --dark:  #1a1a1a;          /* sötét mező = fekete (kicsit lágyítva, hogy a fekete bábuk se tűnjenek el) */
+    --light: #dee3e6;          /* világos mező = arany */
+    --dark:  #8ca2ad;          /* sötét mező = fekete (kicsit lágyítva, hogy a fekete bábuk se tűnjenek el) */
     --from: rgba(255,255,255,0.40);   /* utolsó lépés: halvány fehér — látható mind goldon, mind feketén */
     --capture: rgba(255,140,0,0.70);
     --check: rgba(220,30,30,0.65);
@@ -80,6 +80,24 @@ h1, h2, h3, h4, h5, h6 {
     box-shadow: 0 8px 18px rgba(0,0,0,0.5);
 }
 
+.captured-pieces {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1px;
+    max-width: 80px;
+    min-width: 24px;
+}
+
+.captured-piece {
+    width: 20px;
+    height: 20px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    opacity: 0.85;
+}
+
 .player .name
 {
     font-weight: 600;
@@ -112,7 +130,7 @@ h1, h2, h3, h4, h5, h6 {
 {
     width: var(--board-size);
     height: var(--board-size);
-    border: 4px solid var(--accent-gold);
+    border: 4px solid #5a6a73;
     border-radius: 6px;
     box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4) inset;
     position: relative;
@@ -213,7 +231,7 @@ h1, h2, h3, h4, h5, h6 {
     border-radius: 50%;  /* Tökéletes kör */
     position: absolute;  /* Abszolút pozíció (központosításhoz) */
     z-index: 2;  /* Felül jelenjen meg */
-    background: rgba(0,0,0,0.18);  /* Átlátszó fekete */
+    background: rgba(50,50,50,0.55);  /* Sötét szürke */
 }
 
 /* Ütési lehetőség (narancs) */
