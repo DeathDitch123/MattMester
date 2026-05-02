@@ -4,7 +4,16 @@
       "Bash(npx jest *)",
       "Bash(awk '/^window\\\\.MattMesterAdminChatModeration/,/^}\\\\\\)\\\\\\(\\\\\\);/' /d/Letoltesek/GIthub/repo/MattMester/frontend/javascript/adminPanel.js)",
       "Bash(node -e \"require\\('./api/routes/reports.js'\\); console.log\\('reports.js OK'\\);\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(xargs grep *)",
+      "Bash(grep -v \"^//\")",
+      "Bash(node --check sql/modules/siteSettings.js)",
+      "Bash(node --check sql/modules/abilities.js)",
+      "Bash(node --check sql/modules/socialAdmin.js)",
+      "Bash(node --check sql/modules/gamesAdmin.js)",
+      "Bash(node --check sql/modules/testRuns.js)",
+      "Bash(node --check frontend/javascript/adminPanel.js)",
+      "Bash(npm test *)"
     ]
   }
 }

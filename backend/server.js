@@ -177,7 +177,7 @@ app.locals.socketHub = socketHub;
 app.locals.sessionStore = sessionMiddleware.store;
 
 // Admin panel - /admin socket namespace + service binderek (ADMIN_PANEL.md F4)
-const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter, createAdminUserDisconnector } = require('./api/admin/socketNamespace.js');
+const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter, createAdminUserDisconnector, createSpectatorBroadcaster } = require('./api/admin/socketNamespace.js');
 const adminAuditService = require('./api/admin/auditService.js');
 const adminAlertingService = require('./api/admin/alertingService.js');
 const adminNamespace = createAdminNamespace(io);
@@ -185,6 +185,7 @@ const adminSocketHub = {
     broadcastAdmin: createAdminBroadcaster(adminNamespace),
     emitToAdminUser: createAdminUserEmitter(adminNamespace),
     disconnectAllForAdminUser: createAdminUserDisconnector(adminNamespace),
+    broadcastSpectator: createSpectatorBroadcaster(adminNamespace),
     namespace: adminNamespace
 };
 app.locals.adminSocketHub = adminSocketHub;
@@ -365,6 +366,24 @@ initDatabase()
         // Soft-delete purge scheduler (admin-trigger 24h grace utan hard-delete).
         const { startSoftDeletePurgeScheduler } = require('./api/admin/softDeletePurgeJob.js');
         startSoftDeletePurgeScheduler();
+
+        // Test runs cleanup: server restart utan az "lengyo" running statuszu
+        // sorokat eligazitja (orphan recovery).
+        try {
+            const testRuns = require('./sql/modules/testRuns.js');
+            await testRuns.cleanupOrphanedRunning();
+        } catch (err) {
+            console.warn('test_runs cleanup kihagyva:', err.message);
+        }
+
+        // Site settings cache eager warmup (a maintenance middleware sync-eljen
+        // hasznalja, igy az elso request elott legyen a cache feltoltve).
+        try {
+            const siteSettings = require('./sql/modules/siteSettings.js');
+            await siteSettings.getSettings();
+        } catch (err) {
+            console.warn('siteSettings warmup kihagyva:', err.message);
+        }
 
         // Dinamikus chat-blocklist (admin altal hozzadott szavak) betoltese DB-bol
         // a containsBlockedWord() in-memory cachebe. A cache az admin endpoint-bol

@@ -11,6 +11,13 @@ const adminRoutes = require('./routes/admin.js');
 const notificationsRoutes = require('./routes/notifications.js');
 const publicRoutes = require('./routes/public.js');
 const reportsRoutes = require('./routes/reports.js');
+const { maintenanceGuard } = require('./middleware/maintenanceGuard.js');
+
+// Maintenance guard: ha a site_settings.maintenance_mode TRUE, a nem-admin
+// kereseket 503-mal lojuk vissza. Az admin-utvonalak (parseAdminToken alaja)
+// es az admin Bearer-tokenes kereseket atengedi, hogy a "kiur" is meg tudjon
+// lepni. Az /api/admin/* routerre is rakerul, de az ott eleve admin-only.
+router.use(maintenanceGuard());
 
 router.use('/admin', adminRoutes);
 router.use(publicRoutes);

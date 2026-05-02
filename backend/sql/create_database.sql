@@ -768,3 +768,55 @@ SET
     u.elo = random_elo.base_elo,
     u.elo_classical = random_elo.new_elo_mm,
     u.elo_blitz = random_elo.new_elo_bullet;
+
+-- ============================================================================
+-- Admin oldalak: site_settings + test_runs
+-- ============================================================================
+
+-- Site-wide beallitasok (egysoros tabla, id=1).
+-- Az admin panel "Beallitasok" oldala olvassa/irja. A maintenance_mode es a
+-- registration_enabled toggle elesben hat — middleware-ek olvassak in-memory
+-- cache-bol (TTL=30s).
+CREATE TABLE
+    IF NOT EXISTS site_settings (
+        id TINYINT PRIMARY KEY DEFAULT 1,
+        site_name VARCHAR(100) NOT NULL DEFAULT 'MattMester',
+        support_email VARCHAR(150) NOT NULL DEFAULT 'mattmester.support@gmail.com',
+        default_language ENUM ('hu', 'en') NOT NULL DEFAULT 'hu',
+        timezone VARCHAR(64) NOT NULL DEFAULT 'Europe/Budapest',
+        registration_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        maintenance_mode BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_by INT NULL,
+        CHECK (id = 1),
+        FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
+    );
+
+INSERT IGNORE INTO site_settings (id) VALUES (1);
+
+-- Tesztfutasok elozmenyei. A backend testRunnerService irja, az admin panel
+-- "Tesztek" oldal listazza (utolso N runt). status='running' alatt mutex
+-- biztositja, hogy ne legyen ket egyideju run.
+CREATE TABLE
+    IF NOT EXISTS test_runs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        triggered_by INT NULL,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        finished_at TIMESTAMP NULL,
+        status ENUM (
+            'running',
+            'passed',
+            'failed',
+            'timeout',
+            'error'
+        ) NOT NULL DEFAULT 'running',
+        total INT DEFAULT 0,
+        passed INT DEFAULT 0,
+        failed INT DEFAULT 0,
+        skipped INT DEFAULT 0,
+        duration_ms INT NULL,
+        raw_summary JSON NULL,
+        stderr_tail TEXT NULL,
+        FOREIGN KEY (triggered_by) REFERENCES users (id) ON DELETE SET NULL,
+        INDEX idx_test_runs_started (started_at)
+    );

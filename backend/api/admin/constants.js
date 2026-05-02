@@ -84,7 +84,27 @@ const ADMIN_PERMISSIONS = Object.freeze({
     IP_BLOCK_CREATE:    'ip_blocks.create',
     IP_BLOCK_REMOVE:    'ip_blocks.remove',
     SECURITY_LOGINS_VIEW:   'security.logins.view',
-    SECURITY_LOGINS_EXPORT: 'security.logins.export'
+    SECURITY_LOGINS_EXPORT: 'security.logins.export',
+
+    // Játszmák
+    GAMES_VIEW:        'games.view',
+    GAMES_FORCE_END:   'games.force_end',
+
+    // Képességek
+    ABILITIES_VIEW:    'abilities.view',
+    ABILITIES_EDIT:    'abilities.edit',
+
+    // Közösségi kapcsolatok
+    SOCIAL_VIEW:       'social.view',
+    SOCIAL_UNBLOCK:    'social.unblock',
+
+    // Tesztek
+    TESTS_VIEW:        'tests.view',
+    TESTS_RUN:         'tests.run',
+
+    // Site settings
+    SETTINGS_VIEW:     'settings.view',
+    SETTINGS_EDIT:     'settings.edit'
 });
 
 const SUPER_ONLY_PERMISSIONS = Object.freeze(new Set([
@@ -101,7 +121,12 @@ const CRITICAL_ACTIONS = Object.freeze(new Set([
     ADMIN_PERMISSIONS.NOTIFICATIONS_BROADCAST,
     ADMIN_PERMISSIONS.ADMIN_GRANT,
     ADMIN_PERMISSIONS.ADMIN_REVOKE,
-    ADMIN_PERMISSIONS.IP_BLOCK_CREATE
+    ADMIN_PERMISSIONS.IP_BLOCK_CREATE,
+    ADMIN_PERMISSIONS.GAMES_FORCE_END,
+    ADMIN_PERMISSIONS.ABILITIES_EDIT,
+    ADMIN_PERMISSIONS.SOCIAL_UNBLOCK,
+    ADMIN_PERMISSIONS.TESTS_RUN,
+    ADMIN_PERMISSIONS.SETTINGS_EDIT
 ]));
 
 // Egyseges hibakodok az admin response-okhoz.

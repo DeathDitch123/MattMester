@@ -652,6 +652,114 @@
         </div>
     </div>
 
+    <!-- Kepesseg editor modal (uj / szerkesztes; torleshez a critical action modalt hasznaljuk) -->
+    <div class="modal fade" id="abilityEditorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-magic me-2 text-gold"></i>
+                        <span id="abilityEditorTitle">Kepesseg</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="abilityEditorName" class="form-label">Nev <span class="text-danger">*</span></label>
+                            <input type="text" id="abilityEditorName" class="form-control" maxlength="100" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="abilityEditorCooldown" class="form-label">Cooldown (kor)</label>
+                            <input type="number" id="abilityEditorCooldown" class="form-control" min="0" max="999" value="0">
+                        </div>
+                        <div class="col-12">
+                            <label for="abilityEditorDescription" class="form-label">Leiras</label>
+                            <textarea id="abilityEditorDescription" class="form-control" rows="3" maxlength="2000"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label for="abilityEditorReason" class="form-label">
+                                Indoklas <span class="text-danger">*</span>
+                                <span class="critical-reason-counter ms-2">
+                                    <span id="abilityEditorReasonCount">0</span> / 30
+                                </span>
+                            </label>
+                            <textarea id="abilityEditorReason" class="form-control" rows="2"
+                                      placeholder="Reszletes, naplozasra kerulo indoklas (min. 30 karakter)..."
+                                      oninput="abilityEditorReasonInput(this.value)"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-gold" onclick="abilityEditorSubmit()">
+                        <i class="bi bi-check2 me-1"></i>Mentes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spectator modal (eloben mukodo meccs nezese) -->
+    <div class="modal fade" id="spectatorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-eye me-2 text-gold"></i>
+                        <span id="spectatorTitle">Spectator</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                            onclick="closeSpectator()" aria-label="Bezaras"></button>
+                </div>
+                <div class="modal-body" id="spectatorBody">
+                    <div class="text-center py-4 text-secondary">Toltes...</div>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-secondary me-auto">A meccs lepesei elo realtime jonnek a /admin WebSocketrol.</small>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" onclick="closeSpectator()">Bezar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin grant felhasznalo-valaszto modal -->
+    <div class="modal fade" id="adminGrantPickerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-stars me-2 text-gold"></i>
+                        Admin szerep adasa
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3">
+                        Add meg a felhasznalonevet, akinek admin szerepet szeretnel adni. A muvelet
+                        kritikus, ezert egy tovabbi indoklast es jelszo-megerositest is kerni fogunk.
+                    </p>
+                    <div class="mb-3">
+                        <label for="adminGrantUsername" class="form-label">Felhasznalonev <span class="text-danger">*</span></label>
+                        <input type="text" id="adminGrantUsername" class="form-control" placeholder="pelda: SakkMester99">
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="adminGrantMakeSuper">
+                        <label class="form-check-label" for="adminGrantMakeSuper">
+                            <i class="bi bi-stars text-gold me-1"></i>Super-admin jogot is adjon
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-gold" onclick="adminGrantPickerSubmit()">
+                        <i class="bi bi-arrow-right me-1"></i>Tovabb
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast container (showToast() helper hozza létre dinamikusan, de itt egy fix slot is van) -->
     <div id="adminToastContainer" class="admin-toast-container"></div>
 

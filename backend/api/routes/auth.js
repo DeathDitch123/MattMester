@@ -26,6 +26,7 @@ const {
     destroySessionAsync
 } = require('./_shared.js');
 const networkClassifier = require('../admin/networkClassifier.js');
+const siteSettings = require('../../sql/modules/siteSettings.js');
 
 const router = express.Router();
 
@@ -298,6 +299,18 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
+        // Globális regisztráció-toggle: az admin panel Beállítások oldaláról kapcsolható ki.
+        const settings = await siteSettings.getSettings();
+        if (settings && settings.registrationEnabled === false) {
+            statusCode = 403;
+            payload = {
+                success: false,
+                code: 'REGISTRATION_DISABLED',
+                message: 'A regisztráció ideiglenesen le van tiltva. Kérjük próbálkozz később.'
+            };
+            return response.status(statusCode).json(payload);
+        }
+
         const { username, password, email } = request.body;
         if (!username || !password || !email) {
             statusCode = 400;

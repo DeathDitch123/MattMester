@@ -647,6 +647,21 @@ function registerPvpHandlers(socket, io) {
         io.to(`chess-game:${gameId}`).emit('chess:state:update', {
             allapot: jatekAllapotKliens(jatek)
         });
+
+        // Admin spectator broadcast — minden lepest tovabbitunk a /admin namespace
+        // game:${dbGameId}:spectator szobajaba is. Csak akkor, ha van DB-id.
+        try {
+            if (jatek.dbGameId) {
+                io.of('/admin').to(`game:${jatek.dbGameId}:spectator`).emit('admin:games:move', {
+                    gameId: jatek.dbGameId,
+                    move: { fromX, fromY, toX, toY, promotion: promotion || 'queen' },
+                    player: { color: szin, userId: context.userId },
+                    allapot: jatekAllapotKliens(jatek)
+                });
+            }
+        } catch (err) {
+            console.warn('[PvP] admin spectator move broadcast hiba:', err.message);
+        }
     });
 
     // ─────────────────────────────────────
@@ -691,6 +706,20 @@ function registerPvpHandlers(socket, io) {
         io.to(`chess-game:${gameId}`).emit('chess:state:update', {
             allapot: jatekAllapotKliens(jatek)
         });
+
+        // Admin spectator broadcast — kepesseg-aktivalas szinten
+        try {
+            if (jatek.dbGameId) {
+                io.of('/admin').to(`game:${jatek.dbGameId}:spectator`).emit('admin:games:ability', {
+                    gameId: jatek.dbGameId,
+                    ability: { key, params },
+                    player: { color: szin, userId: context.userId },
+                    allapot: jatekAllapotKliens(jatek)
+                });
+            }
+        } catch (err) {
+            console.warn('[PvP] admin spectator ability broadcast hiba:', err.message);
+        }
     });
 
     // ─────────────────────────────────────

@@ -458,7 +458,59 @@ const state = {
     },
 
     // Section navigation
-    currentSectionId: null
+    currentSectionId: null,
+
+    // ─── Admin oldalak (6) közös state ───
+
+    // Beallitasok
+    siteSettings: {
+        loaded: false, loading: false, error: null,
+        data: null  // { siteName, supportEmail, defaultLanguage, timezone, registrationEnabled, maintenanceMode }
+    },
+
+    // Super admin lista
+    adminsList: {
+        loaded: false, loading: false, error: null,
+        list: []
+    },
+
+    // Kepessegek
+    abilities: {
+        loaded: false, loading: false, error: null,
+        list: [],
+        editing: null  // { id, name, description, cooldownTurns } vagy null = uj
+    },
+
+    // Kozossegi kapcsolatok
+    socialAdmin: {
+        requestsLoaded: false, blocksLoaded: false, countsLoaded: false,
+        loading: false, error: null,
+        requests: [], blocks: [],
+        counts: { totalFriendships: 0, pendingRequests: 0, activeBlocks: 0 }
+    },
+
+    // Jatszmak
+    gamesAdmin: {
+        loaded: false, loading: false, error: null,
+        list: [], counts: { ongoing: 0, finished: 0, abandoned: 0, draw: 0 },
+        filter: 'all',   // 'all' | 'ongoing' | 'finished' | 'abandoned'
+        search: '',
+        // Spectator allapot
+        spectator: {
+            gameId: null,
+            game: null,         // teljes meccs adat (getGameById eredmenye)
+            loading: false,
+            error: null
+        }
+    },
+
+    // Tesztek
+    testsAdmin: {
+        latestLoaded: false, historyLoaded: false,
+        latest: null, history: [],
+        running: null,    // { runId, startedAt, elapsedMs } amíg fut
+        loading: false, error: null
+    }
 };
 
 const MAX_LIVE_BUFFER = 50;
@@ -2093,71 +2145,114 @@ const SECTIONS = {
     `,
 
     /* ---------- Játékok > Játszmák ---------- */
-    games: () => `
-        ${h.header({
-        icon: 'bi-knight-fill', title: 'Játszmák',
-        subtitle: 'Lefutott és folyamatban lévő játszmák'
-    })}
-        ${h.stats([
-        { icon: 'bi-play-circle-fill', value: SAMPLE.games.filter(g => g.status === 'live').length, label: 'Folyamatban', color: 'success' },
-        { icon: 'bi-trophy-fill', value: SAMPLE.games.filter(g => g.status === 'finished').length, label: 'Befejezett', color: 'warning' },
-        { icon: 'bi-x-circle-fill', value: '2', label: 'Megszakított', color: 'danger' }
-    ])}
-        ${h.table({
-        title: 'Játszmák listája',
-        headerExtra: `<div class="btn-group btn-group-sm">
-                <button type="button" class="btn btn-outline-secondary active">Összes</button>
-                <button type="button" class="btn btn-outline-secondary">Élő</button>
-                <button type="button" class="btn btn-outline-secondary">Befejezett</button>
-            </div>`,
-        headers: ['Azonosító', 'Világos', 'Sötét', 'Állapot', 'Győztes', 'Lépések', 'Időkontroll', ''],
-        rows: SAMPLE.games.map(g => [
-            `<span class="font-monospace text-gold">${g.id}</span>`,
-            `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle text-light"></i><span>${g.white}</span></div>`,
-            `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle-fill text-dark border rounded-circle"></i><span>${g.black}</span></div>`,
-            statusPill(g.status),
-            g.winner === '—' ? '<span class="text-secondary">—</span>' : `<span class="text-success">${g.winner}</span>`,
-            g.moves, g.time,
-            h.actions(g.status === 'live'
-                ? [{ icon: 'bi-eye', variant: 'gold', title: 'Nézés' }, { icon: 'bi-stop-circle', variant: 'danger', title: 'Leállítás' }]
-                : [{ icon: 'bi-eye', variant: 'gold', title: 'Nézés' }, { icon: 'bi-download', variant: 'secondary', title: 'PGN letöltés' }])
-        ])
-    })}
-    `,
+    games: () => {
+        const g = state.gamesAdmin;
+        const c = g.counts || { ongoing: 0, finished: 0, abandoned: 0, draw: 0 };
+        const fmtTime = (iso) => {
+            if (!iso) return '—';
+            try { return new Date(iso).toLocaleString('hu-HU'); } catch (_) { return String(iso); }
+        };
+        const filterButtons = ['all', 'ongoing', 'finished', 'abandoned'].map((key) => {
+            const labels = { all: 'Összes', ongoing: 'Élő', finished: 'Befejezett', abandoned: 'Megszakított' };
+            const active = g.filter === key ? ' active' : '';
+            return `<button type="button" class="btn btn-outline-secondary${active}" onclick="setGamesFilter('${key}')">${labels[key]}</button>`;
+        }).join('');
+
+        const rows = (g.list || []).map((row) => {
+            const winner = row.winner ? `<span class="text-success">${escapeHtml(row.winner.username || '—')}</span>` : '<span class="text-secondary">—</span>';
+            const buttons = [];
+            buttons.push(`<button type="button" class="btn btn-sm btn-outline-gold" onclick="openSpectator(${row.id})" title="Megnez"><i class="bi bi-eye"></i></button>`);
+            if (row.status === 'ongoing') {
+                buttons.push(`<button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmForceEndGame(${row.id})" title="Force end"><i class="bi bi-stop-circle"></i></button>`);
+            } else {
+                buttons.push(`<button type="button" class="btn btn-sm btn-outline-secondary" onclick="downloadGamePgn(${row.id})" title="PGN letoltes"><i class="bi bi-download"></i></button>`);
+            }
+            return [
+                `<span class="font-monospace text-gold">#${row.id}</span>`,
+                `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle text-light"></i><span>${escapeHtml(row.white?.username || '—')}</span></div>`,
+                `<div class="d-flex align-items-center gap-2"><i class="bi bi-circle-fill text-dark border rounded-circle"></i><span>${escapeHtml(row.black?.username || '—')}</span></div>`,
+                statusPill(row.status),
+                winner,
+                String(row.moveCount || 0),
+                escapeHtml(row.timeControl || '—'),
+                `<span class="text-secondary small">${fmtTime(row.startTime)}</span>`,
+                `<div class="d-inline-flex gap-2">${buttons.join('')}</div>`
+            ];
+        });
+
+        return `
+            ${h.header({
+                icon: 'bi-knight-fill', title: 'Játszmák',
+                subtitle: g.loaded ? `${g.list.length} jatszma listazva` : 'Lefutott és folyamatban lévő játszmák',
+                actions: [{ label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminGames()' }]
+            })}
+            ${h.stats([
+                { icon: 'bi-play-circle-fill', value: c.ongoing, label: 'Folyamatban', color: 'success' },
+                { icon: 'bi-trophy-fill',      value: c.finished, label: 'Befejezett', color: 'warning' },
+                { icon: 'bi-x-circle-fill',    value: c.abandoned, label: 'Megszakított', color: 'danger' },
+                { icon: 'bi-circle-half',      value: c.draw, label: 'Döntetlen', color: 'primary' }
+            ])}
+            <div class="alerts-filter-bar mb-3">
+                <div class="btn-group btn-group-sm" role="group">${filterButtons}</div>
+                <input type="text" class="form-control form-control-sm" placeholder="Felhasznalonev keresese..."
+                       value="${escapeHtml(g.search || '')}" onchange="setGamesSearch(this.value)" style="max-width:280px;">
+            </div>
+            ${g.error ? `<div class="alert alert-danger">${escapeHtml(g.error)}</div>` : ''}
+            ${g.loading
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                : (rows.length === 0 && g.loaded
+                    ? `<div class="content-card text-center py-5 text-secondary">Nincs jatszma a megadott szurokre.</div>`
+                    : h.table({
+                        title: 'Játszmák listája',
+                        headers: ['Azonosító', 'Világos', 'Sötét', 'Állapot', 'Győztes', 'Lépések', 'Időkontroll', 'Indult', ''],
+                        rows
+                    })
+                )
+            }
+        `;
+    },
 
     /* ---------- Játékok > Képességek ---------- */
-    abilities: () => `
-        ${h.header({
-        icon: 'bi-magic', title: 'Képességek / Erősítők',
-        subtitle: 'Speciális játékos képességek kezelése',
-        actions: [{ label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold' }]
-    })}
-        <div class="row g-4">
-            ${[
-            { name: 'Időutazás', desc: '+30 másodperc hozzáadása az óra idejéhez játszmánként egyszer.', uses: '1 234' },
-            { name: 'Gyalogválasztás', desc: 'Egy gyalog azonnali előléptetése bármilyen figurára.', uses: '892' },
-            { name: 'Csere visszavonás', desc: 'Az utolsó lépés visszavonása az ellenfél jóváhagyásával.', uses: '445' }
-        ].map(a => `
-                <div class="col-md-6 col-lg-4">
-                    ${h.card({
-            title: a.name,
-            headerExtra: h.badge('Aktív', 'success'),
-            classes: 'h-100',
-            body: `
-                            <p class="text-secondary mb-3">${a.desc}</p>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small class="text-muted">${a.uses} használat</small>
-                                <div class="btn-group">
-                                    ${h.iconBtn({ icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés' })}
-                                    ${h.iconBtn({ icon: 'bi-trash', variant: 'danger', title: 'Törlés' })}
-                                </div>
+    abilities: () => {
+        const a = state.abilities;
+        const cards = (a.list || []).map((ab) => `
+            <div class="col-md-6 col-lg-4">
+                ${h.card({
+                    title: escapeHtml(ab.name),
+                    headerExtra: h.badge(`${ab.cooldownTurns} kor cooldown`, 'warning'),
+                    classes: 'h-100',
+                    body: `
+                        <p class="text-secondary mb-3">${escapeHtml(ab.description || '—')}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">${ab.usageCount || 0} hasznalat</small>
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-sm btn-outline-gold" onclick="openAbilityEditor(${ab.id})" title="Szerkesztes"><i class="bi bi-pencil"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDeleteAbility(${ab.id})" title="Torles"><i class="bi bi-trash"></i></button>
                             </div>
-                        `
-        })}
-                </div>
-            `).join('')}
-        </div>
-    `,
+                        </div>
+                    `
+                })}
+            </div>
+        `).join('');
+
+        return `
+            ${h.header({
+                icon: 'bi-magic', title: 'Képességek / Erősítők',
+                subtitle: a.loaded ? `${a.list.length} képesség` : 'Speciális játékos képességek kezelése',
+                actions: [
+                    { label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold', onclick: 'openAbilityEditor()' },
+                    { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminAbilities()' }
+                ]
+            })}
+            ${a.error ? `<div class="alert alert-danger">${escapeHtml(a.error)}</div>` : ''}
+            ${a.loading
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                : (a.list.length === 0 && a.loaded
+                    ? `<div class="content-card text-center py-5 text-secondary">Meg nincsenek kepessegek. Kattints az "Uj kepesseg" gombra.</div>`
+                    : `<div class="row g-4">${cards}</div>`)
+            }
+        `;
+    },
 
     /* ---------- Naplók > Bejelentkezések ---------- */
     security: () => {
@@ -2381,236 +2476,291 @@ const SECTIONS = {
     },
 
     /* ---------- Super admin ---------- */
-    superAdmin: () => `
-        ${h.header({
-        icon: 'bi-stars', title: 'Super admin',
-        subtitle: 'Admin szerepkörök kiosztása és visszavonása',
-        actions: [{
-            label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold',
-            onclick: "openCriticalAction('admin.grant', 'új admin')"
-        }]
-    })}
-
-        <div class="alert alert-warning bg-warning bg-opacity-10 border-warning d-flex align-items-start gap-2">
-            <i class="bi bi-info-circle-fill text-warning mt-1"></i>
-            <div class="flex-grow-1">
-                <strong>Last-super-admin lock</strong> aktív — egy super-admin saját
-                <code>is_super_admin</code> flag-jét nem tudja levenni, ha ő az utolsó.
-                Minden admin grant/revoke <strong>kritikus művelet</strong>: 30 char indok + jelszó megerősítés.
-            </div>
-        </div>
-
-        ${h.table({
-        title: 'Admin felhasználók', icon: 'bi-shield-fill',
-        headers: ['Admin', 'Szint', 'Csatlakozott', 'Utoljára aktív', 'Műveletek'],
-        rows: SAMPLE_ADMINS.map(a => [
-            h.user({ name: a.name, email: a.email }),
-            a.isSuper
+    superAdmin: () => {
+        const s = state.adminsList;
+        const fmt = (iso) => {
+            if (!iso) return '—';
+            try { return new Date(iso).toLocaleString('hu-HU'); } catch (_) { return String(iso); }
+        };
+        const rows = (s.list || []).map((a) => [
+            h.user({ name: a.username || `#${a.id}`, email: a.email || '' }),
+            a.isSuperAdmin
                 ? `<span class="super-pill"><i class="bi bi-stars"></i>Super admin</span>`
                 : rolePill('admin'),
-            `<span class="text-secondary">${a.joined}</span>`,
-            `<span class="text-secondary">${a.lastSeen}</span>`,
+            `<span class="text-secondary">${fmt(a.createdAt)}</span>`,
+            `<span class="text-secondary">${fmt(a.lastActive)}</span>`,
             `<div class="d-inline-flex gap-2">
-                    ${h.btn({ label: 'Részletek', icon: 'bi-eye', variant: 'outline-light', size: 'sm' })}
-                    ${a.isSuper
-                ? h.btn({ label: 'Saját super lock', icon: 'bi-lock-fill', variant: 'outline-secondary', size: 'sm', attrs: 'disabled' })
-                : h.btn({
-                    label: 'Revoke', icon: 'bi-shield-fill-x', variant: 'outline-danger', size: 'sm',
-                    onclick: `openCriticalAction('admin.revoke', '${a.name}')`
-                })
+                ${a.isSuperAdmin
+                    ? h.btn({ label: 'Super lock', icon: 'bi-lock-fill', variant: 'outline-secondary', size: 'sm', attrs: 'disabled' })
+                    : h.btn({
+                        label: 'Revoke', icon: 'bi-shield-fill-x', variant: 'outline-danger', size: 'sm',
+                        onclick: `openCriticalAction('admin.revoke', '${escapeHtml(a.username || '#' + a.id).replace(/'/g, "\\'")}', ${Number(a.id) || 'null'})`
+                    })}
+            </div>`
+        ]);
+        return `
+            ${h.header({
+                icon: 'bi-stars', title: 'Super admin',
+                subtitle: s.loaded ? `${s.list.length} admin felhasznalo` : 'Admin szerepkörök kiosztása és visszavonása',
+                actions: [
+                    { label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold', onclick: "openAdminGrantPicker()" },
+                    { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminAdminsList()' }
+                ]
+            })}
+            <div class="alert alert-warning bg-warning bg-opacity-10 border-warning d-flex align-items-start gap-2">
+                <i class="bi bi-info-circle-fill text-warning mt-1"></i>
+                <div class="flex-grow-1">
+                    <strong>Last-super-admin lock</strong> aktív — egy super-admin saját
+                    <code>is_super_admin</code> flag-jét nem tudja levenni, ha ő az utolsó.
+                    Minden admin grant/revoke <strong>kritikus művelet</strong>: 30 char indok + jelszó megerősítés.
+                </div>
+            </div>
+            ${s.error ? `<div class="alert alert-danger">${escapeHtml(s.error)}</div>` : ''}
+            ${s.loading
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                : (rows.length === 0 && s.loaded
+                    ? `<div class="content-card text-center py-5 text-secondary">Nincs admin felhasznalo.</div>`
+                    : h.table({
+                        title: 'Admin felhasználók', icon: 'bi-shield-fill',
+                        headers: ['Admin', 'Szint', 'Csatlakozott', 'Utoljára aktív', 'Műveletek'],
+                        rows
+                    }))
             }
-                </div>`
-        ])
-    })}
-    `,
+        `;
+    },
 
     /* ---------- Közösségi ---------- */
-    friends: () => `
-        ${h.header({
-        icon: 'bi-people', title: 'Közösségi kapcsolatok',
-        subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen'
-    })}
-        ${h.stats([
-        { icon: 'bi-diagram-3-fill', value: '142', label: 'Összes barátság', color: 'primary' },
-        { icon: 'bi-person-plus', value: '8', label: 'Függő kérelem', color: 'warning' },
-        { icon: 'bi-person-x-fill', value: '5', label: 'Aktív blokkolás', color: 'danger' }
-    ])}
-        <div class="row g-4">
-            <div class="col-lg-7">
-                ${h.card({
-        title: 'Függő barátkérelmek', icon: 'bi-person-plus-fill', noBodyPadding: true,
-        body: `<table class="table mb-0"><thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end"></th></tr></thead><tbody>
-                        ${[
-                { from: 'SakkMester99', to: 'RookRider', when: '2 órája' },
-                { from: 'FairPlayer', to: 'Magnus Carlsen', when: '1 napja' }
-            ].map(r => `<tr><td><span class="text-white">${r.from}</span></td><td><span class="text-white">${r.to}</span></td><td><span class="text-secondary">${r.when}</span></td><td class="text-end">${h.btn({ label: 'Részletek', size: 'sm' })}</td></tr>`).join('')}
-                    </tbody></table>`
-    })}
+    friends: () => {
+        const s = state.socialAdmin;
+        const c = s.counts || {};
+        const fmtRel = (iso) => {
+            if (!iso) return '—';
+            try { return formatRelative(iso); } catch (_) { return String(iso); }
+        };
+        const requestRows = (s.requests || []).map((r) => `
+            <tr>
+                <td><span class="text-white">${escapeHtml(r.from?.username || '—')}</span></td>
+                <td><span class="text-white">${escapeHtml(r.to?.username || '—')}</span></td>
+                <td><span class="text-secondary">${fmtRel(r.inviteTime)}</span></td>
+                <td class="text-end"><span class="badge bg-secondary">${escapeHtml(r.status)}</span></td>
+            </tr>
+        `).join('');
+        const blockRows = (s.blocks || []).map((b) => `
+            <tr>
+                <td><span class="text-white">${escapeHtml(b.blocker?.username || '—')}</span></td>
+                <td><span class="text-white">${escapeHtml(b.blocked?.username || '—')}</span></td>
+                <td class="text-end">
+                    <button type="button" class="btn btn-sm btn-outline-success"
+                            onclick="confirmAdminUnblock(${Number(b.blocker?.id) || 0}, ${Number(b.blocked?.id) || 0}, '${escapeHtml(b.blocker?.username || '')}', '${escapeHtml(b.blocked?.username || '')}')">
+                        <i class="bi bi-unlock"></i> Felold
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+        return `
+            ${h.header({
+                icon: 'bi-people', title: 'Közösségi kapcsolatok',
+                subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen',
+                actions: [{ label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminSocial()' }]
+            })}
+            ${h.stats([
+                { icon: 'bi-diagram-3-fill', value: c.totalFriendships || 0, label: 'Összes barátság', color: 'primary' },
+                { icon: 'bi-person-plus',    value: c.pendingRequests  || 0, label: 'Függő kérelem',   color: 'warning' },
+                { icon: 'bi-person-x-fill',  value: c.activeBlocks     || 0, label: 'Aktív blokkolás', color: 'danger' }
+            ])}
+            ${s.error ? `<div class="alert alert-danger">${escapeHtml(s.error)}</div>` : ''}
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    ${h.card({
+                        title: 'Függő barátkérelmek', icon: 'bi-person-plus-fill', noBodyPadding: true,
+                        body: requestRows.length
+                            ? `<table class="table mb-0"><thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end">Allapot</th></tr></thead><tbody>${requestRows}</tbody></table>`
+                            : `<div class="text-center text-secondary py-4">${s.requestsLoaded ? 'Nincs fuggo kerelem.' : 'Toltes...'}</div>`
+                    })}
+                </div>
+                <div class="col-lg-5">
+                    ${h.card({
+                        title: 'Aktív blokkolások', icon: 'bi-person-x-fill', noBodyPadding: true,
+                        body: blockRows.length
+                            ? `<table class="table mb-0"><thead><tr><th>Blokkoló</th><th>Blokkolt</th><th class="text-end"></th></tr></thead><tbody>${blockRows}</tbody></table>`
+                            : `<div class="text-center text-secondary py-4">${s.blocksLoaded ? 'Nincs aktiv blokk.' : 'Toltes...'}</div>`
+                    })}
+                </div>
             </div>
-            <div class="col-lg-5">
-                ${h.card({
-        title: 'Aktív blokkolások', icon: 'bi-person-x-fill', noBodyPadding: true,
-        body: `<table class="table mb-0"><thead><tr><th>Blokkoló</th><th>Blokkolt</th><th class="text-end"></th></tr></thead><tbody>
-                        ${[
-                { who: 'FairPlayer', whom: 'ToxikusZoli' },
-                { who: 'SakkMester99', whom: 'SpamKing' }
-            ].map(b => `<tr><td><span class="text-white">${b.who}</span></td><td><span class="text-white">${b.whom}</span></td><td class="text-end">${h.btn({ label: 'Feloldás', variant: 'outline-success', size: 'sm' })}</td></tr>`).join('')}
-                    </tbody></table>`
-    })}
+        `;
+    },
+
+    /* ---------- Tesztek ---------- */
+    tests: () => {
+        const t = state.testsAdmin;
+        const latest = t.latest;
+        const running = t.running;
+        const fmt = (iso) => {
+            if (!iso) return '—';
+            try { return new Date(iso).toLocaleString('hu-HU'); } catch (_) { return String(iso); }
+        };
+        const fmtDur = (ms) => {
+            if (!Number.isFinite(ms)) return '—';
+            if (ms < 1000) return `${ms} ms`;
+            const sec = ms / 1000;
+            if (sec < 60) return `${sec.toFixed(1)} s`;
+            return `${Math.floor(sec / 60)}m ${Math.floor(sec % 60)}s`;
+        };
+        const isSuper = Boolean(state.isSuperAdmin);
+        const runDisabled = running ? 'disabled' : (!isSuper ? 'disabled title="Csak super-admin futtathat tesztet."' : '');
+
+        const statsRow = h.stats([
+            { icon: 'bi-check-circle-fill', value: latest ? latest.passed  : '—', label: 'Sikeres', color: 'success' },
+            { icon: 'bi-x-circle-fill',     value: latest ? latest.failed  : '—', label: 'Sikertelen', color: 'danger' },
+            { icon: 'bi-skip-forward-fill', value: latest ? latest.skipped : '—', label: 'Kihagyott', color: 'warning' },
+            { icon: 'bi-stopwatch',         value: latest ? fmtDur(latest.durationMs) : '—', label: 'Futási idő', color: 'primary' }
+        ]);
+
+        const historyRows = (t.history || []).map((r) => `
+            <tr>
+                <td><span class="font-monospace text-gold">#${r.id}</span></td>
+                <td>${escapeHtml(r.triggeredByUsername || (r.triggeredBy ? '#' + r.triggeredBy : 'rendszer'))}</td>
+                <td><span class="badge bg-${r.status === 'passed' ? 'success' : (r.status === 'failed' ? 'danger' : (r.status === 'running' ? 'info' : 'secondary'))}">${escapeHtml(r.status)}</span></td>
+                <td><span class="font-monospace">${r.passed}/${r.total}</span></td>
+                <td><span class="font-monospace">${r.failed}</span></td>
+                <td><span class="text-secondary">${fmtDur(r.durationMs)}</span></td>
+                <td><span class="text-secondary small">${fmt(r.startedAt)}</span></td>
+            </tr>
+        `).join('');
+
+        return `
+            ${h.header({
+                icon: 'bi-clipboard2-check', title: 'Tesztek',
+                subtitle: latest
+                    ? `Utolso futas: ${fmt(latest.startedAt)} — ${escapeHtml(latest.status)}`
+                    : 'Backend Jest + Supertest tesztek',
+                actions: [
+                    { label: running ? 'Fut...' : 'Tesztek futtatasa', icon: running ? 'bi-arrow-repeat' : 'bi-play-fill', variant: 'gold', size: 'sm', onclick: 'confirmRunTests()', attrs: runDisabled },
+                    { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminTests()' }
+                ]
+            })}
+
+            ${running ? `
+                <div class="alert alert-info bg-info bg-opacity-10 border-info d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-arrow-repeat spin"></i>
+                    <div class="flex-grow-1">
+                        <strong>Fut: run #${running.runId}</strong> — eltelt: ${fmtDur(running.elapsedMs || 0)}
+                    </div>
+                </div>
+            ` : ''}
+            ${t.error ? `<div class="alert alert-danger">${escapeHtml(t.error)}</div>` : ''}
+
+            ${statsRow}
+
+            <div class="row g-4">
+                <div class="col-lg-7">
+                    ${h.card({
+                        title: 'Test suite-ok (utolso futas)', icon: 'bi-list-check',
+                        noBodyPadding: true,
+                        body: latest && latest.rawSummary && Array.isArray(latest.rawSummary.testResults)
+                            ? `<div class="test-list">${latest.rawSummary.testResults.map((tr) => {
+                                const status = tr.numFailingTests > 0 ? 'fail' : 'pass';
+                                const label = tr.numFailingTests > 0 ? 'FAIL' : 'PASS';
+                                const fileName = String(tr.name || '').split(/[\\/]/).pop();
+                                return `<div class="test-row test-${status}">
+                                    <div class="test-status-dot"></div>
+                                    <span class="test-suite">${escapeHtml(fileName)}</span>
+                                    <span class="test-name">${tr.numPassingTests}/${tr.numPassingTests + tr.numFailingTests + (tr.numPendingTests || 0)} pass</span>
+                                    <span class="test-status-label">${label}</span>
+                                </div>`;
+                            }).join('')}</div>`
+                            : `<div class="text-center text-secondary py-4">${t.latestLoaded ? 'Meg nincs futas, kattints a "Tesztek futtatasa" gombra.' : 'Toltes...'}</div>`
+                    })}
+                </div>
+                <div class="col-lg-5">
+                    ${h.card({
+                        title: 'Stderr (utolso 4KB)', icon: 'bi-terminal-fill',
+                        body: latest && latest.stderrTail
+                            ? `<pre class="json-block" style="max-height:280px;overflow:auto;white-space:pre-wrap;">${escapeHtml(latest.stderrTail)}</pre>`
+                            : `<pre class="json-block" style="max-height:280px;overflow:auto;">${latest ? '(Nincs stderr output)' : '(Meg nincs futas)'}</pre>`
+                    })}
+                </div>
             </div>
-        </div>
-    `,
 
-    /* ---------- Tesztek (formaterv — placeholder) ---------- */
-    tests: () => `
-        ${h.header({
-        icon: 'bi-clipboard2-check', title: 'Tesztek',
-        subtitle: 'Frontend és backend tesztek áttekintése — eredmények és lefedettség',
-        actions: [
-            { label: 'Összes futtatása', icon: 'bi-play-fill', variant: 'gold', size: 'sm', attrs: 'disabled' },
-            { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', attrs: 'disabled' }
-        ]
-    })}
-
-        <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-4">
-            <i class="bi bi-info-circle-fill me-1"></i>
-            Ez a szekció <strong>formaterv</strong> — a tesztfuttatás integráció (Jest + Supertest) még nincs bekötve.
-            A vázlat azt mutatja, hogyan fognak megjelenni az eredmények.
-        </div>
-
-        ${h.stats([
-        { icon: 'bi-check-circle-fill', value: '<span class="text-secondary">—</span>', label: 'Sikeres', color: 'success' },
-        { icon: 'bi-x-circle-fill', value: '<span class="text-secondary">—</span>', label: 'Sikertelen', color: 'danger' },
-        { icon: 'bi-skip-forward-fill', value: '<span class="text-secondary">—</span>', label: 'Kihagyott', color: 'warning' },
-        { icon: 'bi-stopwatch', value: '<span class="text-secondary">—</span>', label: 'Futási idő', color: 'primary' }
-    ])}
-
-        <div class="row g-4">
-            <div class="col-lg-7">
+            <div class="mt-4">
                 ${h.card({
-        title: 'Tesztek listája', icon: 'bi-list-check',
-        headerExtra: `
-                        <div class="filter-bar">
-                            <select class="form-select form-select-sm" disabled>
-                                <option>Minden suite</option>
-                                <option>Unit (Jest)</option>
-                                <option>Integration (Supertest)</option>
-                                <option>Auth bypass</option>
-                                <option>Rate limit</option>
-                                <option>Real-time</option>
-                            </select>
-                            <select class="form-select form-select-sm" disabled>
-                                <option>Minden státusz</option>
-                                <option>Pass</option>
-                                <option>Fail</option>
-                                <option>Skip</option>
-                            </select>
-                        </div>
-                    `,
-        noBodyPadding: true,
-        body: `<div class="test-list">
-                        ${[
-                { suite: 'Unit', name: 'permissions.js — SUPER_ONLY halmaz integritása', status: 'pending' },
-                { suite: 'Unit', name: 'AuditLogService.record — redaction allowlist', status: 'pending' },
-                { suite: 'Unit', name: 'parseAdminToken — hash egyeztetés + lejárat', status: 'pending' },
-                { suite: 'Unit', name: 'requireReasonOnMutate — char limitek', status: 'pending' },
-                { suite: 'Integration', name: 'Login → elevate → admin endpoint → 200', status: 'pending' },
-                { suite: 'Integration', name: 'Player elevate → 403', status: 'pending' },
-                { suite: 'Integration', name: 'Critical action confirmPassword nélkül → 400', status: 'pending' },
-                { suite: 'Auth bypass', name: 'Admin endpoint admin token nélkül → 401', status: 'pending' },
-                { suite: 'Auth bypass', name: 'WS /admin player session-nel → connect_error', status: 'pending' },
-                { suite: 'Rate limit', name: '10× rossz token egy IP-ről → 11. már 429', status: 'pending' },
-                { suite: 'Real-time', name: '2 socket-kliens → audit:created 500ms-en belül', status: 'pending' }
-            ].map(t => `
-                            <div class="test-row test-${t.status}">
-                                <div class="test-status-dot"></div>
-                                <span class="test-suite">${t.suite}</span>
-                                <span class="test-name">${t.name}</span>
-                                <span class="test-status-label">${t.status === 'pass' ? 'PASS' :
-                    t.status === 'fail' ? 'FAIL' :
-                        t.status === 'skip' ? 'SKIP' : 'függő'
-                }</span>
-                                <span class="test-duration">—</span>
-                            </div>
-                        `).join('')}
-                    </div>`
-    })}
+                    title: 'Futtatasi elozmenyek', icon: 'bi-clock-history',
+                    noBodyPadding: true,
+                    body: historyRows.length
+                        ? `<table class="table mb-0"><thead><tr><th>ID</th><th>Inditotta</th><th>Allapot</th><th>Pass/Total</th><th>Fail</th><th>Idotartam</th><th>Indult</th></tr></thead><tbody>${historyRows}</tbody></table>`
+                        : `<div class="text-center text-secondary py-4">${t.historyLoaded ? 'Meg nincs futasi elozmeny.' : 'Toltes...'}</div>`
+                })}
             </div>
-            <div class="col-lg-5">
-                ${h.card({
-        title: 'Eredmények log', icon: 'bi-terminal-fill',
-        body: `
-                        <pre class="json-block" style="max-height:280px;overflow:auto;">$ npm test
-[ ... ide kerül a tesztek kimenete élőben streamelve ... ]
-
-A teszt-runner integráció a következő iterációban
-kerül bekötésre. Helyettesítő nézet: lista bal oldalt.</pre>
-                    `
-    })}
-
-                ${h.card({
-        title: 'Lefedettség', icon: 'bi-pie-chart-fill', classes: 'mt-4',
-        body: `
-                        <div class="coverage-row">
-                            <span class="coverage-label">Statements</span>
-                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
-                                <div class="progress-bar bg-secondary" style="width:0%"></div>
-                            </div>
-                            <span class="coverage-value">—</span>
-                        </div>
-                        <div class="coverage-row">
-                            <span class="coverage-label">Branches</span>
-                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
-                                <div class="progress-bar bg-secondary" style="width:0%"></div>
-                            </div>
-                            <span class="coverage-value">—</span>
-                        </div>
-                        <div class="coverage-row">
-                            <span class="coverage-label">Functions</span>
-                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
-                                <div class="progress-bar bg-secondary" style="width:0%"></div>
-                            </div>
-                            <span class="coverage-value">—</span>
-                        </div>
-                        <div class="coverage-row">
-                            <span class="coverage-label">Lines</span>
-                            <div class="progress flex-grow-1" role="progressbar" style="height:8px;">
-                                <div class="progress-bar bg-secondary" style="width:0%"></div>
-                            </div>
-                            <span class="coverage-value">—</span>
-                        </div>
-                    `
-    })}
-            </div>
-        </div>
-    `,
+        `;
+    },
 
     /* ---------- Beállítások ---------- */
-    settings: () => `
-        ${h.header({
-        icon: 'bi-gear-fill', title: 'Beállítások',
-        subtitle: 'Általános platform paraméterek'
-    })}
-        ${h.card({
-        body: h.form({
-            fields: [
-                { id: 'settingsSiteName', label: 'Oldal neve', value: 'MattMester' },
-                { id: 'settingsSupportEmail', label: 'Support e-mail', value: 'support@mattmester.hu', type: 'email' },
-                {
-                    id: 'settingsLanguage', label: 'Alapértelmezett nyelv', type: 'select',
-                    options: [{ value: 'hu', label: 'Magyar', selected: true }, { value: 'en', label: 'English' }]
-                },
-                {
-                    id: 'settingsTimezone', label: 'Időzóna', type: 'select',
-                    options: [{ value: 'Europe/Budapest', label: 'Europe/Budapest', selected: true }, 'UTC']
-                },
-                { id: 'settingsRegistration', label: 'Regisztráció engedélyezve', type: 'switch', value: true },
-                { id: 'settingsMaintenance', label: 'Karbantartási mód', type: 'switch', value: false }
-            ],
-            submit: { label: 'Beállítások mentése', icon: 'bi-check2', variant: 'gold' }
-        })
-    })}
-    `
+    settings: () => {
+        const s = state.siteSettings;
+        const d = s.data || {};
+        const langs = [
+            { value: 'hu', label: 'Magyar', selected: d.defaultLanguage === 'hu' },
+            { value: 'en', label: 'English', selected: d.defaultLanguage === 'en' }
+        ];
+        const tzCurrent = d.timezone || 'Europe/Budapest';
+        return `
+            ${h.header({
+                icon: 'bi-gear-fill', title: 'Beállítások',
+                subtitle: s.loaded ? `Mentve: ${d.updatedAt ? new Date(d.updatedAt).toLocaleString('hu-HU') : '—'}` : 'Általános platform paraméterek'
+            })}
+            ${s.error ? `<div class="alert alert-danger">${escapeHtml(s.error)}</div>` : ''}
+            ${s.loading
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                : (!s.loaded
+                    ? `<div class="content-card text-center py-5 text-secondary">Meg nincsenek betoltott beallitasok.</div>`
+                    : h.card({
+                        body: `
+                            <form id="settingsForm" onsubmit="event.preventDefault(); submitSiteSettings();">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="settingsSiteName">Oldal neve</label>
+                                        <input type="text" class="form-control" id="settingsSiteName" maxlength="100" value="${escapeHtml(d.siteName || '')}" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="settingsSupportEmail">Support e-mail</label>
+                                        <input type="email" class="form-control" id="settingsSupportEmail" maxlength="150" value="${escapeHtml(d.supportEmail || '')}" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="settingsLanguage">Alapertelmezett nyelv</label>
+                                        <select class="form-select" id="settingsLanguage">
+                                            ${langs.map((l) => `<option value="${l.value}" ${l.selected ? 'selected' : ''}>${l.label}</option>`).join('')}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" for="settingsTimezone">Idozona</label>
+                                        <input type="text" class="form-control" id="settingsTimezone" maxlength="64" value="${escapeHtml(tzCurrent)}" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="settingsRegistration" ${d.registrationEnabled ? 'checked' : ''}>
+                                            <label class="form-check-label" for="settingsRegistration">Regisztracio engedelyezve</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="form-check form-switch">
+                                            <input class="form-check-input" type="checkbox" id="settingsMaintenance" ${d.maintenanceMode ? 'checked' : ''} onchange="onMaintenanceToggleChange(this.checked)">
+                                            <label class="form-check-label text-warning" for="settingsMaintenance"><i class="bi bi-cone-striped me-1"></i>Karbantartasi mod</label>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="alert alert-warning bg-warning bg-opacity-10 border-warning small mt-3 mb-3 ${d.maintenanceMode ? '' : 'd-none'}" id="settingsMaintenanceWarn">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                                    <strong>Figyelem:</strong> a karbantartasi mod aktivalasa minden NEM-admin usert kizar a platformrol.
+                                </div>
+                                <div class="text-end">
+                                    <button type="submit" class="btn btn-gold"><i class="bi bi-check2 me-1"></i>Beallitasok mentese</button>
+                                </div>
+                            </form>
+                        `
+                    }))
+            }
+        `;
+    }
 };
 
 /* =============================================================
@@ -3752,7 +3902,12 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId, extras = 
                 'chat.delete': 'Chat üzenet törlése',
                 'notifications.broadcast': 'Globális értesítés küldése',
                 'admin.grant': 'Admin szerep kiosztása',
-                'admin.revoke': 'Admin szerep visszavonása'
+                'admin.revoke': 'Admin szerep visszavonása',
+                'settings.edit': 'Beállítások mentése',
+                'abilities.edit': 'Képesség módosítása',
+                'social.unblock': 'Blokk feloldása',
+                'games.force_end': 'Meccs erőszakos befejezése',
+                'tests.run': 'Tesztek futtatása'
             };
             // Pozitiv (zold) styling: a tiltas-feloldas vissza-allitja a hozzaferest, nem destruktiv.
             const positiveActions = new Set(['users.unban']);
@@ -8370,6 +8525,710 @@ function initResponsiveSidebar() {
     apply();
     window.addEventListener('resize', apply);
 }
+
+/* =============================================================
+   Admin oldalak (6) — fetch + handler fuggvenyek
+   ============================================================= */
+
+// Section-loader: amikor a felhasznalo egy oldalra navigal, elinditja a fetch-et.
+function maybeLoadSectionData(sectionId) {
+    if (!state.adminToken) return;
+    try {
+        switch (sectionId) {
+            case 'settings':    if (!state.siteSettings.loaded)        loadSiteSettings(); break;
+            case 'superAdmin':  if (!state.adminsList.loaded)          loadAdminAdminsList(); break;
+            case 'abilities':   if (!state.abilities.loaded)           loadAdminAbilities(); break;
+            case 'friends':     if (!state.socialAdmin.requestsLoaded) loadAdminSocial(); break;
+            case 'games':       if (!state.gamesAdmin.loaded)          loadAdminGames(); break;
+            case 'tests':       if (!state.testsAdmin.latestLoaded)    loadAdminTests(); break;
+        }
+    } catch (err) {
+        console.warn('maybeLoadSectionData hiba:', err.message);
+    }
+}
+
+// ─── Helper: standard admin GET fetch + JSON parse ───
+async function adminFetchJson(path, options = {}) {
+    const opts = {
+        method: options.method || 'GET',
+        credentials: 'same-origin',
+        headers: adminAuthHeaders(options.headers || { Accept: 'application/json' })
+    };
+    if (options.body) {
+        opts.headers['Content-Type'] = 'application/json';
+        opts.body = JSON.stringify(options.body);
+    }
+    const res = await fetch(path, opts);
+    let json = null;
+    try { json = await res.json(); } catch (_) { json = null; }
+    if (!res.ok) {
+        if ((res.status === 401 || res.status === 403) && json?.code) {
+            const flow = getAdminAuthFlow();
+            if (flow?.handleAdminAuthError && flow.handleAdminAuthError(json.code)) {
+                throw new Error(json.message || 'Auth hiba');
+            }
+        }
+        throw new Error(json?.message || `HTTP ${res.status}`);
+    }
+    if (json && json.success === false) {
+        throw new Error(json.message || 'Ismeretlen szerver hiba.');
+    }
+    return json;
+}
+
+// ────────────── BEALLITASOK ──────────────
+
+async function loadSiteSettings() {
+    state.siteSettings.loading = true;
+    state.siteSettings.error = null;
+    if (state.currentSectionId === 'settings') showSection('settings', null, { silent: true });
+    try {
+        const json = await adminFetchJson('/api/admin/settings');
+        state.siteSettings.data = json.data;
+        state.siteSettings.loaded = true;
+        state.siteSettings.loading = false;
+        if (state.currentSectionId === 'settings') showSection('settings', null, { silent: true });
+    } catch (err) {
+        state.siteSettings.loading = false;
+        state.siteSettings.error = err.message;
+        if (state.currentSectionId === 'settings') showSection('settings', null, { silent: true });
+    }
+}
+
+async function submitSiteSettings() {
+    const form = document.getElementById('settingsForm');
+    if (!form) return;
+    const before = state.siteSettings.data || {};
+    const patch = {
+        siteName:            document.getElementById('settingsSiteName')?.value?.trim() || '',
+        supportEmail:        document.getElementById('settingsSupportEmail')?.value?.trim() || '',
+        defaultLanguage:     document.getElementById('settingsLanguage')?.value || 'hu',
+        timezone:            document.getElementById('settingsTimezone')?.value?.trim() || 'Europe/Budapest',
+        registrationEnabled: Boolean(document.getElementById('settingsRegistration')?.checked),
+        maintenanceMode:     Boolean(document.getElementById('settingsMaintenance')?.checked)
+    };
+    const enablingMaintenance = patch.maintenanceMode && !before.maintenanceMode;
+    state.criticalActionData = { action: 'settings.edit', patch };
+    const desc = enablingMaintenance
+        ? '<strong class="text-warning">Figyelem:</strong> a karbantartasi mod aktivalasa minden NEM-admin user-t kizar a platformrol!<br>'
+        : '';
+    openCriticalAction('settings.edit', `Beallitasok mentese${enablingMaintenance ? ' (karbantartas BE)' : ''}`);
+    // openCriticalAction megnyitja a modalt; a leiras-szoveg felulirasahoz toldjunk:
+    setTimeout(() => {
+        const descEl = document.getElementById('criticalActionDescription');
+        if (descEl) {
+            descEl.innerHTML = `${desc}<strong class="text-white">Muvelet:</strong> <code class="text-gold">settings.edit</code><br><strong class="text-white">Mezok:</strong> ${Object.keys(patch).join(', ')}`;
+        }
+    }, 30);
+}
+
+async function applySettingsEditFromCritical(reason) {
+    const patch = state.criticalActionData?.patch;
+    if (!patch) return;
+    try {
+        const json = await adminFetchJson('/api/admin/settings', {
+            method: 'PUT',
+            body: { ...patch, reason }
+        });
+        state.siteSettings.data = json.data;
+        state.siteSettings.loaded = true;
+        showToast('Beallitasok mentve.', 'success', 'bi-check-circle-fill');
+        if (state.currentSectionId === 'settings') showSection('settings', null, { silent: true });
+    } catch (err) {
+        showToast(err.message || 'Hiba a settings mentes soran.', 'danger');
+    }
+}
+
+// ────────────── SUPER ADMIN ──────────────
+
+async function loadAdminAdminsList() {
+    state.adminsList.loading = true;
+    state.adminsList.error = null;
+    if (state.currentSectionId === 'superAdmin') showSection('superAdmin', null, { silent: true });
+    try {
+        const json = await adminFetchJson('/api/admin/admins/');
+        state.adminsList.list = Array.isArray(json.data) ? json.data : [];
+        state.adminsList.loaded = true;
+        state.adminsList.loading = false;
+        if (state.currentSectionId === 'superAdmin') showSection('superAdmin', null, { silent: true });
+    } catch (err) {
+        state.adminsList.loading = false;
+        state.adminsList.error = err.message;
+        if (state.currentSectionId === 'superAdmin') showSection('superAdmin', null, { silent: true });
+    }
+}
+
+function openAdminGrantPicker() {
+    const modalEl = document.getElementById('adminGrantPickerModal');
+    const inputEl = document.getElementById('adminGrantUsername');
+    if (modalEl && window.bootstrap?.Modal) {
+        if (inputEl) inputEl.value = '';
+        new window.bootstrap.Modal(modalEl).show();
+    } else {
+        showToast('A grant modal meg nem kesz.', 'info');
+    }
+}
+
+async function adminGrantPickerSubmit() {
+    const username = document.getElementById('adminGrantUsername')?.value?.trim();
+    const makeSuper = Boolean(document.getElementById('adminGrantMakeSuper')?.checked);
+    if (!username) { showToast('Felhasznalonev kotelezo.', 'warning'); return; }
+    try {
+        // Mivel nincs lookup-by-username admin endpoint, hasznaljuk a meglevo /admin/users/list-et
+        const json = await adminFetchJson('/api/admin/users/list');
+        const target = (json.data || []).find((u) => String(u.username).toLowerCase() === username.toLowerCase());
+        if (!target) { showToast(`Nincs ilyen felhasznalo: ${username}`, 'warning'); return; }
+        const modalEl = document.getElementById('adminGrantPickerModal');
+        if (modalEl && window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        state.criticalActionData = { action: 'admin.grant', targetUserId: target.id, targetLabel: target.username, makeSuper };
+        openCriticalAction('admin.grant', target.username, target.id, { makeSuper });
+    } catch (err) {
+        showToast(err.message || 'Hiba a user keresenel.', 'danger');
+    }
+}
+
+async function applyAdminGrantFromCritical(reason) {
+    const data = state.criticalActionData;
+    if (!data?.targetUserId) return;
+    try {
+        await adminFetchJson('/api/admin/admins/grant', {
+            method: 'POST',
+            body: { targetUserId: data.targetUserId, makeSuper: Boolean(data.makeSuper), reason }
+        });
+        showToast('Admin jog megadva.', 'success', 'bi-shield-fill-check');
+        await loadAdminAdminsList();
+    } catch (err) {
+        showToast(err.message || 'Hiba a grant soran.', 'danger');
+    }
+}
+
+async function applyAdminRevokeFromCritical(reason) {
+    const data = state.criticalActionData;
+    if (!data?.targetUserId) return;
+    try {
+        await adminFetchJson('/api/admin/admins/revoke', {
+            method: 'POST',
+            body: { targetUserId: data.targetUserId, reason }
+        });
+        showToast('Admin jog visszavonva.', 'success', 'bi-shield-fill-x');
+        await loadAdminAdminsList();
+    } catch (err) {
+        showToast(err.message || 'Hiba a revoke soran.', 'danger');
+    }
+}
+
+// ────────────── KEPESSEGEK ──────────────
+
+async function loadAdminAbilities() {
+    state.abilities.loading = true;
+    state.abilities.error = null;
+    if (state.currentSectionId === 'abilities') showSection('abilities', null, { silent: true });
+    try {
+        const json = await adminFetchJson('/api/admin/abilities/');
+        state.abilities.list = Array.isArray(json.data) ? json.data : [];
+        state.abilities.loaded = true;
+        state.abilities.loading = false;
+        if (state.currentSectionId === 'abilities') showSection('abilities', null, { silent: true });
+    } catch (err) {
+        state.abilities.loading = false;
+        state.abilities.error = err.message;
+        if (state.currentSectionId === 'abilities') showSection('abilities', null, { silent: true });
+    }
+}
+
+function openAbilityEditor(id) {
+    const editing = id ? state.abilities.list.find((a) => a.id === Number(id)) : null;
+    state.abilities.editing = editing || { id: null, name: '', description: '', cooldownTurns: 0 };
+    const modalEl = document.getElementById('abilityEditorModal');
+    if (!modalEl || !window.bootstrap?.Modal) {
+        showToast('A kepesseg-editor meg nem kesz.', 'info');
+        return;
+    }
+    const titleEl = document.getElementById('abilityEditorTitle');
+    if (titleEl) titleEl.textContent = editing ? `Kepesseg szerkesztese: ${editing.name}` : 'Uj kepesseg';
+    document.getElementById('abilityEditorName').value = state.abilities.editing.name || '';
+    document.getElementById('abilityEditorDescription').value = state.abilities.editing.description || '';
+    document.getElementById('abilityEditorCooldown').value = state.abilities.editing.cooldownTurns ?? 0;
+    document.getElementById('abilityEditorReason').value = '';
+    document.getElementById('abilityEditorReasonCount').textContent = '0';
+    new window.bootstrap.Modal(modalEl).show();
+}
+
+async function abilityEditorSubmit() {
+    const editing = state.abilities.editing;
+    if (!editing) return;
+    const name = document.getElementById('abilityEditorName')?.value?.trim();
+    const description = document.getElementById('abilityEditorDescription')?.value?.trim();
+    const cooldownTurns = Number(document.getElementById('abilityEditorCooldown')?.value) || 0;
+    const reason = document.getElementById('abilityEditorReason')?.value?.trim() || '';
+    if (!name) { showToast('A nev kotelezo.', 'warning'); return; }
+    if (reason.length < 30) { showToast('Indoklas: legalabb 30 karakter (kritikus muvelet).', 'warning'); return; }
+
+    try {
+        if (editing.id) {
+            await adminFetchJson(`/api/admin/abilities/${editing.id}`, {
+                method: 'PATCH',
+                body: { name, description, cooldownTurns, reason }
+            });
+            showToast('Kepesseg modositva.', 'success', 'bi-check-circle-fill');
+        } else {
+            await adminFetchJson('/api/admin/abilities/', {
+                method: 'POST',
+                body: { name, description, cooldownTurns, reason }
+            });
+            showToast('Kepesseg letrehozva.', 'success', 'bi-plus-circle-fill');
+        }
+        const modalEl = document.getElementById('abilityEditorModal');
+        if (modalEl && window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+        await loadAdminAbilities();
+    } catch (err) {
+        showToast(err.message || 'Hiba a mentes soran.', 'danger');
+    }
+}
+
+function confirmDeleteAbility(id) {
+    const ab = state.abilities.list.find((a) => a.id === Number(id));
+    if (!ab) return;
+    state.criticalActionData = { action: 'abilities.edit', abilityId: id, deleteFlow: true };
+    openCriticalAction('abilities.edit', `Kepesseg torles: ${ab.name}`);
+}
+
+async function applyAbilityDeleteFromCritical(reason) {
+    const id = state.criticalActionData?.abilityId;
+    if (!id) return;
+    try {
+        await adminFetchJson(`/api/admin/abilities/${id}`, {
+            method: 'DELETE',
+            body: { reason }
+        });
+        showToast('Kepesseg torolve.', 'success', 'bi-trash3-fill');
+        await loadAdminAbilities();
+    } catch (err) {
+        showToast(err.message || 'Hiba a torles soran.', 'danger');
+    }
+}
+
+// ────────────── KOZOSSEGI ──────────────
+
+async function loadAdminSocial() {
+    state.socialAdmin.loading = true;
+    state.socialAdmin.error = null;
+    if (state.currentSectionId === 'friends') showSection('friends', null, { silent: true });
+    try {
+        const [counts, requests, blocks] = await Promise.all([
+            adminFetchJson('/api/admin/social/counts'),
+            adminFetchJson('/api/admin/social/requests?status=pending'),
+            adminFetchJson('/api/admin/social/blocks')
+        ]);
+        state.socialAdmin.counts = counts.data || { totalFriendships: 0, pendingRequests: 0, activeBlocks: 0 };
+        state.socialAdmin.requests = Array.isArray(requests.data) ? requests.data : [];
+        state.socialAdmin.blocks = Array.isArray(blocks.data) ? blocks.data : [];
+        state.socialAdmin.requestsLoaded = true;
+        state.socialAdmin.blocksLoaded = true;
+        state.socialAdmin.countsLoaded = true;
+        state.socialAdmin.loading = false;
+        if (state.currentSectionId === 'friends') showSection('friends', null, { silent: true });
+    } catch (err) {
+        state.socialAdmin.loading = false;
+        state.socialAdmin.error = err.message;
+        if (state.currentSectionId === 'friends') showSection('friends', null, { silent: true });
+    }
+}
+
+function confirmAdminUnblock(blockerId, blockedId, blockerName, blockedName) {
+    if (!blockerId || !blockedId) return;
+    state.criticalActionData = { action: 'social.unblock', blockerId, blockedId, blockerName, blockedName };
+    openCriticalAction('social.unblock', `Blokk feloldas: ${blockerName} → ${blockedName}`);
+}
+
+async function applySocialUnblockFromCritical(reason) {
+    const data = state.criticalActionData;
+    if (!data?.blockerId || !data?.blockedId) return;
+    try {
+        await adminFetchJson(`/api/admin/social/blocks/${data.blockerId}/${data.blockedId}/unblock`, {
+            method: 'POST',
+            body: { reason }
+        });
+        showToast('Blokk feloldva.', 'success', 'bi-unlock-fill');
+        await loadAdminSocial();
+    } catch (err) {
+        showToast(err.message || 'Hiba a feloldas soran.', 'danger');
+    }
+}
+
+// ────────────── JATSZMAK ──────────────
+
+async function loadAdminGames() {
+    state.gamesAdmin.loading = true;
+    state.gamesAdmin.error = null;
+    if (state.currentSectionId === 'games') showSection('games', null, { silent: true });
+    try {
+        const params = new URLSearchParams();
+        if (state.gamesAdmin.filter && state.gamesAdmin.filter !== 'all') {
+            params.set('status', state.gamesAdmin.filter);
+        }
+        if (state.gamesAdmin.search) params.set('search', state.gamesAdmin.search);
+        const [list, counts] = await Promise.all([
+            adminFetchJson(`/api/admin/games/?${params.toString()}`),
+            adminFetchJson('/api/admin/games/counts')
+        ]);
+        state.gamesAdmin.list = Array.isArray(list.data) ? list.data : [];
+        state.gamesAdmin.counts = counts.data || { ongoing: 0, finished: 0, abandoned: 0, draw: 0 };
+        state.gamesAdmin.loaded = true;
+        state.gamesAdmin.loading = false;
+        if (state.currentSectionId === 'games') showSection('games', null, { silent: true });
+    } catch (err) {
+        state.gamesAdmin.loading = false;
+        state.gamesAdmin.error = err.message;
+        if (state.currentSectionId === 'games') showSection('games', null, { silent: true });
+    }
+}
+
+function setGamesFilter(filter) {
+    state.gamesAdmin.filter = filter;
+    loadAdminGames();
+}
+function setGamesSearch(value) {
+    state.gamesAdmin.search = String(value || '').trim();
+    loadAdminGames();
+}
+
+function downloadGamePgn(gameId) {
+    if (!gameId) return;
+    // PGN letoltes: a Bearer-token miatt fetch + Blob, hogy az admin token utazzon vele.
+    (async () => {
+        try {
+            const res = await fetch(`/api/admin/games/${gameId}/pgn`, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ Accept: 'application/x-chess-pgn' })
+            });
+            if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                throw new Error(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `mattmester-game-${gameId}.pgn`;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 300);
+        } catch (err) {
+            showToast(err.message || 'PGN letoltes hiba.', 'danger');
+        }
+    })();
+}
+
+function confirmForceEndGame(gameId) {
+    if (!gameId) return;
+    state.criticalActionData = { action: 'games.force_end', gameId };
+    openCriticalAction('games.force_end', `Meccs eroszakos befejezese: #${gameId}`);
+}
+
+async function applyGameForceEndFromCritical(reason) {
+    const id = state.criticalActionData?.gameId;
+    if (!id) return;
+    try {
+        await adminFetchJson(`/api/admin/games/${id}/force-end`, {
+            method: 'POST',
+            body: { reason }
+        });
+        showToast('Meccs befejezve (forced).', 'success', 'bi-stop-circle-fill');
+        await loadAdminGames();
+    } catch (err) {
+        showToast(err.message || 'Hiba a force-end soran.', 'danger');
+    }
+}
+
+// ────── Spectator ──────
+
+async function openSpectator(gameId) {
+    if (!gameId) return;
+    state.gamesAdmin.spectator = { gameId, game: null, loading: true, error: null };
+    const modalEl = document.getElementById('spectatorModal');
+    if (!modalEl || !window.bootstrap?.Modal) {
+        showToast('Spectator modal nem kesz.', 'info');
+        return;
+    }
+    new window.bootstrap.Modal(modalEl).show();
+    document.getElementById('spectatorTitle').textContent = `Spectator: meccs #${gameId}`;
+    document.getElementById('spectatorBody').innerHTML = '<div class="text-center py-4"><i class="bi bi-arrow-repeat spin"></i> Meccs adat betoltese...</div>';
+
+    try {
+        const json = await adminFetchJson(`/api/admin/games/${gameId}`);
+        state.gamesAdmin.spectator.game = json.data;
+        state.gamesAdmin.spectator.loading = false;
+        renderSpectatorBody();
+        // WS join
+        if (state.adminSocket) {
+            state.adminSocket.emit('admin:games:spectate:join', { gameId });
+        }
+    } catch (err) {
+        state.gamesAdmin.spectator.loading = false;
+        state.gamesAdmin.spectator.error = err.message;
+        document.getElementById('spectatorBody').innerHTML = `<div class="alert alert-danger">${escapeHtml(err.message)}</div>`;
+    }
+}
+
+function renderSpectatorBody() {
+    const sp = state.gamesAdmin.spectator;
+    const game = sp.game;
+    const body = document.getElementById('spectatorBody');
+    if (!body) return;
+    if (!game) { body.innerHTML = '<div class="text-secondary">Nincs adat.</div>'; return; }
+
+    const fen = game.currentFen || game.initialFen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+    const lastMoves = (game.moves || []).slice(-10).reverse();
+    const moveList = lastMoves.map((m) => `
+        <li class="d-flex justify-content-between gap-2 small">
+            <span class="font-monospace text-secondary">${m.plyNumber}.</span>
+            <span class="font-monospace text-white">${escapeHtml(m.san || (m.fromPos + '→' + m.toPos))}</span>
+            <span class="text-secondary">${escapeHtml(m.player?.username || '—')}</span>
+        </li>
+    `).join('');
+
+    body.innerHTML = `
+        <div class="row g-3">
+            <div class="col-md-7">
+                <div class="text-secondary small mb-1">Aktualis allas (FEN):</div>
+                <pre class="json-block" style="font-size:0.75rem;white-space:pre-wrap;word-break:break-all;">${escapeHtml(fen)}</pre>
+                <div class="text-secondary small mt-3">
+                    <strong>Vilagos:</strong> ${escapeHtml(game.white?.username || '—')} ·
+                    <strong>Sotet:</strong> ${escapeHtml(game.black?.username || '—')} ·
+                    <strong>Allapot:</strong> ${escapeHtml(game.status)}
+                    ${game.timeControl ? ` · <strong>Idokontroll:</strong> ${escapeHtml(game.timeControl)}` : ''}
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="text-secondary small mb-1">Utolso 10 lepes:</div>
+                <ol class="list-unstyled mb-0" style="max-height:280px;overflow:auto;" id="spectatorMoves">
+                    ${moveList || '<li class="text-secondary">Meg nincs lepes.</li>'}
+                </ol>
+            </div>
+        </div>
+    `;
+}
+
+function closeSpectator() {
+    const sp = state.gamesAdmin.spectator;
+    if (sp?.gameId && state.adminSocket) {
+        try { state.adminSocket.emit('admin:games:spectate:leave', { gameId: sp.gameId }); } catch (_) {}
+    }
+    state.gamesAdmin.spectator = { gameId: null, game: null, loading: false, error: null };
+}
+
+function onAdminGamesMove(payload) {
+    const sp = state.gamesAdmin.spectator;
+    if (!sp || !sp.gameId || !payload) return;
+    if (Number(payload.gameId) !== Number(sp.gameId)) return;
+    if (!sp.game) return;
+    // Frissitsuk a current_fen-t es toldjunk hozza egy lepest a moves vegere.
+    if (payload.allapot?.fen) sp.game.currentFen = payload.allapot.fen;
+    sp.game.moves = sp.game.moves || [];
+    sp.game.moves.push({
+        plyNumber: (sp.game.moves.length || 0) + 1,
+        san: null,
+        fromPos: payload.move ? `${payload.move.fromX},${payload.move.fromY}` : null,
+        toPos: payload.move ? `${payload.move.toX},${payload.move.toY}` : null,
+        player: { id: payload.player?.userId, username: payload.player?.color === 'white' ? sp.game.white?.username : sp.game.black?.username }
+    });
+    renderSpectatorBody();
+}
+
+// ────────────── TESZTEK ──────────────
+
+async function loadAdminTests() {
+    state.testsAdmin.loading = true;
+    state.testsAdmin.error = null;
+    if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+    try {
+        const [latest, history, running] = await Promise.all([
+            adminFetchJson('/api/admin/tests/latest'),
+            adminFetchJson('/api/admin/tests/history'),
+            adminFetchJson('/api/admin/tests/running')
+        ]);
+        state.testsAdmin.latest = latest.data;
+        state.testsAdmin.history = Array.isArray(history.data) ? history.data : [];
+        state.testsAdmin.latestLoaded = true;
+        state.testsAdmin.historyLoaded = true;
+        if (running.data?.inProcess) {
+            state.testsAdmin.running = {
+                runId: running.data.inProcessMeta?.id,
+                startedAt: running.data.inProcessMeta?.startedAt,
+                elapsedMs: running.data.inProcessMeta?.durationMs
+            };
+        } else {
+            state.testsAdmin.running = null;
+        }
+        state.testsAdmin.loading = false;
+        if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+    } catch (err) {
+        state.testsAdmin.loading = false;
+        state.testsAdmin.error = err.message;
+        if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+    }
+}
+
+function confirmRunTests() {
+    if (state.testsAdmin.running) { showToast('Mar fut egy teszt.', 'warning'); return; }
+    if (!state.isSuperAdmin) { showToast('Csak super-admin futtathat tesztet.', 'warning'); return; }
+    state.criticalActionData = { action: 'tests.run' };
+    openCriticalAction('tests.run', 'Tesztek futtatasa');
+}
+
+async function applyTestsRunFromCritical(reason) {
+    try {
+        const json = await adminFetchJson('/api/admin/tests/run', {
+            method: 'POST',
+            body: { reason }
+        });
+        showToast(`Teszt futas elinditva (run #${json.data?.runId}).`, 'success', 'bi-play-fill');
+        state.testsAdmin.running = {
+            runId: json.data?.runId,
+            startedAt: json.data?.startedAt,
+            elapsedMs: 0
+        };
+        if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+    } catch (err) {
+        showToast(err.message || 'Hiba a teszt inditasanal.', 'danger');
+    }
+}
+
+// ────────────── Critical action dispatch hook ──────────────
+// A meglevo executeCriticalAction function-be be kell hookolnunk az uj action-okre.
+// Egyszerubb wrapper: monkey-patch hogy az ismeretlen action-okre dispatcheljunk a fenti
+// applyXxxFromCritical fuggvenyekre. Az eredeti executeCriticalAction kezeli a regi action-oket
+// (users.ban, users.unban, users.delete, chat.delete) — ez a wrapper extra kezeli a 6 ujat.
+
+(function attachExtraCriticalActions() {
+    if (typeof executeCriticalAction !== 'function') return;
+    const originalExecute = executeCriticalAction;
+
+    const NEW_ACTION_HANDLERS = {
+        'admin.grant':      (reason) => applyAdminGrantFromCritical(reason),
+        'admin.revoke':     (reason) => applyAdminRevokeFromCritical(reason),
+        'settings.edit':    (reason) => applySettingsEditFromCritical(reason),
+        'abilities.edit':   (reason) => {
+            const data = state.criticalActionData;
+            if (data?.deleteFlow) return applyAbilityDeleteFromCritical(reason);
+            // egyebkent az ability editor sajat reason mezojet hasznaljuk, nem ezt
+            return Promise.resolve();
+        },
+        'social.unblock':   (reason) => applySocialUnblockFromCritical(reason),
+        'games.force_end':  (reason) => applyGameForceEndFromCritical(reason),
+        'tests.run':        (reason) => applyTestsRunFromCritical(reason)
+    };
+
+    window.executeCriticalAction = async function patchedExecuteCriticalAction() {
+        const action = state.criticalActionData?.action;
+        if (action && NEW_ACTION_HANDLERS[action]) {
+            const modalEl = document.getElementById('criticalActionModal');
+            if (modalEl && window.bootstrap?.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            }
+            const reason = document.getElementById('criticalReason')?.value?.trim() || '';
+            if (reason.length < 30) {
+                showToast('Az indoklasnak legalabb 30 karakter hosszunak kell lennie.', 'warning');
+                return;
+            }
+            try { await NEW_ACTION_HANDLERS[action](reason); } catch (err) {
+                console.error('extra critical handler hiba:', err);
+            }
+            return;
+        }
+        return originalExecute();
+    };
+})();
+
+// Showsection hook — eredeti showSection meghagyva, csak a vegen meghivjuk a section-loadert.
+(function attachSectionLoader() {
+    if (typeof showSection !== 'function') return;
+    const originalShow = showSection;
+    window.showSection = function patchedShowSection(sectionId, event, options) {
+        const result = originalShow(sectionId, event, options);
+        try { maybeLoadSectionData(sectionId); } catch (_) { /* ignore */ }
+        return result;
+    };
+})();
+
+// Ability editor reason counter
+function abilityEditorReasonInput(value) {
+    const el = document.getElementById('abilityEditorReasonCount');
+    if (el) el.textContent = String(String(value || '').length);
+}
+
+// Maintenance switch warning toggle (Beallitasok form)
+function onMaintenanceToggleChange(checked) {
+    const warn = document.getElementById('settingsMaintenanceWarn');
+    if (warn) warn.classList.toggle('d-none', !checked);
+}
+
+// ────────────── WS event listeners ──────────────
+// A tobbi admin tab eseteben az `admin:settings:updated`, `admin:abilities:changed`,
+// `admin:social:block_changed`, `admin:tests:finished`, `admin:games:move` eventeket
+// figyeljuk. Bekotjuk amikor az admin socket connect-tel.
+
+function attachAdminSocketListeners(socket) {
+    if (!socket) return;
+    socket.on('admin:settings:updated', (payload) => {
+        if (payload?.settings) {
+            state.siteSettings.data = payload.settings;
+            state.siteSettings.loaded = true;
+            if (state.currentSectionId === 'settings') showSection('settings', null, { silent: true });
+        }
+    });
+    socket.on('admin:abilities:changed', () => {
+        if (state.abilities.loaded) loadAdminAbilities();
+    });
+    socket.on('admin:social:block_changed', () => {
+        if (state.socialAdmin.requestsLoaded) loadAdminSocial();
+    });
+    socket.on('admin:games:ended', () => {
+        if (state.gamesAdmin.loaded) loadAdminGames();
+    });
+    socket.on('admin:games:move', onAdminGamesMove);
+    socket.on('admin:games:ability', onAdminGamesMove);
+    socket.on('admin:games:force_end', () => {
+        showToast('A nezett meccs adminisztratorian befejezve.', 'warning');
+    });
+    socket.on('admin:tests:started', (payload) => {
+        state.testsAdmin.running = {
+            runId: payload?.runId,
+            startedAt: payload?.startedAt,
+            elapsedMs: 0
+        };
+        if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+    });
+    socket.on('admin:tests:progress', (payload) => {
+        if (state.testsAdmin.running) {
+            state.testsAdmin.running.elapsedMs = payload?.elapsedMs || 0;
+            if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+        }
+    });
+    socket.on('admin:tests:finished', () => {
+        state.testsAdmin.running = null;
+        loadAdminTests();
+    });
+}
+
+// Patch the existing admin socket setup if available (idempotent).
+(function autoAttachOnSocketReady() {
+    let attached = false;
+    const tryAttach = () => {
+        if (attached) return;
+        if (state.adminSocket) {
+            attachAdminSocketListeners(state.adminSocket);
+            attached = true;
+        }
+    };
+    // Periodic poll — egyszer hooktol fuggetlenul biztos befut.
+    const intervalId = setInterval(() => {
+        tryAttach();
+        if (attached) clearInterval(intervalId);
+    }, 1000);
+})();
 
 document.addEventListener('DOMContentLoaded', () => {
     runSafely('adminDOMContentLoaded', () => {

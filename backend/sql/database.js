@@ -508,6 +508,44 @@ async function createTables() {
             INDEX idx_user_reports_game (game_id)
         )`,
 
+        // Site-wide settings (single-row pattern: id=1 mindig). Az admin panel
+        // Beallitasok oldala ezt olvassa/irja. Maintenance/registration toggle
+        // elesben hat — middleware-ek olvassak (cache TTL=30s).
+        `CREATE TABLE IF NOT EXISTS site_settings (
+            id TINYINT PRIMARY KEY DEFAULT 1,
+            site_name VARCHAR(100) NOT NULL DEFAULT 'MattMester',
+            support_email VARCHAR(150) NOT NULL DEFAULT 'mattmester.support@gmail.com',
+            default_language ENUM('hu', 'en') NOT NULL DEFAULT 'hu',
+            timezone VARCHAR(64) NOT NULL DEFAULT 'Europe/Budapest',
+            registration_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            maintenance_mode BOOLEAN NOT NULL DEFAULT FALSE,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            updated_by INT NULL,
+            CHECK (id = 1),
+            FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL
+        )`,
+
+        `INSERT IGNORE INTO site_settings (id) VALUES (1)`,
+
+        // Tesztfutasok elozmenyei (utolso N runt tartjuk meg). Az admin panel
+        // Tesztek oldal ezt listazza, a testRunnerService irja a recordokat.
+        `CREATE TABLE IF NOT EXISTS test_runs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            triggered_by INT NULL,
+            started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            finished_at TIMESTAMP NULL,
+            status ENUM('running', 'passed', 'failed', 'timeout', 'error') NOT NULL DEFAULT 'running',
+            total INT DEFAULT 0,
+            passed INT DEFAULT 0,
+            failed INT DEFAULT 0,
+            skipped INT DEFAULT 0,
+            duration_ms INT NULL,
+            raw_summary JSON NULL,
+            stderr_tail TEXT NULL,
+            FOREIGN KEY (triggered_by) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_test_runs_started (started_at)
+        )`,
+
         // "Recent opponents" tabla — Rocket League stilusu lista a felhasznalo
         // legutobbi ellenfeleirol. Egy par (user_id, opponent_user_id) UNIQUE,
         // utolso meccs idopontjat tartjuk + meccsek szamat. A frontend listaba

@@ -151,7 +151,38 @@ function createAdminNamespace(io) {
                 }
             });
 
+            // Jatszma spectator (kibic) handlerek — admin egyszer csatlakozik egy
+            // konkret meccs spectator szobajaba, onnantol minden lepest megkap.
+            const spectatedGameIds = new Set();
+
+            socket.on('admin:games:spectate:join', (payload = {}) => {
+                try {
+                    const gameId = safeNumber(payload?.gameId, 0);
+                    if (!gameId) return;
+                    const room = `game:${gameId}:spectator`;
+                    socket.join(room);
+                    spectatedGameIds.add(gameId);
+                    socket.emit('admin:games:spectate:joined', { gameId });
+                } catch (error) {
+                    console.warn('admin:games:spectate:join hiba:', error.message);
+                }
+            });
+
+            socket.on('admin:games:spectate:leave', (payload = {}) => {
+                try {
+                    const gameId = safeNumber(payload?.gameId, 0);
+                    if (!gameId) return;
+                    const room = `game:${gameId}:spectator`;
+                    socket.leave(room);
+                    spectatedGameIds.delete(gameId);
+                    socket.emit('admin:games:spectate:left', { gameId });
+                } catch (error) {
+                    console.warn('admin:games:spectate:leave hiba:', error.message);
+                }
+            });
+
             socket.on('disconnect', (reason) => {
+                spectatedGameIds.clear();
                 console.log(`[admin-ns] disconnect user=${userId} reason=${reason}`);
             });
         });
@@ -171,6 +202,21 @@ function createAdminBroadcaster(adminNamespace) {
             adminNamespace.to(ADMIN_ROOM).emit(eventName, payload);
         } catch (error) {
             console.warn('broadcastAdmin hiba:', error.message);
+        }
+    };
+}
+
+// Egy konkret jatszma spectator-szobajaba kuld eseményt. A pvp.js move handlere
+// hivja minden lepes utan, hogy az admin spectator-ok elo-elo lassak a meccset.
+function createSpectatorBroadcaster(adminNamespace) {
+    return function broadcastSpectator(gameId, eventName, payload) {
+        try {
+            if (!adminNamespace || !gameId) {
+                return;
+            }
+            adminNamespace.to(`game:${gameId}:spectator`).emit(eventName, payload);
+        } catch (error) {
+            console.warn('broadcastSpectator hiba:', error.message);
         }
     };
 }
@@ -220,5 +266,6 @@ module.exports = {
     createAdminBroadcaster,
     createAdminUserEmitter,
     createAdminUserDisconnector,
+    createSpectatorBroadcaster,
     ADMIN_ROOM
 };
