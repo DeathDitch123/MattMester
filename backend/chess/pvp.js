@@ -126,8 +126,24 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
     // DB mentés + statisztikák
     if (dbGameId) {
         try {
+            // PGN-szeru leiras a moves tablabol az admin review celra. A
+            // games.pgn oszlopba mentodik, igy a Bejelentesek panel review
+            // modal-jaban + a .pgn / .txt letoltesnel teljes lepessor latszik.
+            // Result string PGN-konvencio: "1-0" / "0-1" / "1/2-1/2".
+            let pgnResult = '*';
+            if (eredmeny === 'draw') pgnResult = '1/2-1/2';
+            else if (eredmeny === 'white') pgnResult = '1-0';
+            else if (eredmeny === 'black') pgnResult = '0-1';
+
+            let pgnString = null;
+            try {
+                pgnString = await chessSql.buildPgnLikeFromMoves(dbGameId, { result: pgnResult });
+            } catch (pgnErr) {
+                console.warn('PGN build hiba:', pgnErr.message);
+            }
+
             if (eredmeny === 'draw') {
-                await chessSql.jatekVegeMentDb(dbGameId, null, 'draw');
+                await chessSql.jatekVegeMentDb(dbGameId, null, 'draw', pgnString);
                 await Promise.all([
                     chessSql.dontetlenMentDb(whiteId),
                     chessSql.dontetlenMentDb(blackId)
@@ -135,7 +151,7 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
             } else {
                 const winnerId = eredmeny === 'white' ? whiteId : blackId;
                 const loserId = eredmeny === 'white' ? blackId : whiteId;
-                await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished');
+                await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished', pgnString);
                 await Promise.all([
                     chessSql.gyozelemMentDb(winnerId),
                     chessSql.veresegMentDb(loserId)
@@ -143,6 +159,18 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
             }
         } catch (err) {
             console.error('PvP DB mentési hiba:', err);
+        }
+    }
+
+    // Recent opponents lista frissites: a ket jatekos kolcsonosen egymas
+    // legutobbi ellenfele lett. UPSERT-tel megy (ha mar volt par korabban,
+    // csak last_played_at + counter bump). Hibat csak warningoljuk, ne
+    // tortje meg a game-end emit-flow-t.
+    if (whiteId && blackId && whiteId !== blackId) {
+        try {
+            await sql.recordRecentOpponentPair(whiteId, blackId, dbGameId || null);
+        } catch (recentErr) {
+            console.warn('recordRecentOpponentPair hiba:', recentErr.message);
         }
     }
 

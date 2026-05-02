@@ -1182,6 +1182,7 @@ async function getFlaggedChatMessages(limit = 50) {
 
     await ensureChatTables(pool);
     await ensureChatReportsTable(pool);
+    await ensureChatProfanityStrikesTable(pool);
 
     const [rows] = await pool.execute(
         `
@@ -1198,6 +1199,8 @@ async function getFlaggedChatMessages(limit = 50) {
                 c.type AS conversation_type,
                 COALESCE(rep.report_count, 0) AS report_count,
                 rep.earliest_report_at AS earliest_report_at,
+                COALESCE(strikes.total, 0) AS sender_strike_count,
+                msg_strike.ban_type AS message_strike_ban_type,
                 CASE
                     WHEN COALESCE(rep.report_count, 0) > 0 THEN 'report'
                     WHEN m.is_body_masked = TRUE THEN 'auto'
@@ -1212,6 +1215,12 @@ async function getFlaggedChatMessages(limit = 50) {
                 WHERE status = 'pending'
                 GROUP BY message_id
             ) rep ON rep.message_id = m.id
+            LEFT JOIN (
+                SELECT user_id, COUNT(*) AS total
+                FROM chat_profanity_strikes
+                GROUP BY user_id
+            ) strikes ON strikes.user_id = m.sender_id
+            LEFT JOIN chat_profanity_strikes msg_strike ON msg_strike.message_id = m.id
             WHERE m.is_body_masked = TRUE OR rep.message_id IS NOT NULL
             ORDER BY COALESCE(rep.earliest_report_at, m.sent_at) DESC, m.id DESC
             LIMIT ?
@@ -1267,7 +1276,9 @@ async function getFlaggedChatMessages(limit = 50) {
         reportCount: Number(row.report_count || 0),
         reports: reportRowsByMessage.get(Number(row.id)) || [],
         sentAt: row.sent_at,
-        earliestReportAt: row.earliest_report_at
+        earliestReportAt: row.earliest_report_at,
+        senderStrikeCount: Number(row.sender_strike_count || 0),
+        messageStrikeBanType: row.message_strike_ban_type || null
     }));
 }
 

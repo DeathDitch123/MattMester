@@ -370,6 +370,57 @@ CREATE TABLE
         INDEX idx_account_ban_events_user (user_id, created_at)
     );
 
+-- User-vs-user bejelentesek (player-actions). NEM osszekeverendo a
+-- chat_message_reports-tel: az csak chat-uzenetekre vonatkozik.
+-- Itt egy felhasznalo bejelenthet egy masik felhasznalot pl. csalas /
+-- toxikussag / spam / zaklatas / fairplay-megsertes / egyeb miatt.
+-- game_id: opcionalis - egy konkret meccshez kapcsolt bejelentes (cheating /
+-- unfair_play eseten), igy az admin a PGN + lepeslista alapjan tud
+-- dontest hozni. ON DELETE SET NULL: ha a meccs torlodne, a report megmarad.
+-- FONTOS: false report eseten NEM bunteti a bejelentot (chat-tel ellentetben),
+-- mert egy player-magaviselet utolagosan nehezen ellenorizheto.
+CREATE TABLE
+    IF NOT EXISTS user_reports (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        reporter_user_id INT NOT NULL,
+        reported_user_id INT NOT NULL,
+        game_id INT NULL,
+        category ENUM ('cheating', 'toxicity', 'spam', 'harassment', 'unfair_play', 'other') NOT NULL DEFAULT 'other',
+        message VARCHAR(1000) NULL,
+        status ENUM ('open', 'under_review', 'closed') NOT NULL DEFAULT 'open',
+        resolution ENUM ('none', 'dismissed', 'warned', 'banned') NOT NULL DEFAULT 'none',
+        admin_note VARCHAR(1000) NULL,
+        reviewed_by_user_id INT NULL,
+        reviewed_at TIMESTAMP NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (reporter_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (reported_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id) ON DELETE SET NULL,
+        FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE SET NULL,
+        INDEX idx_user_reports_status_created (status, created_at),
+        INDEX idx_user_reports_reported (reported_user_id, created_at),
+        INDEX idx_user_reports_reporter (reporter_user_id, created_at),
+        INDEX idx_user_reports_game (game_id)
+    );
+
+-- "Recent opponents" tabla - Rocket League stilusu lista a felhasznalo
+-- legutobbi ellenfeleirol. Egy par (user_id, opponent_user_id) UNIQUE,
+-- utolso meccs idopontjat tartjuk + meccsek szamat. A frontend listaba
+-- utolso meccs szerint csokkeno sorrendben rendez, max 25-ot mutat.
+CREATE TABLE
+    IF NOT EXISTS recent_opponents (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        opponent_user_id INT NOT NULL,
+        last_played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        match_count INT NOT NULL DEFAULT 1,
+        last_game_id INT NULL,
+        UNIQUE KEY ux_recent_opponents_pair (user_id, opponent_user_id),
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (opponent_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_recent_opponents_user_time (user_id, last_played_at)
+    );
+
 -- Universal notifications table (single source of truth for badge + history)
 -- Targeting:
 --   target_user_id IS NULL   -> broadcast (audience driven by audience field)

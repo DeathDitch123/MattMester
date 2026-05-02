@@ -150,16 +150,22 @@ async function createTables() {
             FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
         )`,
 
+        // moves: san es fen_after NULL-able. Eredetileg NOT NULL voltak, de a
+        // chess engine-ben jelenleg nem generalunk full FEN-t es minden meccsen
+        // a NULL miatt silently elnyelodott az INSERT. Most NULL-able-tel a
+        // mentes mar megy, san hianyaban a "Pawn e2-e4" formatumot hasznaljuk
+        // szovegesen az admin review-hoz; teljes FEN csak akkor mentodik, ha
+        // a hivo at tudja adni.
         `CREATE TABLE IF NOT EXISTS moves (
             id INT AUTO_INCREMENT PRIMARY KEY,
             game_id INT NOT NULL,
             player_id INT NOT NULL,
             ply_number INT NOT NULL,
-            san VARCHAR(10) NOT NULL,
+            san VARCHAR(20) NULL DEFAULT NULL,
             piece VARCHAR(10),
             from_pos VARCHAR(5),
             to_pos VARCHAR(5),
-            fen_after VARCHAR(100) NOT NULL,
+            fen_after VARCHAR(100) NULL DEFAULT NULL,
             is_capture BOOLEAN DEFAULT FALSE,
             is_check BOOLEAN DEFAULT FALSE,
             is_checkmate BOOLEAN DEFAULT FALSE,
@@ -468,6 +474,57 @@ async function createTables() {
             reason VARCHAR(255) NULL,
             UNIQUE KEY ux_rate_esc_scope (scope, scope_value),
             INDEX idx_rate_esc_expires (expires_at)
+        )`,
+
+        // User-vs-user bejelentesek (NEM chat-uzenet bejelentesek - azoknak kulon
+        // a chat_message_reports tablajuk van). Ide kerulnek a player-actions
+        // bejelentesek: cheating, toxicity, spam, fairplay megsertese, stb.
+        // Status: 'open' (uj), 'under_review' (admin nezi), 'closed' (lezarva).
+        // FONTOS: false report eseten NEM bunteti a bejelentot (chat-tel ellentetben),
+        // mert egy player-magaviselet utolagosan nehezen ellenorizheto.
+        // game_id: opcionalis - egy konkret meccshez kapcsolt bejelentes (cheating /
+        // unfair_play eseten), igy az admin a PGN + lepeslista alapjan tud
+        // dontest hozni. ON DELETE SET NULL: ha a meccs torlodne, a report megmarad.
+        `CREATE TABLE IF NOT EXISTS user_reports (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            reporter_user_id INT NOT NULL,
+            reported_user_id INT NOT NULL,
+            game_id INT NULL,
+            category ENUM('cheating', 'toxicity', 'spam', 'harassment', 'unfair_play', 'other') NOT NULL DEFAULT 'other',
+            message VARCHAR(1000) NULL,
+            status ENUM('open', 'under_review', 'closed') NOT NULL DEFAULT 'open',
+            resolution ENUM('none', 'dismissed', 'warned', 'banned') NOT NULL DEFAULT 'none',
+            admin_note VARCHAR(1000) NULL,
+            reviewed_by_user_id INT NULL,
+            reviewed_at TIMESTAMP NULL DEFAULT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reported_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reviewed_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE SET NULL,
+            INDEX idx_user_reports_status_created (status, created_at),
+            INDEX idx_user_reports_reported (reported_user_id, created_at),
+            INDEX idx_user_reports_reporter (reporter_user_id, created_at),
+            INDEX idx_user_reports_game (game_id)
+        )`,
+
+        // "Recent opponents" tabla — Rocket League stilusu lista a felhasznalo
+        // legutobbi ellenfeleirol. Egy par (user_id, opponent_user_id) UNIQUE,
+        // utolso meccs idopontjat tartjuk + meccsek szamat. A frontend listaba
+        // utolso meccs szerint csokkeno sorrendben rendez, max 25-ot mutat,
+        // alul levag - karbantartas a backendben tortenik a recordRecentOpponent
+        // hivasakor (a 25. felett a legregebbi tablaban marad, csak a UI vagja).
+        `CREATE TABLE IF NOT EXISTS recent_opponents (
+            id BIGINT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            opponent_user_id INT NOT NULL,
+            last_played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            match_count INT NOT NULL DEFAULT 1,
+            last_game_id INT NULL,
+            UNIQUE KEY ux_recent_opponents_pair (user_id, opponent_user_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (opponent_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_recent_opponents_user_time (user_id, last_played_at)
         )`
     ];
 
@@ -691,6 +748,57 @@ async function runMigrations() {
         }
     } catch (err) {
         console.warn(`[Migration] admin_alert_log idx_aalert_dismissed kihagyva: ${err.message}`);
+    }
+
+    // moves: san + fen_after NOT NULL -> NULL-able (forward-compat). A regi
+    // sema NOT NULL-tel volt, de a kod sosem adott at SAN-t/FEN-t, igy MINDEN
+    // lepes-mentes silently elnyelodott egy try/catch-ben. Most relax-aljuk,
+    // hogy a uj kod tudjon menteni akkor is ha SAN/FEN nincs (NULL), es az
+    // admin review-hoz egy egyszeru "Pawn e2-e4" formatu leiras is eleg.
+    const movesNullableColumns = [
+        ['san',       'VARCHAR(20) NULL DEFAULT NULL'],
+        ['fen_after', 'VARCHAR(100) NULL DEFAULT NULL']
+    ];
+    for (const [colName, colDef] of movesNullableColumns) {
+        try {
+            const [colRows] = await pool.execute(
+                `SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS
+                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'moves' AND COLUMN_NAME = ?`,
+                [colName]
+            );
+            if (colRows.length && String(colRows[0].IS_NULLABLE || '').toUpperCase() === 'NO') {
+                await pool.execute(`ALTER TABLE moves MODIFY COLUMN \`${colName}\` ${colDef}`);
+                console.log(`[Migration] moves.${colName} NOT NULL -> NULL-able.`);
+            }
+        } catch (err) {
+            console.warn(`[Migration] moves.${colName} relax kihagyva: ${err.message}`);
+        }
+    }
+
+    // user_reports: game_id oszlop (forward-compat). Regi DB-ken nem letezett -
+    // ezzel a meglevo bejelentesek meccs nelkul maradnak, az ujak tudnak meccset
+    // mellekelni. FK ON DELETE SET NULL: ha torlodne a meccs, a report megmarad.
+    try {
+        const [rows] = await pool.execute(
+            `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user_reports' AND COLUMN_NAME = 'game_id'`
+        );
+        if (rows.length === 0) {
+            await pool.execute(`ALTER TABLE user_reports ADD COLUMN game_id INT NULL DEFAULT NULL AFTER reported_user_id`);
+            console.log('[Migration] user_reports.game_id hozzáadva.');
+            try {
+                await pool.execute(`ALTER TABLE user_reports ADD INDEX idx_user_reports_game (game_id)`);
+            } catch (idxErr) {
+                console.warn(`[Migration] idx_user_reports_game kihagyva: ${idxErr.message}`);
+            }
+            try {
+                await pool.execute(`ALTER TABLE user_reports ADD CONSTRAINT fk_user_reports_game FOREIGN KEY (game_id) REFERENCES games(id) ON DELETE SET NULL`);
+            } catch (fkErr) {
+                console.warn(`[Migration] fk_user_reports_game kihagyva: ${fkErr.message}`);
+            }
+        }
+    } catch (err) {
+        console.warn(`[Migration] user_reports.game_id kihagyva: ${err.message}`);
     }
 }
 

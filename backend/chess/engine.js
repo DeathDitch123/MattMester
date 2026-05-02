@@ -25,6 +25,43 @@ const {
     cooldownTickAndCleanup
 } = require('./abilities.js');
 
+// Egyszeru SAN-szeru notacio generalas DB-mentes + admin review celra.
+// NEM teljes szabvanyos SAN (nincs disambiguation pl. ket huszar ugyanoda lephet),
+// de emberi atnezeshez es a PGN-szeru export-hoz teljesen elegseges:
+//   "e4", "exd5", "Nf3", "Bxc4", "O-O", "O-O-O", "e8=Q", "Nf3+", "Qxh7#"
+const PIECE_SAN_LETTER = {
+    pawn: '', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K'
+};
+const PROMO_SAN_LETTER = {
+    knight: 'N', bishop: 'B', rook: 'R', queen: 'Q'
+};
+function buildSimpleSan({ piece, fromPos, toPos, isCapture, isCheck, isCheckmate, special, promotionPiece }) {
+    if (special === 'castle-ks') return isCheckmate ? 'O-O#' : (isCheck ? 'O-O+' : 'O-O');
+    if (special === 'castle-qs') return isCheckmate ? 'O-O-O#' : (isCheck ? 'O-O-O+' : 'O-O-O');
+
+    const letter = PIECE_SAN_LETTER[String(piece || '').toLowerCase()] ?? '';
+    const target = String(toPos || '');
+    let core;
+    if (letter === '') {
+        // Gyalog: utesnel "exd5", egyebkent "e4". A gyalog from-fajilejat ('e2'-bol 'e').
+        if (isCapture) {
+            const fromFile = String(fromPos || '').slice(0, 1);
+            core = `${fromFile}x${target}`;
+        } else {
+            core = target;
+        }
+    } else {
+        core = `${letter}${isCapture ? 'x' : ''}${target}`;
+    }
+    if (promotionPiece) {
+        const promoLetter = PROMO_SAN_LETTER[String(promotionPiece).toLowerCase()] || 'Q';
+        core = `${core}=${promoLetter}`;
+    }
+    if (isCheckmate) return `${core}#`;
+    if (isCheck) return `${core}+`;
+    return core;
+}
+
 /**
  * Játék újraindítása (vagy inicializálás).
  * Visszaadja a kliens-biztonságos állapotot.
@@ -215,12 +252,27 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         const allapotOk = allapot.ok;
         const nyertesSzin = allapot.nyertes;
 
+        // SAN-szeru notacio generalas admin review celra. Nem teljes szabvanyos
+        // SAN (nem tudunk diszambiguaciot pl. ket huszar ugyanoda lephet), de
+        // emberi atnezeshez es a PGN-szeru export-hoz teljesen elegseges.
+        const san = buildSimpleSan({
+            piece: eredetiTipus,
+            fromPos,
+            toPos,
+            isCapture: voltUtes,
+            isCheck,
+            isCheckmate,
+            special,
+            promotionPiece
+        });
+
         (async () => {
             try {
                 await chessSql.lepesMentDb({
                     gameId: dbGameId,
                     playerId,
                     moveNumber,
+                    san,
                     piece: eredetiTipus,
                     fromPos,
                     toPos,
@@ -231,9 +283,21 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
                 });
 
                 if (vege) {
+                    // PGN-szeru leiras a moves tablabol (a friss lepes mar bent
+                    // van) admin review celra. Hibat csak warningoljuk.
+                    let pgnResult = '*';
+                    if (allapotOk === 'matt') pgnResult = nyertesSzin === 'white' ? '1-0' : '0-1';
+                    else pgnResult = '1/2-1/2';
+                    let pgnString = null;
+                    try {
+                        pgnString = await chessSql.buildPgnLikeFromMoves(dbGameId, { result: pgnResult });
+                    } catch (pgnErr) {
+                        console.warn('PGN build hiba (engine):', pgnErr.message);
+                    }
+
                     if (allapotOk === "matt") {
                         const winnerId = jatek.jatekosok[nyertesSzin]?.userId || null;
-                        await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished');
+                        await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished', pgnString);
 
                         if (winnerId) {
                             const vesztesSzin = (nyertesSzin === "white") ? "black" : "white";
@@ -243,7 +307,7 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
                         }
                     } else {
                         // Döntetlen: patt, 50 lépés, elégtelen anyag, háromszori ismétlés
-                        await chessSql.jatekVegeMentDb(dbGameId, null, 'draw');
+                        await chessSql.jatekVegeMentDb(dbGameId, null, 'draw', pgnString);
                         const whiteId = jatek.jatekosok.white?.userId;
                         const blackId = jatek.jatekosok.black?.userId;
                         if (whiteId) await chessSql.dontetlenMentDb(whiteId);

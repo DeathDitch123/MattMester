@@ -29,6 +29,23 @@ const networkClassifier = require('../admin/networkClassifier.js');
 
 const router = express.Router();
 
+// Auth flow-ban (login / register / logout) frissitjuk az adott sessionID-vel
+// nyitott socketek context-et, hogy az admin panel azonnal online-ra valtsa a
+// usert. Backend-driven sync: nem fugg attol, hogy a frontend emit-el-e
+// `socket:sync`-et — a sessionMiddleware csak handshake-kor olvas, ezert egy
+// mar nyitott anonim socket cached session-jenek frissitese itt tortenik.
+function applySocketSessionUpdate(request, sessionData) {
+    try {
+        const socketHub = request.app?.locals?.socketHub;
+        if (!socketHub || typeof socketHub.applySessionUpdate !== 'function') return;
+        const sessionId = request.sessionID || null;
+        if (!sessionId) return;
+        socketHub.applySessionUpdate(sessionId, sessionData || {});
+    } catch (error) {
+        console.warn('applySocketSessionUpdate hiba:', error.message);
+    }
+}
+
 function buildMailVerifiedRedirectPath(payloadInput = {}) {
     const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
     const params = new URLSearchParams();
@@ -134,6 +151,19 @@ router.post('/login', authLoginLimiter, async (request, response) => {
 
         await saveSessionAsync(request, 'Hiba a munkamenet mentésekor.');
 
+        // Mar nyitott socketek context-et a sessionID alapjan frissitjuk: a
+        // bejelentkezes utan az admin panel azonnal online-ra latja a usert,
+        // anelkul hogy a kliensnek socket reconnect-et / `socket:sync`-et kelljen
+        // emit-elnie.
+        applySocketSessionUpdate(request, {
+            userId: user.id,
+            username: user.username,
+            role: user.role,
+            profile_image: user.profile_image || '/profile_pictures/default.png',
+            profile_image_status: user.profile_image_status || 'default',
+            is_email_verified: !!user.is_email_verified
+        });
+
         // Az utolso login IP-t bemashojuk a users tablaba — az auto IP-ban escalation
         // rendszer ezt hasznalja, ha admin offline usert banol.
         try {
@@ -201,6 +231,8 @@ const logoutHandler = async (request, response) => {
     try {
         if (request.session?.userId) {
             const logoutUserId = request.session.userId;
+            // sessionID-t a destroy elott kapjuk el; utana mar nem letezik a request-en.
+            const previousSessionId = request.sessionID || null;
 
             await logAuthenticatedAction(request, logoutUserId, {
                 eventType: 'logout',
@@ -211,10 +243,41 @@ const logoutHandler = async (request, response) => {
                 message: 'Sikeres kijelentkezés.'
             });
 
+            // Explicit last_active bump: a users.last_active csak `ON UPDATE
+            // CURRENT_TIMESTAMP` szabaly miatt frissulne, az pedig nem trigger-el
+            // ha a sor nem valtozik. Igy a "Utolso aktivitas" admin oszlop a
+            // login-kori timestampen ragadt volna meg ("7 perce" stb. logout
+            // utan), pedig a user epp most lett offline. Beirjuk a NOW()-t.
+            try {
+                await sql.touchUserLastActive(logoutUserId);
+            } catch (touchErr) {
+                console.warn('logout last_active touch hiba:', touchErr.message);
+            }
+
             await destroySessionAsync(request, 'Sikertelen kijelentkezés.');
             response.clearCookie('connect.sid');
             console.log('Session sikeresen megsemmisítve.');
             payload.message = 'Sikeres kijelentkezés.';
+
+            // Mar nyitott socketek context-et anonim allapotra valtjuk, hogy az
+            // admin panel azonnal offline-ra valtsa a felhasznalot a kijelentkezes
+            // utan — anelkul hogy a kliensnek socket disconnect/reconnect-et
+            // kellene kezdemenyeznie.
+            try {
+                const socketHub = request.app?.locals?.socketHub;
+                if (previousSessionId && socketHub && typeof socketHub.applySessionUpdate === 'function') {
+                    socketHub.applySessionUpdate(previousSessionId, {
+                        userId: null,
+                        username: 'Vendég',
+                        role: 'guest',
+                        profile_image: null,
+                        profile_image_status: 'default',
+                        is_email_verified: false
+                    });
+                }
+            } catch (sockErr) {
+                console.warn('logout socket session sync hiba:', sockErr.message);
+            }
         }
     } catch (error) {
         console.error('Logout hiba:', error);
@@ -313,6 +376,18 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
         await saveSessionAsync(request, 'Sikertelen regisztráció.');
         console.log('Session sikeresen mentve a regisztráció után.');
 
+        // Backend-driven socket session sync: a regisztracio auto-loginol, ezert
+        // a mar nyitott (anonim) socket context-et frissitjuk az uj userId-vel,
+        // hogy az admin panel azonnal online-ra valtsa az uj felhasznalot.
+        applySocketSessionUpdate(request, {
+            userId: result.insertId,
+            username,
+            role: 'player',
+            profile_image: '/profile_pictures/default.png',
+            profile_image_status: 'default',
+            is_email_verified: false
+        });
+
         await logAuthenticatedAction(request, result.insertId, {
             eventType: 'register',
             eventCategory: 'auth',
@@ -321,6 +396,42 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
             success: true,
             message: 'Sikeres regisztráció.'
         });
+
+        // A regisztracio auto-loginol (session.userId beallitva), ezert egy
+        // 'login' eventet is rogzitunk: igy a frissen regisztralt user megjelenik
+        // az admin Bejelentkezesi elozmenyek panelen is, nem csak a 'register'
+        // sor jon le. A listAdminLoginHistory event_type IN ('login','login_failed')
+        // szurot hasznal, igy 'register' nelkul nem latszana ott a be-belepes.
+        await logAuthenticatedAction(request, result.insertId, {
+            eventType: 'login',
+            eventCategory: 'auth',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Automatikus bejelentkezés regisztráció után.',
+            metadata: { viaRegistration: true }
+        });
+
+        // Live broadcast az admin Bejelentkezesek oldal feedjebe: a register-utani
+        // auto-login is jelenjen meg azonnal a live feed-en.
+        try {
+            const adminSocketHub = request.app?.locals?.adminSocketHub;
+            if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                adminSocketHub.broadcastAdmin('admin:security:login', {
+                    userId: result.insertId,
+                    username,
+                    eventType: 'login',
+                    success: true,
+                    ip: ipAddress,
+                    userAgent,
+                    location: networkClassifier.classifyIp(ipAddress),
+                    device: networkClassifier.parseUserAgent(userAgent),
+                    occurredAt: new Date().toISOString()
+                });
+            }
+        } catch (broadcastErr) {
+            console.warn('register auto-login broadcast hiba:', broadcastErr.message);
+        }
 
         let verificationEmailSent = false;
         try {

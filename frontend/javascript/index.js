@@ -556,10 +556,18 @@ function bindLoginForm() {
                     hideModalById('loginModal');
                     showToast('Sikeres bejelentkezes.');
 
-                    if (socket) {
-                        console.log('Login form successful, refreshing stats via socket...');
-                        socket.disconnect();
-                        socket.connect();
+                    // forceReconnect: true — express-session `saveUninitialized: false`
+                    // miatt egy anonim socket handshake-kori sessionID-je NEM egyezik a
+                    // login HTTP kérés sessionID-jével (utóbbi csak a login response
+                    // Set-Cookie-jával válik aktívvá). Ezért teljes új handshake kell,
+                    // hogy a socket az új cookie-val csatlakozzon és a backend a friss
+                    // session.userId-t lássa. Puszta `socket:sync` itt nem elég.
+                    if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+                        try {
+                            await window.MattMesterSocket.syncSocketContextOrReconnect('login-success', { forceReconnect: true });
+                        } catch (syncErr) {
+                            console.warn('Login utani socket sync hiba:', syncErr.message || syncErr);
+                        }
                     }
                     await refreshAuthUi('login-success');
                 } catch (error) {
@@ -666,6 +674,15 @@ function bindRegisterForm() {
                     registerForm.reset();
                     resetRegisterValidationState();
                     hideModalById('registerModal');
+                    // forceReconnect: true — anonim sessionID != register HTTP sessionID
+                    // (saveUninitialized: false miatt). Lasd a login flow kommentjet.
+                    if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+                        try {
+                            await window.MattMesterSocket.syncSocketContextOrReconnect('register-success', { forceReconnect: true });
+                        } catch (syncErr) {
+                            console.warn('Register utani socket sync hiba:', syncErr.message || syncErr);
+                        }
+                    }
                     await refreshAuthUi('register-success');
                     showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
                 } catch (error) {
@@ -710,9 +727,14 @@ async function handleLogout() {
             console.warn('[index] logout reset dispatch hiba:', resetError.message);
         }
 
-        if (socket) {
-            socket.disconnect();
-            socket.connect();
+        // forceReconnect: true — logout után a régi session-cookie törölve, új handshake
+        // kell, hogy a socket az anonim állapotot tükrözze a backend felé.
+        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            try {
+                await window.MattMesterSocket.syncSocketContextOrReconnect('logout-success', { forceReconnect: true });
+            } catch (syncErr) {
+                console.warn('Logout utani socket sync hiba:', syncErr.message || syncErr);
+            }
         }
         await refreshAuthUi('logout-success');
     } catch (error) {

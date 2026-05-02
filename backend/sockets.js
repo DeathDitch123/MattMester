@@ -847,18 +847,17 @@ function createSocketHub(io) {
                                         at: new Date().toISOString()
                                     });
                                 } catch (_) {}
-                                // Force-disconnect a kuldot — a mar nyitott socketjeit lebontjuk,
-                                // hogy ne tudjon tovabbi uzenetet kuldeni a ban alatt.
+                                // Ban-os disconnect: a kliens a `user:banned` eventre a /html/ban.html-re
+                                // navigal (lasd socketClient.js). Ezert NEM force-logout-ot kuldunk,
+                                // mert az csak kijelentkeztetne a usert ban tajekoztatas nelkul.
                                 try {
+                                    io.to(`user-room:${senderUserId}`).emit('user:banned', {
+                                        reason: strikeResult.banReason || 'profanity_strike_ban',
+                                        at: new Date().toISOString()
+                                    });
                                     const targetSockets = await io.in(`user-room:${senderUserId}`).fetchSockets();
                                     for (const s of targetSockets) {
-                                        try {
-                                            s.emit('user:force-logout', {
-                                                reason: 'profanity_strike_ban',
-                                                at: new Date().toISOString()
-                                            });
-                                            s.disconnect(true);
-                                        } catch (_) {}
+                                        try { s.disconnect(true); } catch (_) {}
                                     }
                                 } catch (_) {}
                             }
@@ -968,6 +967,22 @@ function createSocketHub(io) {
                 handlePvpDisconnect(currentContext.userId, io).catch((error) => {
                     console.error('PvP disconnect kezelési hiba:', error);
                 });
+            }
+
+            // last_active bump: ha a felhasznalo utolso clientje is lecsatlakozott
+            // (osszes nyitott tab/eszkoz lement), akkor offline-ra vált. A users.last_active
+            // `ON UPDATE CURRENT_TIMESTAMP` szabaly nem trigger-el sor-modositas nelkul,
+            // ezert explicit beirjuk a NOW()-t. Ez biztositja, hogy az admin panel
+            // "Utolso aktivitas" oszlopa pontosan az offline-ra valtas pillanatat
+            // mutassa, ne pedig a regi (pl. login-kori) timestampet.
+            if (currentContext && currentContext.userId) {
+                const stillOnline = [...clientsById.values()]
+                    .some((rec) => Number(rec.userId) === Number(currentContext.userId));
+                if (!stillOnline) {
+                    sql.touchUserLastActive(currentContext.userId).catch((error) => {
+                        console.warn('socket disconnect last_active touch hiba:', error.message);
+                    });
+                }
             }
 
             syncPresence();
@@ -1196,6 +1211,45 @@ function createSocketHub(io) {
                 io.to(SOCKET_ROOMS.admin).emit(String(eventName), payload || {});
             } catch (error) {
                 console.warn('broadcastAdmin hiba:', error.message);
+            }
+        },
+        // Backend-driven session sync: ha a HTTP-oldali auth flow modositja a
+        // session-t (login / register / logout), itt frissitjuk MINDEN ezzel a
+        // sessionID-vel kapcsolodo, mar nyitott socket cached session-jet, majd
+        // ujragyartjuk a context-et + presence-t. Ezzel a frontend-nek nem kell
+        // kulon socket:sync-et emit-elnie ahhoz, hogy az admin panel azonnal
+        // online-ra valtsa a usert. A bug, amit ez fix-el: a sessionMiddleware csak
+        // handshake-kor olvas, igy egy mar nyitott socket request.session-je az
+        // anonim allapotnal ragad meg, amig nincs disconnect+reconnect.
+        applySessionUpdate(sessionId, sessionData) {
+            try {
+                const sid = sessionId ? String(sessionId) : '';
+                if (!sid) return false;
+                const data = sessionData || {};
+                let updatedAny = false;
+                for (const [socketId, context] of socketsById.entries()) {
+                    if (!context || context.sessionId !== sid) continue;
+                    const socket = io.sockets.sockets.get(socketId);
+                    if (!socket || !socket.request) continue;
+                    try {
+                        const sess = socket.request.session || (socket.request.session = {});
+                        sess.userId = data.userId ?? null;
+                        sess.username = data.username ?? 'Vendég';
+                        sess.role = data.role ?? 'guest';
+                        sess.profile_image = data.profile_image ?? null;
+                        sess.profile_image_status = data.profile_image_status ?? 'default';
+                        sess.is_email_verified = !!data.is_email_verified;
+                        refreshSocketContextFromSession(socket);
+                        updatedAny = true;
+                    } catch (innerErr) {
+                        console.warn('applySessionUpdate per-socket hiba:', innerErr.message);
+                    }
+                }
+                if (updatedAny) syncPresence();
+                return updatedAny;
+            } catch (error) {
+                console.warn('applySessionUpdate hiba:', error.message);
+                return false;
             }
         }
     };

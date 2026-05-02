@@ -175,6 +175,27 @@ async function getUserLastLoginIp(userId) {
     }
 }
 
+// Ban-info egy adott userId-hez. A ban.html /api/banInfo endpoint hivja:
+// visszaadja az is_banned / banned_until / ban_reason mezoket + username-t,
+// hogy a kitiltott user lassa miert lett kitiltva. NEM kovetel auth-ot
+// (a tiltott user session-je gyakran mar nincs is meg).
+async function getBanInfoById(userId) {
+    const pool = getPool();
+    const numericUserId = Number(userId) || 0;
+    if (!numericUserId) return null;
+    try {
+        const [rows] = await pool.execute(
+            `SELECT id, username, is_banned, banned_until, ban_reason
+             FROM users WHERE id = ? LIMIT 1`,
+            [numericUserId]
+        );
+        return rows[0] || null;
+    } catch (error) {
+        console.warn('getBanInfoById hiba:', error.message);
+        return null;
+    }
+}
+
 async function setUserLastLoginIp(userId, ipAddress) {
     const pool = getPool();
     const numericUserId = Number(userId) || 0;
@@ -187,6 +208,26 @@ async function setUserLastLoginIp(userId, ipAddress) {
         );
     } catch (error) {
         console.warn('setUserLastLoginIp hiba:', error.message);
+    }
+}
+
+// Explicit last_active bump-ot vegez egy felhasznalon. A users.last_active oszlop
+// `ON UPDATE CURRENT_TIMESTAMP` szabaly miatt csak akkor frissul, ha tenylegesen
+// modosul valamelyik mezo — egy `UPDATE id=id` no-op nem triggerel friss timestampot.
+// Ezert a logout / socket disconnect path-on explicit beirjuk a NOW()-t, hogy az
+// admin panel "Utolso aktivitas" oszlopa azonnal "Most"-ra valtson, ne ragadjon meg
+// a regi (pl. login utani) timestampnal.
+async function touchUserLastActive(userId) {
+    const pool = getPool();
+    const numericUserId = Number(userId) || 0;
+    if (!numericUserId) return;
+    try {
+        await pool.execute(
+            `UPDATE users SET last_active = CURRENT_TIMESTAMP WHERE id = ?`,
+            [numericUserId]
+        );
+    } catch (error) {
+        console.warn('touchUserLastActive hiba:', error.message);
     }
 }
 
@@ -240,5 +281,7 @@ module.exports = {
     recordAccountBanEvent,
     getUserLastLoginIp,
     setUserLastLoginIp,
+    touchUserLastActive,
+    getBanInfoById,
     isLoopbackIp
 };

@@ -1726,6 +1726,22 @@ function createSearchResultListItem(player) {
     viewButton.innerHTML = '<i data-lucide="eye" style="width: 16px; height: 16px;"></i>';
     actions.appendChild(viewButton);
 
+    // Jelentes gomb a keresesi talalat soraban: a globalis playerActionModal-t
+    // hivja meg ami egy egyseges modal-bol enged jelenteni a jatekost.
+    if (friendStatus !== 'blocked') {
+        const reportButton = document.createElement('button');
+        reportButton.type = 'button';
+        reportButton.className = 'btn btn-sm btn-outline-danger py-1 px-2';
+        reportButton.title = 'Jelentés';
+        reportButton.dataset.action = 'report';
+        reportButton.dataset.userId = String(player.userId || player.id || '');
+        reportButton.dataset.username = String(player.username || '');
+        reportButton.dataset.profileImage = String(player.profileImage || '/profile_pictures/default.png');
+        reportButton.dataset.friendStatus = friendStatus;
+        reportButton.innerHTML = '<i data-lucide="flag" style="width: 16px; height: 16px;"></i>';
+        actions.appendChild(reportButton);
+    }
+
     item.appendChild(avatarWrap);
     item.appendChild(info);
     item.appendChild(actions);
@@ -1867,6 +1883,26 @@ function bindSearchResultsModalEvents() {
                         throw error;
                     }
                 });
+            } else if (action === 'report') {
+                // Player jelentes: a globalis playerActions modul-ra delegalunk,
+                // amelyik az egyseges report-modal-t nyitja meg kategoria-valasztassal.
+                if (window.MattMesterPlayerActions?.openPlayerActionModal) {
+                    const profileImage = String(actionButton.dataset.profileImage || '/profile_pictures/default.png');
+                    const friendStatus = String(actionButton.dataset.friendStatus || 'none');
+                    window.MattMesterPlayerActions.openPlayerActionModal({
+                        userId,
+                        username,
+                        profileImage,
+                        friendStatus
+                    });
+                    // A user a tobbi gomb (profil / barat) helyett egybol a Jelentes-t
+                    // szeretne — automatikusan nyissuk a report-modalt is. (Az action
+                    // modal flash-szeruen jelenik meg.)
+                    setTimeout(() => {
+                        const reportBtn = document.getElementById('playerActionReportBtn');
+                        if (reportBtn) reportBtn.click();
+                    }, 50);
+                }
             } else if (action === 'pending-friend' || action === 'accepted-friend' || action === 'blocked-friend') {
                 // Ezek az akciók nem interaktívak, vagy később implementálandók
             }

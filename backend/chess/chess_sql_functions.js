@@ -36,11 +36,56 @@ async function jatekMentDb(whitePlayerId, blackPlayerId, mode) {
  * @param {number|null} winnerId - users.id (null = döntetlen)
  * @param {string} status - 'finished' | 'abandoned'
  */
-async function jatekVegeMentDb(gameId, winnerId, status) {
+async function jatekVegeMentDb(gameId, winnerId, status, pgn = null) {
     const pool = getPool();
-    const query = `UPDATE games SET winner_id = ?, status = ?, end_time = NOW()
-                   WHERE id = ?`;
-    await pool.execute(query, [winnerId, status, gameId]);
+    if (pgn) {
+        await pool.execute(
+            `UPDATE games SET winner_id = ?, status = ?, end_time = NOW(), pgn = ?
+             WHERE id = ?`,
+            [winnerId, status, pgn, gameId]
+        );
+    } else {
+        await pool.execute(
+            `UPDATE games SET winner_id = ?, status = ?, end_time = NOW()
+             WHERE id = ?`,
+            [winnerId, status, gameId]
+        );
+    }
+}
+
+// Egy meccs osszes lepesebol egyszeru, olvashato "PGN-szeru" leiras generalasa
+// admin review celra. NEM teljes szabvanyos PGN (FEN-t kovetelne lepesenkent),
+// de a san mezok (pl. "Nf3", "exd5", "O-O") sorrendben listazva eleg az
+// emberi atnezeshez. Ha a san NULL, beillesztunk egy "piece from-to" alakot.
+async function buildPgnLikeFromMoves(gameId, options = {}) {
+    const pool = getPool();
+    const [rows] = await pool.execute(
+        `SELECT ply_number, san, piece, from_pos, to_pos, is_capture
+         FROM moves WHERE game_id = ? ORDER BY ply_number ASC, id ASC`,
+        [gameId]
+    );
+    if (!rows.length) return '';
+
+    const tokens = [];
+    for (const row of rows) {
+        let token = row.san || '';
+        if (!token) {
+            const piece = String(row.piece || '?').slice(0, 1).toUpperCase();
+            const fromTo = `${row.from_pos || '?'}${row.is_capture ? 'x' : '-'}${row.to_pos || '?'}`;
+            token = piece === 'P' ? fromTo : `${piece}${fromTo}`;
+        }
+        tokens.push(token);
+    }
+    // 1. white-token black-token / 2. ...
+    const lines = [];
+    for (let i = 0; i < tokens.length; i += 2) {
+        const moveNum = Math.floor(i / 2) + 1;
+        const white = tokens[i] || '';
+        const black = tokens[i + 1] || '';
+        lines.push(black ? `${moveNum}. ${white} ${black}` : `${moveNum}. ${white}`);
+    }
+    const result = options.result || '*';
+    return `${lines.join(' ')} ${result}`;
 }
 
 /**
@@ -73,21 +118,28 @@ async function jatekLekerdezDb(gameId) {
  */
 async function lepesMentDb(params) {
     const pool = getPool();
-    const query = `INSERT INTO moves 
-        (game_id, player_id, move_number, piece, from_pos, to_pos, 
-         is_capture, is_check, is_checkmate, promotion_piece)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+    // FONTOS: a moves tabla `ply_number` oszlopot hasznal (NEM `move_number`).
+    // A regi kodban move_number-t insert-eltunk, ami SQL hibaba futott es
+    // silently elnyelodott a hivo try/catch-ben - ezert minden meccs ures
+    // lepeslistaval futott. A san es fen_after mezok most NULL-able-k, igy ha
+    // a hivo nem ad at, a sor akkor is bemegy.
+    const query = `INSERT INTO moves
+        (game_id, player_id, ply_number, san, piece, from_pos, to_pos,
+         is_capture, is_check, is_checkmate, promotion_piece, fen_after)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
     const [result] = await pool.execute(query, [
         params.gameId,
         params.playerId,
-        params.moveNumber,
+        params.moveNumber || params.plyNumber || 0,
+        params.san || null,
         params.piece,
         params.fromPos,
         params.toPos,
         params.isCapture || false,
         params.isCheck || false,
         params.isCheckmate || false,
-        params.promotionPiece || null
+        params.promotionPiece || null,
+        params.fenAfter || null
     ]);
     return result.insertId;
 }
@@ -244,6 +296,7 @@ module.exports = {
     jatekLekerdezDb,
     lepesMentDb,
     lepesekLekerdezDb,
+    buildPgnLikeFromMoves,
     gyozelemMentDb,
     veresegMentDb,
     dontetlenMentDb,

@@ -65,6 +65,9 @@ const ADMIN_PERMISSIONS = Object.freeze({
     CHAT_VIEW_ANY: 'chat.view_any',
     CHAT_DELETE_MESSAGE: 'chat.delete',
 
+    REPORTS_VIEW: 'reports.view',
+    REPORTS_REVIEW: 'reports.review',
+
     NOTIFICATIONS_SEND: 'notifications.send',
     NOTIFICATIONS_BROADCAST: 'notifications.broadcast',
 

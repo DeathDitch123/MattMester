@@ -537,9 +537,26 @@
 
     async function syncSocketContextOrReconnect(socketInstance, reason = 'session-mutation', options = {}) {
         // Első körben normál sync; hiba esetén fallback: disconnect -> reconnect -> új sync.
+        // `options.forceReconnect: true` esetén KIHAGYJUK az optimista első próbálkozást
+        // és azonnal disconnect+reconnect-et csinálunk. Ez a login/register/logout flow-ban
+        // szükséges, mert express-session `saveUninitialized: false` mellett egy anonim
+        // socket handshake-kori sessionID-je NEM egyezik meg a login HTTP kérés
+        // sessionID-jével (utóbbi csak a login után kerül cookie-ba). Ilyenkor egy puszta
+        // `socket:sync` event-tel a backend csak a régi anonim session cache-t látja —
+        // a context-frissítéshez teljes új handshake kell.
         try {
             const connectTimeoutMs = options.connectTimeoutMs ?? SOCKET_CONNECT_TIMEOUT_MS;
             const syncTimeoutMs = options.syncTimeoutMs ?? SOCKET_SYNC_TIMEOUT_MS;
+
+            if (options.forceReconnect) {
+                if (!socketInstance) {
+                    throw new Error('A socket objektum nem elérhető a forceReconnect kéréshez.');
+                }
+                try { socketInstance.disconnect(); } catch (_) {}
+                await ensureSocketConnected(socketInstance, connectTimeoutMs);
+                await emitSocketSyncAndWait(socketInstance, `${reason}:force-reconnect`, syncTimeoutMs);
+                return;
+            }
 
             await ensureSocketConnected(socketInstance, connectTimeoutMs);
             await emitSocketSyncAndWait(socketInstance, reason, syncTimeoutMs);

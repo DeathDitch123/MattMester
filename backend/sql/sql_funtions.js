@@ -13,6 +13,8 @@ const friends = require('./modules/friends.js');
 const chat = require('./modules/chat.js');
 const notifications = require('./modules/notifications.js');
 const emailVerification = require('./modules/emailVerification.js');
+const userReports = require('./modules/userReports.js');
+const recentOpponents = require('./modules/recentOpponents.js');
 
 module.exports = {
     // profileImage
@@ -76,6 +78,8 @@ module.exports = {
     recordAccountBanEvent: bans.recordAccountBanEvent,
     getUserLastLoginIp: bans.getUserLastLoginIp,
     setUserLastLoginIp: bans.setUserLastLoginIp,
+    touchUserLastActive: bans.touchUserLastActive,
+    getBanInfoById: bans.getBanInfoById,
 
     // userLogs
     insertUserLog: userLogs.insertUserLog,
@@ -136,5 +140,21 @@ module.exports = {
     dismissAllNotificationsForUser: notifications.dismissAllNotificationsForUser,
     markFriendRequestNotificationsReadForUser: notifications.markFriendRequestNotificationsReadForUser,
     markAllNotificationsReadForUser: notifications.markAllNotificationsReadForUser,
-    getUnreadNotificationCount: notifications.getUnreadNotificationCount
+    getUnreadNotificationCount: notifications.getUnreadNotificationCount,
+
+    // user-vs-user reports (player bejelentesek - chat-tol fuggetlen)
+    USER_REPORT_CATEGORIES: userReports.ALLOWED_CATEGORIES,
+    USER_REPORT_STATUSES: userReports.ALLOWED_STATUSES,
+    USER_REPORT_RESOLUTIONS: userReports.ALLOWED_RESOLUTIONS,
+    createUserReport: userReports.createUserReport,
+    listUserReports: userReports.listUserReports,
+    updateUserReportStatus: userReports.updateUserReportStatus,
+    countUserReportsByStatus: userReports.countUserReportsByStatus,
+    getGameReviewById: userReports.getGameReviewById,
+
+    // recent opponents (Rocket League stilusu lista)
+    RECENT_OPPONENTS_DEFAULT_LIMIT: recentOpponents.RECENT_OPPONENTS_DEFAULT_LIMIT,
+    RECENT_OPPONENTS_MAX_LIMIT: recentOpponents.RECENT_OPPONENTS_MAX_LIMIT,
+    recordRecentOpponentPair: recentOpponents.recordRecentOpponentPair,
+    getRecentOpponentsForUser: recentOpponents.getRecentOpponentsForUser
 };

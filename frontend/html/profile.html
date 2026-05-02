@@ -27,6 +27,7 @@
     <script src="../javascript/chessInviteGlobal.js" defer></script>
     <script src="../javascript/chatModal.js" defer></script>
     <script src="../javascript/profile.js" defer></script>
+    <script src="../javascript/playerActions.js" defer></script>
     <script src="../javascript/shared/houseRules.js" defer></script>
 </head>
 
@@ -274,6 +275,22 @@
                                         <!-- Sample game rows -->
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Legutobbi ellenfelek (Rocket League stilus) -->
+                    <div class="card mb-4 section-block" id="recentOpponents">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="swords" class="me-2"></i>Legutóbbi ellenfelek</span>
+                            <small class="text-secondary">Max 25 · kattints rájuk</small>
+                        </div>
+                        <div class="card-body">
+                            <div id="recentOpponentsList" role="list">
+                                <div class="text-secondary text-center py-3">Betöltés...</div>
+                            </div>
+                            <div id="recentOpponentsEmpty" class="text-secondary text-center py-3 d-none">
+                                Még nem játszottál senkivel — indíts egy meccset!
                             </div>
                         </div>
                     </div>

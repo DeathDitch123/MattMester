@@ -686,9 +686,11 @@ router.post(
                                 at: new Date().toISOString()
                             });
                         }
+                        // banUser() (nem disconnectUser) — `user:banned` eventet kuld,
+                        // amitol a kliens a /html/ban.html-re navigal a /api/logout helyett.
                         const socketHub = request.app?.locals?.socketHub;
-                        if (socketHub && typeof socketHub.disconnectUser === 'function') {
-                            await socketHub.disconnectUser(result.senderId, 'profanity_strike_ban');
+                        if (socketHub && typeof socketHub.banUser === 'function') {
+                            await socketHub.banUser(result.senderId, strikeOutcome.banReason || 'profanity_strike_ban');
                         }
                     }
                 }
@@ -820,6 +822,149 @@ router.post(
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE;
             response.locals.adminAudit.success = false;
             response.locals.adminAudit.errorCode = 'CHAT_BLOCKLIST_ADD_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// =====================================================================
+// USER REPORTS (player-vs-player bejelentesek; NEM chat-uzenet bejelentesek)
+// list = osszes / 'open' / 'under_review' / 'closed' szuressel.
+// PATCH /reports/:id/status - admin atallithatja a status-t es resolution-t.
+// =====================================================================
+
+router.get(
+    '/reports',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, data: [], message: 'Szerverhiba a bejelentes lista lekerdezesekor.' };
+        try {
+            const status = typeof request.query?.status === 'string' ? request.query.status.trim() : '';
+            const limit = Math.min(Math.max(Number(request.query?.limit) || 100, 1), 500);
+            const reports = await sql.listUserReports({ status: status || null, limit });
+            const counts = await sql.countUserReportsByStatus();
+            payload = {
+                success: true,
+                data: reports,
+                counts,
+                message: reports.length ? `${reports.length} bejelentes.` : 'Nincs bejelentes.'
+            };
+            response.locals.adminAudit.skip = true; // read-only listazas
+        } catch (error) {
+            console.error('admin/reports list hiba:', error.message);
+            statusCode = 500;
+            payload = { success: false, data: [], message: error.message || payload.message };
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// GET /admin/games/:gameId/review - egy konkret meccs reszletes lekerdezese
+// admin manualis review-hoz: PGN, lepes-lista timestamp-pel (timing pattern
+// elemzes), jatekos-info. Csak a Bejelentesek panel hivja egy report-hoz
+// kapcsolt meccs megnyitasakor.
+router.get(
+    '/games/:gameId/review',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a meccs lekerdezese soran.' };
+        try {
+            const gameId = Number(request.params?.gameId) || 0;
+            if (!gameId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen meccs azonosito.');
+            }
+            const game = await sql.getGameReviewById(gameId);
+            if (!game) {
+                statusCode = 404;
+                throw new Error('A meccs nem talalhato.');
+            }
+            payload = { success: true, data: game };
+            response.locals.adminAudit.skip = true; // read-only
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// PATCH a bejelentes status-an. Body: { status, resolution?, adminNote? }.
+// Status valtozasanal automatikusan rogziti a reviewer + reviewed_at mezoket.
+// reason kotelezo (REPORTS_REVIEW critical action - min. 30 char ha closed,
+// barmilyen kis valasz mas status-nal).
+router.patch(
+    '/reports/:id/status',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.REPORTS_REVIEW),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a bejelentes frissitese soran.' };
+        try {
+            const adminUserId = Number(request.adminAuth?.userId) || 0;
+            const reportId = Number(request.params?.id) || 0;
+            if (!reportId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen bejelentes azonosito.');
+            }
+
+            const { status, resolution, adminNote } = request.body || {};
+            const result = await sql.updateUserReportStatus(reportId, {
+                status,
+                resolution,
+                adminNote: adminNote ?? request.adminReason ?? null,
+                reviewerUserId: adminUserId
+            });
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.REPORTS_REVIEW;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'user_report';
+            response.locals.adminAudit.targetId = reportId;
+            response.locals.adminAudit.afterState = { status, resolution: resolution || null };
+            response.locals.adminAudit.success = true;
+
+            // Real-time push: a tobbi admin tabnak frissulnek a counterek + lista.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:reports:updated', {
+                        reportId,
+                        status: status || null,
+                        resolution: resolution || null,
+                        reviewedByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('admin:reports:updated broadcast hiba:', broadcastErr.message);
+            }
+
+            payload = {
+                success: true,
+                message: 'A bejelentes frissitve.',
+                data: { reportId, updated: result.updated }
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            const messageLower = String(error?.message || '').toLowerCase();
+            if (messageLower.includes('nem talalhato')) statusCode = 404;
+            else if (messageLower.includes('ervenytelen')) statusCode = 400;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.REPORTS_REVIEW;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'REPORT_UPDATE_FAILED';
         }
         return response.status(statusCode).json(payload);
     }

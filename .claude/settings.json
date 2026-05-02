@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx jest *)",
+      "Bash(awk '/^window\\\\.MattMesterAdminChatModeration/,/^}\\\\\\)\\\\\\(\\\\\\);/' /d/Letoltesek/GIthub/repo/MattMester/frontend/javascript/adminPanel.js)",
+      "Bash(node -e \"require\\('./api/routes/reports.js'\\); console.log\\('reports.js OK'\\);\")",
+      "Bash(node -e ' *)"
+    ]
+  }
+}
