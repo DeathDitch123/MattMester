@@ -777,6 +777,26 @@ function createSocketHub(io) {
                 } catch (sideEffectError) {
                     console.warn('[sockets] chat:message:send side-effect hiba:', sideEffectError.message);
                 }
+
+                // Admin chat moderacios real-time push: ha a profanity-filter maszkolt
+                // egy uzenetet, a Chat moderalas panel azonnal lassa az uj jelolt sort.
+                if (insertedMessage?.isBodyMasked) {
+                    try {
+                        io.of('/admin').to('admin:room').emit('admin:chat:flagged', {
+                            messageId: insertedMessage.id,
+                            conversationId,
+                            senderId: insertedMessage.senderId,
+                            senderUsername: insertedMessage.senderUsername,
+                            senderProfileImage: insertedMessage.senderProfileImage,
+                            body: insertedMessage.bodyOriginal,
+                            bodyMasked: insertedMessage.body,
+                            sentAt: insertedMessage.sentAt,
+                            at: new Date().toISOString()
+                        });
+                    } catch (adminEmitErr) {
+                        console.warn('[sockets] admin:chat:flagged emit hiba:', adminEmitErr.message);
+                    }
+                }
             } catch (error) {
                 const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet');
 

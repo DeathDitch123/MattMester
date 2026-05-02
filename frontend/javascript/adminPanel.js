@@ -676,13 +676,20 @@ function renderUserStatusCell(user) {
         const banned = Boolean(user?.isBanned);
         const online = Boolean(user?.online);
         const tabCount = Number(user?.presenceTabCount || 0);
+        const pendingDeletion = user?.pendingDeletionUntil ? new Date(user.pendingDeletionUntil) : null;
+        const isPending = pendingDeletion && pendingDeletion > new Date();
+
         const onlineHtml = online
             ? `<span class="user-presence user-presence-online" title="Online · ${tabCount} aktív tab">
                   <span class="user-presence-dot"></span>Online${tabCount > 1 ? ` <span class="user-presence-tabs">${tabCount}</span>` : ''}
                </span>`
             : `<span class="user-presence user-presence-offline" title="Offline"><span class="user-presence-dot"></span>Offline</span>`;
         const bannedHtml = banned ? `<span class="badge badge-status-banned ms-1">Tiltott</span>` : '';
-        html = `<div class="user-status-cell">${onlineHtml}${bannedHtml}</div>`;
+        const pendingHtml = isPending ? `
+            <span class="badge bg-danger ms-1" title="Hard-delete: ${escapeHtml(pendingDeletion.toLocaleString('hu-HU'))}">
+                <i class="bi bi-hourglass-split me-1"></i>Törlésre várólista
+            </span>` : '';
+        html = `<div class="user-status-cell">${onlineHtml}${bannedHtml}${pendingHtml}</div>`;
     } catch (err) {
         console.warn('renderUserStatusCell hiba:', err);
         html = '—';
@@ -1757,10 +1764,10 @@ const SECTIONS = {
                                 <label class="form-label" for="banReason">
                                     Indok <span class="text-danger">*</span>
                                     <span class="critical-reason-counter ms-2">
-                                        <span id="banReasonCount">0</span> / 30
+                                        <span id="banReasonCount">0</span> / 10
                                     </span>
                                 </label>
-                                <textarea id="banReason" class="form-control" rows="3" placeholder="Részletes indok — naplózásra kerül." oninput="onBanReasonInput(this)"></textarea>
+                                <textarea id="banReason" class="form-control" rows="3" placeholder="Rövid indok — naplózásra kerül (min. 10 karakter)." oninput="onBanReasonInput(this)"></textarea>
                             </div>
                             <div class="col-12">
                                 <label class="form-label" for="banPassword">Saját admin jelszó <span class="text-danger">*</span></label>
@@ -1827,18 +1834,27 @@ const SECTIONS = {
         const targetLabel = hasUser ? (u.username || `#${u.id}`) : 'kiválasztott felhasználó';
         const isAdminTarget = hasUser && u.role === 'admin';
 
+        // Varolista: minden user akinek pending_deletion_until a jovoben van.
+        const allUsers = Array.isArray(state.users.list) ? state.users.list : [];
+        const now = Date.now();
+        const pendingList = allUsers.filter((x) => {
+            if (!x.pendingDeletionUntil) return false;
+            const t = new Date(x.pendingDeletionUntil).getTime();
+            return Number.isFinite(t) && t > now;
+        }).sort((a, b) => new Date(a.pendingDeletionUntil) - new Date(b.pendingDeletionUntil));
+
         return `
         ${h.header({
             icon: 'bi-trash3-fill', title: 'Felhasználó törlése',
             subtitle: hasUser
                 ? `${targetLabel} — előre kiválasztva törléshez`
-                : 'Profil végleges törlése admin oldalról',
+                : 'Profil törlése admin oldalról (24h grace + visszaállítás)',
             actions: hasUser
                 ? [{ label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }]
                 : []
         })}
         <div class="row g-4 mb-4">
-            <div class="col-lg-7">
+            <div class="col-lg-5">
                 ${h.card({
             title: hasUser ? `Profil törlése — ${escapeHtml(targetLabel)}` : 'Profil törlése',
             icon: 'bi-trash3-fill',
@@ -1850,7 +1866,7 @@ const SECTIONS = {
                         </div>
                         <div class="alert alert-info bg-info bg-opacity-10 border-info small mb-3">
                             <i class="bi bi-info-circle me-1"></i>
-                            Megerősítéshez a saját <strong>admin jelszavadat</strong> kell megadnod a következő ablakban. Az indok <strong>opcionális</strong>, de javasolt audit célokra.
+                            Megerősítéshez a saját <strong>admin jelszavadat</strong> kell megadnod a lenti mezőben. Az indok <strong>opcionális</strong>, de javasolt audit célokra.
                         </div>
                         ${hasUser ? `
                             <div class="ban-target-card mb-3">
@@ -1873,20 +1889,91 @@ const SECTIONS = {
                                 <a href="#" class="text-gold" onclick="showSection('users', event)">listából</a>.
                             </div>
                         `}
-                        ${h.form({
-                fields: [
-                    {
-                        id: 'deleteReason', label: 'Indok (opcionális, max 1000 char)', col: 12, type: 'textarea',
-                        placeholder: 'Részletes indok — naplózásra kerül. Lehet üres is.'
-                    }
-                ],
-                submit: {
-                    label: 'Profil törlése', icon: 'bi-trash3-fill', variant: 'danger',
-                    onclick: hasUser && !isAdminTarget
-                        ? `openCriticalAction('users.delete', '${escapeHtml(targetLabel).replace(/'/g, "\\'")}')`
-                        : `showToast('${isAdminTarget ? 'Admin profil nem törölhető' : 'Először válassz felhasználót'}.', 'warning')`
-                }
-            })}
+                        <form class="row g-3" onsubmit="event.preventDefault();">
+                            <div class="col-12">
+                                <label class="form-label" for="deleteReason">
+                                    Indok <span class="text-secondary">(opcionális, max 1000 char)</span>
+                                </label>
+                                <textarea id="deleteReason" class="form-control" rows="3" maxlength="1000"
+                                          placeholder="Részletes indok — naplózásra kerül. Lehet üres is."></textarea>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label" for="deletePassword">Saját admin jelszó <span class="text-danger">*</span></label>
+                                <input id="deletePassword" class="form-control" type="password"
+                                       autocomplete="current-password"
+                                       placeholder="Saját admin jelszavad megerősítésre">
+                            </div>
+                            ${hasUser && !isAdminTarget ? `
+                                <div class="col-12 mt-2">
+                                    <button type="button" id="deleteHoldBtn" class="ban-hold-btn"
+                                            data-target-id="${u.id}"
+                                            onmousedown="startDeleteHold(this)"
+                                            onmouseup="cancelDeleteHold(this)"
+                                            onmouseleave="cancelDeleteHold(this)"
+                                            ontouchstart="event.preventDefault(); startDeleteHold(this)"
+                                            ontouchend="cancelDeleteHold(this)">
+                                        <span class="ban-hold-label"><i class="bi bi-trash3-fill me-2"></i>Profil törlése</span>
+                                        <small class="ban-hold-sub">Tartsd nyomva 5 másodpercig</small>
+                                    </button>
+                                </div>
+                            ` : `
+                                <div class="col-12 mt-2">
+                                    <button type="button" class="ban-hold-btn" disabled>
+                                        <span class="ban-hold-label"><i class="bi bi-trash3-fill me-2"></i>Profil törlése</span>
+                                        <small class="ban-hold-sub">${isAdminTarget ? 'Admin profil nem törölhető' : 'Először válassz felhasználót'}</small>
+                                    </button>
+                                </div>
+                            `}
+                        </form>
+                    `
+        })}
+            </div>
+            <div class="col-lg-7">
+                ${h.card({
+            title: 'Törlésre várólista',
+            icon: 'bi-hourglass-split',
+            headerExtra: `<span class="text-secondary small">${pendingList.length} bejegyzés · ${pendingList.length > 0 ? '24h grace' : ''}</span>`,
+            noBodyPadding: true,
+            body: `
+                        <table class="table mb-0">
+                            <thead>
+                                <tr>
+                                    <th>Felhasználó</th>
+                                    <th>Hátralévő idő</th>
+                                    <th class="text-end">Művelet</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${pendingList.length === 0
+                    ? `<tr><td colspan="3" class="text-center text-secondary py-4">
+                            <i class="bi bi-hourglass me-1"></i>Nincs törlésre váró felhasználó.
+                       </td></tr>`
+                    : pendingList.map((p) => {
+                        const untilTs = new Date(p.pendingDeletionUntil).getTime();
+                        const diffMs = Math.max(0, untilTs - now);
+                        const totalMin = Math.floor(diffMs / 60000);
+                        const hours = Math.floor(totalMin / 60);
+                        const mins = totalMin % 60;
+                        const countdown = hours > 0 ? `${hours}ó ${mins}p` : `${mins}p`;
+                        const danger = hours < 2;
+                        return `
+                                            <tr>
+                                                <td>${h.user({ name: p.username, email: p.email, profile_image: p.profileImage, username: p.username, struck: true })}</td>
+                                                <td>
+                                                    <span class="${danger ? 'text-danger fw-semibold' : 'text-warning'}" title="${escapeHtml(new Date(p.pendingDeletionUntil).toLocaleString('hu-HU'))}">
+                                                        <i class="bi bi-hourglass-split me-1"></i>${countdown}
+                                                    </span>
+                                                    ${p.deletedReason ? `<div class="small text-secondary" title="${escapeHtml(p.deletedReason)}">${escapeHtml(p.deletedReason.length > 60 ? p.deletedReason.slice(0, 60) + '…' : p.deletedReason)}</div>` : ''}
+                                                </td>
+                                                <td class="text-end">
+                                                    ${h.iconBtn({ icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${p.id})` })}
+                                                    ${h.iconBtn({ icon: 'bi-arrow-counterclockwise', variant: 'success', title: 'Visszaállít (törlés visszavonása)', onclick: `restoreUserDeletion(${p.id})` })}
+                                                </td>
+                                            </tr>
+                                        `;
+                    }).join('')}
+                            </tbody>
+                        </table>
                     `
         })}
             </div>
@@ -1895,53 +1982,34 @@ const SECTIONS = {
     },
 
     /* ---------- Moderáció > Chat ---------- */
-    chats: () => {
-        const messages = [
-            {
-                priority: ['Magas', 'danger'], game: '#4921', user: 'AgresszívJatekos99',
-                text: '„Te aztán teljes kezdő vagy, töröld ki a játékot!!!"', time: '2 perce'
-            },
-            {
-                priority: ['Közepes', 'warning'], game: '#4918', user: 'ChatSpammer',
-                text: '[Ismétlődő üzenet: „siess" × 15]', time: '15 perce'
-            }
-        ];
-        return `
-            ${h.header({
+    chats: () => `
+        ${h.header({
             icon: 'bi-chat-dots-fill', title: 'Chat moderálás',
-            subtitle: 'Megjelölt és bejelentett üzenetek áttekintése'
+            subtitle: 'Megjelölt és bejelentett üzenetek áttekintése',
+            actions: [{
+                label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
+                attrs: 'id="chatModerationRefresh"'
+            }]
         })}
-            ${h.card({
-            title: `Megjelölt üzenetek (${messages.length})`, icon: 'bi-exclamation-triangle-fill',
+        ${h.card({
+            title: `<span id="chatModerationCardTitle">Megjelölt üzenetek</span>`,
+            icon: 'bi-exclamation-triangle-fill',
             noBodyPadding: true,
-            body: `<div class="moderation-list">
-                    ${messages.map(m => `
-                        <article class="moderation-item">
-                            <header class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
-                                <div class="d-flex align-items-center gap-2">
-                                    ${h.badge(m.priority[0], m.priority[1])}
-                                    <small class="text-secondary">${m.game} játszma</small>
-                                </div>
-                                <small class="text-muted">${m.time}</small>
-                            </header>
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                ${h.avatar(m.user, 24)}<strong class="text-white">${m.user}</strong>
-                            </div>
-                            <blockquote class="moderation-quote">${m.text}</blockquote>
-                            <div class="d-flex justify-content-end gap-2">
-                                ${h.btn({ label: 'Engedélyezés', variant: 'outline-success', size: 'sm' })}
-                                ${h.btn({ label: 'Némítás', variant: 'outline-warning', size: 'sm' })}
-                                ${h.btn({
-                label: 'Törlés', variant: 'outline-danger', size: 'sm',
-                onclick: "openCriticalAction('chat.delete', '" + m.user + "')"
-            })}
-                            </div>
-                        </article>
-                    `).join('')}
-                </div>`
+            body: `
+                <div class="px-3 pt-3">
+                    <p class="text-secondary mb-2">Két forrás:
+                        <span class="badge bg-danger">Bejelentett</span> = felhasználói bejelentés;
+                        <span class="badge bg-warning text-dark">Auto-flagged</span> = a profanity-filter blocklist által maszkolt üzenet (fix szabály, az admin sem engedélyezheti — csak törölhető vagy figyelmen kívül hagyható).
+                        Az <strong>Engedélyezés</strong> a felhasználói bejelentéseket utasítja el, a <strong>Törlés</strong> véglegesen eltávolítja az üzenetet, a <strong>Némítás</strong> megnyitja a feladó adatlapját.
+                    </p>
+                    <div id="chatModerationMessage" class="alert d-none" role="alert"></div>
+                </div>
+                <div class="moderation-list" id="chatModerationList">
+                    <div class="text-center text-secondary py-4">Töltés...</div>
+                </div>
+            `
         })}
-        `;
-    },
+    `,
 
     /* ---------- Moderáció > Profilképek ---------- */
     profileImageReview: () => `
@@ -2686,6 +2754,9 @@ function showSection(sectionId, event, options = {}) {
     if (sectionId === 'profileImageReview') {
         window.MattMesterAdminProfileImages?.refresh?.();
     }
+    if (sectionId === 'chats') {
+        window.MattMesterAdminChatModeration?.refresh?.();
+    }
     if (sectionId === 'users') {
         // Reset visibleCount csak akkor, ha üres a lista — különben a user
         // által addig lazy-loadolt mennyiséget visszaállítjuk minimumra.
@@ -2711,6 +2782,17 @@ function showSection(sectionId, event, options = {}) {
             loadAdminUsersList({ silent: true }).then(() => {
                 if (state.currentSectionId === 'userBan') {
                     showSection('userBan', null, { silent: true });
+                }
+            });
+        }
+    }
+    if (sectionId === 'userDelete' && !silent) {
+        // A userDelete view jobboldali "Torlesre varolista" panelje a state.users.list-bol
+        // szuri ki a soft-deleted user-eket. Ha ures, betoltjuk + ujrarenderelunk.
+        if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
+            loadAdminUsersList({ silent: true }).then(() => {
+                if (state.currentSectionId === 'userDelete') {
+                    showSection('userDelete', null, { silent: true });
                 }
             });
         }
@@ -3201,6 +3283,40 @@ function connectAdminSocket() {
                 }
             });
 
+            // Profilkep moderacio broadcast: a tobbi admin tab fuggo lista azonnal frissuljon.
+            // A dashboard 'tickPendingImages' szamlalot az admin:stats:tick (5s) tartja szinkronban,
+            // de a Profilkepek view tablazatat csak ezzel az esemennyel tudjuk azonnal ujrahuzni.
+            sock.on('admin:profile-image:reviewed', () => {
+                if (state.currentSectionId === 'profileImageReview') {
+                    window.MattMesterAdminProfileImages?.refresh?.();
+                }
+            });
+
+            // Chat moderacio: uj jelolt uzenet erkezett (profanity-filter maszkolt) VAGY
+            // mas admin felulbiralta (allow/delete) — mindketto eseten frissitsuk a listat.
+            sock.on('admin:chat:flagged', () => {
+                if (state.currentSectionId === 'chats') {
+                    window.MattMesterAdminChatModeration?.refresh?.();
+                }
+            });
+            sock.on('admin:chat:reviewed', () => {
+                if (state.currentSectionId === 'chats') {
+                    window.MattMesterAdminChatModeration?.refresh?.();
+                }
+            });
+
+            // Soft-delete restore broadcast: a tobbi admin tab user-listja + a userDelete
+            // varolista is frissuljon. A 'users', 'userDetail', 'userBan', 'userDelete'
+            // szekciok mind a state.users.list-bol szurnek, igy mindegyiket re-renderelni kell.
+            sock.on('admin:user:deletion-restored', () => {
+                loadAdminUsersList({ silent: true }).then(() => {
+                    const refreshable = ['users', 'userDetail', 'userBan', 'userDelete'];
+                    if (refreshable.includes(state.currentSectionId)) {
+                        showSection(state.currentSectionId, null, { silent: true });
+                    }
+                });
+            });
+
             // Bejelentkezesi feed real-time push (login + login_failed event-ek).
             // A backend a payload-ban mar `location` (geoip + kategoria) es `device` mezovel
             // kuldi az enriched adatot — a frontendnek nincs sajat geoIP DB-je.
@@ -3558,7 +3674,7 @@ function showToast(message, variant = 'success', icon = 'bi-check-circle-fill') 
     }, 3000);
 }
 
-function openCriticalAction(action, targetLabel, overrideTargetUserId) {
+function openCriticalAction(action, targetLabel, overrideTargetUserId, extras = null) {
     try {
         const modalEl = document.getElementById('criticalActionModal');
         if (modalEl && window.bootstrap?.Modal) {
@@ -3613,7 +3729,7 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId) {
                 passwordField.value = '';
             }
             const targetUserId = overrideTargetUserId != null ? overrideTargetUserId : (state.selectedUser?.id || null);
-            state.criticalActionData = { action, targetUserId, targetLabel };
+            state.criticalActionData = { action, targetUserId, targetLabel, ...(extras || {}) };
             new window.bootstrap.Modal(modalEl).show();
         } else {
             showToast(`A(z) ${action} még csak shell elem.`, 'info', 'bi-cone-striped');
@@ -3724,6 +3840,31 @@ async function executeCriticalAction() {
                 showToast('Hálózati hiba a profil törlése során.', 'danger');
                 console.error('user delete hiba:', err);
             }
+        } else if (action === 'chat.delete') {
+            const messageId = Number(state.criticalActionData?.messageId) || 0;
+            if (!messageId) {
+                showToast('Nincs kiválasztott üzenet a törléshez.', 'danger');
+                return;
+            }
+            try {
+                const res = await fetch(`/api/admin/chat/messages/${messageId}/delete`, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ reason })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success) {
+                    showToast('Az üzenet véglegesen törölve.', 'success', 'bi-trash3-fill');
+                    window.MattMesterAdminChatModeration?.refresh?.();
+                } else {
+                    if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                    showToast(data.message || 'Hiba az üzenet törlésénél.', 'danger');
+                }
+            } catch (err) {
+                showToast('Hálózati hiba az üzenet törlésénél.', 'danger');
+                console.error('chat delete hiba:', err);
+            }
         } else {
             showToast(`A(z) ${action || 'ismeretlen'} művelet még nincs bekötve.`, 'info', 'bi-cone-striped');
         }
@@ -3757,17 +3898,26 @@ function renderAdminUserRow(user) {
                 : '<span class="text-muted">—</span>';
             const joinedCell = `<span class="text-secondary">${escapeHtml(formatDateOnly(user.createdAt))}</span>`;
 
-            const actionItems = banned
-                ? [
+            const isPendingDeletion = user.pendingDeletionUntil && new Date(user.pendingDeletionUntil) > new Date();
+            let actionItems;
+            if (isPendingDeletion) {
+                actionItems = [
+                    { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-arrow-counterclockwise', variant: 'success', title: 'Visszaállít (törlés visszavonása)', onclick: `restoreUserDeletion(${user.id})` }
+                ];
+            } else if (banned) {
+                actionItems = [
                     { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
                     { icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés', onclick: `editAdminUser(${user.id})` },
                     { icon: 'bi-check-circle', variant: 'success', title: 'Tiltás kezelése', onclick: `banAdminUser(${user.id})` }
-                ]
-                : [
+                ];
+            } else {
+                actionItems = [
                     { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
                     { icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés', onclick: `editAdminUser(${user.id})` },
                     { icon: 'bi-ban', variant: 'danger', title: 'Tiltás (kritikus)', onclick: `banAdminUser(${user.id})` }
                 ];
+            }
 
             html = `
                 <tr class="admin-user-row${user.online ? ' is-online' : ''}" data-user-id="${user.id}" data-signature="${escapeHtml(signature)}">
@@ -4535,7 +4685,7 @@ function onBanReasonInput(textarea) {
     if (!counter || !textarea) return;
     const len = textarea.value.length;
     counter.textContent = String(len);
-    counter.parentElement.classList.toggle('valid', len >= 30);
+    counter.parentElement.classList.toggle('valid', len >= 10);
 }
 
 function startBanHold(btn) {
@@ -4567,8 +4717,8 @@ async function submitBanInline(btn) {
         const reason = (document.getElementById('banReason')?.value || '').trim();
         const currentPassword = document.getElementById('banPassword')?.value || '';
 
-        if (reason.length < 30) {
-            showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+        if (reason.length < 10) {
+            showToast('Az indoknak legalább 10 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
             return;
         }
         if (!currentPassword) {
@@ -4601,6 +4751,145 @@ async function submitBanInline(btn) {
         }
     });
 }
+
+/* =============================================================
+   Inline delete form: hold-to-confirm + jelszo-verifikacio (mint a ban-nal)
+   ============================================================= */
+let deleteHoldTimer = null;
+
+function startDeleteHold(btn) {
+    if (!btn || btn.disabled) return;
+    if (deleteHoldTimer) { clearTimeout(deleteHoldTimer); deleteHoldTimer = null; }
+    btn.classList.add('holding');
+    deleteHoldTimer = setTimeout(async () => {
+        btn.classList.remove('holding');
+        deleteHoldTimer = null;
+        await submitDeleteInline(btn);
+    }, BAN_HOLD_MS);
+}
+
+function cancelDeleteHold(btn) {
+    if (deleteHoldTimer) {
+        clearTimeout(deleteHoldTimer);
+        deleteHoldTimer = null;
+    }
+    if (btn) btn.classList.remove('holding');
+}
+
+async function submitDeleteInline(btn) {
+    await runSafelyAsync('submitDeleteInline', async () => {
+        const targetUserId = Number(btn?.dataset?.targetId) || 0;
+        if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+
+        const reason = (document.getElementById('deleteReason')?.value || '').trim();
+        const currentPassword = document.getElementById('deletePassword')?.value || '';
+
+        if (!currentPassword) {
+            showToast('A saját admin jelszó megadása kötelező.', 'warning', 'bi-exclamation-circle');
+            return;
+        }
+
+        try {
+            btn.disabled = true;
+            const res = await fetch(`/api/admin/users/${targetUserId}/delete`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({
+                    currentPassword,
+                    reason: reason.length > 0 ? reason : null
+                })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success) {
+                const name = data.deletedUsername ? escapeHtml(data.deletedUsername) : 'A felhasználó';
+                showToast(
+                    data.message || `${name} törlésre kijelölve. 24 órán belül visszaállítható a Felhasználó listából.`,
+                    'success',
+                    'bi-hourglass-split'
+                );
+                if (state.selectedUser && Number(state.selectedUser.id) === Number(targetUserId)) {
+                    state.selectedUser = null;
+                    state.selectedUserId = null;
+                }
+                await loadAdminUsersList({ silent: true });
+                showSection('users', null, { silent: true });
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a profil törlése során.', 'danger');
+                btn.disabled = false;
+            }
+        } catch (err) {
+            showToast('Hálózati hiba a profil törlése során.', 'danger');
+            console.error('inline delete hiba:', err);
+            btn.disabled = false;
+        }
+    });
+}
+
+// Soft-deleted user visszaallitasa (24h grace-en belul). Modal popup-ban kerunk megerositest.
+function restoreUserDeletion(userId) {
+    if (!userId) return;
+    const modalEl = document.getElementById('restoreUserModal');
+    if (!modalEl || !window.bootstrap?.Modal) {
+        // Fallback: ha valamiert nincs modal, browser confirm
+        if (confirm('Visszaállítja a felhasználót?')) {
+            executeUserRestore(userId);
+        }
+        return;
+    }
+    // Username megjelenitese a modalban (csak ha a state.users.list-ben van).
+    const u = (state.users.list || []).find((x) => Number(x.id) === Number(userId));
+    setText('restoreUserModalName', u?.username || `#${userId}`);
+    const untilEl = document.getElementById('restoreUserModalUntil');
+    if (untilEl && u?.pendingDeletionUntil) {
+        untilEl.textContent = new Date(u.pendingDeletionUntil).toLocaleString('hu-HU');
+    } else if (untilEl) {
+        untilEl.textContent = '—';
+    }
+    state.restoreUserData = { userId };
+    new window.bootstrap.Modal(modalEl).show();
+}
+
+async function executeUserRestore(userId) {
+    if (!userId) return;
+    return runSafelyAsync('executeUserRestore', async () => {
+        try {
+            const res = await fetch(`/api/admin/users/${userId}/restore-deletion`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' })
+            });
+            const data = await res.json().catch(() => ({}));
+            // Modal bezarasa eredmenytol fuggetlenul (mar elindult a muvelet).
+            const modalEl = document.getElementById('restoreUserModal');
+            if (modalEl && window.bootstrap?.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            }
+            if (res.ok && data?.success) {
+                showToast(data.message || 'Felhasználó visszaállítva.', 'success', 'bi-arrow-counterclockwise');
+                await loadAdminUsersList({ silent: true });
+                const refreshable = ['users', 'userDetail', 'userBan', 'userDelete'];
+                if (refreshable.includes(state.currentSectionId)) {
+                    showSection(state.currentSectionId, null, { silent: true });
+                }
+            } else {
+                if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
+                showToast(data.message || 'Hiba a visszaállításkor.', 'danger');
+            }
+        } catch (err) {
+            console.error('executeUserRestore hiba:', err);
+            showToast('Hálózati hiba a visszaállításkor.', 'danger');
+        }
+    });
+}
+
+function confirmUserRestore() {
+    const userId = state.restoreUserData?.userId;
+    if (!userId) return;
+    executeUserRestore(userId);
+}
+
 
 function applyUserDetailAvatar() {
     try {
@@ -6488,7 +6777,28 @@ function startActivityRefreshTimer() {
    19) Profilkép moderáció - admin tokennel
    ============================================================= */
 window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
-    const STATE = { loading: false, bound: false };
+    const STATE = { loading: false, bound: false, pendingRejectUploadId: 0 };
+    let rejectModalInstance = null;
+
+    function getRejectModalInstance() {
+        if (rejectModalInstance) return rejectModalInstance;
+        const el = document.getElementById('profileImageRejectModal');
+        if (!el || typeof bootstrap === 'undefined') return null;
+        rejectModalInstance = bootstrap.Modal.getOrCreateInstance(el);
+        return rejectModalInstance;
+    }
+
+    function updateRejectReasonCounter() {
+        const reasonField = document.getElementById('profileImageRejectReason');
+        const counter = document.getElementById('profileImageRejectReasonCount');
+        const confirmBtn = document.getElementById('profileImageRejectConfirmBtn');
+        if (!reasonField || !counter) return;
+        const len = reasonField.value.trim().length;
+        counter.textContent = String(len);
+        const valid = len >= 10 && len <= 500;
+        counter.parentElement?.classList.toggle('valid', valid);
+        if (confirmBtn) confirmBtn.disabled = !valid;
+    }
 
     function setMessage(type, message) {
         const el = document.getElementById('profileImageReviewMessage');
@@ -6532,7 +6842,7 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                         <button type="button" class="btn btn-success btn-sm me-2" data-action="approve" data-upload-id="${safeUploadId}">
                             <i class="bi bi-check-circle me-1"></i>Jóváhagy
                         </button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" data-action="reject" data-upload-id="${safeUploadId}">
+                        <button type="button" class="btn btn-outline-danger btn-sm" data-action="reject" data-upload-id="${safeUploadId}" data-username="${safeUsername}">
                             <i class="bi bi-x-circle me-1"></i>Elutasít
                         </button>
                     </td>
@@ -6575,10 +6885,29 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
     }
 
     async function approve(uploadId) {
+        const id = Number(uploadId) || 0;
+        if (!id) return false;
         let approved = false;
         try {
-            setMessage('success', 'A profilkép jóváhagyás nézetben van, de a backend művelet még nincs bekötve.');
+            setMessage(null, '');
+            const response = await fetch(`/api/admin/profile-images/${id}/approve`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({})
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.status === 401 && handleAdminAuthError(result?.code || '')) {
+                return false;
+            }
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'A jóváhagyás sikertelen.');
+            }
             approved = true;
+            setMessage('success', result.message || 'A profilkép jóváhagyva.');
+            if (typeof showToast === 'function') {
+                showToast('Profilkép jóváhagyva.', 'success', 'bi-check-circle-fill');
+            }
             await refresh();
         } catch (error) {
             console.error('admin profile-image approve hiba:', error);
@@ -6588,13 +6917,56 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
         return approved;
     }
 
-    async function reject(uploadId) {
-        const reviewNoteRaw = window.prompt('Add meg az elutasítás indokát (opcionális, max 500 karakter):', '') || '';
-        const reviewNote = reviewNoteRaw.trim().slice(0, 500);
+    // A reject() csak megnyitja a modal-t — a tenyleges API hivast a confirm gomb
+    // (lasd bind() -> profileImageRejectConfirmBtn handler) intezi.
+    function reject(uploadId, username = '') {
+        const id = Number(uploadId) || 0;
+        if (!id) return false;
+        STATE.pendingRejectUploadId = id;
+
+        const userLabel = document.getElementById('profileImageRejectModalUser');
+        if (userLabel) userLabel.textContent = username || '—';
+
+        const reasonField = document.getElementById('profileImageRejectReason');
+        if (reasonField) reasonField.value = '';
+        updateRejectReasonCounter();
+
+        const modal = getRejectModalInstance();
+        if (!modal) {
+            setMessage('danger', 'A modal nem érhető el. Frissítsd az oldalt.');
+            return false;
+        }
+        modal.show();
+        setTimeout(() => reasonField?.focus(), 200);
+        return true;
+    }
+
+    async function performReject(uploadId, reviewNote) {
+        const id = Number(uploadId) || 0;
+        if (!id) return false;
+        if (!reviewNote || reviewNote.length < 10) return false;
+
         let rejected = false;
         try {
-            setMessage('success', reviewNote ? `Elutasítási indok rögzítve: ${reviewNote}` : 'Az elutasítás nézetben van, de a backend művelet még nincs bekötve.');
+            setMessage(null, '');
+            const response = await fetch(`/api/admin/profile-images/${id}/reject`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ reason: reviewNote, reviewNote })
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.status === 401 && handleAdminAuthError(result?.code || '')) {
+                return false;
+            }
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'Az elutasítás sikertelen.');
+            }
             rejected = true;
+            setMessage('success', result.message || 'A profilkép elutasítva.');
+            if (typeof showToast === 'function') {
+                showToast('Profilkép elutasítva.', 'success', 'bi-x-circle-fill');
+            }
             await refresh();
         } catch (error) {
             console.error('admin profile-image reject hiba:', error);
@@ -6620,13 +6992,335 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                 if (!uploadId) return;
                 const action = btn.dataset.action;
                 if (action === 'approve') approve(uploadId);
-                else if (action === 'reject') reject(uploadId);
+                else if (action === 'reject') reject(uploadId, btn.dataset.username || '');
             }
         });
+
+        // Reject modal: textarea karakterszamlalo + confirm gomb engedelyezese
+        const reasonField = document.getElementById('profileImageRejectReason');
+        if (reasonField) {
+            reasonField.addEventListener('input', updateRejectReasonCounter);
+        }
+
+        const confirmBtn = document.getElementById('profileImageRejectConfirmBtn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', async () => {
+                const id = STATE.pendingRejectUploadId;
+                const reviewNote = String(reasonField?.value || '').trim().slice(0, 500);
+                if (!id || reviewNote.length < 10) return;
+
+                confirmBtn.disabled = true;
+                const ok = await performReject(id, reviewNote);
+                confirmBtn.disabled = false;
+
+                if (ok) {
+                    STATE.pendingRejectUploadId = 0;
+                    getRejectModalInstance()?.hide();
+                }
+            });
+        }
     }
 
     document.addEventListener('DOMContentLoaded', () => runSafely('admin profile-image bind', bind));
     return { refresh, approve, reject };
+})();
+
+/* =============================================================
+   19.1) Chat moderáció - admin tokennel + real-time
+   ============================================================= */
+window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
+    const STATE = { loading: false, bound: false, pendingAllowMessageId: 0 };
+    let allowModalInstance = null;
+
+    function setMessage(type, message) {
+        const el = document.getElementById('chatModerationMessage');
+        if (!el) return;
+        if (!message) {
+            el.className = 'alert d-none';
+            el.textContent = '';
+        } else {
+            el.className = `alert alert-${type}`;
+            el.textContent = message;
+        }
+    }
+
+    function getAllowModalInstance() {
+        if (allowModalInstance) return allowModalInstance;
+        const el = document.getElementById('chatAllowModal');
+        if (!el || typeof bootstrap === 'undefined') return null;
+        allowModalInstance = bootstrap.Modal.getOrCreateInstance(el);
+        return allowModalInstance;
+    }
+
+    function updateAllowReasonCounter() {
+        const reasonField = document.getElementById('chatAllowReason');
+        const counter = document.getElementById('chatAllowReasonCount');
+        const confirmBtn = document.getElementById('chatAllowConfirmBtn');
+        if (!reasonField || !counter) return;
+        const len = reasonField.value.trim().length;
+        counter.textContent = String(len);
+        const valid = len >= 10 && len <= 1000;
+        counter.parentElement?.classList.toggle('valid', valid);
+        if (confirmBtn) confirmBtn.disabled = !valid;
+    }
+
+    function formatRelativeTime(iso) {
+        try {
+            const date = new Date(iso);
+            if (Number.isNaN(date.getTime())) return '—';
+            const diffMs = Date.now() - date.getTime();
+            const diffSec = Math.max(0, Math.floor(diffMs / 1000));
+            if (diffSec < 60) return `${diffSec} mp-e`;
+            const diffMin = Math.floor(diffSec / 60);
+            if (diffMin < 60) return `${diffMin} perce`;
+            const diffH = Math.floor(diffMin / 60);
+            if (diffH < 24) return `${diffH} órája`;
+            const diffD = Math.floor(diffH / 24);
+            return `${diffD} napja`;
+        } catch (_) { return '—'; }
+    }
+
+    function renderRows(rows) {
+        const list = document.getElementById('chatModerationList');
+        const cardTitle = document.getElementById('chatModerationCardTitle');
+        if (cardTitle) cardTitle.textContent = `Megjelölt üzenetek (${rows?.length || 0})`;
+        if (!list) return;
+
+        if (!rows || !rows.length) {
+            list.innerHTML = '<div class="text-center text-secondary py-4">Nincs jelölt üzenet.</div>';
+            return;
+        }
+
+        list.innerHTML = rows.map((row) => {
+            const id = Number(row.id) || 0;
+            const senderId = Number(row.senderId) || 0;
+            const username = escapeHtml(row.senderUsername || '—');
+            const safeProfileImage = escapeHtml(row.senderProfileImage || '/profile_pictures/default.png');
+            const conversationType = String(row.conversationType || 'private');
+            const convLabel = conversationType === 'group' ? 'csoport' : 'privát chat';
+            const relTime = escapeHtml(formatRelativeTime(row.sentAt));
+            const safeBody = escapeHtml(row.body || '');
+            const safeBodyMasked = escapeHtml(row.bodyMasked || '***');
+            const kind = String(row.kind || 'auto');
+            const isAutoFlagged = Boolean(row.isAutoFlagged);
+            const reportCount = Number(row.reportCount || 0);
+            const reports = Array.isArray(row.reports) ? row.reports : [];
+
+            // Badge: 'report' (felhasznaloi bejelentes) vagy 'auto' (rendszer-szuro).
+            // Ha mindketto igaz, a kind='report' es jelezzuk a kettos cimket.
+            const kindBadges = [];
+            if (kind === 'report') {
+                kindBadges.push(`<span class="badge bg-danger">Bejelentett (${reportCount})</span>`);
+                if (isAutoFlagged) {
+                    kindBadges.push(`<span class="badge bg-warning text-dark" title="Profanity-filter is jelolte">Auto-flagged</span>`);
+                }
+            } else {
+                kindBadges.push(`<span class="badge bg-warning text-dark">Auto-flagged (rendszer)</span>`);
+            }
+
+            const reportersHtml = reports.length
+                ? `
+                    <div class="text-secondary small mb-2">
+                        <i class="bi bi-flag-fill text-danger me-1"></i>Bejelentő${reports.length > 1 ? 'k' : ''}:
+                        ${reports.map((r) => {
+                            const reporterName = escapeHtml(r.reporterUsername || '—');
+                            const reasonText = r.reason ? ` — <em>${escapeHtml(r.reason)}</em>` : '';
+                            return `<div class="ms-3"><strong>${reporterName}</strong>${reasonText}</div>`;
+                        }).join('')}
+                    </div>
+                `
+                : '';
+
+            // Engedelyezes csak 'report' kind-on jelenik meg — auto-flagged uzeneteket
+            // a fix blocklist hard rule miatt az admin sem birálhatja felül.
+            const allowBtn = kind === 'report'
+                ? `<button type="button" class="btn btn-outline-success btn-sm" data-chat-action="allow" data-message-id="${id}" data-username="${username}">
+                        <i class="bi bi-check-circle me-1"></i>Engedélyezés
+                    </button>`
+                : `<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Auto-flagged üzenet — a profanity-filter blocklist hard rule, az admin sem bírálhatja felül.">
+                        <i class="bi bi-lock me-1"></i>Nem engedélyezhető
+                    </button>`;
+
+            const maskedDisplay = isAutoFlagged
+                ? `<div class="text-secondary small mb-1">A résztvevők ezt látják: <span class="font-monospace text-warning">${safeBodyMasked}</span></div>`
+                : '';
+
+            return `
+                <article class="moderation-item" data-message-id="${id}">
+                    <header class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            ${kindBadges.join(' ')}
+                            <small class="text-secondary">#${id} · ${escapeHtml(convLabel)} (#${row.conversationId})</small>
+                        </div>
+                        <small class="text-muted">${relTime}</small>
+                    </header>
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <img src="${safeProfileImage}" alt="${username}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);">
+                        <strong class="text-white">${username}</strong>
+                        <span class="text-secondary small">#${senderId}</span>
+                    </div>
+                    ${reportersHtml}
+                    <blockquote class="moderation-quote">
+                        ${maskedDisplay}
+                        <div>${isAutoFlagged ? 'Eredeti: ' : ''}<span class="text-white">${safeBody}</span></div>
+                    </blockquote>
+                    <div class="d-flex justify-content-end gap-2">
+                        ${allowBtn}
+                        <button type="button" class="btn btn-outline-warning btn-sm" data-chat-action="mute" data-user-id="${senderId}">
+                            <i class="bi bi-mic-mute me-1"></i>Némítás
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" data-chat-action="delete" data-message-id="${id}" data-username="${username}">
+                            <i class="bi bi-trash me-1"></i>Törlés
+                        </button>
+                    </div>
+                </article>
+            `;
+        }).join('');
+    }
+
+    async function refresh() {
+        let refreshed = false;
+        try {
+            if (!STATE.loading) {
+                STATE.loading = true;
+                setMessage(null, '');
+
+                const response = await fetch('/api/admin/chat/flagged', {
+                    headers: adminAuthHeaders(),
+                    credentials: 'same-origin'
+                });
+                const result = await response.json().catch(() => ({}));
+                const authHandled = response.status === 401 && handleAdminAuthError(result?.code || '');
+                if (authHandled) {
+                    renderRows([]);
+                } else if (!response.ok || !result?.success) {
+                    throw new Error(result?.message || 'Hiba a chat moderálási lista lekérdezésekor.');
+                } else {
+                    renderRows(result.data || []);
+                    refreshed = true;
+                }
+            }
+        } catch (error) {
+            console.error('admin chat moderation fetch hiba:', error);
+            setMessage('danger', error.message || 'Hiba a lekérdezés során.');
+            renderRows([]);
+        } finally {
+            STATE.loading = false;
+        }
+        return refreshed;
+    }
+
+    function openAllow(messageId, username = '') {
+        const id = Number(messageId) || 0;
+        if (!id) return false;
+        STATE.pendingAllowMessageId = id;
+
+        const userLabel = document.getElementById('chatAllowModalUser');
+        if (userLabel) userLabel.textContent = username || '—';
+
+        const reasonField = document.getElementById('chatAllowReason');
+        if (reasonField) reasonField.value = '';
+        updateAllowReasonCounter();
+
+        const modal = getAllowModalInstance();
+        if (!modal) {
+            setMessage('danger', 'A modal nem érhető el. Frissítsd az oldalt.');
+            return false;
+        }
+        modal.show();
+        setTimeout(() => reasonField?.focus(), 200);
+        return true;
+    }
+
+    async function performAllow(messageId, reason) {
+        const id = Number(messageId) || 0;
+        if (!id || !reason || reason.length < 10) return false;
+        let ok = false;
+        try {
+            setMessage(null, '');
+            const response = await fetch(`/api/admin/chat/messages/${id}/allow`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: adminAuthHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ reason })
+            });
+            const result = await response.json().catch(() => ({}));
+            if (response.status === 401 && handleAdminAuthError(result?.code || '')) return false;
+            if (!response.ok || !result?.success) {
+                throw new Error(result?.message || 'Az engedélyezés sikertelen.');
+            }
+            ok = true;
+            setMessage('success', result.message || 'Az üzenet engedélyezve.');
+            if (typeof showToast === 'function') {
+                showToast('Üzenet engedélyezve.', 'success', 'bi-check-circle-fill');
+            }
+            await refresh();
+        } catch (error) {
+            console.error('admin chat allow hiba:', error);
+            setMessage('danger', error.message || 'Az engedélyezés sikertelen.');
+        }
+        return ok;
+    }
+
+    function bind() {
+        if (STATE.bound) return;
+        STATE.bound = true;
+
+        document.addEventListener('click', (event) => {
+            if (event.target.closest('#chatModerationRefresh')) {
+                event.preventDefault();
+                refresh();
+                return;
+            }
+            const btn = event.target.closest('button[data-chat-action]');
+            if (!btn || !btn.closest('#chatModerationList')) return;
+
+            const action = btn.dataset.chatAction;
+            const messageId = Number(btn.dataset.messageId) || 0;
+            const userId = Number(btn.dataset.userId) || 0;
+            const username = btn.dataset.username || '';
+
+            if (action === 'allow') {
+                openAllow(messageId, username);
+            } else if (action === 'delete') {
+                // Reuse a meglevo critical-action modal-t: chat.delete kritikus action,
+                // a kovetkezo lepesben (executeCriticalAction) az action-bol tudja
+                // hogy chat-uzenetet kell torolni (state.criticalActionData.messageId).
+                openCriticalAction('chat.delete', username, null, { messageId });
+            } else if (action === 'mute') {
+                if (!userId) return;
+                if (typeof openAdminUserView === 'function') {
+                    openAdminUserView(userId);
+                } else {
+                    setMessage('warning', 'A felhasználó nézet nem érhető el.');
+                }
+            }
+        });
+
+        const reasonField = document.getElementById('chatAllowReason');
+        if (reasonField) reasonField.addEventListener('input', updateAllowReasonCounter);
+
+        const confirmBtn = document.getElementById('chatAllowConfirmBtn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', async () => {
+                const reason = String(document.getElementById('chatAllowReason')?.value || '').trim().slice(0, 1000);
+                const id = STATE.pendingAllowMessageId;
+                if (!id || reason.length < 10) return;
+
+                confirmBtn.disabled = true;
+                const ok = await performAllow(id, reason);
+                confirmBtn.disabled = false;
+
+                if (ok) {
+                    STATE.pendingAllowMessageId = 0;
+                    getAllowModalInstance()?.hide();
+                }
+            });
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => runSafely('admin chat-moderation bind', bind));
+    return { refresh, openAllow };
 })();
 
 /* =============================================================

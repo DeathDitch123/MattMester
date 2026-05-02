@@ -243,6 +243,8 @@ async function getAllUsers() {
             u.elo_blitz AS elo_bullet,
             u.is_banned,
             u.banned_until,
+            u.pending_deletion_until,
+            u.deleted_reason,
             u.last_active,
             u.created_at,
             (

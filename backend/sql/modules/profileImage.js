@@ -172,7 +172,7 @@ async function approveProfileImage(uploadId, adminUserId) {
         );
 
         await connection.commit();
-        return true;
+        return { userId: upload.user_id, filename: upload.filename };
     } catch (error) {
         await connection.rollback();
         throw new Error(`Hiba a kep jovahagyasa soran: ${error.message}`);
@@ -212,7 +212,7 @@ async function rejectProfileImage(uploadId, adminUserId, reviewNote = null) {
         );
 
         await connection.commit();
-        return true;
+        return { userId: upload.user_id, filename: DEFAULT_PROFILE_IMAGE_PATH };
     } catch (error) {
         await connection.rollback();
         if (error.message === 'A kép nem található vagy már nem függő állapotú.') {

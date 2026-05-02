@@ -537,6 +537,14 @@ function bindLoginForm() {
                             );
                             return;
                         }
+                        if (result.code === 'account_pending_deletion') {
+                            showFormMessage(
+                                messageElement, 'danger',
+                                'A fiókodat az adminisztrátorok törlésre jelölték. Ha tévedésnek tartod, vedd fel a kapcsolatot a fejlesztőkkel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=T%C3%B6rl%C3%A9s%20fellebbez%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AFelhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%20a%20felhaszn%C3%A1l%C3%B3nevedet%5D%0A%0AKifog%C3%A1solom%20a%20fi%C3%B3kom%20t%C3%B6rl%C3%A9s%C3%A9t%2C%20mert%3A%0A%5Bide%20%C3%ADrd%20az%20indokot%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                true
+                            );
+                            return;
+                        }
                         throw new Error(result.message || 'Sikertelen bejelentkezes.');
                     }
 

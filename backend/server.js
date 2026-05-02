@@ -361,6 +361,10 @@ initDatabase()
         // Admin audit retention scheduler (ADMIN_PANEL.md F9)
         const { startRetentionScheduler } = require('./api/admin/retentionJob.js');
         startRetentionScheduler();
+
+        // Soft-delete purge scheduler (admin-trigger 24h grace utan hard-delete).
+        const { startSoftDeletePurgeScheduler } = require('./api/admin/softDeletePurgeJob.js');
+        startSoftDeletePurgeScheduler();
         
         server.on('error', (error) => {
             if (error && error.code === 'EADDRINUSE') {

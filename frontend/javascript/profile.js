@@ -632,6 +632,14 @@ function bindNotificationCenterEvents() {
             });
         });
 
+        // Admin jovahagyta / elutasitotta a fuggo profilkepet — sessionInfo re-fetch
+        // hogy a Profile Settings avatar + image-status pill azonnal lekoveti az uj allapotot.
+        window.addEventListener('mattmester:user:profile:imageReviewed', () => {
+            runSafelyAsync('userProfileImageReviewedRefresh', async () => {
+                try { await refreshAuthUi('admin-profile-image-reviewed'); } catch (_) {}
+            });
+        });
+
         window.addEventListener('mattmester:notification:push', (event) => {
             runSafely('notificationPushCollect', () => {
                 const notification = normalizeNotificationItem(event?.detail || {});

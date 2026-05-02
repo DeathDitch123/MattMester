@@ -333,13 +333,46 @@ router.post(
             // Reason opcionalis approve-nal; manualisan rakjuk az auditra
             request.adminReason = String(request.body?.reason || '').trim().slice(0, 1000) || 'profilkep jovahagyas';
 
-            await sql.approveProfileImage(uploadId, adminUserId);
+            const approveResult = await sql.approveProfileImage(uploadId, adminUserId);
+            const ownerUserId = Number(approveResult?.userId) || 0;
+            const ownerFilename = approveResult?.filename || null;
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW;
             response.locals.adminAudit.severity = 'info';
             response.locals.adminAudit.targetType = 'profile_image';
             response.locals.adminAudit.targetId = uploadId;
             response.locals.adminAudit.afterState = { status: 'approved' };
             response.locals.adminAudit.success = true;
+
+            // Live broadcast a tobbi admin tabnak: a fuggo profilkep lista + dashboard tick frissuljon.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:profile-image:reviewed', {
+                        uploadId,
+                        status: 'approved',
+                        reviewedByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('profile-image approve: broadcast hiba:', broadcastErr.message);
+            }
+
+            // Real-time push az erintett felhasznalo nyitott tabjaira: a profil oldal
+            // image status pill + avatar azonnal frissuljon (fetchSessionInfo re-fetch).
+            try {
+                const socketHub = request.app?.locals?.socketHub;
+                if (ownerUserId && socketHub && typeof socketHub.emitToUser === 'function') {
+                    socketHub.emitToUser(ownerUserId, 'user:profile:imageReviewed', {
+                        uploadId,
+                        status: 'approved',
+                        filename: ownerFilename,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (pushErr) {
+                console.warn('profile-image approve: user push hiba:', pushErr.message);
+            }
 
             payload = {
                 success: true,
@@ -386,13 +419,44 @@ router.post(
             const reviewNoteRaw = typeof request.body?.reviewNote === 'string' ? request.body.reviewNote.trim() : '';
             const reviewNote = reviewNoteRaw ? reviewNoteRaw.slice(0, 500) : (request.adminReason || null);
 
-            await sql.rejectProfileImage(uploadId, adminUserId, reviewNote);
+            const rejectResult = await sql.rejectProfileImage(uploadId, adminUserId, reviewNote);
+            const ownerUserId = Number(rejectResult?.userId) || 0;
+            const ownerFilename = rejectResult?.filename || null;
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW;
             response.locals.adminAudit.severity = 'info';
             response.locals.adminAudit.targetType = 'profile_image';
             response.locals.adminAudit.targetId = uploadId;
             response.locals.adminAudit.afterState = { status: 'rejected', reviewNote };
             response.locals.adminAudit.success = true;
+
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:profile-image:reviewed', {
+                        uploadId,
+                        status: 'rejected',
+                        reviewedByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('profile-image reject: broadcast hiba:', broadcastErr.message);
+            }
+
+            try {
+                const socketHub = request.app?.locals?.socketHub;
+                if (ownerUserId && socketHub && typeof socketHub.emitToUser === 'function') {
+                    socketHub.emitToUser(ownerUserId, 'user:profile:imageReviewed', {
+                        uploadId,
+                        status: 'rejected',
+                        filename: ownerFilename,
+                        reviewNote,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (pushErr) {
+                console.warn('profile-image reject: user push hiba:', pushErr.message);
+            }
 
             payload = {
                 success: true,
@@ -409,6 +473,184 @@ router.post(
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW;
             response.locals.adminAudit.success = false;
             response.locals.adminAudit.errorCode = 'PROFILE_IMAGE_REJECT_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// =====================================================================
+// CHAT MODERATION
+// flagged list = is_body_masked TRUE uzenetek; allow = unmask, delete = fizikai torles.
+// =====================================================================
+
+router.get(
+    '/chat/flagged',
+    adminLimiterChain,
+    parseAdminToken,
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, data: [], message: 'Szerverhiba a chat moderacios lista lekerdezese soran.' };
+        try {
+            const limit = Math.min(Math.max(Number(request.query?.limit) || 50, 1), 200);
+            const messages = await sql.getFlaggedChatMessages(limit);
+            payload = {
+                success: true,
+                data: messages,
+                message: messages.length ? `${messages.length} jelolt uzenet.` : 'Nincs jelolt uzenet.'
+            };
+            response.locals.adminAudit.skip = true; // read-only listazas, ne logoljuk minden lekerest
+        } catch (error) {
+            console.error('Admin flagged chat lista hiba:', error.message);
+            statusCode = 500;
+            payload = { success: false, data: [], message: error.message || payload.message };
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// Allow: a fuggo felhasznaloi bejelenteseket lezarja 'allowed' statusszal.
+// FONTOS: ez NEM veszi le a maszkolast (is_body_masked) — a profanity-filter blocklist
+// hard rule, az admin sem birálhatja felul. Ha egy uzenet csak auto-flagged es nincs
+// pending bejelentes rajta, a hivas 409-cel hibazik.
+// Reason kotelezo (chat.view_any normal action, min 10 char).
+router.post(
+    '/chat/messages/:messageId/allow',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.CHAT_VIEW_ANY),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba a bejelentes lezarasa soran.' };
+        try {
+            const adminUserId = Number(request.adminAuth?.userId) || 0;
+            const messageId = Number(request.params?.messageId) || 0;
+            if (!messageId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen uzenet azonosito.');
+            }
+
+            const result = await sql.dismissReportsForMessage(messageId, adminUserId, request.adminReason);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_VIEW_ANY;
+            response.locals.adminAudit.severity = 'info';
+            response.locals.adminAudit.targetType = 'chat_message';
+            response.locals.adminAudit.targetId = messageId;
+            response.locals.adminAudit.afterState = { reportsDismissed: result.dismissedReports };
+            response.locals.adminAudit.success = true;
+
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:chat:reviewed', {
+                        messageId,
+                        action: 'allowed',
+                        reviewedByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('chat allow: admin broadcast hiba:', broadcastErr.message);
+            }
+
+            payload = {
+                success: true,
+                message: `${result.dismissedReports} bejelentes lezarva (allowed). A maszkolas (ha van) erintetlen marad.`,
+                data: { messageId, action: 'allowed', dismissedReports: result.dismissedReports }
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            const messageLower = String(error?.message || '').toLowerCase();
+            if (messageLower.includes('nem talalhato') || messageLower.includes('nem található')) {
+                statusCode = 404;
+            } else if (messageLower.includes('nincs feldolgozhato')) {
+                statusCode = 409;
+            }
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_VIEW_ANY;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'CHAT_ALLOW_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// Delete: reason kotelezo (chat.delete kritikus action, min 30 char).
+router.post(
+    '/chat/messages/:messageId/delete',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    requireReasonOnMutate(ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Szerverhiba az uzenet torlese soran.' };
+        try {
+            const adminUserId = Number(request.adminAuth?.userId) || 0;
+            const messageId = Number(request.params?.messageId) || 0;
+            if (!messageId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen uzenet azonosito.');
+            }
+
+            const result = await sql.deleteChatMessageById(messageId, adminUserId, request.adminReason);
+
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE;
+            response.locals.adminAudit.severity = 'critical';
+            response.locals.adminAudit.targetType = 'chat_message';
+            response.locals.adminAudit.targetId = messageId;
+            response.locals.adminAudit.afterState = { deleted: true };
+            response.locals.adminAudit.success = true;
+
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:chat:reviewed', {
+                        messageId,
+                        action: 'deleted',
+                        reviewedByUserId: adminUserId,
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('chat delete: admin broadcast hiba:', broadcastErr.message);
+            }
+
+            try {
+                const socketHub = request.app?.locals?.socketHub;
+                if (socketHub && typeof socketHub.emitToUser === 'function' && Array.isArray(result.participantUserIds)) {
+                    for (const uid of result.participantUserIds) {
+                        socketHub.emitToUser(uid, 'chat:message:deleted', {
+                            messageId,
+                            conversationId: result.conversationId
+                        });
+                    }
+                }
+            } catch (pushErr) {
+                console.warn('chat delete: user push hiba:', pushErr.message);
+            }
+
+            payload = {
+                success: true,
+                message: 'Az uzenet veglegesen torolve.',
+                data: { messageId, action: 'deleted' }
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            const messageLower = String(error?.message || '').toLowerCase();
+            if (messageLower.includes('nem talalhato') || messageLower.includes('nem található')) {
+                statusCode = 404;
+            }
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE;
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'CHAT_DELETE_FAILED';
         }
         return response.status(statusCode).json(payload);
     }
@@ -1013,6 +1255,8 @@ router.get(
                         profileImageStatus: user.profile_image_status || null,
                         isBanned: Boolean(user.is_banned),
                         bannedUntil: user.banned_until,
+                        pendingDeletionUntil: user.pending_deletion_until || null,
+                        deletedReason: user.deleted_reason || null,
                         elo: user.elo,
                         eloMM: user.elo_MM,
                         eloBullet: user.elo_bullet,
@@ -1377,9 +1621,9 @@ router.post(
             const durationHours = Math.max(1, Number(body.durationHours) || 24);
             const reason = String(body.reason || request.adminReason || '').trim();
             const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
-            if (reason.length < 30) {
+            if (reason.length < 10) {
                 statusCode = 400;
-                throw new Error('Az indoknak legalább 30 karakter hosszúnak kell lennie.');
+                throw new Error('Az indoknak legalább 10 karakter hosszúnak kell lennie.');
             }
 
             // Admin sajat jelszavanak ellenorzese — a delete-flow mintajara, hogy a hold-button
@@ -1666,11 +1910,14 @@ router.post(
                 response.locals.adminAudit.reason = reason;
             }
 
-            // Hard delete (a sajat self-delete flow ugyanezt a fuggvenyt hasznalja).
-            // A fuggveny dob: 'A felhasznalo nem talalhato.' / 'Admin profil nem torolheto.'
-            const deleteResult = await sql.deleteUserProfileWithTransaction(targetUserId);
+            // SOFT delete admin-trigger esetén: a user 24 óráig a `pending_deletion_until`-lel
+            // jelölve marad, hard-delete csak a hourly cron-on keresztül történik. A self-delete
+            // marad hard (privacy intent + abuse-prevenció).
+            // A softDeleteUserByAdmin dob: 'A felhasznalo nem talalhato.' / 'Admin profil nem torolheto.'
+            const deleteResult = await sql.softDeleteUserByAdmin(targetUserId, adminUserId, reason);
 
-            // Sockets / sessions takaritasa - mint a ban-nal.
+            // Sockets / sessions takaritasa: a usert kijelentkeztetjuk + deleted.html-re iranyitjuk.
+            // (Ha az admin restore-olja a 24 oran belul, ujra be tud lepni.)
             try {
                 const adminSocketHub = request.app?.locals?.adminSocketHub;
                 if (adminSocketHub && typeof adminSocketHub.disconnectAllForAdminUser === 'function') {
@@ -1678,18 +1925,35 @@ router.post(
                 }
                 const socketHub = request.app?.locals?.socketHub;
                 if (socketHub && typeof socketHub.notifyUserDeleted === 'function') {
-                    // notifyUserDeleted kuld 'user:deleted' eventet -> /html/deleted.html redirect.
-                    // NEM banUser-t hivunk, kulonben a kliens ban.html-re menne (felrevezeto).
-                    // NEM disconnectUser-t hivunk, mert az csak /api/logout-ra dob, ami nem
-                    // mutatja a usernek hogy a fiokja torolve lett.
                     await socketHub.notifyUserDeleted(targetUserId);
                 }
             } catch (kickErr) {
                 console.warn('user delete: socket disconnect hiba:', kickErr.message);
             }
 
+            // Sessions destroy a session store-ból (mintha banned lenne).
+            try {
+                const sessionStore = request.app?.locals?.sessionStore;
+                if (sessionStore && typeof sessionStore.all === 'function') {
+                    await new Promise((resolve) => {
+                        sessionStore.all((err, sessions) => {
+                            if (err || !sessions) { resolve(); return; }
+                            const destroyPromises = Object.entries(sessions)
+                                .filter(([, s]) => Number(s?.userId) === targetUserId)
+                                .map(([sid]) => new Promise((res) => sessionStore.destroy(sid, () => res())));
+                            Promise.all(destroyPromises).then(resolve);
+                        });
+                    });
+                }
+            } catch (sessionErr) {
+                console.warn('soft-delete: session destroy hiba:', sessionErr.message);
+            }
+
             response.locals.adminAudit.targetLabel = deleteResult.username || null;
             response.locals.adminAudit.success = true;
+            response.locals.adminAudit.afterState = {
+                pendingDeletionUntil: deleteResult.pendingDeletionUntil
+            };
 
             try {
                 await alertingService.recordAdminAction({
@@ -1703,6 +1967,8 @@ router.post(
                         actorUserId: adminUserId,
                         actorUsername: request.adminAuth?.username,
                         deletedUsername: deleteResult.username,
+                        soft: true,
+                        pendingDeletionUntil: deleteResult.pendingDeletionUntil,
                         reason
                     }
                 });
@@ -1710,11 +1976,35 @@ router.post(
                 console.warn('user delete: alert log hiba:', alertErr.message);
             }
 
+            // Target user_logs entry — Biztonsagi naploba bekerul.
+            try {
+                await sql.insertUserLog(targetUserId, {
+                    eventType: 'pending_deletion',
+                    eventCategory: 'security',
+                    severity: 'critical',
+                    source: 'admin',
+                    success: true,
+                    message: `Admin törlésre jelölte a fiókodat (${new Date(deleteResult.pendingDeletionUntil).toLocaleString('hu-HU')} után véglegesen törlődik)${reason ? ' — ' + reason : ''}`,
+                    ipAddress: request.adminAuth?.ipAddress || request.ip,
+                    userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
+                    metadata: {
+                        actorAdminId: adminUserId,
+                        actorAdminUsername: request.adminAuth?.username,
+                        pendingDeletionUntil: deleteResult.pendingDeletionUntil,
+                        reason
+                    }
+                });
+            } catch (logErr) {
+                console.warn('soft-delete: target user_logs insert hiba:', logErr.message);
+            }
+
             payload = {
                 success: true,
-                message: 'A felhasznalo profilja sikeresen torolve.',
+                soft: true,
+                message: `${deleteResult.username} törlésre kijelölve. 24 órán belül visszaállítható.`,
                 deletedUserId: deleteResult.userId,
-                deletedUsername: deleteResult.username
+                deletedUsername: deleteResult.username,
+                pendingDeletionUntil: deleteResult.pendingDeletionUntil
             };
         } catch (error) {
             if (statusCode === 200) {
@@ -1722,6 +2012,7 @@ router.post(
                 if (error.message === 'A felhasznalo nem talalhato.') statusCode = 404;
                 else if (error.message === 'Admin profil nem torolheto.') statusCode = 403;
                 else if (error.message === 'A jelenlegi jelszo hibas.') statusCode = 401;
+                else if (error.message === 'A felhasznalo mar torlesre van kijelolve.') statusCode = 409;
             }
             payload = { success: false, message: error.message || 'Szerverhiba.' };
 
@@ -2051,6 +2342,85 @@ router.delete(
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.IP_BLOCK_REMOVE;
             response.locals.adminAudit.success = false;
             response.locals.adminAudit.errorCode = 'IP_BLOCK_REMOVE_FAILED';
+        }
+        return response.status(statusCode).json(payload);
+    }
+);
+
+// POST /admin/users/:id/restore-deletion — soft-deleted user visszaallitasa.
+// Idempotens: ha a user nincs soft-delete allapotban, 0 affectedRows + figyelmezteto uzenet.
+router.post(
+    '/users/:id/restore-deletion',
+    adminLimiterChain,
+    parseAdminToken,
+    express.json(),
+    auditContext,
+    auditFlush,
+    async (request, response) => {
+        let statusCode = 200;
+        let payload = { success: false, message: 'Belso hiba a visszaallitaskor.' };
+        const adminUserId = Number(request.adminAuth?.userId) || 0;
+        const targetUserId = Number(request.params?.id) || 0;
+        try {
+            if (!targetUserId) {
+                statusCode = 400;
+                throw new Error('Ervenytelen felhasznalo azonosito.');
+            }
+            const affected = await sql.restoreUserFromSoftDelete(targetUserId);
+
+            response.locals.adminAudit.action = 'users.restore_deletion';
+            response.locals.adminAudit.severity = 'warning';
+            response.locals.adminAudit.targetType = 'user';
+            response.locals.adminAudit.targetId = targetUserId;
+            response.locals.adminAudit.success = true;
+
+            if (affected > 0) {
+                // Audit log a target user_logs-ba.
+                try {
+                    await sql.insertUserLog(targetUserId, {
+                        eventType: 'restored_from_deletion',
+                        eventCategory: 'security',
+                        severity: 'info',
+                        source: 'admin',
+                        success: true,
+                        message: 'Admin visszavonta a fiók törlését.',
+                        ipAddress: request.adminAuth?.ipAddress || request.ip,
+                        userAgent: request.adminAuth?.userAgent || request.headers['user-agent'],
+                        metadata: {
+                            actorAdminId: adminUserId,
+                            actorAdminUsername: request.adminAuth?.username
+                        }
+                    });
+                } catch (logErr) {
+                    console.warn('restore-deletion: target user_logs insert hiba:', logErr.message);
+                }
+
+                // Live broadcast az admin tabokra (a delete-tablan eltunjon a sor).
+                try {
+                    const adminSocketHub = request.app?.locals?.adminSocketHub;
+                    if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                        adminSocketHub.broadcastAdmin('admin:user:deletion-restored', {
+                            userId: targetUserId,
+                            restoredByUserId: adminUserId,
+                            at: new Date().toISOString()
+                        });
+                    }
+                } catch (broadcastErr) {
+                    console.warn('restore-deletion: broadcast hiba:', broadcastErr.message);
+                }
+            }
+
+            payload = {
+                success: true,
+                message: affected > 0 ? 'Felhasználó visszaállítva.' : 'A felhasználó nem volt törlésre kijelölve.',
+                affected
+            };
+        } catch (error) {
+            if (statusCode === 200) statusCode = 500;
+            payload = { success: false, message: error.message || payload.message };
+            response.locals.adminAudit.action = 'users.restore_deletion';
+            response.locals.adminAudit.success = false;
+            response.locals.adminAudit.errorCode = 'RESTORE_DELETION_FAILED';
         }
         return response.status(statusCode).json(payload);
     }

@@ -417,6 +417,135 @@
         </div>
     </div>
 
+    <!-- Soft-delete visszaállítása modal — a Felhasználó törlése > Várólista zöld 🔄 gombjából nyílik -->
+    <div class="modal fade" id="restoreUserModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal is-positive">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-arrow-counterclockwise me-2"></i>
+                        Felhasználó visszaállítása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div>
+                            A felhasználó <strong>visszaáll a normál állapotba</strong>: újra be tud lépni, az összes adata
+                            (barátok, meccsek, profil) érintetlen. A művelet <strong>naplózásra kerül</strong>.
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white">Felhasználó:</strong> <span class="text-gold font-monospace" id="restoreUserModalName">—</span><br>
+                        <strong class="text-white">Eredeti törlési határidő:</strong> <span class="font-monospace" id="restoreUserModalUntil">—</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmUserRestore()">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i>Visszaállítás
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat üzenet engedélyezése (unmask) modal — a Moderáció > Chat moderálás view "Engedélyezés"
+         gombjából nyílik. Indok kötelező, min. 10 karakter (chat.view_any normal action). -->
+    <div class="modal fade" id="chatAllowModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal is-positive">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-check-circle me-2 text-success"></i>
+                        Chat üzenet engedélyezése
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div>
+                            Az engedélyezéssel a profanity-filter által <strong>maszkolt</strong> üzenetről leveszed a maszkot.
+                            A résztvevők ezután az eredeti szöveget látják. A művelet <strong>naplózásra kerül</strong>.
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white">Feladó:</strong>
+                        <span class="text-gold font-monospace" id="chatAllowModalUser">—</span>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="chatAllowReason" class="form-label">
+                            Felülbírálás indoka <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="chatAllowReasonCount">0</span> / 10–1000
+                            </span>
+                        </label>
+                        <textarea id="chatAllowReason" class="form-control" rows="3" maxlength="1000"
+                            placeholder="Min. 10 karakter — pl. szövegkörnyezetben rendben van, nem szabálysértő..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-success" id="chatAllowConfirmBtn" disabled>
+                        <i class="bi bi-check-circle me-1"></i>Engedélyezés megerősítése
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profilkép elutasítása modal — a Moderáció > Profilképek view "Elutasít" gombjából nyílik.
+         Indok kötelező, min. 10 karakter (admin requireReasonOnMutate middleware). -->
+    <div class="modal fade" id="profileImageRejectModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-x-circle me-2 text-danger"></i>
+                        Profilkép elutasítása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div>
+                            Az elutasítás után a feltöltő publikus profilképe <strong>visszaáll az alapértelmezettre</strong>.
+                            Az indok <strong>naplózásra kerül</strong>.
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white">Felhasználó:</strong>
+                        <span class="text-gold font-monospace" id="profileImageRejectModalUser">—</span>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="profileImageRejectReason" class="form-label">
+                            Elutasítás indoka <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="profileImageRejectReasonCount">0</span> / 10–500
+                            </span>
+                        </label>
+                        <textarea id="profileImageRejectReason" class="form-control" rows="3" maxlength="500"
+                            placeholder="Min. 10 karakter — pl. szabálysértő tartalom, sértő ábrázolás, alacsony minőség..."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="profileImageRejectConfirmBtn" disabled>
+                        <i class="bi bi-x-circle me-1"></i>Elutasítás megerősítése
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Admin profilkép szerkesztő modal — a profil oldali editor admin párja (azonnal jóváhagyott) -->
     <div class="modal fade" id="adminProfileImageEditorModal" tabindex="-1" aria-labelledby="adminProfileImageEditorModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">

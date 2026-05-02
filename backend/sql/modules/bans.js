@@ -16,13 +16,14 @@ async function unbanUser(userId) {
     );
 }
 
-// Gyors index lookup minden authentikalt request-en — csak a ban-statusz erdekel.
-// Visszaadja: { is_banned: 0|1 } vagy null ha a user nem letezik.
+// Gyors index lookup minden authentikalt request-en — ban + soft-delete statusz.
+// Visszaadja: { is_banned: 0|1, pending_deletion_until: TIMESTAMP|null } vagy null ha a user nem letezik.
+// Az isAuthenticated middleware mindkettot kiakasztja (az admin-soft-delete = belepes-tiltas).
 async function checkUserBanStatus(userId) {
     const pool = getPool();
     try {
         const [rows] = await pool.execute(
-            'SELECT is_banned FROM users WHERE id = ? LIMIT 1',
+            'SELECT is_banned, pending_deletion_until FROM users WHERE id = ? LIMIT 1',
             [userId]
         );
         return rows[0] || null;

@@ -872,6 +872,24 @@
             }
         });
 
+        socket.on('user:profile:imageReviewed', (payload = {}) => {
+            // Admin jovahagyta / elutasitotta a fuggo profilkepet — a profil oldal
+            // azonnal frissitse az avatart es a status pill-t (re-fetch sessionInfo).
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:user:profile:imageReviewed', {
+                    detail: {
+                        uploadId: payload?.uploadId || null,
+                        status: payload?.status || null,
+                        filename: payload?.filename || null,
+                        reviewNote: payload?.reviewNote || null,
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (forwardErr) {
+                console.warn('[socketClient] user:profile:imageReviewed forward hiba:', forwardErr.message);
+            }
+        });
+
         socket.on('stats:public', (stats) => {
             // Publikus statisztika mentése + custom event továbbítás.
             socketState.statsPublic = stats || null;

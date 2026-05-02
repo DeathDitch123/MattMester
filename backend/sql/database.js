@@ -263,6 +263,25 @@ async function createTables() {
             INDEX idx_chat_messages_sender (sender_id)
         )`,
 
+        `CREATE TABLE IF NOT EXISTS chat_message_reports (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            message_id INT NOT NULL,
+            reporter_user_id INT NOT NULL,
+            reason VARCHAR(500) NULL,
+            status ENUM('pending', 'allowed', 'deleted', 'dismissed') NOT NULL DEFAULT 'pending',
+            reviewed_by INT NULL,
+            reviewed_at TIMESTAMP NULL DEFAULT NULL,
+            review_note VARCHAR(1000) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_report_per_user_per_message (message_id, reporter_user_id),
+            FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+            FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_chat_message_reports_status (status, created_at),
+            INDEX idx_chat_message_reports_message (message_id),
+            INDEX idx_chat_message_reports_reporter (reporter_user_id)
+        )`,
+
         `CREATE TABLE IF NOT EXISTS notifications (
             id BIGINT AUTO_INCREMENT PRIMARY KEY,
             type VARCHAR(64) NOT NULL,
@@ -512,10 +531,16 @@ async function runMigrations() {
     // Új oszlopok hozzáadása ha még nem léteznek (régi DB-knél a CREATE TABLE
     // IF NOT EXISTS nem ad új oszlopot, mert a tábla már megvolt).
     const newColumns = [
-        ['elo_mattmester',  'INT DEFAULT 800'],
-        ['elo_classical',   'INT DEFAULT 800'],
-        ['elo_blitz',       'INT DEFAULT 800'],
-        ['is_super_admin',  'BOOLEAN NOT NULL DEFAULT FALSE']
+        ['elo_mattmester',          'INT DEFAULT 800'],
+        ['elo_classical',           'INT DEFAULT 800'],
+        ['elo_blitz',               'INT DEFAULT 800'],
+        ['is_super_admin',          'BOOLEAN NOT NULL DEFAULT FALSE'],
+        // Soft-delete grace period (admin-trigger only). Ha kitoltott, a user nem
+        // tud belepni, de az adatok meg megvannak. Hourly cron hard-delete-eli ha
+        // pending_deletion_until < NOW().
+        ['pending_deletion_until',  'TIMESTAMP NULL DEFAULT NULL'],
+        ['deleted_by_admin_id',     'INT NULL DEFAULT NULL'],
+        ['deleted_reason',          'VARCHAR(500) NULL DEFAULT NULL']
     ];
     for (const [colName, colDef] of newColumns) {
         try {
@@ -584,6 +609,21 @@ async function runMigrations() {
         } catch (err) {
             console.warn(`[Migration] admin_alert_log.${colName} hozzáadás kihagyva: ${err.message}`);
         }
+    }
+
+    // users: pending_deletion_until index (a hourly cron purge gyors WHERE-jehez).
+    try {
+        const [idxRows] = await pool.execute(
+            `SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND INDEX_NAME = 'idx_users_pending_deletion'
+             LIMIT 1`
+        );
+        if (idxRows.length === 0) {
+            await pool.execute(`ALTER TABLE users ADD INDEX idx_users_pending_deletion (pending_deletion_until)`);
+            console.log('[Migration] users idx_users_pending_deletion hozzáadva.');
+        }
+    } catch (err) {
+        console.warn(`[Migration] users idx_users_pending_deletion kihagyva: ${err.message}`);
     }
 
     // admin_alert_log: dismissed index (gyors filter undismissed-only listara).

@@ -92,7 +92,8 @@ const SUPER_ONLY_PERMISSIONS = Object.freeze(new Set([
 
 const CRITICAL_ACTIONS = Object.freeze(new Set([
     ADMIN_PERMISSIONS.USERS_DELETE,
-    ADMIN_PERMISSIONS.USERS_BAN,
+    // USERS_BAN: szandekosan NEM kritikus -> requireReasonOnMutate 10 char minimumot kovetel
+    // (a ban-form inline hold-to-confirm + jelszo-ellenorzes elegendo vedelem).
     ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE,
     ADMIN_PERMISSIONS.NOTIFICATIONS_BROADCAST,
     ADMIN_PERMISSIONS.ADMIN_GRANT,

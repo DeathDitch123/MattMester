@@ -9,19 +9,28 @@ async function isAuthenticated(request, response, next) {
     if (!request.session || !request.session.userId) {
         return response.status(401).json({ success: false, message: 'Bejelentkezés szükséges a kereséshez.' });
     }
-    // Ban-check: ha a user kozben bannolva lett, a sessiona elavult — destroy + 403.
-    // Ez vedi a direkt /chess, /profile stb. navigaciot is, nem csak a sessionInfo-t.
+    // Ban + soft-delete check: ha a user kozben bannolva lett VAGY admin soft-delete-elte,
+    // a sessiona elavult — destroy + 403. Mindketto block, csak a code/message mas.
     try {
         const sql = require('../sql/sql_funtions.js');
-        const banRow = await sql.checkUserBanStatus(request.session.userId);
-        if (banRow && banRow.is_banned) {
+        const row = await sql.checkUserBanStatus(request.session.userId);
+        const isSoftDeleted = row && row.pending_deletion_until && new Date(row.pending_deletion_until) > new Date();
+        if (row && (row.is_banned || isSoftDeleted)) {
             await new Promise((resolve) => {
                 request.session.destroy((err) => {
-                    if (err) console.warn('isAuthenticated: ban-eviction destroy hiba:', err.message);
+                    if (err) console.warn('isAuthenticated: eviction destroy hiba:', err.message);
                     resolve();
                 });
             });
             response.clearCookie('connect.sid');
+            if (isSoftDeleted) {
+                return response.status(403).json({
+                    success: false,
+                    code: 'account_pending_deletion',
+                    message: 'A fiókod admin által törlésre lett kijelölve.',
+                    pendingDeletionUntil: row.pending_deletion_until
+                });
+            }
             return response.status(403).json({
                 success: false,
                 code: 'account_banned',

@@ -43,6 +43,10 @@ module.exports = {
     updateUserProfileSettings: users.updateUserProfileSettings,
     searchUsersByUsernameContains: users.searchUsersByUsernameContains,
     deleteUserProfileWithTransaction: users.deleteUserProfileWithTransaction,
+    softDeleteUserByAdmin: users.softDeleteUserByAdmin,
+    restoreUserFromSoftDelete: users.restoreUserFromSoftDelete,
+    listSoftDeletedUsers: users.listSoftDeletedUsers,
+    listExpiredSoftDeletedUserIds: users.listExpiredSoftDeletedUserIds,
     getUserBasicById: users.getUserBasicById,
     findUserByUsernameForAdmin: users.findUserByUsernameForAdmin,
     getUserIdsByRole: users.getUserIdsByRole,
@@ -99,6 +103,11 @@ module.exports = {
     normalizeTextForModeration: chat.normalizeTextForModeration,
     getUnreadChatMessageTotal: chat.getUnreadChatMessageTotal,
     markConversationReadForUser: chat.markConversationReadForUser,
+    getFlaggedChatMessages: chat.getFlaggedChatMessages,
+    getFlaggedChatMessageCount: chat.getFlaggedChatMessageCount,
+    reportChatMessage: chat.reportChatMessage,
+    dismissReportsForMessage: chat.dismissReportsForMessage,
+    deleteChatMessageById: chat.deleteChatMessageById,
 
     // emailVerification
     saveEmailVerificationToken: emailVerification.saveEmailVerificationToken,

@@ -1065,6 +1065,344 @@ async function getUnreadChatMessageTotal(userId) {
     return total;
 }
 
+async function ensureChatReportsTable(executor) {
+    await executor.execute(`
+        CREATE TABLE IF NOT EXISTS chat_message_reports (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            message_id INT NOT NULL,
+            reporter_user_id INT NOT NULL,
+            reason VARCHAR(500) NULL,
+            status ENUM('pending', 'allowed', 'deleted', 'dismissed') NOT NULL DEFAULT 'pending',
+            reviewed_by INT NULL,
+            reviewed_at TIMESTAMP NULL DEFAULT NULL,
+            review_note VARCHAR(1000) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY unique_report_per_user_per_message (message_id, reporter_user_id),
+            FOREIGN KEY (message_id) REFERENCES chat_messages(id) ON DELETE CASCADE,
+            FOREIGN KEY (reporter_user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL,
+            INDEX idx_chat_message_reports_status (status, created_at),
+            INDEX idx_chat_message_reports_message (message_id),
+            INDEX idx_chat_message_reports_reporter (reporter_user_id)
+        )
+    `);
+}
+
+// Admin chat moderacio listaja KETFELE forrasbol jon:
+//   1) auto: a profanity-filter altal maszkolt uzenetek (is_body_masked = TRUE) — fix
+//      blocklist match, NEM felulbiralhato. Az admin csak torolheti vagy figyelmen kivul hagyhatja.
+//   2) report: felhasznaloi bejelentes (chat_message_reports.status = 'pending') — itt az admin
+//      eldontheti hogy elutasitja a bejelentest (Engedelyezes / dismiss) vagy torli az uzenetet.
+// Egy uzenet lehet egyszerre auto-flagged ES bejelentett — ilyenkor 'report' kind-kent listazzuk
+// (erdemibb action), de jelezzuk az isAutoFlagged flag-gel.
+async function getFlaggedChatMessages(limit = 50) {
+    const pool = getPool();
+    const normalizedLimit = normalizeListLimit(limit, 50, 200);
+
+    await ensureChatTables(pool);
+    await ensureChatReportsTable(pool);
+
+    const [rows] = await pool.execute(
+        `
+            SELECT
+                m.id,
+                m.conversation_id,
+                m.sender_id,
+                m.body,
+                m.body_masked,
+                m.is_body_masked,
+                m.sent_at,
+                u.username AS sender_username,
+                u.profile_image AS sender_profile_image,
+                c.type AS conversation_type,
+                COALESCE(rep.report_count, 0) AS report_count,
+                rep.earliest_report_at AS earliest_report_at,
+                CASE
+                    WHEN COALESCE(rep.report_count, 0) > 0 THEN 'report'
+                    WHEN m.is_body_masked = TRUE THEN 'auto'
+                    ELSE NULL
+                END AS kind
+            FROM chat_messages m
+            JOIN users u ON u.id = m.sender_id
+            JOIN chat_conversations c ON c.id = m.conversation_id
+            LEFT JOIN (
+                SELECT message_id, COUNT(*) AS report_count, MIN(created_at) AS earliest_report_at
+                FROM chat_message_reports
+                WHERE status = 'pending'
+                GROUP BY message_id
+            ) rep ON rep.message_id = m.id
+            WHERE m.is_body_masked = TRUE OR rep.message_id IS NOT NULL
+            ORDER BY COALESCE(rep.earliest_report_at, m.sent_at) DESC, m.id DESC
+            LIMIT ?
+        `,
+        [normalizedLimit]
+    );
+
+    if (!rows.length) return [];
+
+    const reportRowsByMessage = new Map();
+    const messageIdsWithReports = rows
+        .filter((row) => Number(row.report_count || 0) > 0)
+        .map((row) => Number(row.id));
+
+    if (messageIdsWithReports.length) {
+        const placeholders = messageIdsWithReports.map(() => '?').join(',');
+        const [reportRows] = await pool.execute(
+            `
+                SELECT r.id, r.message_id, r.reporter_user_id, r.reason, r.created_at,
+                       u.username AS reporter_username
+                FROM chat_message_reports r
+                JOIN users u ON u.id = r.reporter_user_id
+                WHERE r.status = 'pending' AND r.message_id IN (${placeholders})
+                ORDER BY r.created_at ASC, r.id ASC
+            `,
+            messageIdsWithReports
+        );
+        reportRows.forEach((row) => {
+            const list = reportRowsByMessage.get(Number(row.message_id)) || [];
+            list.push({
+                reportId: row.id,
+                reporterUserId: row.reporter_user_id,
+                reporterUsername: row.reporter_username,
+                reason: row.reason,
+                createdAt: row.created_at
+            });
+            reportRowsByMessage.set(Number(row.message_id), list);
+        });
+    }
+
+    return rows.map((row) => ({
+        id: row.id,
+        kind: row.kind,
+        conversationId: row.conversation_id,
+        conversationType: row.conversation_type,
+        senderId: row.sender_id,
+        senderUsername: row.sender_username,
+        senderProfileImage: row.sender_profile_image || DEFAULT_PROFILE_IMAGE_PATH,
+        body: row.body,
+        bodyMasked: row.body_masked || '***',
+        isBodyMasked: Boolean(row.is_body_masked),
+        isAutoFlagged: Boolean(row.is_body_masked),
+        reportCount: Number(row.report_count || 0),
+        reports: reportRowsByMessage.get(Number(row.id)) || [],
+        sentAt: row.sent_at,
+        earliestReportAt: row.earliest_report_at
+    }));
+}
+
+async function getFlaggedChatMessageCount() {
+    const pool = getPool();
+    await ensureChatTables(pool);
+    await ensureChatReportsTable(pool);
+    const [rows] = await pool.execute(
+        `
+            SELECT COUNT(*) AS total FROM chat_messages m
+            LEFT JOIN (
+                SELECT message_id FROM chat_message_reports WHERE status = 'pending' GROUP BY message_id
+            ) rep ON rep.message_id = m.id
+            WHERE m.is_body_masked = TRUE OR rep.message_id IS NOT NULL
+        `
+    );
+    return Number(rows[0]?.total || 0);
+}
+
+// Felhasznaloi bejelentes egy chat uzenetrol. UNIQUE(message_id, reporter_user_id) miatt
+// egy felhasznalo egy uzenetet csak egyszer jelenthet — a duplikatumot externalisan jelezzuk.
+async function reportChatMessage(messageId, reporterUserId, reason = null) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const normalizedMessageId = normalizePositiveInt(messageId, 0);
+    const normalizedReporterId = normalizePositiveInt(reporterUserId, 0);
+
+    if (!normalizedMessageId || !normalizedReporterId) {
+        connection.release();
+        throw new Error('Ervenytelen azonosito.');
+    }
+
+    const trimmedReason = reason ? String(reason).trim().slice(0, 500) : null;
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatTables(connection);
+        await ensureChatReportsTable(connection);
+
+        // Ellenorizzuk hogy az uzenet letezik es a bejelento NEM a sajat uzenetet jelenti.
+        const [messageRows] = await connection.execute(
+            `SELECT id, conversation_id, sender_id FROM chat_messages WHERE id = ? LIMIT 1`,
+            [normalizedMessageId]
+        );
+        if (!messageRows.length) {
+            throw new Error('Az uzenet nem talalhato.');
+        }
+        if (Number(messageRows[0].sender_id) === normalizedReporterId) {
+            throw new Error('A sajat uzenetedet nem jelentheted.');
+        }
+
+        // A bejelentonek reszvevonek kell lennie a beszelgetesben (privacy: idegen
+        // beszelgeteseket nem lehet "tavolrol" jelenteni).
+        const [participantRows] = await connection.execute(
+            `SELECT id FROM chat_participants WHERE conversation_id = ? AND user_id = ? LIMIT 1`,
+            [messageRows[0].conversation_id, normalizedReporterId]
+        );
+        if (!participantRows.length) {
+            throw new Error('Csak a beszelgetes resztvevoje jelenthet uzenetet.');
+        }
+
+        try {
+            const [insertResult] = await connection.execute(
+                `INSERT INTO chat_message_reports (message_id, reporter_user_id, reason, status)
+                 VALUES (?, ?, ?, 'pending')`,
+                [normalizedMessageId, normalizedReporterId, trimmedReason]
+            );
+
+            await connection.commit();
+            return {
+                reportId: insertResult.insertId,
+                messageId: normalizedMessageId,
+                conversationId: messageRows[0].conversation_id,
+                senderId: messageRows[0].sender_id,
+                duplicate: false
+            };
+        } catch (insertError) {
+            // ER_DUP_ENTRY: a felhasznalo mar bejelentette ezt az uzenetet.
+            if (insertError && (insertError.code === 'ER_DUP_ENTRY' || insertError.errno === 1062)) {
+                await connection.rollback();
+                return {
+                    reportId: null,
+                    messageId: normalizedMessageId,
+                    conversationId: messageRows[0].conversation_id,
+                    senderId: messageRows[0].sender_id,
+                    duplicate: true
+                };
+            }
+            throw insertError;
+        }
+    } catch (error) {
+        try { await connection.rollback(); } catch (_) {}
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+// Admin "Engedelyezes" — a fuggo bejelenteseket lezarja status='allowed'-del.
+// FONTOS: ez NEM veszi le a maszkolast (is_body_masked) — a profanity-filter
+// blocklist hard rule, az admin sem birálhatja felul.
+async function dismissReportsForMessage(messageId, adminUserId, reviewNote = null) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const normalizedMessageId = normalizePositiveInt(messageId, 0);
+    const normalizedAdminId = normalizePositiveInt(adminUserId, 0);
+
+    if (!normalizedMessageId) {
+        connection.release();
+        throw new Error('Ervenytelen uzenet azonosito.');
+    }
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatReportsTable(connection);
+
+        const [messageRows] = await connection.execute(
+            `SELECT id, conversation_id, sender_id FROM chat_messages WHERE id = ? LIMIT 1`,
+            [normalizedMessageId]
+        );
+        if (!messageRows.length) {
+            throw new Error('Az uzenet nem talalhato.');
+        }
+
+        const [updateResult] = await connection.execute(
+            `UPDATE chat_message_reports
+             SET status = 'allowed', reviewed_by = ?, reviewed_at = NOW(), review_note = ?
+             WHERE message_id = ? AND status = 'pending'`,
+            [normalizedAdminId || null, reviewNote ? String(reviewNote).slice(0, 1000) : null, normalizedMessageId]
+        );
+
+        if (!updateResult.affectedRows) {
+            throw new Error('Nincs feldolgozhato bejelentes ezen az uzeneten.');
+        }
+
+        const [participantRows] = await connection.execute(
+            `SELECT user_id FROM chat_participants WHERE conversation_id = ?`,
+            [messageRows[0].conversation_id]
+        );
+
+        await connection.commit();
+        return {
+            messageId: normalizedMessageId,
+            conversationId: messageRows[0].conversation_id,
+            senderId: messageRows[0].sender_id,
+            dismissedReports: updateResult.affectedRows,
+            participantUserIds: participantRows.map((row) => Number(row.user_id)).filter((id) => id > 0)
+        };
+    } catch (error) {
+        try { await connection.rollback(); } catch (_) {}
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
+// Admin "Torles": fizikailag torli az uzenetet. Visszaadja a conversationId-t es
+// a resztvevok listajat, hogy a hivo realtime broadcastolhassa a torlest.
+async function deleteChatMessageById(messageId, adminUserId = null, reviewNote = null) {
+    const pool = getPool();
+    const connection = await pool.getConnection();
+    const normalizedId = normalizePositiveInt(messageId, 0);
+    const normalizedAdminId = normalizePositiveInt(adminUserId, 0);
+    if (!normalizedId) {
+        connection.release();
+        throw new Error('Ervenytelen uzenet azonosito.');
+    }
+
+    try {
+        await connection.beginTransaction();
+        await ensureChatReportsTable(connection);
+
+        const [rows] = await connection.execute(
+            `SELECT id, conversation_id, sender_id FROM chat_messages WHERE id = ? FOR UPDATE`,
+            [normalizedId]
+        );
+
+        if (!rows.length) {
+            throw new Error('Az uzenet nem talalhato.');
+        }
+
+        const conversationId = rows[0].conversation_id;
+        const senderId = rows[0].sender_id;
+
+        const [participantRows] = await connection.execute(
+            `SELECT user_id FROM chat_participants WHERE conversation_id = ?`,
+            [conversationId]
+        );
+
+        // A fuggo bejelenteseket lezarjuk 'deleted' statusszal — auditalhato marad,
+        // mig az uzenet sora elott a CASCADE kitorli a sorokat (FK ON DELETE CASCADE).
+        // (Kornyezet-fuggetlen: ha a CASCADE futna elobb, az UPDATE 0 sort erint.)
+        await connection.execute(
+            `UPDATE chat_message_reports
+             SET status = 'deleted', reviewed_by = ?, reviewed_at = NOW(), review_note = ?
+             WHERE message_id = ? AND status = 'pending'`,
+            [normalizedAdminId || null, reviewNote ? String(reviewNote).slice(0, 1000) : null, normalizedId]
+        );
+
+        await connection.execute(`DELETE FROM chat_messages WHERE id = ?`, [normalizedId]);
+
+        await connection.commit();
+        return {
+            messageId: normalizedId,
+            conversationId,
+            senderId,
+            participantUserIds: participantRows.map((row) => Number(row.user_id)).filter((id) => id > 0)
+        };
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
+}
+
 async function markConversationReadForUser(userId, conversationId) {
     const pool = getPool();
     let outcome = { changed: false, lastMessageId: 0 };
@@ -1127,5 +1465,10 @@ module.exports = {
     createOrGetDirectConversation,
     insertMessageInConversation,
     getUnreadChatMessageTotal,
-    markConversationReadForUser
+    markConversationReadForUser,
+    getFlaggedChatMessages,
+    getFlaggedChatMessageCount,
+    reportChatMessage,
+    dismissReportsForMessage,
+    deleteChatMessageById
 };

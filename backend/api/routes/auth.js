@@ -106,6 +106,16 @@ router.post('/login', authLoginLimiter, async (request, response) => {
             throw banErr;
         }
 
+        // Soft-delete grace period: ha admin torleshez jelolte, blokkolt belepes 24 oraig.
+        // (A self-delete azonnali hard delete -> nem latja itt, mert a sor mar nincs.)
+        if (user.pending_deletion_until && new Date(user.pending_deletion_until) > new Date()) {
+            statusCode = 403;
+            const untilStr = new Date(user.pending_deletion_until).toLocaleString('hu-HU');
+            const delErr = new Error(`A fiókod admin által törlésre lett kijelölve (${untilStr} után véglegesen törlődik). Ha tévedésnek tartod, vedd fel a kapcsolatot: mattmester.support@gmail.com`);
+            delErr.code = 'account_pending_deletion';
+            throw delErr;
+        }
+
         request.session.userId = user.id;
         request.session.username = user.username;
         request.session.role = user.role;
@@ -382,18 +392,18 @@ router.get('/sessionInfo', async (request, response) => {
                 request.session.destroy(() => {
                     console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
                 });
-            } else if (dbUser.is_banned) {
-                // A banned user session-jet azonnal megsemmisitjuk minden sessionInfo lekereskor
-                // — ez a vegso vedelem hogy ne maradhasson "logged in" allapotban a banned user.
+            } else if (dbUser.is_banned || (dbUser.pending_deletion_until && new Date(dbUser.pending_deletion_until) > new Date())) {
+                // Banned VAGY admin-soft-deleted user: session destroy + clearCookie.
                 // A frontend loggedIn:false-ot lat -> homepage kijelentkezett UI-t mutat.
                 await new Promise((resolve) => {
                     request.session.destroy((err) => {
-                        if (err) console.warn('sessionInfo: ban-eviction destroy hiba:', err.message);
+                        if (err) console.warn('sessionInfo: eviction destroy hiba:', err.message);
                         resolve();
                     });
                 });
                 response.clearCookie('connect.sid');
-                console.log(`Banned user (${dbUser.username}) session-je evictalva sessionInfo-n.`);
+                const reasonLabel = dbUser.is_banned ? 'banned' : 'pending_deletion';
+                console.log(`User (${dbUser.username}) session-je evictalva sessionInfo-n: ${reasonLabel}.`);
             } else {
                 // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
                 request.session.userId = dbUser.id;

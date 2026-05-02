@@ -45,7 +45,7 @@ async function getUserByUsername(username) {
     const pool = getPool();
     const query = `SELECT id, username, email, password_hash, profile_image,
                           elo, elo_classical AS elo_MM, elo_blitz AS elo_bullet, role, is_banned,
-                          ban_reason, banned_until, last_active,
+                          ban_reason, banned_until, pending_deletion_until, last_active,
                           is_email_verified, created_at
                    FROM users WHERE username = ?`;
     try {
@@ -60,7 +60,7 @@ async function getUserByEmail(mailAdress) {
     const pool = getPool();
     const query = `SELECT id, username, email, password_hash, profile_image,
                           elo, elo_classical AS elo_MM, elo_blitz AS elo_bullet, role, is_banned,
-                          ban_reason, banned_until, last_active,
+                          ban_reason, banned_until, pending_deletion_until, last_active,
                           is_email_verified, created_at
                    FROM users WHERE email = ?`;
     try {
@@ -168,6 +168,7 @@ async function getSessionUserById(userId) {
             u.is_banned,
             u.ban_reason,
             u.banned_until,
+            u.pending_deletion_until,
             u.last_active,
             u.is_email_verified,
             u.created_at,
@@ -545,6 +546,88 @@ async function deleteUserProfileWithTransaction(userId) {
     }
 }
 
+// =====================================================================
+// Soft-delete (admin-trigger) + restore (24h grace period)
+// =====================================================================
+
+// Soft-delete: a felhasznalo NEM kerul fizikailag torlesre, csak `pending_deletion_until`
+// kitoltodik (NOW() + graceMs). A login flow + middleware soft-deleted usert elutasit
+// (mintha banned lenne). Az hourly cron purge fizikailag is torli ha lejart a grace.
+// Visszater: { soft: true, pendingDeletionUntil: Date, username }.
+async function softDeleteUserByAdmin(userId, adminUserId, reason, graceMs = 24 * 60 * 60 * 1000) {
+    const pool = getPool();
+    const [rows] = await pool.execute(
+        'SELECT id, username, role, pending_deletion_until FROM users WHERE id = ? LIMIT 1',
+        [userId]
+    );
+    if (!rows.length) throw new Error('A felhasznalo nem talalhato.');
+    const user = rows[0];
+    if (user.role === 'admin') throw new Error('Admin profil nem torolheto.');
+    if (user.pending_deletion_until) throw new Error('A felhasznalo mar torlesre van kijelolve.');
+
+    const pendingUntil = new Date(Date.now() + graceMs);
+    await pool.execute(
+        `UPDATE users
+         SET pending_deletion_until = ?,
+             deleted_by_admin_id = ?,
+             deleted_reason = ?
+         WHERE id = ?`,
+        [pendingUntil, adminUserId || null, reason ? String(reason).slice(0, 500) : null, userId]
+    );
+    return {
+        soft: true,
+        userId,
+        username: user.username,
+        pendingDeletionUntil: pendingUntil
+    };
+}
+
+// Visszaallitja a soft-deleted usert (pending_deletion_until + meta NULL-ra).
+// Idempotens: ha mar nem soft-deleted, 0 affectedRows.
+async function restoreUserFromSoftDelete(userId) {
+    const pool = getPool();
+    const [result] = await pool.execute(
+        `UPDATE users
+         SET pending_deletion_until = NULL,
+             deleted_by_admin_id = NULL,
+             deleted_reason = NULL
+         WHERE id = ? AND pending_deletion_until IS NOT NULL`,
+        [userId]
+    );
+    return result.affectedRows || 0;
+}
+
+// Lista admin oldali UI-hoz: soft-deleted user-ek, akiknek meg nem jart le a grace.
+async function listSoftDeletedUsers(limit = 200) {
+    const pool = getPool();
+    const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 500);
+    const [rows] = await pool.query(
+        `SELECT u.id, u.username, u.email, u.pending_deletion_until,
+                u.deleted_by_admin_id, u.deleted_reason,
+                a.username AS deleted_by_admin_username
+         FROM users u
+         LEFT JOIN users a ON a.id = u.deleted_by_admin_id
+         WHERE u.pending_deletion_until IS NOT NULL
+           AND u.pending_deletion_until > NOW()
+         ORDER BY u.pending_deletion_until ASC
+         LIMIT ?`,
+        [safeLimit]
+    );
+    return rows || [];
+}
+
+// Cron-utility: lejart soft-deleted user-ek azonositoinak listaja, hogy a hourly job
+// hard-delete-elje oket a `deleteUserProfileWithTransaction`-nel.
+async function listExpiredSoftDeletedUserIds() {
+    const pool = getPool();
+    const [rows] = await pool.query(
+        `SELECT id FROM users
+         WHERE pending_deletion_until IS NOT NULL
+           AND pending_deletion_until <= NOW()`
+    );
+    return (rows || []).map((r) => r.id);
+}
+
 async function getUserBasicById(userId) {
     const pool = getPool();
     let user = null;
@@ -630,6 +713,10 @@ module.exports = {
     updateUserProfileSettings,
     searchUsersByUsernameContains,
     deleteUserProfileWithTransaction,
+    softDeleteUserByAdmin,
+    restoreUserFromSoftDelete,
+    listSoftDeletedUsers,
+    listExpiredSoftDeletedUserIds,
     getUserBasicById,
     findUserByUsernameForAdmin,
     getUserIdsByRole,

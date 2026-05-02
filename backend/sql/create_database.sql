@@ -309,6 +309,26 @@ CREATE TABLE
         INDEX idx_chat_messages_sender (sender_id)
     );
 
+CREATE TABLE
+    IF NOT EXISTS chat_message_reports (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        message_id INT NOT NULL,
+        reporter_user_id INT NOT NULL,
+        reason VARCHAR(500) NULL,
+        status ENUM ('pending', 'allowed', 'deleted', 'dismissed') NOT NULL DEFAULT 'pending',
+        reviewed_by INT NULL,
+        reviewed_at TIMESTAMP NULL DEFAULT NULL,
+        review_note VARCHAR(1000) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_report_per_user_per_message (message_id, reporter_user_id),
+        FOREIGN KEY (message_id) REFERENCES chat_messages (id) ON DELETE CASCADE,
+        FOREIGN KEY (reporter_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by) REFERENCES users (id) ON DELETE SET NULL,
+        INDEX idx_chat_message_reports_status (status, created_at),
+        INDEX idx_chat_message_reports_message (message_id),
+        INDEX idx_chat_message_reports_reporter (reporter_user_id)
+    );
+
 -- Universal notifications table (single source of truth for badge + history)
 -- Targeting:
 --   target_user_id IS NULL   -> broadcast (audience driven by audience field)
