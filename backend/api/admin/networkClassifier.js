@@ -17,7 +17,7 @@ function classifyIp(ip) {
     // Loopback
     if (lower === '127.0.0.1' || lower === '::1' || lower === '::ffff:127.0.0.1' ||
         lower.startsWith('127.') || lower === 'localhost') {
-        return { ...base, category: 'loopback', label: 'Localhost' };
+        return { ...base, category: 'loopback', label: 'Szervergép' };
     }
     // Link-local IPv4
     if (/^169\.254\./.test(lower)) return { ...base, category: 'link-local', label: 'Link-local (APIPA)' };

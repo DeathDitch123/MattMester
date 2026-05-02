@@ -4240,7 +4240,7 @@ function classifyIpClient(ip) {
     const lower = String(ip).toLowerCase().trim();
     if (lower === '127.0.0.1' || lower === '::1' || lower === '::ffff:127.0.0.1' ||
         lower.startsWith('127.') || lower === 'localhost') {
-        return { category: 'loopback', label: 'Localhost' };
+        return { category: 'loopback', label: 'Szervergép' };
     }
     if (/^169\.254\./.test(lower)) return { category: 'link-local', label: 'Link-local (APIPA)' };
     if (/^10\./.test(lower)) return { category: 'private', label: 'Belső hálózat (10.x)' };

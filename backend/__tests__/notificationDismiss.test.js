@@ -151,7 +151,7 @@ describe('notification dismiss – SQL filter intent (smoke)', () => {
         const fs = require('fs');
         const path = require('path');
         const source = fs.readFileSync(
-            path.join(__dirname, '..', 'sql', 'sql_funtions.js'),
+            path.join(__dirname, '..', 'sql', 'modules', 'notifications.js'),
             'utf8'
         );
         // Listazas: dismissed_at IS NULL
@@ -164,7 +164,7 @@ describe('notification dismiss – SQL filter intent (smoke)', () => {
         const fs = require('fs');
         const path = require('path');
         const source = fs.readFileSync(
-            path.join(__dirname, '..', 'sql', 'sql_funtions.js'),
+            path.join(__dirname, '..', 'sql', 'modules', 'notifications.js'),
             'utf8'
         );
         expect(source).toMatch(/dismissNotificationForUser[\s\S]*?ON DUPLICATE KEY UPDATE/);
