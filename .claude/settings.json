@@ -24,7 +24,24 @@
       "Bash(node --check backend/sockets.js)",
       "Bash(node --check frontend/javascript/shared/maintenanceClient.js)",
       "Bash(node --check frontend/javascript/socketClient.js)",
-      "Bash(node --check backend/server.js)"
+      "Bash(node --check backend/server.js)",
+      "Bash(cat *.js)",
+      "Bash(node --check /tmp/_combined.js)",
+      "Read(//tmp/**)",
+      "Bash(grep -ohE 'onclick=\"[a-zA-Z_$][a-zA-Z0-9_$]*\\\\\\(' frontend/html/adminPanel.html)",
+      "Bash(grep -nE \"function executeCriticalAction\\\\\\\\b|executeCriticalAction\\\\\\\\s*=\" *.js)",
+      "Bash(grep -nE \"^const state\\\\\\\\b|^let state\\\\\\\\b|^var state\\\\\\\\b\" *.js)",
+      "Bash(grep -nE \"^const h\\\\\\\\s*=\" *.js)",
+      "Bash(grep -nE \"^const SECTIONS\\\\\\\\b\" *.js)",
+      "Bash(grep -nE \"^const NAV_TREE\\\\\\\\b\" *.js)",
+      "Bash(grep -nE \"^let tokenIntervalId\\\\\\\\b\" *.js)",
+      "Bash(grep -nE \"window\\\\\\\\.MattMesterAdmin[A-Za-z]+ = \" *.js)",
+      "Bash(grep -nE \"function downloadGamePgn\\\\\\\\b\" *.js)",
+      "Bash(grep -nE \"function clearAuditFilterIntent\\\\\\\\b\" *.js)",
+      "Bash(grep -nE \"express\\\\\\\\.static|static\\\\\\\\\\(\" backend/server.js)",
+      "Bash(grep -rn \"javascript/adminPanel\\\\\\\\.js\" frontend/ backend/ --include=\"*.js\" --include=\"*.html\")",
+      "Bash(curl -s -o /tmp/_adminPanel.html -w \"HTTP %{http_code}  bytes=%{size_download}\\\\n\" http://localhost:3000/html/adminPanel.html)",
+      "Bash(curl -sI http://localhost:3000/html/adminPanel.html)"
     ]
   }
 }
