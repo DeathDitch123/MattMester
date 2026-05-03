@@ -418,11 +418,6 @@ async function dismissAllNotificationsForUser(userId, userRole) {
     return outcome;
 }
 
-// Visszafele kompatibilis alias: a route-ok es kulso hivok a regi nevet
-// hasznaljak, viselkedes ugyanaz mint a dismiss-all (per spec).
-const markAllNotificationsReadForUser = dismissAllNotificationsForUser;
-const markFriendRequestNotificationsReadForUser = dismissFriendRequestNotificationsForUser;
-
 async function getUnreadNotificationCount(userId, userRole) {
     const pool = getPool();
     let count = 0;
@@ -472,7 +467,5 @@ module.exports = {
     dismissNotificationForUser,
     dismissFriendRequestNotificationsForUser,
     dismissAllNotificationsForUser,
-    markAllNotificationsReadForUser,
-    markFriendRequestNotificationsReadForUser,
     getUnreadNotificationCount
 };

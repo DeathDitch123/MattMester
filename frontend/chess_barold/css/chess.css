@@ -1264,3 +1264,246 @@ h1, h2, h3, h4, h5, h6 {
     font-weight: 700;
 }
 
+
+/* ============================================================
+   SPRINT 2 (N9-N13): move-list panel, settings modal, themes,
+   board flip, last-move pulse, rematch modal, coord toggle.
+   ============================================================ */
+
+/* --- Tema-presetek (body[data-board-theme]) --- */
+body[data-board-theme="green"] {
+    --light: #eeeed2;
+    --dark: #769656;
+}
+body[data-board-theme="brown"] {
+    --light: #f0d9b5;
+    --dark: #b58863;
+}
+body[data-board-theme="blue"] {
+    --light: #dee3e6;
+    --dark: #4a7295;
+}
+
+/* --- Koordinatak elrejtese (body[data-show-coords="off"]) --- */
+body[data-show-coords="off"] .coord-rank,
+body[data-show-coords="off"] .coord-file {
+    display: none;
+}
+
+/* --- Animaciok kikapcsolasa --- */
+body[data-anim="off"] .square .piece {
+    transition: none !important;
+}
+body[data-anim="off"] .square.just-moved::after {
+    animation: none !important;
+}
+
+/* --- Last-move pulse (N12) --- */
+.square.just-moved {
+    position: relative;
+}
+.square.just-moved::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border: 2px solid var(--accent-gold);
+    border-radius: 4px;
+    animation: justMovedPulse 700ms ease-out forwards;
+}
+@keyframes justMovedPulse {
+    0%   { opacity: 0.95; transform: scale(1.04); }
+    100% { opacity: 0; transform: scale(1); }
+}
+
+/* --- Move-list panel (N9) --- */
+.move-list-panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    margin-top: 12px;
+    padding: 8px 10px 10px;
+    max-height: 260px;
+    display: flex;
+    flex-direction: column;
+}
+.move-list-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+.move-list-title {
+    flex: 1;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+.flip-board-btn,
+.chess-settings-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    transition: background 120ms;
+}
+.flip-board-btn:hover,
+.chess-settings-btn:hover {
+    background: rgba(212, 175, 55, 0.15);
+}
+.move-list-body {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    flex: 1;
+    font-family: 'Courier New', Consolas, monospace;
+    font-size: 0.92rem;
+    color: var(--text-primary);
+    min-height: 80px;
+}
+.move-list-empty {
+    color: var(--text-secondary);
+    font-style: italic;
+    text-align: center;
+    padding: 16px 0;
+}
+.move-pair {
+    display: grid;
+    grid-template-columns: 28px 1fr 1fr;
+    gap: 6px;
+    padding: 3px 4px;
+    border-radius: 4px;
+}
+.move-pair:nth-child(odd) {
+    background: rgba(255, 255, 255, 0.025);
+}
+.move-num {
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+.move-w, .move-b {
+    color: var(--text-primary);
+}
+
+/* --- Settings modal (N10) --- */
+.chess-settings-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+}
+.chess-settings-modal.hidden {
+    display: none;
+}
+.chess-settings-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 24px 28px;
+    min-width: 320px;
+    max-width: 400px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+.chess-settings-title {
+    margin: 0 0 16px 0;
+    color: var(--accent-gold);
+}
+.chess-settings-row {
+    margin: 10px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.chess-settings-row label {
+    color: var(--text-primary);
+    cursor: pointer;
+    user-select: none;
+}
+.chess-settings-row select {
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+}
+.chess-settings-row input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+.chess-settings-actions {
+    justify-content: flex-end;
+    margin-top: 18px;
+}
+.chess-settings-close {
+    background: var(--accent-gold);
+    color: var(--bg-dark);
+    border: none;
+    padding: 8px 18px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+.chess-settings-close:hover {
+    background: var(--accent-gold-hover);
+}
+
+/* --- Rematch modal + button (N13) --- */
+.rematch-btn {
+    background: var(--accent-gold);
+    color: var(--bg-dark);
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    margin-top: 8px;
+    transition: background 120ms;
+}
+.rematch-btn:hover {
+    background: var(--accent-gold-hover);
+}
+.rematch-btn:disabled {
+    background: var(--text-secondary);
+    cursor: not-allowed;
+}
+.rematch-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9100;
+}
+.rematch-modal.hidden {
+    display: none;
+}
+.rematch-modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 28px 32px;
+    text-align: center;
+}
+.rematch-title {
+    margin: 0 0 18px 0;
+    font-size: 1.1rem;
+    color: var(--text-primary);
+}
+.rematch-modal-buttons {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+}

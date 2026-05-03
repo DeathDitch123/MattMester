@@ -2,17 +2,17 @@ const express = require('express');
 const sql = require('../../sql/sql_functions.js');
 const { isAuthenticated, requireVerifiedEmail } = require('../functions.js');
 const { chatMessageLimiter, chatDirectOpenLimiter } = require('../middleware/rateLimiter.js');
-const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('../chatUtils.js');
+const { CHAT_CONFIG, validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('../chatUtils.js');
 const { parsePositiveInteger, getAuthenticatedUserIdOrThrow } = require('./_shared.js');
 const { notificationService } = require('../../services.js');
 
 const router = express.Router();
 
-const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
-const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
-// Default 'soft_mask' — l. backend/sockets.js azonos kommentet. Az admin moderalas
-// panelnek latnia kell a tartalmilag szabalysertő üzeneteket, hogy bannolhatóak legyenek.
-const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'soft_mask').trim().toLowerCase();
+// N14 (#37): a duplikalt CHAT_RATE_LIMIT_*/CHAT_BLACKLIST_POLICY konstansok atkoltozve
+// a backend/api/chatUtils.js CHAT_CONFIG-jaba — egyetlen forras-igazsag.
+const CHAT_RATE_LIMIT_MAX_MESSAGES = CHAT_CONFIG.RATE_LIMIT_MAX_MESSAGES;
+const CHAT_RATE_LIMIT_WINDOW_MS = CHAT_CONFIG.RATE_LIMIT_WINDOW_MS;
+const CHAT_BLACKLIST_POLICY = CHAT_CONFIG.BLACKLIST_POLICY;
 const chatRateLimitByUserId = new Map();
 
 function parseChatListLimit(value, fallback = 30, min = 1, max = 50) {

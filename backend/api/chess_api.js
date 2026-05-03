@@ -113,7 +113,13 @@ router.get('/user-elo', async (req, res) => {
     try {
         const userId = req.session?.userId || null;
         if (userId) {
-            const elo = await chessSql.eloLekerdezDb(userId);
+            // N14 (#46): a session-elo-t a setSessionFromUser tolti login-kor.
+            // Csak akkor terhelje a DB-t, ha a session-bol hianyzik (refresh / regi session).
+            const sessionElo = Number(req.session?.elo);
+            let elo = Number.isFinite(sessionElo) && sessionElo > 0 ? sessionElo : null;
+            if (!elo) {
+                elo = await chessSql.eloLekerdezDb(userId);
+            }
             responseBody = { elo: elo || KEZDO_ELO, bejelentkezve: true };
         }
         return res.status(statusCode).json(responseBody);
@@ -475,24 +481,6 @@ router.post('/:id/ability', requireVerifiedEmailOrGuestBot, async (req, res) => 
 });
 
 // ────────────────────────────────────────────
-// POST /api/chess/:id/reset — Játék újraindítás
-// ────────────────────────────────────────────
-router.post('/:id/reset', (req, res) => {
-    let statusCode = 200;
-    let payload;
-    try {
-        const jatek = findGameOrThrow(req.params.id);
-        rejectIfPvp(jatek);
-        requireParticipant(req, jatek);
-        payload = { allapot: jatekUjraIndit(jatek) };
-    } catch (err) {
-        statusCode = err.statusCode || 500;
-        payload = { error: err.message };
-    }
-    res.status(statusCode).json(payload);
-});
-
-// ────────────────────────────────────────────
 // POST /api/chess/:id/surrender — Feladás ELO-változással
 // ────────────────────────────────────────────
 router.post('/:id/surrender', async (req, res) => {
@@ -545,33 +533,8 @@ router.post('/:id/surrender', async (req, res) => {
     res.status(statusCode).json(payload);
 });
 
-// ────────────────────────────────────────────
-// DELETE /api/chess/:id — Játék törlése (feladás / disconnect)
-// ────────────────────────────────────────────
-router.delete('/:id', async (req, res) => {
-    let statusCode = 200;
-    let payload;
-    try {
-        const jatek = findGameOrThrow(req.params.id);
-        rejectIfPvp(jatek);              // PvP törlés a disconnect/surrender flow-on át
-        requireParticipant(req, jatek);
-        const gameId = parseInt(req.params.id, 10);
-
-        if (jatek.dbGameId) {
-            try {
-                await chessSql.jatekVegeMentDb(jatek.dbGameId, null, 'abandoned');
-            } catch (dbErr) {
-                console.error('Chess DB abandon hiba:', dbErr);
-            }
-        }
-
-        jatekTorol(gameId);
-        payload = { message: 'Játék törölve.' };
-    } catch (err) {
-        statusCode = err.statusCode || 500;
-        payload = { error: err.message };
-    }
-    res.status(statusCode).json(payload);
-});
+// N14 (#41): a DELETE /api/chess/:id es POST /api/chess/:id/reset endpointok
+// frontendbol nem voltak hivva, torolve. Ha a jovoben kellenek, az uj kell-uk
+// kovet a /surrender minta szerint (ELO + DB game-state mentes).
 
 module.exports = router;

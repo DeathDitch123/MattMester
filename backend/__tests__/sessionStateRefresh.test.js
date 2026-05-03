@@ -42,8 +42,7 @@ jest.mock('../services.js', () => {
         services: {
             getCurrentStats: () => ({ public: {}, admin: {} }),
             refreshStats: jest.fn(() => Promise.resolve()),
-            handleHeartbeat: jest.fn(),
-            handleConnection: jest.fn()
+            handleHeartbeat: jest.fn()
         },
         notificationService: {
             send: jest.fn(() => Promise.resolve({ saved: null, deliveredTo: [], errors: [] })),
@@ -55,6 +54,12 @@ jest.mock('../services.js', () => {
 });
 
 jest.mock('../api/chatUtils.js', () => ({
+    CHAT_CONFIG: {
+        RATE_LIMIT_MAX_MESSAGES: 5,
+        RATE_LIMIT_WINDOW_MS: 10 * 1000,
+        MAX_MESSAGE_LENGTH: 1000,
+        BLACKLIST_POLICY: 'soft_mask'
+    },
     validateChatRateLimitOrThrow: jest.fn(),
     writeChatSecurityAudit: jest.fn(() => Promise.resolve())
 }));

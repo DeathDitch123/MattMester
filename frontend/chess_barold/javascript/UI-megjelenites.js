@@ -66,7 +66,7 @@ export function tablaRajzol(allapot, flip = false) {
 function kiemelFrissit(allapot) {
     const mezok = document.querySelectorAll(".square");
     for (let i = 0; i < mezok.length; i++) {
-        mezok[i].classList.remove("from", "to", "check");
+        mezok[i].classList.remove("from", "to", "check", "just-moved");
     }
 
     // Utolsó lépés sárga kiemelés (from/to)
@@ -74,7 +74,14 @@ function kiemelFrissit(allapot) {
         const fromEl = mezoElemKeres(allapot.utolsoLepes.from.x, allapot.utolsoLepes.from.y);
         const toEl = mezoElemKeres(allapot.utolsoLepes.to.x, allapot.utolsoLepes.to.y);
         if (fromEl) fromEl.classList.add("from");
-        if (toEl) toEl.classList.add("to");
+        if (toEl) {
+            toEl.classList.add("to");
+            // N12: just-moved pulse — egyszer animal, animation-fill-mode: forwards
+            // miatt eltunik magatol a CSS-ben. A class minden render-skor letorlodik
+            // a fenti loopban, igy reflow-zal automatikusan ujra ratesszuk a kovetkezo
+            // lepesnel.
+            toEl.classList.add("just-moved");
+        }
     }
 
     // Sakk jelzés (piros) — a szerver megmondja melyik király van sakkban
@@ -128,6 +135,47 @@ function idoFrissit(allapot) {
 export function uiJatekVegeMegjelenit(uzenet) {
     const statusElem = document.getElementById("status");
     if (statusElem) statusElem.textContent = uzenet;
+}
+
+/**
+ * Move-list panel renderelése a szerver lepesTortenet-jébol.
+ * A panel jobb oldalon, scrollos lista, paronkent (1. e4 c5).
+ * Miert szerveroldali SAN: nem dupliklajuk a piece-letter / capture / check
+ * logikat a kliensen — ugyanaz a fuggveny szolja a DB-export-ot is, igy
+ * konzisztens marad. A kliens csak megjeleniti.
+ */
+export function renderMoveList(allapot) {
+    const panel = document.getElementById("move-list-body");
+    if (!panel) return;
+    const lepesek = (allapot && Array.isArray(allapot.lepesTortenet)) ? allapot.lepesTortenet : [];
+    if (lepesek.length === 0) {
+        panel.innerHTML = '<li class="move-list-empty">Még nincs lépés</li>';
+        return;
+    }
+    const html = [];
+    let parIdx = 0;
+    for (let i = 0; i < lepesek.length; i += 2) {
+        parIdx++;
+        const white = lepesek[i] || {};
+        const black = lepesek[i + 1] || null;
+        const whiteSan = white.san || '...';
+        const blackSan = black && black.san ? black.san : '';
+        html.push(
+            `<li class="move-pair"><span class="move-num">${parIdx}.</span>` +
+            `<span class="move-w">${whiteSan}</span>` +
+            `<span class="move-b">${blackSan}</span></li>`
+        );
+    }
+    panel.innerHTML = html.join('');
+    panel.scrollTop = panel.scrollHeight;
+}
+
+/**
+ * Move-list panel teljes ureseses (uj jatek inditasakor).
+ */
+export function clearMoveList() {
+    const panel = document.getElementById("move-list-body");
+    if (panel) panel.innerHTML = '<li class="move-list-empty">Még nincs lépés</li>';
 }
 
 /**

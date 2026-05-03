@@ -135,7 +135,14 @@
       "Bash(node --check \"D:/Letoltesek/GIthub/repo/MattMester/frontend/javascript/adminPanel/01-helpers.js\")",
       "Bash(node --check \"D:/Letoltesek/GIthub/repo/MattMester/frontend/javascript/chessModeChooser.js\")",
       "Bash(git mv *)",
-      "Bash(grep -v \":0$\")"
+      "Bash(grep -v \":0$\")",
+      "Bash(pushd backend *)",
+      "Bash(popd)",
+      "Bash(node --check ../frontend/chess_barold/javascript/settings.js)",
+      "Bash(node --check ../frontend/chess_barold/javascript/UI-megjelenites.js)",
+      "Bash(node --check ../frontend/chess_barold/javascript/audio.js)",
+      "Bash(node --check chess/pvp.js)",
+      "Bash(node --check chess/engine.js)"
     ]
   }
 }

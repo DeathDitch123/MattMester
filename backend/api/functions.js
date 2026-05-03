@@ -3,39 +3,48 @@
 // ============================================================
 // Az új single-source-of-truth a `backend/api/middleware/auth.js`:
 //   - pageGuard, apiGuard, adminGuard, setSessionFromUser
-// A `isAuthenticated` és `isAdmin` itt visszafelé-kompatibilis re-export
-// — a meglévő route-ok futnak tovább, az új route-ok már a middleware/auth.js-t
-// importálják közvetlenül. Ezt egy következő sprintben (külön ütemben) cserélhetjük.
+// Az `isAuthenticated` itt visszafelé-kompatibilis re-export — 8 meglévő
+// route még a regi nevet importalja, a kovetkezo sprintben atallnak az
+// apiGuard-ra es ez a fajl is megszunhet.
+// N14 (#73): az `isAdmin` re-export torolve — sehol nem volt mar hivatkozva.
 // ============================================================
 
-const { apiGuard, adminGuard } = require('./middleware/auth.js');
+const { apiGuard } = require('./middleware/auth.js');
 
 const EMAIL_VERIFICATION_REQUIRED_MESSAGE = 'Ez a funkció csak megerősített email cím után érhető el. Ellenőrizd az email fiókod vagy kérj új verifikációs emailt.';
 
 // DEPRECATED — használd az `apiGuard`-ot a `middleware/auth.js`-ből.
-// Ugyanaz a viselkedés (401 + ban/soft-delete check), a régi név csak
-// re-export, hogy a meglévő route-ok ne törjenek.
 const isAuthenticated = apiGuard;
-
-// DEPRECATED — használd az `adminGuard`-ot a `middleware/auth.js`-ből.
-const isAdmin = adminGuard;
 
 async function requireVerifiedEmail(request, response, next) {
     let statusCode = 200;
     let body = null;
     let proceed = false;
     try {
-        const sql = require('../sql/sql_functions.js');
         const userId = Number(request.session?.userId) || 0;
         if (!userId) {
             statusCode = 401;
             body = { success: false, code: 'NOT_AUTHENTICATED', message: 'Bejelentkezés szükséges.' };
         } else {
-            const statusRow = await sql.getUserVerificationStatusById(userId);
-            if (!statusRow) {
-                statusCode = 404;
-                body = { success: false, code: 'USER_NOT_FOUND', message: 'A felhasználó nem található.' };
-            } else if (!statusRow.is_email_verified) {
+            // N14 (#52): session-cache az is_email_verified mezo, mert a setSessionFromUser
+            // login + register eseten beallitja. Csak akkor terhelje a DB-t, ha a session
+            // mezo hianyzik (regi session migracio elott).
+            let isVerified = null;
+            if (request.session && typeof request.session.is_email_verified !== 'undefined') {
+                isVerified = !!request.session.is_email_verified;
+            }
+            if (isVerified === null) {
+                const sql = require('../sql/sql_functions.js');
+                const statusRow = await sql.getUserVerificationStatusById(userId);
+                if (!statusRow) {
+                    statusCode = 404;
+                    body = { success: false, code: 'USER_NOT_FOUND', message: 'A felhasználó nem található.' };
+                } else {
+                    isVerified = !!statusRow.is_email_verified;
+                    // Megnezzuk hogy menjen tovabb a kovetkezo kondicionalison.
+                }
+            }
+            if (statusCode === 200 && isVerified === false) {
                 statusCode = 403;
                 body = {
                     success: false,
@@ -43,7 +52,7 @@ async function requireVerifiedEmail(request, response, next) {
                     message: EMAIL_VERIFICATION_REQUIRED_MESSAGE
                 };
                 await logVerificationBlock(request, userId);
-            } else {
+            } else if (statusCode === 200 && isVerified === true) {
                 proceed = true;
             }
         }
@@ -80,7 +89,6 @@ async function logVerificationBlock(request, userId) {
 }
 
 module.exports = {
-    isAdmin,
     isAuthenticated,
     requireVerifiedEmail,
     EMAIL_VERIFICATION_REQUIRED_MESSAGE

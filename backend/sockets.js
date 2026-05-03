@@ -1,15 +1,15 @@
 const { services, notificationService } = require('./services.js');
 const sql = require('./sql/sql_functions.js');
 const { registerPvpHandlers, handlePvpDisconnect } = require('./chess/pvp.js');
-const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
+const { CHAT_CONFIG, validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
+// N14 (#38): parsePositiveInteger atkoltozve a backend/utils/parse.js-be (egyetlen forras).
+const { parsePositiveInteger } = require('./utils/parse.js');
 
-const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
-const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
-const CHAT_MAX_MESSAGE_LENGTH = 1000;
-// Default 'soft_mask' — a blocked-word uzenetek is mentodnek (maszkolva), igy az
-// admin chat moderalas panel latja oket es bannolhatja a szabalysertoket.
-// 'hard_block' eseten a uzenet nem mentodne, csak elutasitva lenne.
-const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'soft_mask').trim().toLowerCase();
+// N14 (#37): a duplikalt chat-konstansok atkoltozve a chatUtils.js CHAT_CONFIG-jaba.
+const CHAT_RATE_LIMIT_MAX_MESSAGES = CHAT_CONFIG.RATE_LIMIT_MAX_MESSAGES;
+const CHAT_RATE_LIMIT_WINDOW_MS = CHAT_CONFIG.RATE_LIMIT_WINDOW_MS;
+const CHAT_MAX_MESSAGE_LENGTH = CHAT_CONFIG.MAX_MESSAGE_LENGTH;
+const CHAT_BLACKLIST_POLICY = CHAT_CONFIG.BLACKLIST_POLICY;
 
 const SOCKET_ROOMS = Object.freeze({
     general: 'general-room',
@@ -52,16 +52,6 @@ function safeString(value, fallback = '') {
     }
 
     return value.trim();
-}
-
-function parsePositiveInteger(value, fallback = null) {
-    const parsed = Number(value);
-    let result = fallback;
-    if (Number.isInteger(parsed) && parsed > 0) {
-        result = parsed;
-    }
-
-    return result;
 }
 
 function getConversationRoomName(conversationId) {

@@ -1,2 +1,5 @@
 # node_modules mappák ignorálása mindenhol
 **/node_modules/
+
+# Claude Code lokalis konfig + transcript-ek — projekt-szinten nem reszek
+.claude/

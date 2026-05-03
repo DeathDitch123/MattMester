@@ -359,10 +359,11 @@ describe('Frontend: chess_barold ES module split', () => {
         expect(content).not.toMatch(/^function oldalSerult\(/m);
     });
 
-    test('mind a 5 chess_barold/javascript/*.js parse-olhato', () => {
+    test('mind a 6 chess_barold/javascript/*.js parse-olhato', () => {
         const files = listJsFiles(CHESS_DIR);
-        // varando: UI-megjelenites.js, abilities.js, audio.js, domSkeleton.js, main.js
-        expect(files.length).toBe(5);
+        // varando: UI-megjelenites.js, abilities.js, audio.js, domSkeleton.js, main.js,
+        // settings.js (N10 — kliens-oldali sakk preferenciak modul).
+        expect(files.length).toBe(6);
         for (const filePath of files) {
             const check = nodeParseCheck(filePath);
             if (!check.ok) {
@@ -909,5 +910,105 @@ describe('Frontend: maintenanceClient.js custom modal (NEM natív alert)', () =>
         expect(content).not.toMatch(/\balert\s*\(/);
         expect(content).not.toMatch(/\bconfirm\s*\(/);
         expect(content).not.toMatch(/\bprompt\s*\(/);
+    });
+});
+
+describe('N14: halott kod + duplikaciok takaritva', () => {
+    test('services.handleConnection nem letezik (sehol nem volt hivva)', () => {
+        const services = readFile(path.join(BACKEND, 'services.js'));
+        expect(services).not.toMatch(/\bhandleConnection\s*\(/);
+    });
+
+    test('notifications mark*ReadForUser aliasok torolve', () => {
+        const notif = readFile(path.join(BACKEND, 'sql', 'modules', 'notifications.js'));
+        expect(notif).not.toMatch(/markAllNotificationsReadForUser/);
+        expect(notif).not.toMatch(/markFriendRequestNotificationsReadForUser/);
+        const aggregator = readFile(path.join(BACKEND, 'sql', 'sql_functions.js'));
+        expect(aggregator).not.toMatch(/markAllNotificationsReadForUser/);
+        expect(aggregator).not.toMatch(/markFriendRequestNotificationsReadForUser/);
+    });
+
+    test('functions.js isAdmin re-export torolve (#73)', () => {
+        const fn = readFile(path.join(BACKEND, 'api', 'functions.js'));
+        // A modul.exports nem tartalmazza, es nincs `const isAdmin = ...` deklaracio sem.
+        expect(fn).not.toMatch(/^\s*isAdmin\s*,\s*$/m);
+        expect(fn).not.toMatch(/const\s+isAdmin\s*=/);
+    });
+
+    test('chess_api: POST /:id/reset es DELETE /:id endpointok torolve (#41)', () => {
+        const api = readFile(path.join(BACKEND, 'api', 'chess_api.js'));
+        expect(api).not.toMatch(/router\.post\(['"]\/:id\/reset['"]/);
+        expect(api).not.toMatch(/router\.delete\(['"]\/:id['"]/);
+    });
+
+    test('chat-konstansok egyetlen forras-igazsag (CHAT_CONFIG)', () => {
+        // A regi inline `const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;` mind chat.js mind
+        // sockets.js-bol elment, helyette CHAT_CONFIG-bol olvasnak.
+        const chatRoute = readFile(path.join(BACKEND, 'api', 'routes', 'chat.js'));
+        const sockets = readFile(path.join(BACKEND, 'sockets.js'));
+        const utils = readFile(path.join(BACKEND, 'api', 'chatUtils.js'));
+        // chatUtils.js-ben EGY definicio van.
+        expect(utils).toMatch(/const\s+CHAT_CONFIG\s*=\s*Object\.freeze/);
+        // chat.js + sockets.js mar CHAT_CONFIG-rol szarmaztat (nincs inline 5/10000).
+        expect(chatRoute).not.toMatch(/const\s+CHAT_RATE_LIMIT_MAX_MESSAGES\s*=\s*5\s*;/);
+        expect(sockets).not.toMatch(/const\s+CHAT_RATE_LIMIT_MAX_MESSAGES\s*=\s*5\s*;/);
+        expect(chatRoute).toMatch(/CHAT_CONFIG\.RATE_LIMIT_MAX_MESSAGES/);
+        expect(sockets).toMatch(/CHAT_CONFIG\.RATE_LIMIT_MAX_MESSAGES/);
+    });
+
+    test('parsePositiveInteger egyetlen forras: backend/utils/parse.js (#38)', () => {
+        const utils = readFile(path.join(BACKEND, 'utils', 'parse.js'));
+        expect(utils).toMatch(/function\s+parsePositiveInteger\(/);
+        // _shared.js es sockets.js mar nem tartalmaznak sajat function definiciot.
+        const shared = readFile(path.join(BACKEND, 'api', 'routes', '_shared.js'));
+        const sockets = readFile(path.join(BACKEND, 'sockets.js'));
+        expect(shared).not.toMatch(/function\s+parsePositiveInteger\s*\(/);
+        expect(sockets).not.toMatch(/function\s+parsePositiveInteger\s*\(/);
+    });
+
+    test('frontend/css/gameRoom.css ures fajl torolve', () => {
+        const file = path.join(FRONTEND, 'css', 'gameRoom.css');
+        expect(fileExists(file)).toBe(false);
+    });
+});
+
+describe('N9-N13: sakk interaktivitas — kliens-oldali fajlok elerhetoek', () => {
+    test('move-list panel render + clearMoveList exportalva van', () => {
+        const ui = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'UI-megjelenites.js'));
+        expect(ui).toMatch(/export\s+function\s+renderMoveList/);
+        expect(ui).toMatch(/export\s+function\s+clearMoveList/);
+    });
+
+    test('settings.js modul letezik es a 4 fo helper exportalva', () => {
+        const file = path.join(FRONTEND, 'chess_barold', 'javascript', 'settings.js');
+        expect(fileExists(file)).toBe(true);
+        const content = readFile(file);
+        expect(content).toMatch(/initChessSettings/);
+        expect(content).toMatch(/loadChessSettings/);
+        expect(content).toMatch(/applyChessSettings/);
+        expect(content).toMatch(/getChessSettings/);
+    });
+
+    test('chess.html tartalmazza a move-list panel + settings modal + rematch elemeket', () => {
+        const html = readFile(path.join(FRONTEND, 'chess_barold', 'html', 'chess.html'));
+        expect(html).toMatch(/id=["']move-list-panel["']/);
+        expect(html).toMatch(/id=["']chess-settings-modal["']/);
+        expect(html).toMatch(/id=["']rematch-offer-modal["']/);
+        expect(html).toMatch(/id=["']rematchBtn["']/);
+        expect(html).toMatch(/id=["']flipBoardBtn["']/);
+    });
+
+    test('backend lepesTortenet kliens-output bovult san+color-ra', () => {
+        const state = readFile(path.join(BACKEND, 'chess', 'state.js'));
+        // jatekAllapotKliens lepesTortenet slim valtozata
+        expect(state).toMatch(/lepesTortenetKliens\s*=\s*jatek\.lepesTortenet\.map/);
+        expect(state).toMatch(/lepesTortenet:\s*lepesTortenetKliens/);
+    });
+
+    test('engine.js minden lepesnel SAN-t es check/mate flag-et tarol', () => {
+        const engine = readFile(path.join(BACKEND, 'chess', 'engine.js'));
+        expect(engine).toMatch(/utolsoEntry\.san\s*=\s*sanLepes/);
+        expect(engine).toMatch(/utolsoEntry\.check\s*=\s*isCheckLepes/);
+        expect(engine).toMatch(/utolsoEntry\.mate\s*=\s*isCheckmateLepes/);
     });
 });

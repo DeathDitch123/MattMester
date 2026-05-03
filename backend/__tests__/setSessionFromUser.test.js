@@ -89,8 +89,9 @@ describe('Auth middleware exports — pageGuard, apiGuard, adminGuard, setSessio
     test('a régi functions.js az új middleware-re re-exportál', () => {
         const legacy = require('../api/functions.js');
         const mw = require('../api/middleware/auth.js');
-        // isAuthenticated === apiGuard, isAdmin === adminGuard
+        // isAuthenticated === apiGuard meg el (8 route hasznalja); isAdmin
+        // re-export N14 (#73) ota torolve, ami a teszt resze.
         expect(legacy.isAuthenticated).toBe(mw.apiGuard);
-        expect(legacy.isAdmin).toBe(mw.adminGuard);
+        expect(legacy.isAdmin).toBeUndefined();
     });
 });

@@ -239,6 +239,29 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         else if (allapot.ok === "haromszor")  uzenet = "Döntetlen (háromszori ismétlés).";
     }
 
+    // SAN-szeru notacio mindig keszul (kliens move-list panel + DB-mentes is
+    // ezt hasznalja). A check/mate mar tudhato, mert az allapot ellenorzes
+    // megtortent. A szam egyszer fut, az eredmenyt a lepesTortenet entry
+    // tartalmazza, igy a kliens NEM rendel le mind igy.
+    const isCheckLepes = !!allapot.sakkban;
+    const isCheckmateLepes = allapot.ok === "matt";
+    const sanLepes = buildSimpleSan({
+        piece: eredetiTipus,
+        fromPos: from.pos,
+        toPos: to.pos,
+        isCapture: voltUtes,
+        isCheck: isCheckLepes,
+        isCheckmate: isCheckmateLepes,
+        special,
+        promotionPiece
+    });
+    const utolsoEntry = jatek.lepesTortenet[jatek.lepesTortenet.length - 1];
+    if (utolsoEntry) {
+        utolsoEntry.san = sanLepes;
+        utolsoEntry.check = isCheckLepes;
+        utolsoEntry.mate = isCheckmateLepes;
+    }
+
     // --- DB MENTÉS (nem blokkolja a kliensválaszt) ---
     if (jatek.dbGameId) {
         const dbGameId = jatek.dbGameId;
@@ -246,25 +269,13 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         const moveNumber = jatek.lepesszam;
         const fromPos = from.pos;
         const toPos = to.pos;
-        const isCheck = !!(allapot.sakkban);
-        const isCheckmate = allapot.ok === "matt";
+        const isCheck = isCheckLepes;
+        const isCheckmate = isCheckmateLepes;
         const vege = allapot.vege;
         const allapotOk = allapot.ok;
         const nyertesSzin = allapot.nyertes;
 
-        // SAN-szeru notacio generalas admin review celra. Nem teljes szabvanyos
-        // SAN (nem tudunk diszambiguaciot pl. ket huszar ugyanoda lephet), de
-        // emberi atnezeshez es a PGN-szeru export-hoz teljesen elegseges.
-        const san = buildSimpleSan({
-            piece: eredetiTipus,
-            fromPos,
-            toPos,
-            isCapture: voltUtes,
-            isCheck,
-            isCheckmate,
-            special,
-            promotionPiece
-        });
+        const san = sanLepes;
 
         (async () => {
             try {

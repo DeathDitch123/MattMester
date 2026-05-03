@@ -137,8 +137,6 @@ module.exports = {
     dismissNotificationForUser: notifications.dismissNotificationForUser,
     dismissFriendRequestNotificationsForUser: notifications.dismissFriendRequestNotificationsForUser,
     dismissAllNotificationsForUser: notifications.dismissAllNotificationsForUser,
-    markFriendRequestNotificationsReadForUser: notifications.markFriendRequestNotificationsReadForUser,
-    markAllNotificationsReadForUser: notifications.markAllNotificationsReadForUser,
     getUnreadNotificationCount: notifications.getUnreadNotificationCount,
 
     // user-vs-user reports (player bejelentesek - chat-tol fuggetlen)

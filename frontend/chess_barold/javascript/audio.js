@@ -85,6 +85,8 @@ function pittyen(freq, durationMs, gain = 0.03) {
 
 export function lepesHangLejatszas(allapot) {
     if (!allapot || !allapot.utolsoLepes) return;
+    // Hang toggle a beallitas-modulbol — body[data-sound="off"] eseten csendben.
+    if (typeof document !== 'undefined' && document.body && document.body.dataset.sound === 'off') return;
 
     const l = allapot.utolsoLepes;
     const kulcs = `${allapot.lepesszam}:${l.from.x},${l.from.y}->${l.to.x},${l.to.y}`;

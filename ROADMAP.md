@@ -6,9 +6,18 @@
 
 ---
 
-## Jelenlegi állapot (snapshot, 2026-05-03)
+## Jelenlegi állapot (snapshot, 2026-05-03 — Sprint 2 vége)
 
-### ✅ Kész
+### ✅ Kész — Sprint 2 (N9–N14, 2026-05-03)
+- **N9**: Sakk lépéslista panel — algebrai notáció (`1. e4 c5 …`), backend `lepesTortenet` minden entry-be `san`/`check`/`mate` flag, slim kliens-output, jobb oldali scrollos lista.
+- **N10**: Sakk Beállítások modal — 4 tábla-téma (gold/green/brown/blue), hang ki/be, koordináták ki/be, animáció ki/be, auto-flip ki/be. localStorage perszisztencia, custom HTML modal.
+- **N11**: Tábla forgatás — manual flip-toggle (⇅) + auto-flip black PvP játékosnak.
+- **N12**: Smooth piece animation — meglévő `lepesAnimacio` slide + új `.just-moved` CSS pulzus a célmezőn.
+- **N13**: Revans gomb — PvP játék vége után offer/accept/decline handshake, 30s timeout, disconnect cancel. Új `chess:rematch:*` socket események + 12 új teszt.
+- **N14**: Funkcionális takarítás — `services.handleConnection` (#40), notifications mark*ReadForUser aliasok (#51), `isAdmin` deprecated re-export (#73), unused chess endpointok (#41), üres `gameRoom.css` (#14), chat constants → `CHAT_CONFIG` (#37), `parsePositiveInteger` → `backend/utils/parse.js` (#38), session-cache `/user-elo` + `requireVerifiedEmail` (#46, #52). 9 új projectIntegrity guard.
+- **Tesztek**: 261 zöld 19 suite-ban (Sprint 1 végén 249 / 17 → +12 N13 teszt + 9 új N14 guard).
+
+### ✅ Kész — Sprint 1 (N1–N8, 2026-05-03)
 - **S1**: env-alapú session/cookie/helmet hardening, `.env.example`, DB-credek envből.
 - **Admin track F1–F9**: `backend/api/admin/` mind valós impl-lel — `socketNamespace.js`, `alertingService.js`, `adminRateLimiter.js`, `superAdminRoutes.js`, `auditService.js`, `tokenService.js`, `retentionJob.js`, `maintenanceScheduler.js`, `softDeletePurgeJob.js`, `statsTickService.js`, `testRunnerService.js`. Read-only API (`backend/api/routes/admin/readOnlyRoutes.js`), audit retention scheduler (18 hónap), live admin WS namespace.
 - **Frontend split**: `frontend/javascript/profile/` 20 modulra (S18 ~100%), `frontend/javascript/adminPanel/` 25 modulra. Domain-szintű elkülönítés.

@@ -11,10 +11,14 @@
 
 import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt,
          huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres,
-         lepesAnimacio } from './UI-megjelenites.js';
+         lepesAnimacio, renderMoveList, clearMoveList } from './UI-megjelenites.js';
 import { abilitiesInit, abilitiesAllapotFrissit, abilitiesReset, isAbilityArmed } from './abilities.js';
 import { lepesHangLejatszas } from './audio.js';
 import { oldalSerult, oldalVazVisszaallit } from './domSkeleton.js';
+import { initChessSettings, getChessSettings } from './settings.js';
+
+// Manualis flip-toggle state — a setting auto-flip felulirhato manualisan.
+let manualisFlipFelulirva = null; // null = auto-flip kovetkezik, true/false = manualis
 
 // Az aktuális játék ID — a szerver adja
 let gameId = null;
@@ -474,6 +478,32 @@ function pvpSocketInit() {
         pvpJatekVege(data);
     });
 
+    // N13 — Rematch event-ek (server → kliens)
+    socket.on('chess:rematch:offered', () => {
+        // Sajat ajanlat nyugtazva — a rematch-gomb varakozasi allapotba kerul.
+        rematchUiVarakozas();
+    });
+    socket.on('chess:rematch:incoming', (data) => {
+        // Ellenfel ajanlott — bejovo modal megjelenitese.
+        rematchBejovoModal(true, data && data.gameId);
+    });
+    socket.on('chess:rematch:declined', (data) => {
+        rematchUiReset('Az ellenfél elutasította a revanst.');
+        rematchBejovoModal(false);
+    });
+    socket.on('chess:rematch:expired', () => {
+        rematchUiReset('A revans lejárt.');
+        rematchBejovoModal(false);
+    });
+    socket.on('chess:rematch:cancelled', () => {
+        rematchUiReset('A revans érvénytelen — ellenfél kilépett.');
+        rematchBejovoModal(false);
+    });
+    socket.on('chess:rematch:error', (data) => {
+        rematchUiReset((data && data.uzenet) || 'Revans hiba');
+        rematchBejovoModal(false);
+    });
+
     // Legális lépések válasz
     socket.on('chess:moves:response', (data) => {
         console.log('[PvP] moves:response', { lepesek: data.lepesek?.length || 0, x: data.x, y: data.y });
@@ -659,8 +689,17 @@ function pvpJatekKezdet(data) {
     // UI reset
     const feladBtn = document.getElementById('feladBtn');
     const newGameBtn = document.getElementById('newGameBtn');
+    const rematchBtn = document.getElementById('rematchBtn');
     if (feladBtn) feladBtn.classList.remove('hidden');
     if (newGameBtn) newGameBtn.classList.add('hidden');
+    // N13: az uj meccs (akar rematch akar friss) elrejti a rematch-gombot.
+    if (rematchBtn) {
+        rematchBtn.classList.add('hidden');
+        rematchBtn.disabled = false;
+        rematchBtn.textContent = 'Revans';
+    }
+    // N9: move-list panel ureseses az uj jatekhoz.
+    clearMoveList();
     const drawBtn = document.getElementById('drawOfferBtn');
     if (drawBtn) drawBtn.classList.remove('hidden');
 
@@ -680,13 +719,23 @@ function pvpJatekKezdet(data) {
     }).then(() => abilitiesAllapotFrissit(data.allapot));
 }
 
+// Eldonti hogy flippelve renderelje-e a tablat: manualis felulir > auto-flip
+// setting + sajat szin. Ha a manualis nincs allitva, a setting + sajat szin alapjan.
+function kellFlippelni() {
+    if (manualisFlipFelulirva !== null) return manualisFlipFelulirva;
+    let autoflip = true;
+    try { autoflip = getChessSettings().autoflip !== false; } catch (e) { autoflip = true; }
+    return autoflip && pvpAktiv && sajatSzin === 'black';
+}
+
 function pvpAllapotFrissit(allapot) {
     const elozoAllapot = utolsoAllapot;
     utolsoAllapot = allapot;
     kivalasztott = null;
     try { if (appObserver) appObserver.disconnect(); } catch (e) {}
     oldalVazVisszaallit();
-    tablaRajzol(allapot, sajatSzin === 'black');
+    tablaRajzol(allapot, kellFlippelni());
+    renderMoveList(allapot);
 
     // Animáció minden új lépéshez (saját + ellenfél egyaránt)
     if (ujLepesTortent(elozoAllapot, allapot)) {
@@ -731,16 +780,106 @@ function pvpJatekVege(data) {
     const feladBtn = document.getElementById('feladBtn');
     const newGameBtn = document.getElementById('newGameBtn');
     const drawBtn = document.getElementById('drawOfferBtn');
+    const rematchBtn = document.getElementById('rematchBtn');
     const offerElem = document.getElementById('draw-offer-received');
     const dcElem = document.getElementById('opponent-disconnected');
     if (feladBtn) feladBtn.classList.add('hidden');
     if (newGameBtn) newGameBtn.classList.remove('hidden');
     if (drawBtn) drawBtn.classList.add('hidden');
+    // N13: rematch gomb csak PvP veg utan, es csak ha az ellenfel nem hagyta el a meccset.
+    if (rematchBtn) {
+        rematchBtn.classList.remove('hidden');
+        rematchBtn.disabled = false;
+        rematchBtn.textContent = 'Revans';
+    }
     if (offerElem) offerElem.classList.add('hidden');
     if (dcElem) dcElem.classList.add('hidden');
     if (window._dcInterval) {
         clearInterval(window._dcInterval);
         window._dcInterval = null;
+    }
+}
+
+// N13 — rematch UI segedfuggvenyek
+function rematchUiVarakozas() {
+    const rematchBtn = document.getElementById('rematchBtn');
+    if (rematchBtn) {
+        rematchBtn.disabled = true;
+        rematchBtn.textContent = 'Várakozás az ellenfélre...';
+    }
+}
+function rematchUiReset(uzenet) {
+    const rematchBtn = document.getElementById('rematchBtn');
+    if (rematchBtn) {
+        rematchBtn.disabled = false;
+        rematchBtn.textContent = 'Revans';
+    }
+    if (uzenet) {
+        const statusElem = document.getElementById('status');
+        if (statusElem) {
+            const eredeti = statusElem.textContent;
+            statusElem.textContent = uzenet;
+            setTimeout(() => {
+                if (statusElem.textContent === uzenet) statusElem.textContent = eredeti;
+            }, 3000);
+        }
+    }
+}
+function rematchBejovoModal(mutat, gameId) {
+    const modal = document.getElementById('rematch-offer-modal');
+    if (!modal) return;
+    if (mutat) {
+        modal.dataset.gameId = String(gameId || '');
+        modal.classList.remove('hidden');
+    } else {
+        modal.classList.add('hidden');
+        delete modal.dataset.gameId;
+    }
+}
+
+// Rematch gomb + bejovo modal kotsei. Csak egyszer hivodik az init()-bol.
+function rematchEsemenyekKot() {
+    const rematchBtn = document.getElementById('rematchBtn');
+    if (rematchBtn) {
+        rematchBtn.addEventListener('click', () => {
+            const socket = pvpSocketKeres && pvpSocketKeres();
+            if (!socket || !socket.connected) {
+                rematchUiReset('Nincs kapcsolat a szerverrel.');
+                return;
+            }
+            const targetGameId = (utolsoAllapot && utolsoAllapot.gameId) || pvpGameId;
+            socket.emit('chess:rematch:offer', { gameId: targetGameId });
+            rematchUiVarakozas();
+        });
+    }
+    const acceptBtn = document.getElementById('rematchAcceptBtn');
+    const declineBtn = document.getElementById('rematchDeclineBtn');
+    const modal = document.getElementById('rematch-offer-modal');
+    if (acceptBtn) {
+        acceptBtn.addEventListener('click', () => {
+            const socket = pvpSocketKeres && pvpSocketKeres();
+            const gid = modal && modal.dataset.gameId ? Number(modal.dataset.gameId) : null;
+            rematchBejovoModal(false);
+            if (socket && socket.connected && gid) {
+                socket.emit('chess:rematch:accept', { gameId: gid });
+            }
+        });
+    }
+    if (declineBtn) {
+        declineBtn.addEventListener('click', () => {
+            const socket = pvpSocketKeres && pvpSocketKeres();
+            const gid = modal && modal.dataset.gameId ? Number(modal.dataset.gameId) : null;
+            rematchBejovoModal(false);
+            if (socket && socket.connected && gid) {
+                socket.emit('chess:rematch:decline', { gameId: gid });
+            }
+        });
+    }
+    // Overlay-klikk = decline (custom modal pattern, nem natív confirm).
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal && declineBtn) declineBtn.click();
+        });
     }
 }
 
@@ -1094,7 +1233,8 @@ function allapotFrissit(allapot, animald = false) {
     kivalasztott = null;
     try { if (appObserver) appObserver.disconnect(); } catch(e) {}
     oldalVazVisszaallit();
-    tablaRajzol(allapot, pvpAktiv && sajatSzin === 'black');
+    tablaRajzol(allapot, kellFlippelni());
+    renderMoveList(allapot);
     const automataAnimacio = ujLepesTortent(elozoAllapot, allapot);
     if ((animald || automataAnimacio) && allapot.utolsoLepes) {
         const animKulcs = allapotLepesKulcs(allapot);
@@ -1319,6 +1459,18 @@ function esemenyekUjraKot() {
             lepesKuldesLezar();
             pvpAllapotReset();
             eloValtozasFrissit(null);
+            // N9: move-list panel uritese, mert uj jatekot indit a felhasznalo.
+            clearMoveList();
+            // N11: manualis flip felulirast is reseteli, hogy a kovetkezo PvP-ben
+            // visszalegyen az auto-flip viselkedes.
+            manualisFlipFelulirva = null;
+            // N13: rematch-gomb elrejtese (mode-valaszto modal a kovetkezo lepes).
+            const rematchBtnReset = document.getElementById('rematchBtn');
+            if (rematchBtnReset) {
+                rematchBtnReset.classList.add('hidden');
+                rematchBtnReset.disabled = false;
+                rematchBtnReset.textContent = 'Revans';
+            }
             modValasztoMegjelenit();
         });
     }
@@ -1376,6 +1528,27 @@ function esemenyekUjraKot() {
 
 async function init() {
     console.log("[INIT] Mattmester indítás...");
+
+    // N10: kliens-oldali beallitasok betoltese + modal-bind. localStorage perszisztencia,
+    // try-catch a settings.js-ben kezeli az incognito sandboxot.
+    try { initChessSettings(); } catch (e) { console.warn('settings init hiba:', e); }
+
+    // N11: manualis flip-toggle a sidebar gombrol. A setting auto-flip felulirhato manualisan,
+    // amig a felhasznalo nem klikkel ujat.
+    const flipBtn = document.getElementById('flipBoardBtn');
+    if (flipBtn) {
+        flipBtn.addEventListener('click', () => {
+            const aktualis = kellFlippelni();
+            manualisFlipFelulirva = !aktualis;
+            if (utolsoAllapot) {
+                tablaRajzol(utolsoAllapot, kellFlippelni());
+                renderMoveList(utolsoAllapot);
+            }
+        });
+    }
+
+    // N13: rematch gomb + bejovo offer modal eseme nykezelok.
+    rematchEsemenyekKot();
 
     // Feladás modal eseménykezelők (csak egyszer kell kötni)
     surrenderModalEsemenyekKot();

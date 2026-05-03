@@ -203,6 +203,14 @@ function jatekAllapotKliens(jatek) {
         };
     }
 
+    // Slim lepes-tortenet a kliens move-list panel-jehez. Csak amit a UI
+    // tenyleg renderel: szin + SAN-string. A teljes entry (from/to/captured)
+    // marad szerver-oldali, a kliens nem szennyezodik feleslegessel.
+    const lepesTortenetKliens = jatek.lepesTortenet.map(entry => ({
+        color: entry.color,
+        san: entry.san || null
+    }));
+
     return {
         gameId: jatek.gameId,
         tabla,
@@ -211,6 +219,7 @@ function jatekAllapotKliens(jatek) {
         lepesszam: jatek.lepesszam,
         utolsoLepes,
         sakkPoz,
+        lepesTortenet: lepesTortenetKliens,
         ido: {
             white: jatek.jatekosok.white.ido,
             black: jatek.jatekosok.black.ido

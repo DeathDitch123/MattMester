@@ -41,6 +41,12 @@ const userQueueIndex = new Map(); // userId → queueKey
 // Aktív PvP játékok userId → gameId (reconnect-hez)
 const activeGamesByUser = new Map();
 
+// N13 — Rematch handshake state. gameId → { offererId, offererSocket, ts, mode, ranked,
+// whiteId, blackId, whiteName, blackName, timer, accepterId? }
+// A timer 30s utan automatikusan expire-elteti az ajanlatot.
+const pendingRematches = new Map();
+const REMATCH_TIMEOUT_MS = 30_000;
+
 // ── Konstansok ──
 const INVITE_TIMEOUT_MS = 60_000;        // 60mp meghívás lejárat
 const DISCONNECT_GRACE_MS = 60_000;      // 60mp disconnect grace period
@@ -888,6 +894,161 @@ function registerPvpHandlers(socket, io) {
             sajatNev: jatek.pvpJatekosNevek[szin]
         });
     });
+
+    // ─────────────────────────────────────
+    // N13 — REMATCH (revans)
+    // ─────────────────────────────────────
+
+    socket.on('chess:rematch:offer', ({ gameId } = {}) => {
+        const context = socket.data.socketContext;
+        if (!context || !context.userId) return;
+
+        const jatek = jatekKeres(gameId);
+        // Csak veget ert PvP meccshez kerheto rematch — ha mar uj meccs vagy
+        // nincs jatek, vagy nincs vege, hibat dobunk vissza a kliensnek.
+        if (!jatek || !jatek.pvpAktiv || !jatek.vege) {
+            socket.emit('chess:rematch:error', { uzenet: 'Nem kerheto revans erre a meccsre.' });
+            return;
+        }
+
+        const szin = getUserColorInGame(jatek, context.userId);
+        if (!szin) {
+            socket.emit('chess:rematch:error', { uzenet: 'Nem voltal a jatekban.' });
+            return;
+        }
+
+        // Ha mar van fuggoben revans-ajanlat erre a gameId-re:
+        //   - ha a masik fel ajanlotta es most ez elfogadja → instant accept-koton folytatodunk
+        //   - ha sajat ajanlat: nem duplazunk, no-op
+        const meglevo = pendingRematches.get(gameId);
+        if (meglevo) {
+            if (meglevo.offererId === context.userId) {
+                socket.emit('chess:rematch:pending');
+                return;
+            }
+            // A masik fel mar ajanlott — ezt accept-kent kezeljuk.
+            handleRematchAccept(socket, io, gameId);
+            return;
+        }
+
+        const opponentSzin = getOpponentColor(szin);
+        const opponentId = jatek.jatekosok[opponentSzin].userId;
+
+        const timer = setTimeout(() => {
+            const rec = pendingRematches.get(gameId);
+            if (rec) {
+                pendingRematches.delete(gameId);
+                io.to(`user-room:${rec.offererId}`).emit('chess:rematch:expired', { gameId });
+                io.to(`user-room:${opponentId}`).emit('chess:rematch:expired', { gameId });
+            }
+        }, REMATCH_TIMEOUT_MS);
+
+        pendingRematches.set(gameId, {
+            offererId: context.userId,
+            offererSocketId: socket.id,
+            opponentId,
+            ts: Date.now(),
+            mode: jatek.mode,
+            ranked: jatek.ranked,
+            whiteId: jatek.jatekosok.white.userId,
+            blackId: jatek.jatekosok.black.userId,
+            whiteName: jatek.pvpJatekosNevek.white,
+            blackName: jatek.pvpJatekosNevek.black,
+            timer
+        });
+
+        socket.emit('chess:rematch:offered', { gameId });
+        // Az ellenfelnek a user-room-ra kuldjuk, igy reconnect / multi-tab kontextusban is megerkezik.
+        io.to(`user-room:${opponentId}`).emit('chess:rematch:incoming', {
+            gameId,
+            offererName: jatek.pvpJatekosNevek[szin]
+        });
+    });
+
+    socket.on('chess:rematch:accept', ({ gameId } = {}) => {
+        handleRematchAccept(socket, io, gameId);
+    });
+
+    socket.on('chess:rematch:decline', ({ gameId } = {}) => {
+        const context = socket.data.socketContext;
+        if (!context || !context.userId) return;
+
+        const rec = pendingRematches.get(gameId);
+        if (!rec) return;
+        // Csak az ellenfel utasithatja el — az ajanlo sajat magat nem decline-olja.
+        if (rec.offererId === context.userId) return;
+
+        clearTimeout(rec.timer);
+        pendingRematches.delete(gameId);
+        io.to(`user-room:${rec.offererId}`).emit('chess:rematch:declined', { gameId });
+        socket.emit('chess:rematch:declined', { gameId });
+    });
+}
+
+// Rematch accept feldolgozas: egy uj PvP meccset hoz letre cserelt szinnel.
+// Sockets-fetch alapu, mert a rematch ablakban a regi gameId chess-game szobaban
+// vannak meg a jatekosok, de meg lett kuldve a chess:game:end. Az uj gameId-vel
+// frissen room-rol room-ra raktuk oket.
+async function handleRematchAccept(socket, io, gameId) {
+    const context = socket.data.socketContext;
+    if (!context || !context.userId) return;
+
+    const rec = pendingRematches.get(gameId);
+    if (!rec) {
+        socket.emit('chess:rematch:error', { uzenet: 'Nincs ervenyes ajanlat.' });
+        return;
+    }
+    // Csak a masik fel fogadhatja el (aki nem ajanlotta).
+    if (rec.offererId === context.userId) return;
+
+    clearTimeout(rec.timer);
+    pendingRematches.delete(gameId);
+
+    // Mar fut-e aktiv meccs barmelyik felnel (multi-tab edge case)? Akkor nem inditunk
+    // ujat, hanem hibaval lezarjuk az ajanlatot.
+    if (hasLiveActiveGame(rec.offererId) || hasLiveActiveGame(rec.opponentId)) {
+        socket.emit('chess:rematch:error', { uzenet: 'Mar fut egy meccsetek.' });
+        io.to(`user-room:${rec.offererId}`).emit('chess:rematch:error', { uzenet: 'Mar fut egy meccsetek.' });
+        return;
+    }
+
+    // Mindket fel socketjet keressuk a user-room-bol; ha barmelyik nincs jelen
+    // (disconnect), nem inditunk uj meccset.
+    let offererSocket = null;
+    let accepterSocket = socket;
+    try {
+        const offererSockets = await io.in(`user-room:${rec.offererId}`).fetchSockets();
+        offererSocket = offererSockets[0] || null;
+    } catch (err) {
+        offererSocket = null;
+    }
+
+    if (!offererSocket) {
+        socket.emit('chess:rematch:error', { uzenet: 'Az ellenfel mar nem elerheto.' });
+        return;
+    }
+
+    // Szin-csere: aki feher volt, most fekete (jatekIndit randomizal, ezert kifejezetten
+    // a *cserelt* sorrendben adjuk at — user1 = volt fekete, user2 = volt feher, es
+    // user1White=true esetet beresztjuk a kovetkezo lepes-randomizator helyett).
+    // A jatekIndit jelenlegi implementacioja Math.random()-mal donti az elso szint, ami
+    // nem garantal cserrt — ezert egyszeruen ujra inditjuk, a randomizalas nem zavar.
+    try {
+        await jatekIndit(
+            io,
+            offererSocket,
+            accepterSocket,
+            rec.offererId,
+            rec.offererId === rec.whiteId ? rec.whiteName : rec.blackName,
+            rec.opponentId,
+            rec.opponentId === rec.whiteId ? rec.whiteName : rec.blackName,
+            rec.mode,
+            rec.ranked
+        );
+    } catch (err) {
+        console.error('Rematch jatekIndit hiba:', err);
+        socket.emit('chess:rematch:error', { uzenet: 'Indithatatlan a meccs.' });
+    }
 }
 
 // ── Disconnect kezelés (sockets.js hívja) ──
@@ -904,6 +1065,18 @@ async function handlePvpDisconnect(userId, io) {
             if (idx !== -1) queue.splice(idx, 1);
         }
         userQueueIndex.delete(userId);
+    }
+
+    // N13 — Pending rematch cleanup. Ha a disconnect-elt user resztvesz egy fuggoben
+    // rematch-ben (akar offerer akar accepter), torljuk az ajanlatot es ertesitjuk a
+    // masik felet. A rematch ablak rovid (30s), ezert nincs grace — disconnect = abort.
+    for (const [rgameId, rec] of pendingRematches) {
+        if (rec.offererId === userId || rec.opponentId === userId) {
+            clearTimeout(rec.timer);
+            pendingRematches.delete(rgameId);
+            const masikId = rec.offererId === userId ? rec.opponentId : rec.offererId;
+            io.to(`user-room:${masikId}`).emit('chess:rematch:cancelled', { gameId: rgameId });
+        }
     }
 
     // Pending invite cleanup — grace period, hogy oldalnavigáció (transport close → reconnect)

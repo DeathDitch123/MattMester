@@ -189,7 +189,20 @@
                 </div>
 
                 <button id="feladBtn" class="felad-btn">Feladás</button>
+                <button id="rematchBtn" class="rematch-btn hidden">Revans</button>
                 <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
+
+                <!-- Lepeslista panel (algebrai notacio) -->
+                <div id="move-list-panel" class="move-list-panel">
+                    <div class="move-list-head">
+                        <span class="move-list-title">Lépések</span>
+                        <button id="flipBoardBtn" class="flip-board-btn" title="Tábla forgatás">⇅</button>
+                        <button id="chessSettingsBtn" class="chess-settings-btn" title="Beállítások">⚙</button>
+                    </div>
+                    <ol id="move-list-body" class="move-list-body">
+                        <li class="move-list-empty">Még nincs lépés</li>
+                    </ol>
+                </div>
                 <div class="legend">
                     <div><span class="legend-sq from"></span> Utolsó lépés</div>
                     <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
@@ -209,6 +222,60 @@
             </div>
         </footer>
     </div>
+    <!-- REVANS BEJOVO AJANLAT MODAL -->
+    <div id="rematch-offer-modal" class="rematch-modal hidden">
+        <div class="rematch-modal-content">
+            <p class="rematch-title">Ellenfeled revans-t kér!</p>
+            <div class="rematch-modal-buttons">
+                <button id="rematchAcceptBtn" class="pvp-invite-btn accept">Elfogadom</button>
+                <button id="rematchDeclineBtn" class="pvp-invite-btn decline">Elutasítom</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- BEALLITASOK MODAL -->
+    <div id="chess-settings-modal" class="chess-settings-modal hidden">
+        <div class="chess-settings-content">
+            <h3 class="chess-settings-title">Beállítások</h3>
+            <div class="chess-settings-row">
+                <label>Tábla téma</label>
+                <select id="setting-theme">
+                    <option value="gold">Arany (alap)</option>
+                    <option value="green">Zöld</option>
+                    <option value="brown">Fa</option>
+                    <option value="blue">Kék</option>
+                </select>
+            </div>
+            <div class="chess-settings-row">
+                <label>
+                    <input type="checkbox" id="setting-sound" checked>
+                    Hang
+                </label>
+            </div>
+            <div class="chess-settings-row">
+                <label>
+                    <input type="checkbox" id="setting-coords" checked>
+                    Koordináták (a–h, 1–8)
+                </label>
+            </div>
+            <div class="chess-settings-row">
+                <label>
+                    <input type="checkbox" id="setting-anim" checked>
+                    Sima lépés-animáció
+                </label>
+            </div>
+            <div class="chess-settings-row">
+                <label>
+                    <input type="checkbox" id="setting-autoflip" checked>
+                    Auto-flip black-ként
+                </label>
+            </div>
+            <div class="chess-settings-row chess-settings-actions">
+                <button id="chessSettingsClose" class="chess-settings-close">Kész</button>
+            </div>
+        </div>
+    </div>
+
     <!-- FELADÁS MEGERŐSÍTŐ MODAL -->
     <div id="surrender-modal" class="surrender-modal hidden">
         <div class="surrender-modal-content">
