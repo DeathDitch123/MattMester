@@ -9,6 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" defer></script>
 
     <style>
         :root {
@@ -186,6 +187,114 @@
         .retry-feedback.is-ok    { color: #6ee7b7; }
         .retry-feedback i { margin-right: 0.4rem; }
 
+        .btn-dev {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: transparent;
+            color: var(--gold);
+            border: 1px solid rgba(201, 168, 76, 0.45);
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.2s, border-color 0.2s, color 0.2s;
+            cursor: pointer;
+        }
+        .btn-dev:hover { background: rgba(201, 168, 76, 0.10); border-color: var(--gold); color: #ffe6a4; }
+
+        /* Dev login modal — sotet temahoz igazitva, nem az alapertelmezett bootstrap feher */
+        .dev-modal-content {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            color: #e6edf3;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(201, 168, 76, 0.18) inset;
+        }
+        .dev-modal-header {
+            border-bottom: 1px solid var(--border);
+            padding: 1.25rem 1.5rem;
+        }
+        .dev-modal-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--gold);
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .dev-modal-body { padding: 1.5rem; }
+        .dev-modal-footer {
+            border-top: 1px solid var(--border);
+            padding: 1rem 1.5rem;
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.6rem;
+        }
+        .dev-modal-label {
+            display: block;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin-bottom: 0.4rem;
+        }
+        .dev-modal-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            color: #e6edf3;
+            border-radius: 8px;
+            padding: 0.65rem 0.85rem;
+            font-size: 0.95rem;
+            transition: border-color 0.15s, background 0.15s;
+        }
+        .dev-modal-input:focus {
+            outline: none;
+            border-color: var(--gold);
+            background: rgba(201, 168, 76, 0.06);
+        }
+        .dev-modal-input:disabled { opacity: 0.55; cursor: not-allowed; }
+        .dev-modal-feedback {
+            min-height: 1.4rem;
+            margin-top: 0.85rem;
+            font-size: 0.88rem;
+            text-align: left;
+        }
+        .dev-modal-feedback.is-error { color: #ff8b95; }
+        .dev-modal-feedback.is-ok    { color: #6ee7b7; }
+        .dev-modal-feedback.is-info  { color: var(--text-muted); }
+        .dev-modal-feedback i { margin-right: 0.35rem; }
+        .btn-dev-cancel {
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.55rem 1.1rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+        }
+        .btn-dev-cancel:hover { color: #e6edf3; border-color: #4a525d; }
+        .btn-dev-submit {
+            background: var(--gold);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 8px;
+            padding: 0.55rem 1.4rem;
+            font-size: 0.9rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.45rem;
+        }
+        .btn-dev-submit:hover { background: #e0bc55; }
+        .btn-dev-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-dev-submit .spin { animation: maintenanceSpin 0.9s linear infinite; display: inline-block; }
+
         footer {
             background: var(--bg-card);
             border-top: 1px solid var(--border);
@@ -242,11 +351,55 @@
                     <i class="bi bi-arrow-clockwise" id="retryBtnIcon"></i>
                     <span id="retryBtnLabel">Újrapróbálkozás</span>
                 </button>
+                <button type="button" class="btn-dev" onclick="openDevLoginModal()">
+                    <i class="bi bi-code-slash"></i>
+                    Fejlesztő vagyok
+                </button>
             </div>
 
             <div id="retryFeedback" class="retry-feedback" aria-live="polite"></div>
         </div>
     </main>
+
+    <!-- Dev login modal — admin user/jelszo a karbantartas megkerulesehez (csak adminoknak). -->
+    <div class="modal fade" id="devLoginModal" tabindex="-1" aria-labelledby="devLoginModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content dev-modal-content">
+                <div class="dev-modal-header">
+                    <h2 class="dev-modal-title" id="devLoginModalTitle">
+                        <i class="bi bi-shield-lock-fill"></i>
+                        Admin bejelentkezés
+                    </h2>
+                </div>
+                <form id="devLoginForm" autocomplete="off" novalidate>
+                    <div class="dev-modal-body">
+                        <p style="color: var(--text-muted); font-size: 0.88rem; line-height: 1.55; margin-bottom: 1.25rem;">
+                            Karbantartás alatt csak admin szerepkörű fiók léphet be. Sikeres
+                            bejelentkezés után az admin panelra kerülsz, ahonnan a karbantartást ki tudod kapcsolni.
+                        </p>
+                        <div style="margin-bottom: 1rem;">
+                            <label for="devLoginUser" class="dev-modal-label">Felhasználónév vagy email</label>
+                            <input type="text" id="devLoginUser" class="dev-modal-input"
+                                placeholder="admin" autocomplete="username" required>
+                        </div>
+                        <div>
+                            <label for="devLoginPass" class="dev-modal-label">Jelszó</label>
+                            <input type="password" id="devLoginPass" class="dev-modal-input"
+                                placeholder="••••••••" autocomplete="current-password" required>
+                        </div>
+                        <div id="devLoginFeedback" class="dev-modal-feedback" aria-live="polite"></div>
+                    </div>
+                    <div class="dev-modal-footer">
+                        <button type="button" class="btn-dev-cancel" data-bs-dismiss="modal">Mégse</button>
+                        <button type="submit" class="btn-dev-submit" id="devLoginSubmit">
+                            <i class="bi bi-box-arrow-in-right" id="devLoginSubmitIcon"></i>
+                            <span id="devLoginSubmitLabel">Belépés</span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 
     <footer>
         <span class="brand">MATTMESTER</span> &middot; Modern sakkélmény &middot;
@@ -372,6 +525,130 @@
         // Auto-retry 30 mp-enkent — a felhasznalonak nem kell manualisan kattintania.
         // Csendes (no userTriggered flag) — csak akkor mutat valamit, ha sikerul.
         setInterval(() => retryConnection(false), 30 * 1000);
+
+        // ─── Dev login flow ────────────────────────────────────────────────
+        // Admin user + jelszo ele a karbantartasi falat. A `/api/login` mindig
+        // elerheto karbantartas alatt is (lasd maintenanceGuard ALWAYS_ALLOWED_PREFIXES).
+        // Ha a belepo user role !== 'admin', azonnal kijelentkeztetjuk hogy ne
+        // maradjon "useless" non-admin session, es hibaüzenetet mutatunk.
+
+        let devLoginModalInstance = null;
+        let devLoginInFlight = false;
+
+        function getDevLoginModal() {
+            if (devLoginModalInstance) return devLoginModalInstance;
+            const el = document.getElementById('devLoginModal');
+            if (el && window.bootstrap?.Modal) {
+                devLoginModalInstance = new window.bootstrap.Modal(el, { backdrop: 'static', keyboard: true });
+            }
+            return devLoginModalInstance;
+        }
+
+        function openDevLoginModal() {
+            const modal = getDevLoginModal();
+            if (!modal) return;
+            // Reset form state minden nyitaskor — ne maradjon ott elozo beirt jelszo / hibauzenet.
+            const form = document.getElementById('devLoginForm');
+            const feedback = document.getElementById('devLoginFeedback');
+            if (form) form.reset();
+            if (feedback) { feedback.className = 'dev-modal-feedback'; feedback.innerHTML = ''; }
+            setDevLoginSubmitting(false);
+            modal.show();
+            setTimeout(() => document.getElementById('devLoginUser')?.focus(), 250);
+        }
+
+        function setDevLoginSubmitting(busy) {
+            devLoginInFlight = Boolean(busy);
+            const btn = document.getElementById('devLoginSubmit');
+            const icon = document.getElementById('devLoginSubmitIcon');
+            const label = document.getElementById('devLoginSubmitLabel');
+            const userInput = document.getElementById('devLoginUser');
+            const passInput = document.getElementById('devLoginPass');
+            if (btn) btn.disabled = busy;
+            if (userInput) userInput.disabled = busy;
+            if (passInput) passInput.disabled = busy;
+            if (icon) {
+                icon.classList.toggle('spin', busy);
+                icon.className = busy
+                    ? 'bi bi-arrow-clockwise spin'
+                    : 'bi bi-box-arrow-in-right';
+                icon.id = busy ? 'devLoginSubmitIcon' : 'devLoginSubmitIcon';
+            }
+            if (label) label.textContent = busy ? 'Ellenőrzés…' : 'Belépés';
+        }
+
+        function setDevLoginFeedback(kind, html) {
+            const feedback = document.getElementById('devLoginFeedback');
+            if (!feedback) return;
+            feedback.className = `dev-modal-feedback is-${kind}`;
+            feedback.innerHTML = html;
+        }
+
+        async function submitDevLogin(event) {
+            if (event) event.preventDefault();
+            if (devLoginInFlight) return;
+
+            const usernameOrMail = String(document.getElementById('devLoginUser')?.value || '').trim();
+            const password = String(document.getElementById('devLoginPass')?.value || '');
+            if (!usernameOrMail || !password) {
+                setDevLoginFeedback('error', '<i class="bi bi-exclamation-circle"></i>Adj meg felhasználónevet/emailt és jelszót.');
+                return;
+            }
+
+            setDevLoginSubmitting(true);
+            setDevLoginFeedback('info', '<i class="bi bi-arrow-repeat"></i>Bejelentkezés…');
+
+            let response;
+            let body;
+            try {
+                response = await fetch('/api/login', {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+                    body: JSON.stringify({ usernameOrMail, password, remember: false })
+                });
+                body = await response.json().catch(() => ({}));
+            } catch (networkErr) {
+                setDevLoginSubmitting(false);
+                setDevLoginFeedback('error', '<i class="bi bi-wifi-off"></i>Hálózati hiba — ellenőrizd a kapcsolatot.');
+                return;
+            }
+
+            if (!response.ok || !body?.success) {
+                setDevLoginSubmitting(false);
+                const msg = body?.message ? String(body.message) : 'Hibás bejelentkezés.';
+                setDevLoginFeedback('error', `<i class="bi bi-x-octagon-fill"></i>${escapeForFeedback(msg)}`);
+                return;
+            }
+
+            const role = body?.user?.role || '';
+            if (role !== 'admin') {
+                // Sikeres login, de NEM admin → azonnal kijelentkeztetjuk hogy ne maradjon
+                // egy useless non-admin session a karbantartasi lap alatt.
+                try {
+                    await fetch('/api/logout', { method: 'GET', credentials: 'same-origin', cache: 'no-store' });
+                } catch (_) { /* csendben — a UI feedback fontosabb */ }
+                setDevLoginSubmitting(false);
+                setDevLoginFeedback('error', '<i class="bi bi-shield-fill-x"></i>Ez a fiók nem admin — karbantartás alatt csak admin léphet be.');
+                return;
+            }
+
+            // Sikeres admin login → atiranyitjuk az admin panelra.
+            setDevLoginFeedback('ok', '<i class="bi bi-check-circle-fill"></i>Sikeres belépés — átirányítás az admin panelra…');
+            setTimeout(() => window.location.replace('/html/adminPanel.html'), 600);
+        }
+
+        function escapeForFeedback(s) {
+            const div = document.createElement('div');
+            div.textContent = String(s);
+            return div.innerHTML;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const form = document.getElementById('devLoginForm');
+            if (form) form.addEventListener('submit', submitDevLogin);
+        });
     </script>
 </body>
 

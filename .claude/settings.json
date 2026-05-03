@@ -41,7 +41,25 @@
       "Bash(grep -nE \"express\\\\\\\\.static|static\\\\\\\\\\(\" backend/server.js)",
       "Bash(grep -rn \"javascript/adminPanel\\\\\\\\.js\" frontend/ backend/ --include=\"*.js\" --include=\"*.html\")",
       "Bash(curl -s -o /tmp/_adminPanel.html -w \"HTTP %{http_code}  bytes=%{size_download}\\\\n\" http://localhost:3000/html/adminPanel.html)",
-      "Bash(curl -sI http://localhost:3000/html/adminPanel.html)"
+      "Bash(curl -sI http://localhost:3000/html/adminPanel.html)",
+      "Bash(mysql -h 127.0.0.1 -u root mattmester -e \"SELECT id, maintenance_mode, registration_enabled, updated_at FROM site_settings;\")",
+      "Read(//c/xampp/mysql/bin/**)",
+      "Read(//d/xampp/mysql/bin/**)",
+      "Bash(/d/xampp/mysql/bin/mysql.exe -h 127.0.0.1 -u root mattmester -e \"SELECT id, maintenance_mode, registration_enabled, updated_at FROM site_settings;\")",
+      "Bash(/d/xampp/mysql/bin/mysql.exe -h 127.0.0.1 -u root mattmester -e \"UPDATE site_settings SET maintenance_mode = 0 WHERE id = 1; SELECT id, maintenance_mode, updated_at FROM site_settings;\")",
+      "Bash(curl -s -o /dev/null -w \"GET / -> HTTP %{http_code}  redirect: %{redirect_url}\\\\n\" -H \"Accept: text/html\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"GET / -> HTTP %{http_code}  redirect=%{redirect_url}\\\\n\" -H \"Accept: text/html\" http://localhost:3000/)",
+      "Bash(grep -rnE \"app\\\\\\\\.\\(post|use\\).*['\\\\\"]/api/login['\\\\\"]|router\\\\\\\\.\\(post|use\\).*['\\\\\"]/api/login['\\\\\"]|router\\\\\\\\.\\(post|use\\).*['\\\\\"]/login['\\\\\"]\" backend/ --include=\"*.js\")",
+      "Bash(/d/xampp/mysql/bin/mysql.exe -h 127.0.0.1 -u root mattmester -e \"SELECT id, username, role, is_banned FROM users WHERE role = 'admin' LIMIT 5;\")",
+      "Bash(curl -s -o /tmp/_maint.html -w \"HTTP %{http_code}  bytes=%{size_download}\\\\n\" http://localhost:3000/html/maintenance.html)",
+      "Bash(curl -s -X POST http://localhost:3000/api/login -H \"Content-Type: application/json\" -d '{\"usernameOrMail\":\"admin\",\"password\":\"definitely_wrong_password\",\"remember\":false}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/login -H \"Content-Type: application/json\" -d '{\"usernameOrMail\":\"nonexistent_user_xxx\",\"password\":\"whatever\",\"remember\":false}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/login -H \"Content-Type: application/json\" -d '{}' -w \"\\\\nHTTP %{http_code}\\\\n\")",
+      "Bash(/d/xampp/mysql/bin/mysql.exe -h 127.0.0.1 -u root mattmester -e \"UPDATE site_settings SET maintenance_mode = 1 WHERE id = 1;\")",
+      "Bash(curl -s -o /dev/null -w \"now: HTTP %{http_code}\\\\n\" -H \"Accept: text/html\" http://localhost:3000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -H \"Accept: text/html\" http://localhost:3000/)",
+      "Bash(grep -nE \"maintenanceGuard|maintenanceHtmlGuard|express\\\\\\\\.static|app\\\\\\\\.get\\\\\\\\\\(['\\\\\"]\\\\\\\\/['\\\\\"]\" backend/server.js)",
+      "Bash(/d/xampp/mysql/bin/mysql.exe -h 127.0.0.1 -u root mattmester -e \"UPDATE site_settings SET maintenance_mode = 0 WHERE id = 1; SELECT id, maintenance_mode FROM site_settings;\")"
     ]
   }
 }
