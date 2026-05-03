@@ -8,7 +8,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens } = require('../chess/state.js');
+const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser } = require('../chess/state.js');
 const { jatekUjraIndit, legalLepesekKliens, lepesKoordinataval } = require('../chess/engine.js');
 const { idoLeall } = require('../chess/timer.js');
 const chessSql = require('../chess/chess_sql_functions.js');
@@ -162,6 +162,19 @@ router.post('/new-bot', async (req, res) => {
         } else if (modeKey !== undefined && modeKey !== null && (typeof modeKey !== 'string' || !isValidMode(modeKey))) {
             statusCode = 400;
             responseBody = { error: 'Érvénytelen játékmód.' };
+        } else if (req.session?.userId && hasAnyActiveGameForUser(req.session.userId).hasActive) {
+            // Issue #63 — multi-tab guard: ugyanaz a fiok max 1 aktiv meccsel.
+            // Ha az egyik tab-ban PvP-t jatszik, masik tab-ban ne tudjon bot-meccset
+            // inditani (es forditva sem). A pvp.js mar tartalmazza a guard-ot a queue +
+            // invite flow-ban, itt a bot-ag fele kotjuk be ugyanazt.
+            statusCode = 409;
+            const active = hasAnyActiveGameForUser(req.session.userId);
+            responseBody = {
+                error: 'Mar van egy aktiv jatszmad — fejezd be elobb, vagy add fel.',
+                code: 'GAME_ALREADY_ACTIVE',
+                activeGameId: active.gameId,
+                activeMode: active.mode
+            };
         } else {
             const { gameId, jatek } = jatekLetrehoz({
                 mode: modeKey || DEFAULT_MODE,

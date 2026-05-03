@@ -99,6 +99,29 @@ function jatekKeres(gameId) {
 }
 
 /**
+ * Issue #63 — multi-tab guard: van-e a userId-nak BARMILYEN aktiv meccse
+ * (bot vagy PvP)? `aktiv` = vege === false.
+ * Iteralja az osszes betoltott meccset; az n itt kicsi (egyszerre max par tucat
+ * meccs futhat), igy nem szukseg per-user Map.
+ *
+ * Visszater: { hasActive, gameId, mode } vagy { hasActive: false }.
+ */
+function hasAnyActiveGameForUser(userId) {
+    let result = { hasActive: false, gameId: null, mode: null };
+    if (!userId) return result;
+    for (const [gameId, jatek] of jatekok.entries()) {
+        if (jatek.vege) continue;
+        const whiteId = jatek.jatekosok?.white?.userId || null;
+        const blackId = jatek.jatekosok?.black?.userId || null;
+        if (whiteId === userId || blackId === userId) {
+            result = { hasActive: true, gameId, mode: jatek.mode };
+            break;
+        }
+    }
+    return result;
+}
+
+/**
  * Játék törlése (befejezés vagy disconnect után).
  */
 function jatekTorol(gameId) {
@@ -250,5 +273,6 @@ module.exports = {
     jatekTorol,
     mezoKeres,
     jatekAllapotKliens,
-    abilitiesAlapallapot
+    abilitiesAlapallapot,
+    hasAnyActiveGameForUser
 };

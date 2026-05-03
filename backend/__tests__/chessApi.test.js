@@ -66,6 +66,17 @@ beforeEach(() => {
     jest.clearAllMocks();
 });
 
+// Issue #63 multi-tab guard: az aktiv meccsek a state.js belso jatekok Map-jeben
+// halmozodnak fel. Az afterEach a 0..10000 ID-tartomanyban torol minden meccset,
+// igy a kovetkezo teszt tiszta state-rol indul es a guard nem 409-eli a happy
+// path-okat.
+const { jatekTorol, jatekKeres } = require('../chess/state.js');
+afterEach(() => {
+    for (let id = 0; id < 10000; id++) {
+        if (jatekKeres(id)) jatekTorol(id);
+    }
+});
+
 describe('GET /api/chess/modes', () => {
     test('200 + 5 mod minden hozzajuk tartozo metadattal', async () => {
         const app = buildApp();

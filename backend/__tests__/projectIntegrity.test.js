@@ -1028,6 +1028,7 @@ describe('Admin route fajlok auth-guard meglete (kod-szintu)', () => {
         'profileImageRoutes.js',
         'readOnlyRoutes.js',
         'securityLoginsRoutes.js',
+        'servicesRoutes.js',
         'userDeleteRoutes.js',
         'userEditRoutes.js',
         'userReportsRoutes.js'

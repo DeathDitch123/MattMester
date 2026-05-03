@@ -190,6 +190,14 @@ const state = {
         history: [],
         running: null,    // { runId, startedAt, elapsedMs } amíg fut
         loading: false, error: null
+    },
+
+    // Issue #41 — Szolgaltatasok dashboard state
+    servicesAdmin: {
+        loading: true,
+        data: null,
+        error: null,
+        autoRefreshTimerId: null
     }
 };
 

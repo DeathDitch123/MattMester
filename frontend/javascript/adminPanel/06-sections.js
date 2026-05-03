@@ -1531,6 +1531,124 @@ const SECTIONS = {
         `;
     },
 
+    /* ---------- Szolgaltatasok (Issue #41 — service iranyitopult) ---------- */
+    services: () => {
+        const sv = state.servicesAdmin || { loading: true, data: null, error: null };
+        if (sv.loading) {
+            return `${h.header({ icon: 'bi-hdd-stack', title: 'Szolgáltatások', subtitle: 'Háttérszolgáltatások állapota' })}
+                <div class="text-secondary"><i class="bi bi-hourglass-split me-2"></i>Betöltés...</div>`;
+        }
+        if (sv.error) {
+            return `${h.header({ icon: 'bi-hdd-stack', title: 'Szolgáltatások', subtitle: 'Háttérszolgáltatások állapota' })}
+                <div class="alert alert-danger">${escapeHtml(sv.error)}</div>`;
+        }
+        const d = sv.data || {};
+        const proc = d.process || {};
+        const db = d.database || {};
+        const m = d.maintenance || {};
+        const tr = d.testRunner || {};
+        const sched = d.schedulers || {};
+        const fmtUptime = (sec) => {
+            const s = Number(sec) || 0;
+            const h = Math.floor(s / 3600);
+            const min = Math.floor((s % 3600) / 60);
+            const ss = s % 60;
+            return h > 0 ? `${h}h ${min}m` : (min > 0 ? `${min}m ${ss}s` : `${ss}s`);
+        };
+        const dbBadge = db.connected
+            ? `<span class="badge bg-success">CSATLAKOZVA</span>`
+            : `<span class="badge bg-danger">${escapeHtml(db.status || 'unknown')}</span>`;
+        const maintBadge = m.maintenanceMode
+            ? `<span class="badge bg-warning text-dark">KARBANTARTÁS BE</span>`
+            : `<span class="badge bg-success">Üzemszerű</span>`;
+        const trBadge = tr.running
+            ? `<span class="badge bg-info">FUTÁS ALATT</span>`
+            : (tr.productionDisabled ? `<span class="badge bg-secondary">PROD-letiltva</span>` : `<span class="badge bg-success">Készen áll</span>`);
+
+        return `
+            ${h.header({
+                icon: 'bi-hdd-stack', title: 'Szolgáltatások',
+                subtitle: `Frissítve: ${escapeHtml(d.occurredAt || '—')}`,
+                actions: [{ label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadServicesSnapshot()' }]
+            })}
+            <div class="row g-3 mb-4">
+                <div class="col-md-6 col-lg-4">${h.card({
+                    title: 'Adatbázis', icon: 'bi-database',
+                    headerExtra: dbBadge,
+                    body: `<dl class="row mb-0 small">
+                        <dt class="col-5 text-secondary">Pool státusz</dt>
+                        <dd class="col-7 font-monospace">${escapeHtml(db.status || '—')}</dd>
+                    </dl>`
+                })}</div>
+                <div class="col-md-6 col-lg-4">${h.card({
+                    title: 'Karbantartás', icon: 'bi-cone-striped',
+                    headerExtra: maintBadge,
+                    body: `<dl class="row mb-0 small">
+                        <dt class="col-5 text-secondary">Grace perc</dt>
+                        <dd class="col-7 font-monospace">${m.scheduler?.graceMinutes ?? '—'}</dd>
+                        <dt class="col-5 text-secondary">Aktív timer-ek</dt>
+                        <dd class="col-7 font-monospace">${m.scheduler?.pendingTimers ?? 0}</dd>
+                    </dl>`
+                })}</div>
+                <div class="col-md-6 col-lg-4">${h.card({
+                    title: 'Teszt-futtató', icon: 'bi-clipboard2-check',
+                    headerExtra: trBadge,
+                    body: `<dl class="row mb-0 small">
+                        <dt class="col-5 text-secondary">Aktív futás</dt>
+                        <dd class="col-7 font-monospace">${tr.meta ? '#' + tr.meta.id : '—'}</dd>
+                        <dt class="col-5 text-secondary">Eltelt idő</dt>
+                        <dd class="col-7 font-monospace">${tr.meta?.durationMs ? Math.round(tr.meta.durationMs / 1000) + 's' : '—'}</dd>
+                    </dl>`
+                })}</div>
+                <div class="col-md-6 col-lg-4">${h.card({
+                    title: 'Process', icon: 'bi-cpu',
+                    body: `<dl class="row mb-0 small">
+                        <dt class="col-5 text-secondary">PID</dt>
+                        <dd class="col-7 font-monospace">${proc.pid ?? '—'}</dd>
+                        <dt class="col-5 text-secondary">Node</dt>
+                        <dd class="col-7 font-monospace">${escapeHtml(proc.nodeVersion || '—')}</dd>
+                        <dt class="col-5 text-secondary">Platform</dt>
+                        <dd class="col-7 font-monospace">${escapeHtml(proc.platform || '—')}</dd>
+                        <dt class="col-5 text-secondary">Uptime</dt>
+                        <dd class="col-7 font-monospace">${fmtUptime(proc.uptimeSec)}</dd>
+                    </dl>`
+                })}</div>
+                <div class="col-md-6 col-lg-4">${h.card({
+                    title: 'Memória (MB)', icon: 'bi-memory',
+                    body: `<dl class="row mb-0 small">
+                        <dt class="col-5 text-secondary">RSS</dt>
+                        <dd class="col-7 font-monospace">${proc.memoryRssMb ?? '—'}</dd>
+                        <dt class="col-5 text-secondary">Heap used</dt>
+                        <dd class="col-7 font-monospace">${proc.memoryHeapUsedMb ?? '—'}</dd>
+                        <dt class="col-5 text-secondary">Heap total</dt>
+                        <dd class="col-7 font-monospace">${proc.memoryHeapTotalMb ?? '—'}</dd>
+                        <dt class="col-5 text-secondary">External</dt>
+                        <dd class="col-7 font-monospace">${proc.memoryExternalMb ?? '—'}</dd>
+                    </dl>`
+                })}</div>
+                <div class="col-md-6 col-lg-4">${h.card({
+                    title: 'Sakk', icon: 'bi-knight-fill',
+                    body: `<dl class="row mb-0 small">
+                        <dt class="col-5 text-secondary">Aktív meccsek</dt>
+                        <dd class="col-7 font-monospace">${d.activeChessGames ?? 0}</dd>
+                    </dl>`
+                })}</div>
+            </div>
+
+            ${h.card({
+                title: 'Schedulerek', icon: 'bi-clock-history',
+                body: `<table class="table table-dark table-sm mb-0">
+                    <thead><tr><th>Név</th><th>Intervallum</th><th>Funkció</th></tr></thead>
+                    <tbody>
+                        <tr><td><strong>Audit retention</strong></td><td>${escapeHtml(sched.retention?.label || '—')}</td><td class="text-secondary">18 hónapnál régebbi audit + alert + lejárt token törlése</td></tr>
+                        <tr><td><strong>Soft-delete purge</strong></td><td>${escapeHtml(sched.softDeletePurge?.label || '—')}</td><td class="text-secondary">Lejárt soft-delete user-ek hard-delete-elése</td></tr>
+                        <tr><td><strong>Stats tick</strong></td><td>${escapeHtml(sched.statsTick?.label || '—')}</td><td class="text-secondary">Admin dashboard live stats broadcast</td></tr>
+                    </tbody>
+                </table>`
+            })}
+        `;
+    },
+
     /* ---------- Beállítások ---------- */
     settings: () => {
         const s = state.siteSettings;

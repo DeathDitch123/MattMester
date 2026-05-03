@@ -81,26 +81,24 @@ function showSection(sectionId, event, options = {}) {
         bindAdminImageEditorEvents();
     }
     if (sectionId === 'userBan' && !silent) {
-        if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
-            // A userBan view a state.users.list-bol szuri ki az aktiv tiltasokat — ha
-            // ures, betoltjuk, MAJD ujrarendereljuk hogy az aktiv tiltasok megjelenjenek.
-            loadAdminUsersList({ silent: true }).then(() => {
-                if (state.currentSectionId === 'userBan') {
-                    showSection('userBan', null, { silent: true });
-                }
-            });
-        }
+        // Issue #58: minden navigaciokor frissitunk — kulonben egy masik tab/session-ben
+        // tortent ban nem jelenik meg az "Aktiv tiltasok" listaban a stale state.users.list
+        // miatt. A `silent: true` flag csak a loading-spinnert nyomja el, az API hivas
+        // megtortenik.
+        loadAdminUsersList({ silent: true }).then(() => {
+            if (state.currentSectionId === 'userBan') {
+                showSection('userBan', null, { silent: true });
+            }
+        });
     }
     if (sectionId === 'userDelete' && !silent) {
-        // A userDelete view jobboldali "Torlesre varolista" panelje a state.users.list-bol
-        // szuri ki a soft-deleted user-eket. Ha ures, betoltjuk + ujrarenderelunk.
-        if (!Array.isArray(state.users.list) || state.users.list.length === 0) {
-            loadAdminUsersList({ silent: true }).then(() => {
-                if (state.currentSectionId === 'userDelete') {
-                    showSection('userDelete', null, { silent: true });
-                }
-            });
-        }
+        // Issue #58: ugyanaz az indok mint a userBan-nal — friss soft-delete-eket
+        // is meg kell jelenitenunk a "Torlesre varolista"-ban.
+        loadAdminUsersList({ silent: true }).then(() => {
+            if (state.currentSectionId === 'userDelete') {
+                showSection('userDelete', null, { silent: true });
+            }
+        });
     }
     if (sectionId === 'alerts' && !silent) {
         // Csak NEM-silent renderelesnel toltsuk ujra az alerteket (initial nav, manual frissites).
@@ -112,6 +110,23 @@ function showSection(sectionId, event, options = {}) {
         // Bejelentkezesek: auto-load nem-silent navigation-on. (Silent re-render = socket
         // event vagy fetch-after callback, nem trigger-elhet ujabb fetch-et.)
         loadLogins();
+    }
+    if (sectionId === 'services' && !silent) {
+        // Issue #41 — Szolgaltatasok dashboard. Initial load + 5mp auto-refresh.
+        if (typeof loadServicesSnapshot === 'function') loadServicesSnapshot();
+        if (state.servicesAdmin.autoRefreshTimerId) clearInterval(state.servicesAdmin.autoRefreshTimerId);
+        state.servicesAdmin.autoRefreshTimerId = setInterval(() => {
+            if (state.currentSectionId === 'services') {
+                if (typeof loadServicesSnapshot === 'function') loadServicesSnapshot({ silent: true });
+            } else {
+                clearInterval(state.servicesAdmin.autoRefreshTimerId);
+                state.servicesAdmin.autoRefreshTimerId = null;
+            }
+        }, 5000);
+    } else if (state.servicesAdmin?.autoRefreshTimerId) {
+        // Mas oldalra navigaltunk — leallitjuk a polling-t.
+        clearInterval(state.servicesAdmin.autoRefreshTimerId);
+        state.servicesAdmin.autoRefreshTimerId = null;
     }
 
     if (window.innerWidth < 992) {

@@ -242,6 +242,13 @@ if (typeof endpoints.initChatRateLimiterCleanup === 'function') {
     console.log('[Server] Chat Rate Limiter cleanup initialized');
 }
 
+// Issue #45 — CSRF védelem: Origin/Referer header check minden state-changing
+// /api/* request-en. A SameSite cookie melle ez a 2. védelmi reteg. Itt mountoljuk
+// (express.json() utan, az /api routes ELOTT) — igy az osszes API endpoint
+// vedelem alatt van, de a static-fajl-szerver es a HTML-laporeglesek (GET) nem.
+const { csrfGuard } = require('./api/middleware/csrfGuard.js');
+app.use('/api', csrfGuard);
+
 app.use('/api', endpoints);
 const chessEndpoints = require('./api/chess_api.js');
 app.use('/api/chess', chessEndpoints);

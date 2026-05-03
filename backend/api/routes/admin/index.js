@@ -36,6 +36,7 @@ const userDeleteRoutes = require('./userDeleteRoutes.js');
 const alertsRoutes = require('./alertsRoutes.js');
 const ipBlockRoutes = require('./ipBlockRoutes.js');
 const securityLoginsRoutes = require('./securityLoginsRoutes.js');
+const servicesRoutes = require('./servicesRoutes.js');
 
 const router = express.Router();
 
@@ -90,5 +91,6 @@ router.use('/', userDeleteRoutes);
 router.use('/', alertsRoutes);
 router.use('/', ipBlockRoutes);
 router.use('/', securityLoginsRoutes);
+router.use('/', servicesRoutes);
 
 module.exports = router;

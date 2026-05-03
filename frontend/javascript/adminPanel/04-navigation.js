@@ -43,6 +43,7 @@ const NAV_TREE = [
     { id: 'superAdmin', label: 'Super admin', icon: 'bi-stars', leaf: true },
     { id: 'friends', label: 'Közösségi kapcsolatok', icon: 'bi-people', leaf: true },
     { id: 'tests', label: 'Tesztek', icon: 'bi-clipboard2-check', leaf: true },
+    { id: 'services', label: 'Szolgáltatások', icon: 'bi-hdd-stack', leaf: true },
     { id: 'settings', label: 'Beállítások', icon: 'bi-gear-fill', leaf: true }
 ];
 

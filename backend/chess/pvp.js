@@ -9,7 +9,7 @@
 //   - ELO frissítés mindkét játékosra
 // ============================================================
 
-const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens } = require('./state.js');
+const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser } = require('./state.js');
 const { jatekUjraIndit, lepesKoordinataval, legalLepesekKliens } = require('./engine.js');
 const { idoLeall } = require('./timer.js');
 const { eloMeccsEredmeny } = require('./elo.js');
@@ -316,6 +316,11 @@ function registerPvpHandlers(socket, io) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
         }
 
+        // Issue #63 — multi-tab guard: bot-meccs is blokkolja a PvP invite-ot.
+        if (hasAnyActiveGameForUser(userId).hasActive) {
+            return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
+        }
+
         if (hasLiveActiveGame(targetUserId)) {
             return socket.emit('chess:error', { uzenet: 'Az ellenfél már játékban van.' });
         }
@@ -543,6 +548,11 @@ function registerPvpHandlers(socket, io) {
 
         if (hasLiveActiveGame(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
+        }
+
+        // Issue #63 — multi-tab guard: queue-csatlakozas elott a bot-meccs is blokkol.
+        if (hasAnyActiveGameForUser(userId).hasActive) {
+            return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
         }
 
         // Már bármelyik queue-ban van?
