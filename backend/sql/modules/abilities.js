@@ -9,13 +9,13 @@ async function listAbilities() {
     const pool = getPool();
     const [rows] = await pool.execute(
         `SELECT a.id, a.name, a.description, a.cooldown_turns,
-                COALESCE(usage.count, 0) AS usage_count
+                COALESCE(u.cnt, 0) AS usage_count
          FROM abilities a
          LEFT JOIN (
-             SELECT ability_id, COUNT(*) AS count
+             SELECT ability_id, COUNT(*) AS cnt
              FROM ability_log
              GROUP BY ability_id
-         ) usage ON usage.ability_id = a.id
+         ) u ON u.ability_id = a.id
          ORDER BY a.id ASC`
     );
     return rows.map((row) => ({

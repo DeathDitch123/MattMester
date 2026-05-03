@@ -1,0 +1,50 @@
+/* ---------- 2) Reset & alap ---------- */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-dark);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    position: relative;
+    margin: 0;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: 'Playfair Display', serif; }
+
+body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+        linear-gradient(45deg,  rgba(212, 175, 55, 0.02) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(212, 175, 55, 0.02) 25%, transparent 25%),
+        linear-gradient(45deg,  transparent 75%, rgba(212, 175, 55, 0.02) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(212, 175, 55, 0.02) 75%);
+    background-size: 40px 40px;
+    background-position: 0 0, 0 20px, 20px -20px, -20px 0;
+    pointer-events: none;
+    z-index: 0;
+}
+
+::selection { background: rgba(212, 175, 55, 0.3); color: var(--text-primary); }
+
+::-webkit-scrollbar          { width: 8px; height: 8px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: rgba(51, 65, 85, 0.6); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-gold); }
+
+/* ---------- Mobil overlay ---------- */
+.mobile-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 999;
+    backdrop-filter: blur(2px);
+    animation: fadeIn 0.2s ease;
+}
+.mobile-overlay.show { display: block; }
+

@@ -118,7 +118,7 @@ function buildApp(sessionUser) {
     });
 
     const playersRoutes = require('../api/routes/players.js');
-    const adminRoutes = require('../api/routes/admin.js');
+    const adminRoutes = require('../api/routes/admin');
     app.use('/api', playersRoutes);
     app.use('/api/admin', adminRoutes);
     return app;

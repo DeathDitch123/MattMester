@@ -13,6 +13,8 @@ import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt,
          huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres,
          lepesAnimacio } from './UI-megjelenites.js';
 import { abilitiesInit, abilitiesAllapotFrissit, abilitiesReset, isAbilityArmed } from './abilities.js';
+import { lepesHangLejatszas } from './audio.js';
+import { oldalSerult, oldalVazVisszaallit } from './domSkeleton.js';
 
 // Az aktuális játék ID — a szerver adja
 let gameId = null;
@@ -57,101 +59,10 @@ let pvpSocket = null;              // Socket.io kliens (globális window.io())
 let kliensIdoTimer = null;         // kliens-oldali óra countdown (csak megjelenítés)
 let varakozoLepesPromisek = [];    // chess:moves:response Promise-ek
 
-// Hang lejátszás deduplikálás + egyszeri AudioContext
-let utolsoHangLepesKulcs = null;
-let audioCtx = null;
-const HANG_FAJLOK = {
-    jatekosLep: '../sounds/Jatekos_lep.mp3',
-    ellenfelLep: '../sounds/Ellenfel_lep.mp3',
-    sakk: '../sounds/sakk.mp3',
-    matt: '../sounds/matt.mp3',
-    sanc: '../sounds/sanc.mp3'
-};
-const hangCache = {};
+// Hang lejátszás → audio.js modulba kiemelve. A lepesHangLejatszas() es a
+// teljes audio-kontextus + cache + dedup ott él, ide csak importáljuk.
 const DRAG_START_THRESHOLD_PX = 6;
 
-// Hardcoded HTML template — a chess.html .app belseje, board tartalma nélkül
-const OLDAL_VAZ = `
-        <header class="topbar">
-            <div class="player player-black">
-                <div class="captured-pieces" id="captured-by-black"></div>
-                <div class="name" id="name-black">Ellenfél</div>
-                <div class="clock" id="clock-black">10:00</div>
-            </div>
-        </header>
-
-        <main class="main">
-            <div class="board-wrap">
-                <div id="board" class="board" aria-label="Sakk tábla"></div>
-
-                <!-- TÁBLAKITAKARÁS overlay -->
-                <div id="board-hide-overlay" class="board-hide-overlay hidden">
-                    <span>Tábla eltakarva</span>
-                    <span id="board-hide-countdown">5</span>
-                </div>
-
-                <div id="promotion-modal" class="promotion-modal hidden">
-                    <div class="promotion-overlay"></div>
-                    <div class="promotion-choices">
-                        <div class="promotion-piece" data-type="queen"></div>
-                        <div class="promotion-piece" data-type="rook"></div>
-                        <div class="promotion-piece" data-type="bishop"></div>
-                        <div class="promotion-piece" data-type="knight"></div>
-                    </div>
-                </div>
-            </div>
-
-            <aside class="sidebar">
-                <div class="status-row">
-                    Aktív: <strong id="turn-name">fehér</strong>
-                </div>
-                <div id="status" class="status">játékon</div>
-
-                <!-- KÉPESSÉG BAR -->
-                <div id="ability-bar" class="ability-bar hidden">
-                    <div class="ability-points">
-                        <span class="ap-label">Pontok</span>
-                        <span class="ap-mine" id="ap-mine">0</span>
-                        <span class="ap-sep">vs</span>
-                        <span class="ap-opp" id="ap-opp">0</span>
-                    </div>
-                    <div id="ability-buttons" class="ability-buttons"></div>
-                    <div id="ability-hint" class="ability-hint hidden"></div>
-                </div>
-
-                <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
-                <div id="opponent-disconnected" class="opponent-dc hidden">
-                    Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp
-                </div>
-                <div id="elo-change" class="elo-change hidden"></div>
-                <button id="drawOfferBtn" class="draw-btn hidden">Döntetlen ajánlat</button>
-                <div id="draw-offer-received" class="draw-offer hidden">
-                    <p>Ellenfeled döntetlent ajánl</p>
-                    <div class="draw-offer-buttons">
-                        <button id="draw-accept" class="pvp-invite-btn accept">Elfogad</button>
-                        <button id="draw-decline" class="pvp-invite-btn decline">Elutasít</button>
-                    </div>
-                </div>
-                <button id="feladBtn" class="felad-btn">Feladás</button>
-                <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
-                <div class="legend">
-                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
-                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
-                    <div><span class="legend-sq check"></span> Király sakkban</div>
-                    <div><span class="legend-sq enpassant"></span> En passant</div>
-                    <div><span class="legend-sq castle"></span> Sáncolás</div>
-                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
-                </div>
-            </aside>
-        </main>
-
-        <footer class="bottombar">
-            <div class="player player-white">
-                <div class="captured-pieces" id="captured-by-white"></div>
-                <div class="name" id="name-white">Te</div>
-                <div class="clock" id="clock-white">10:00</div>
-            </div>
-        </footer>`;
 
 // ────────────────────────────────────────────
 // API HÍVÁSOK
@@ -1121,93 +1032,6 @@ function botGondolkodasFrissit(allapotVagyBool) {
     else thinkingElem.classList.add('hidden');
 }
 
-function audioContextKeres() {
-    if (audioCtx) return audioCtx;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return null;
-    audioCtx = new Ctx();
-    return audioCtx;
-}
-
-function hangObjektumKeres(hangKulcs) {
-    if (hangCache[hangKulcs]) return hangCache[hangKulcs];
-    const fajl = HANG_FAJLOK[hangKulcs];
-    if (!fajl) return null;
-    const audio = new Audio(fajl);
-    audio.preload = 'auto';
-    hangCache[hangKulcs] = audio;
-    return audio;
-}
-
-function hangLejatszas(hangKulcs, fallbackFreq = 620, fallbackMs = 90, fallbackGain = 0.03) {
-    const hang = hangObjektumKeres(hangKulcs);
-    if (!hang) {
-        pittyen(fallbackFreq, fallbackMs, fallbackGain);
-        return;
-    }
-
-    hang.currentTime = 0;
-    const playPromise = hang.play();
-    if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {
-            pittyen(fallbackFreq, fallbackMs, fallbackGain);
-        });
-    }
-}
-
-function pittyen(freq, durationMs, gain = 0.03) {
-    const ctx = audioContextKeres();
-    if (!ctx) return;
-
-    if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-    }
-
-    const osc = ctx.createOscillator();
-    const amp = ctx.createGain();
-    const start = ctx.currentTime;
-    const end = start + (durationMs / 1000);
-
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(freq, start);
-
-    amp.gain.setValueAtTime(0, start);
-    amp.gain.linearRampToValueAtTime(gain, start + 0.01);
-    amp.gain.exponentialRampToValueAtTime(0.0001, end);
-
-    osc.connect(amp);
-    amp.connect(ctx.destination);
-    osc.start(start);
-    osc.stop(end);
-}
-
-function lepesHangLejatszas(allapot) {
-    if (!allapot || !allapot.utolsoLepes) return;
-
-    const l = allapot.utolsoLepes;
-    const kulcs = `${allapot.lepesszam}:${l.from.x},${l.from.y}->${l.to.x},${l.to.y}`;
-    if (kulcs === utolsoHangLepesKulcs) return;
-    utolsoHangLepesKulcs = kulcs;
-
-    if (allapot.vege) {
-        hangLejatszas('matt', 350, 180, 0.04);
-        return;
-    }
-
-    if (allapot.sakkPoz) {
-        hangLejatszas('sakk', 900, 90, 0.035);
-        return;
-    }
-
-    if (l.special === 'castle-ks' || l.special === 'castle-qs') {
-        hangLejatszas('sanc', 560, 120, 0.03);
-        return;
-    }
-
-    const lepoSzin = allapot.koronLevo === 'white' ? 'black' : 'white';
-    const botLepett = !!(allapot.botAktiv && allapot.botSzin === lepoSzin);
-    hangLejatszas(botLepett ? 'ellenfelLep' : 'jatekosLep', 620, 90, 0.03);
-}
 
 function allapotLepesKulcs(allapot) {
     if (!allapot || !allapot.utolsoLepes) return null;
@@ -1289,105 +1113,6 @@ function allapotFrissit(allapot, animald = false) {
     }
 }
 
-/**
- * Ellenőrzi hogy az oldal váza sérült-e (bármi hiányzik).
- */
-function oldalSerult(allapot) {
-    const kritikusElemek = [
-        ".app",
-        "header.topbar",
-        ".player-black",
-        ".player-black .name",
-        "#clock-black",
-        "main.main",
-        ".board-wrap",
-        "#board",
-        "#promotion-modal",
-        ".promotion-overlay",
-        ".promotion-choices",
-        '.promotion-piece[data-type="queen"]',
-        '.promotion-piece[data-type="rook"]',
-        '.promotion-piece[data-type="bishop"]',
-        '.promotion-piece[data-type="knight"]',
-        "aside.sidebar",
-        ".sidebar .status-row",
-        "#turn-name",
-        "#status",
-        "#bot-thinking",
-        "#feladBtn",
-        ".sidebar .legend",
-        "footer.bottombar",
-        ".player-white",
-        ".player-white .name",
-        "#clock-white"
-    ];
-    for (let i = 0; i < kritikusElemek.length; i++) {
-        if (!document.querySelector(kritikusElemek[i])) {
-            console.log("[INTEGRITÁS] Hiányzó elem:", kritikusElemek[i]);
-            return true;
-        }
-    }
-
-    // Szöveg tartalom ellenőrzés
-    const szovegEllenorzesek = [
-        { sel: ".player-black .name", min: 1 },
-        { sel: "#clock-black", min: 1 },
-        { sel: "#feladBtn", min: 1 },
-        { sel: "#turn-name", min: 1 },
-        { sel: "#status", min: 1 },
-        { sel: ".player-white .name", min: 1 },
-        { sel: "#clock-white", min: 1 },
-        { sel: ".sidebar .legend", min: 5 },
-        { sel: ".sidebar .status-row", min: 3 },
-    ];
-    for (let i = 0; i < szovegEllenorzesek.length; i++) {
-        const e = szovegEllenorzesek[i];
-        const elem = document.querySelector(e.sel);
-        if (elem && elem.textContent.trim().length < e.min) {
-            console.log("[INTEGRITÁS] Üres szöveg:", e.sel);
-            return true;
-        }
-    }
-
-    // Legend div-ek száma
-    const legendDivek = document.querySelectorAll(".sidebar .legend > div");
-    if (legendDivek.length < 6) {
-        console.log("[INTEGRITÁS] Legend sorok:", legendDivek.length, "/ 6");
-        return true;
-    }
-
-    if (allapot) {
-        const boardElem = document.getElementById("board");
-        if (!boardElem) return true;
-        const mezok = boardElem.querySelectorAll(".square");
-        if (mezok.length !== 64) {
-            console.log("[INTEGRITÁS] Mezők száma:", mezok.length, "/ 64");
-            return true;
-        }
-        const szerverBabuk = allapot.tabla.filter(m => m.piece).length;
-        const domBabuk = boardElem.querySelectorAll(".piece").length;
-        if (domBabuk !== szerverBabuk) {
-            console.log("[INTEGRITÁS] Bábuk DOM:", domBabuk, "szerver:", szerverBabuk);
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Visszaállítja az oldal vázát a hardcoded template-ből.
- */
-function oldalVazVisszaallit() {
-    let appElem = document.querySelector(".app");
-    if (!appElem) {
-        console.log("[HELYREÁLLÍTÁS] .app hiányzik — body-ból újra");
-        appElem = document.createElement("div");
-        appElem.className = "app";
-        document.body.innerHTML = "";
-        document.body.appendChild(appElem);
-    }
-    appElem.innerHTML = OLDAL_VAZ;
-}
 
 /**
  * Observer indítás — figyeli a body-t (subtree).

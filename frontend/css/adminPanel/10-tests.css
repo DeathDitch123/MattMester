@@ -1,0 +1,159 @@
+/* =============================================================
+   11) Elevate modal + Tesztek szekció
+   ============================================================= */
+.elevate-modal {
+    border: 1px solid rgba(212, 175, 55, 0.4) !important;
+    box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.6),
+                0 0 0 1px rgba(212, 175, 55, 0.08) !important;
+}
+.elevate-modal .modal-header {
+    border-bottom: 1px solid rgba(212, 175, 55, 0.25);
+}
+.elevate-modal .modal-title { color: var(--accent-gold); font-weight: 700; }
+
+.elevate-info {
+    display: flex;
+    gap: 0.85rem;
+    padding: 0.85rem 1rem;
+    background: rgba(212, 175, 55, 0.08);
+    border: 1px solid rgba(212, 175, 55, 0.3);
+    border-radius: var(--radius-md);
+    margin-bottom: 1.25rem;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+}
+.elevate-info > i {
+    color: var(--accent-gold);
+    font-size: 1.25rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+}
+
+.elevate-modal .form-control-lg {
+    font-size: 1.05rem;
+    padding: 0.65rem 1rem;
+    letter-spacing: 0.5px;
+}
+
+/* ---------- Tesztek szekció ---------- */
+.test-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.test-row {
+    display: grid;
+    grid-template-columns: 12px minmax(140px, 230px) minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.7rem 1.25rem;
+    border-bottom: 1px solid var(--border-soft);
+    font-size: 0.85rem;
+    transition: background 0.15s;
+}
+.test-row:last-child { border-bottom: none; }
+.test-row:hover     { background: rgba(212, 175, 55, 0.04); }
+
+.test-status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    flex-shrink: 0;
+}
+.test-row.test-pass    .test-status-dot { background: var(--accent-green); box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }
+.test-row.test-fail    .test-status-dot { background: var(--accent-red);   box-shadow: 0 0 6px rgba(233, 69, 96, 0.5); }
+.test-row.test-skip    .test-status-dot { background: #f59e0b;             box-shadow: 0 0 6px rgba(245, 158, 11, 0.5); }
+.test-row.test-pending .test-status-dot {
+    background: var(--text-muted);
+    animation: testPending 1.5s ease-in-out infinite;
+}
+@keyframes testPending {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 1; }
+}
+
+.test-suite {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-secondary);
+    font-weight: 600;
+    padding: 0.18rem 0.6rem;
+    background: rgba(212, 175, 55, 0.08);
+    border: 1px solid rgba(212, 175, 55, 0.2);
+    border-radius: 999px;
+    text-align: center;
+    /* A grid track maximumon belul ellipsis, hogy soha ne folyjon at a kovetkezo oszlopba (test-name). */
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    justify-self: start;
+}
+
+.test-name {
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.test-status-label {
+    font-family: 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid var(--border-soft);
+}
+.test-row.test-pass .test-status-label { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.4); }
+.test-row.test-fail .test-status-label { color: var(--accent-red);   border-color: rgba(233, 69, 96, 0.4); }
+.test-row.test-skip .test-status-label { color: #f59e0b;             border-color: rgba(245, 158, 11, 0.4); }
+
+.test-duration {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    min-width: 4em;
+    text-align: right;
+}
+
+.coverage-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 0.5rem 0;
+    border-bottom: 1px dashed var(--border-soft);
+}
+.coverage-row:last-child { border-bottom: none; }
+.coverage-label {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    min-width: 90px;
+    font-weight: 500;
+}
+.coverage-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    min-width: 3em;
+    text-align: right;
+}
+
+@media (max-width: 575.98px) {
+    .test-row {
+        grid-template-columns: 12px 1fr auto;
+        row-gap: 0.35rem;
+    }
+    .test-suite { grid-column: 2; grid-row: 1; }
+    .test-name  { grid-column: 2 / -1; grid-row: 2; white-space: normal; }
+    .test-status-label { grid-column: 3; grid-row: 1; }
+    .test-duration { display: none; }
+}
+

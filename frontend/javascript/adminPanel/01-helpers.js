@@ -312,8 +312,11 @@ const STATUS_BADGE = {
     banned: { label: 'Tiltott', cls: 'badge-status-banned' },
     pending: { label: 'Függő', cls: 'badge-status-pending' },
     live: { label: 'Folyamatban', cls: 'bg-success' },
-    finished: { label: 'Befejezett', cls: 'bg-secondary' }
+    ongoing: { label: 'Élő', cls: 'bg-success' },
+    finished: { label: 'Befejezett', cls: 'bg-secondary' },
+    abandoned: { label: 'Megszakított', cls: 'bg-warning text-dark' }
 };
+const UNKNOWN_BADGE = { label: '—', cls: 'bg-secondary' };
 const ROLE_BADGE = {
     admin: { label: 'Admin', cls: 'badge-role-admin' },
     player: { label: 'Játékos', cls: 'badge-role-player' }
@@ -323,7 +326,16 @@ const RISK_BADGE = {
     medium: { label: 'Közepes', cls: 'bg-warning text-dark' },
     high: { label: 'Magas', cls: 'bg-danger' }
 };
-const statusPill = (key) => `<span class="badge ${STATUS_BADGE[key].cls}">${STATUS_BADGE[key].label}</span>`;
-const rolePill = (key) => `<span class="badge ${ROLE_BADGE[key].cls}">${ROLE_BADGE[key].label}</span>`;
-const riskPill = (key) => `<span class="badge ${RISK_BADGE[key].cls}">${RISK_BADGE[key].label}</span>`;
+const statusPill = (key) => {
+    const s = STATUS_BADGE[key] || { ...UNKNOWN_BADGE, label: key || UNKNOWN_BADGE.label };
+    return `<span class="badge ${s.cls}">${s.label}</span>`;
+};
+const rolePill = (key) => {
+    const s = ROLE_BADGE[key] || { ...UNKNOWN_BADGE, label: key || UNKNOWN_BADGE.label };
+    return `<span class="badge ${s.cls}">${s.label}</span>`;
+};
+const riskPill = (key) => {
+    const s = RISK_BADGE[key] || { ...UNKNOWN_BADGE, label: key || UNKNOWN_BADGE.label };
+    return `<span class="badge ${s.cls}">${s.label}</span>`;
+};
 

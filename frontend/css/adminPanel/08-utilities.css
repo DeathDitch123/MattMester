@@ -1,0 +1,100 @@
+/* Helper utility classes */
+.text-gold   { color: var(--accent-gold) !important; }
+.bg-gold     { background: var(--accent-gold) !important; }
+.border-gold { border-color: var(--accent-gold) !important; }
+
+/* ---------- Footer ---------- */
+.admin-footer {
+    background: rgba(2, 6, 23, 0.55);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border-soft);
+    padding: 1rem 0;
+    margin: 2.5rem calc(-1 * var(--content-pad)) calc(-1 * var(--content-pad));
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.admin-footer-brand {
+    color: var(--accent-gold);
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+}
+
+.admin-footer-text {
+    color: rgba(148, 163, 184, 0.55);
+    font-size: 0.72rem;
+}
+
+/* ---------- 9) Animációk ---------- */
+@keyframes shimmer {
+    0%   { background-position: -200% 0; }
+    100% { background-position:  200% 0; }
+}
+
+@keyframes livePulse {
+    0%, 100% { opacity: 1;   transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(1.25); }
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+.animate-slide-in { animation: slideIn 0.35s var(--easing) both; }
+.animate-fade-in  { animation: fadeIn  0.25s ease both; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1199.98px) {
+    :root { --content-pad: 1.5rem; }
+
+    .admin-user-detail-sticky {
+        position: static;
+    }
+
+    .admin-user-detail-side-stack {
+        position: static;
+    }
+
+    .admin-user-detail-split-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 991.98px) {
+    :root { --content-pad: var(--content-pad-mobile); }
+
+    .sidebar { margin-left: calc(-1 * var(--sidebar-width)); }
+    .sidebar.show { margin-left: 0; box-shadow: 0 0 40px rgba(0, 0, 0, 0.6); }
+
+    .main-content { margin-left: 0; }
+    .top-navbar   { padding: 0.65rem 0.85rem; top: 0.5rem; margin-bottom: 1.25rem; }
+    .search-box   { width: 180px; }
+    .section-title { font-size: 1.3rem; }
+    .stat-value    { font-size: 1.55rem; }
+    .modal-body    { padding: 1.25rem; }
+}
+
+@media (max-width: 575.98px) {
+    .search-box { display: none; }
+    .section-header { gap: 0.75rem; }
+    .section-header-actions { width: 100%; }
+    .section-header-actions .btn { flex: 1 1 auto; }
+    .stat-card  { padding: 1rem 1.1rem; }
+    .stat-icon  { width: 40px; height: 40px; font-size: 1.1rem; }
+    .stat-value { font-size: 1.4rem; }
+    .card-header { padding: 0.85rem 1rem; }
+    .card-body   { padding: 1rem; }
+    .table thead th, .table tbody td { padding: 0.65rem 0.75rem; }
+    .top-navbar > div:first-child { gap: 0.5rem !important; }
+    .user-profile > div > div { display: none !important; }
+}
+

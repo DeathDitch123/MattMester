@@ -1,0 +1,664 @@
+/* Friends List */
+.friends-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    row-gap: 8px;
+    flex-wrap: wrap;
+    padding: 12px 16px;
+}
+
+.friends-header-main {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex-shrink: 0;
+}
+
+.friends-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex: 1 1 auto;
+    justify-content: flex-start;
+}
+
+.friends-header-controls .btn {
+    border-radius: 999px;
+    font-size: 0.76rem;
+    padding: 3px 10px;
+}
+
+.friends-header-controls .btn.is-active {
+    background-color: var(--accent-gold);
+    color: #0f172a;
+    border-color: var(--accent-gold);
+}
+
+.friends-header-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+#friends .card-body {
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+}
+
+.friend-list {
+    max-height: 350px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+}
+
+.friend-item:last-child {
+    border-bottom-left-radius: 15px;
+    border-bottom-right-radius: 15px;
+}
+
+.friends-feedback {
+    margin: 12px 16px;
+    padding: 10px 12px;
+    border: 1px solid rgba(51, 65, 85, 0.65);
+    border-radius: 10px;
+    font-size: 0.86rem;
+    background: rgba(2, 6, 23, 0.35);
+    color: var(--text-secondary);
+}
+
+.friends-feedback.is-success {
+    border-color: rgba(16, 185, 129, 0.4);
+    background: rgba(16, 185, 129, 0.1);
+    color: #86efac;
+}
+
+.friends-feedback.is-error {
+    border-color: rgba(233, 69, 96, 0.45);
+    background: rgba(233, 69, 96, 0.12);
+    color: #fda4af;
+}
+
+.friend-action-delete {
+    border-color: rgba(233, 69, 96, 0.6) !important;
+    color: #fda4af !important;
+}
+
+.friend-action-delete:hover {
+    background-color: rgba(233, 69, 96, 0.16) !important;
+    border-color: rgba(233, 69, 96, 0.9) !important;
+    color: #fff1f2 !important;
+}
+
+.friend-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 0;
+    transition: background-color 0.2s ease;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    cursor: pointer;
+}
+
+.friend-item:last-child {
+    border-bottom: none;
+}
+
+.friend-item:hover {
+    background-color: rgba(212, 175, 55, 0.05);
+}
+
+.friend-item[data-list-status="pending"] {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.14), rgba(245, 158, 11, 0.06));
+}
+
+.friend-item[data-list-status="blocked"] {
+    background: linear-gradient(90deg, rgba(233, 69, 96, 0.2), rgba(233, 69, 96, 0.08));
+}
+
+.friend-list-empty {
+    color: var(--text-secondary);
+    padding: 18px 16px;
+    text-align: center;
+    font-size: 0.9rem;
+}
+
+.friend-actions {
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+.friend-actions-menu {
+    min-width: 220px;
+    border: 1px solid rgba(51, 65, 85, 0.75);
+    background: rgba(2, 6, 23, 0.95);
+}
+
+.friend-actions-menu .dropdown-item {
+    color: var(--text-primary);
+    font-size: 0.88rem;
+}
+
+.friend-actions-menu .dropdown-item:hover {
+    background-color: rgba(212, 175, 55, 0.1);
+}
+
+.friend-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--bg-sidebar);
+    border: 2px solid var(--border-color);
+    transition: border-color 0.2s ease;
+}
+
+.friend-item:hover .friend-avatar {
+    border-color: var(--accent-gold);
+}
+
+.friend-status {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    border: 2px solid var(--bg-card);
+}
+
+.friend-status.online {
+    background-color: var(--accent-green);
+}
+
+.friend-status.offline {
+    background-color: var(--text-secondary);
+}
+
+.friend-status.ingame {
+    background-color: var(--accent-gold);
+}
+
+.search-results-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(51, 65, 85, 0.55);
+    border-radius: 12px;
+    overflow-y: auto;
+    height: min(420px, calc(100vh - 320px));
+    min-height: 180px;
+    background: rgba(2, 6, 23, 0.35);
+}
+
+.search-results-header-content {
+    min-width: 0;
+}
+
+.search-results-header-search {
+    width: 100%;
+}
+
+#searchResultsModal .modal-dialog {
+    max-width: min(900px, calc(100vw - 1.5rem));
+}
+
+#searchResultsModal .modal-content {
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+}
+
+#searchResultsModal .modal-header {
+    flex-shrink: 0;
+}
+
+#searchResultsModal .modal-body {
+    overflow-y: auto;
+}
+
+#searchResultsModal .modal-footer {
+    flex-shrink: 0;
+}
+
+#playerProfileModal .modal-dialog {
+    max-width: min(1100px, calc(100vw - 1.5rem));
+}
+
+#playerProfileModal .modal-content {
+    max-height: calc(100vh - 2rem);
+    display: flex;
+    flex-direction: column;
+}
+
+#playerProfileModal .modal-body {
+    overflow-y: auto;
+}
+
+.player-profile-modal .player-profile-section {
+    border: 1px solid rgba(51, 65, 85, 0.55);
+    border-radius: 12px;
+    padding: 14px;
+    background: rgba(2, 6, 23, 0.3);
+}
+
+.player-profile-modal .player-profile-section + .player-profile-section {
+    margin-top: 12px;
+}
+
+.player-profile-avatar {
+    width: 74px;
+    height: 74px;
+}
+
+.player-meta-box {
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid rgba(51, 65, 85, 0.55);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+
+.player-profile-elo-card {
+    min-width: 0;
+}
+
+.player-profile-modal .modal-header,
+.player-profile-modal .modal-footer {
+    flex-shrink: 0;
+}
+
+.player-profile-modal .modal-footer {
+    justify-content: flex-end;
+}
+
+.search-results-header-search .top-bar-search-feedback {
+    min-height: 16px;
+}
+
+.search-results-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+}
+
+.search-results-item:last-child {
+    border-bottom: none;
+}
+
+.search-results-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 8px;
+}
+
+.search-results-empty {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text-secondary);
+    padding: 10px 12px;
+    border: 1px dashed rgba(51, 65, 85, 0.75);
+    border-radius: 10px;
+}
+
+@media (max-width: 767.98px) {
+    .friends-header {
+        align-items: flex-start;
+    }
+
+    .friends-header-controls {
+        width: 100%;
+        order: 3;
+    }
+
+    .friends-header-actions {
+        margin-left: 0;
+    }
+
+    .friend-item {
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .friend-item .min-width-0 {
+        min-width: calc(100% - 56px);
+    }
+
+    .friend-actions {
+        width: 100%;
+        margin-left: 0;
+        display: flex;
+        justify-content: flex-end;
+    }
+
+    .search-results-header-content .d-flex {
+        align-items: flex-start !important;
+    }
+
+    .search-results-list {
+        height: min(360px, calc(100vh - 320px));
+    }
+
+    .search-results-item {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .search-results-actions {
+        width: 100%;
+        margin-left: 0;
+        justify-content: flex-end;
+    }
+
+    #searchResultsModal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
+    }
+
+    #playerProfileModal .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
+    }
+
+    .player-profile-avatar {
+        width: 64px;
+        height: 64px;
+    }
+
+    .player-profile-modal .modal-body {
+        padding: 0.85rem;
+    }
+
+    .player-profile-modal .player-profile-section {
+        padding: 12px;
+    }
+
+    .player-profile-modal .modal-footer {
+        padding: 0.75rem 0.85rem;
+    }
+
+    .player-profile-modal .modal-footer .btn {
+        width: 100%;
+    }
+
+    .player-profile-modal .elo-number {
+        min-width: 74px;
+        font-size: 1.08rem;
+        padding: 4px 10px;
+    }
+
+    .player-profile-modal .elo-label {
+        font-size: 0.66rem;
+    }
+
+    .player-profile-modal .elo-rank {
+        font-size: 0.7rem;
+    }
+}
+
+.ability-card {
+    background: linear-gradient(135deg, rgba(2, 6, 23, 0.6) 0%, rgba(2, 6, 23, 0.3) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 18px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.ability-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent-gold);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.ability-card:hover {
+    border-color: rgba(212, 175, 55, 0.3);
+    transform: translateX(4px);
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.05) 0%, rgba(2, 6, 23, 0.4) 100%);
+}
+
+.ability-card:hover::before {
+    opacity: 1;
+}
+
+.ability-icon {
+    width: 44px;
+    height: 44px;
+    background-color: rgba(212, 175, 55, 0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent-gold);
+    transition: transform 0.3s ease;
+}
+
+.ability-card:hover .ability-icon {
+    transform: rotate(5deg) scale(1.05);
+}
+
+.security-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.security-item:last-child {
+    border-bottom: none;
+}
+
+.text-success {
+    color: var(--accent-green) !important;
+}
+
+.text-danger {
+    color: var(--accent-red) !important;
+}
+
+.text-warning {
+    color: var(--accent-gold) !important;
+}
+
+@media (max-width: 991.98px) {
+    .sidebar {
+        transform: translateX(-100%);
+        width: 280px;
+    }
+
+    .sidebar.show {
+        transform: translateX(0);
+    }
+
+    .main-content {
+        margin-left: 0;
+    }
+
+    .mobile-overlay {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: rgba(0, 0, 0, 0.7);
+        z-index: 999;
+        backdrop-filter: blur(4px);
+    }
+
+    .mobile-overlay.show {
+        display: block;
+    }
+
+    .top-bar-search {
+        width: 180px;
+    }
+
+    #searchResultsModal .search-results-header-search.top-bar-search {
+        width: 100%;
+        max-width: none;
+    }
+
+    .fab-quick-play {
+        bottom: 20px;
+        right: 20px;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+    }
+
+    .fab-chat {
+        bottom: 84px;
+        right: 20px;
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .top-bar-search {
+        display: none;
+    }
+
+    .search-results-header-search {
+        display: block;
+        width: 100%;
+    }
+
+    .search-results-header-search .top-bar-search-field {
+        width: 100%;
+    }
+
+    .search-results-header-search input {
+        font-size: 0.95rem;
+        padding-right: 42px;
+    }
+
+    #searchResultsModal .modal-content {
+        max-height: calc(100vh - 1rem);
+    }
+
+    .search-results-list {
+        height: min(320px, calc(100vh - 300px));
+    }
+
+    .main-content-inner {
+        padding: 16px;
+    }
+
+    .profile-header {
+        padding: 20px;
+    }
+
+    .profile-avatar {
+        width: 80px;
+        height: 80px;
+    }
+
+    .player-profile-modal .modal-header {
+        padding: 0.75rem 0.85rem;
+    }
+
+    .player-profile-modal .modal-title {
+        font-size: 1rem;
+    }
+
+    .player-profile-modal .player-profile-section {
+        border-radius: 10px;
+        padding: 10px;
+    }
+
+    .player-profile-modal .stat-card {
+        padding: 12px;
+    }
+
+    .player-profile-modal .stat-value {
+        font-size: 1.15rem;
+    }
+
+    .player-profile-avatar {
+        width: 58px;
+        height: 58px;
+    }
+
+    .player-meta-box {
+        padding: 9px 10px;
+    }
+}
+
+@media (max-width: 420px) {
+    .player-profile-modal .modal-title {
+        font-size: 0.95rem;
+    }
+
+    .player-profile-modal .elo-number {
+        min-width: 68px;
+        font-size: 1rem;
+    }
+
+    .player-profile-modal .elo-rank {
+        font-size: 0.66rem;
+        padding: 2px 6px;
+    }
+
+    .player-profile-modal .stat-value {
+        font-size: 1.05rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .profile-image-editor-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-image-editor-side {
+        order: -1;
+    }
+
+    .elo-display {
+        flex: 1 1 30%;
+        min-width: 80px;
+        padding: 10px 5px;
+    }
+
+    .elo-number {
+        font-size: 1.1rem;
+    }
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(51, 65, 85, 0.6);
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-gold);
+}
+

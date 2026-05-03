@@ -1,0 +1,227 @@
+/* Top Bar - Újradolgozott, szimmetrikus verzió */
+.top-bar {
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+    /* Finom arany csík */
+    padding: 12px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.top-bar-left,
+.top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 2;
+}
+
+.top-bar-right {
+    justify-content: flex-end;
+}
+
+/* Középső elem (Mobilon a logó) - Abszolút középre igazítva a szimmetria miatt */
+.top-bar-center {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    z-index: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: all 0.2s ease;
+    padding: 8px 12px;
+    border-radius: 12px;
+}
+
+.top-bar-center:hover {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.1);
+}
+
+.top-bar-center:focus-visible {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: 2px;
+}
+
+.top-bar-search {
+    width: 280px;
+    display: flex;
+    align-items: center;
+    height: 40px;
+}
+
+.top-bar-search-field {
+    position: relative;
+    height: 100%;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.top-bar-search-feedback {
+    margin-top: 6px;
+    min-height: 18px;
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+.top-bar-search input {
+    background: rgba(2, 6, 23, 0.6);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    padding: 8px 44px 8px 12px;
+    border-radius: 12px;
+    width: 100%;
+    height: 40px;
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+}
+
+.top-bar-search input:focus {
+    outline: none;
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15);
+    background: var(--bg-dark);
+}
+
+.top-bar-search input::placeholder {
+    color: var(--text-secondary);
+}
+
+.top-bar-search > i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    width: 16px;
+    height: 16px;
+}
+
+.top-bar-search-btn {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 30px;
+    height: 30px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.top-bar-search-btn:hover {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.12);
+    border-color: rgba(212, 175, 55, 0.28);
+}
+
+.top-bar-search-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.top-bar-search-btn:disabled:hover {
+    color: var(--text-secondary);
+    background: transparent;
+    border-color: transparent;
+}
+
+.top-bar-search-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.2);
+}
+
+.top-bar-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.top-bar-btn:hover {
+    background: rgba(212, 175, 55, 0.1);
+    color: var(--accent-gold);
+    border-color: rgba(212, 175, 55, 0.3);
+    transform: translateY(-2px);
+}
+
+.top-bar-btn-with-badge {
+    position: relative;
+}
+
+.top-bar-badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 9px;
+    background: var(--accent-red, #dc3545);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    border: 2px solid var(--bg-card, #0f172a);
+    box-shadow: 0 0 6px rgba(220, 53, 69, 0.55);
+    pointer-events: none;
+    transition: transform 0.15s ease;
+}
+
+.top-bar-badge[hidden] {
+    display: none !important;
+}
+
+.top-bar-badge.is-pulse {
+    animation: top-bar-badge-pulse 0.6s ease;
+}
+
+@keyframes top-bar-badge-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.25); }
+    100% { transform: scale(1); }
+}
+
+.top-bar-badge--chat {
+    background: var(--accent-blue, #3b82f6);
+    box-shadow: 0 0 6px rgba(59, 130, 246, 0.55);
+}
+
+.notifications-modal-content--transparent {
+    background: rgba(15, 23, 42, 0.78) !important;
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+}
+

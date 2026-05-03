@@ -1,0 +1,38 @@
+/* ================================================================
+   MattAdmin — adminPanel.css
+   1) Tokenek           5) Section header
+   2) Reset & alap      6) Kártyák, táblák
+   3) Sidebar           7) Form, badge, button
+   4) Top navbar        8) Komponens-specifikus (moderation, danger zone, ...)
+                        9) Animációk + responsive
+   ================================================================ */
+
+/* ---------- 1) Tokenek ---------- */
+:root {
+    --bg-dark:           #0f172a;
+    --bg-card:           #1e293b;
+    --bg-card-elev:      #243044;
+    --bg-sidebar:        #020617;
+    --accent-gold:       #d4af37;
+    --accent-gold-hover: #b8941f;
+    --accent-red:        #e94560;
+    --accent-green:      #10b981;
+    --accent-blue:       #3b82f6;
+    --text-primary:      #f1f5f9;
+    --text-secondary:    #94a3b8;
+    --text-muted:        #64748b;
+    --border-color:      #334155;
+    --border-soft:       rgba(51, 65, 85, 0.5);
+
+    --sidebar-width: 264px;
+    --content-pad:   1.75rem;
+    --content-pad-mobile: 1rem;
+
+    --radius-lg: 1rem;
+    --radius-md: 0.75rem;
+    --radius-sm: 0.5rem;
+    --easing:    cubic-bezier(0.4, 0, 0.2, 1);
+    --shadow-card: 0 4px 24px -8px rgba(0, 0, 0, 0.3);
+    --shadow-card-hover: 0 12px 32px -8px rgba(0, 0, 0, 0.45);
+}
+
