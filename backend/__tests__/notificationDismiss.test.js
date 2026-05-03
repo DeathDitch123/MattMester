@@ -22,7 +22,7 @@ jest.mock('../chess/pvp.js', () => ({
     handlePvpDisconnect: jest.fn(() => Promise.resolve())
 }));
 
-jest.mock('../sql/sql_funtions.js', () => ({
+jest.mock('../sql/sql_functions.js', () => ({
     getUnreadNotificationCount: jest.fn(() => Promise.resolve(0)),
     getUnreadChatMessageTotal: jest.fn(() => Promise.resolve(0)),
     getPrivateConversationParticipantIds: jest.fn(() => Promise.resolve([])),

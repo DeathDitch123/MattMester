@@ -1,57 +1,31 @@
-function isAdmin(request, response, next) {
-    if(request.session && request.session.role === 'admin') {
-        return next();
-    }
-    return response.status(403).json({ message: 'Nincs jogosultságod ehhez a művelethez.' });
-}
+// ============================================================
+// LEGACY auth helpers — DEPRECATED
+// ============================================================
+// Az új single-source-of-truth a `backend/api/middleware/auth.js`:
+//   - pageGuard, apiGuard, adminGuard, setSessionFromUser
+// A `isAuthenticated` és `isAdmin` itt visszafelé-kompatibilis re-export
+// — a meglévő route-ok futnak tovább, az új route-ok már a middleware/auth.js-t
+// importálják közvetlenül. Ezt egy következő sprintben (külön ütemben) cserélhetjük.
+// ============================================================
 
-async function isAuthenticated(request, response, next) {
-    if (!request.session || !request.session.userId) {
-        return response.status(401).json({ success: false, message: 'Bejelentkezés szükséges a kereséshez.' });
-    }
-    // Ban + soft-delete check: ha a user kozben bannolva lett VAGY admin soft-delete-elte,
-    // a sessiona elavult — destroy + 403. Mindketto block, csak a code/message mas.
-    try {
-        const sql = require('../sql/sql_funtions.js');
-        const row = await sql.checkUserBanStatus(request.session.userId);
-        const isSoftDeleted = row && row.pending_deletion_until && new Date(row.pending_deletion_until) > new Date();
-        if (row && (row.is_banned || isSoftDeleted)) {
-            await new Promise((resolve) => {
-                request.session.destroy((err) => {
-                    if (err) console.warn('isAuthenticated: eviction destroy hiba:', err.message);
-                    resolve();
-                });
-            });
-            response.clearCookie('connect.sid');
-            if (isSoftDeleted) {
-                return response.status(403).json({
-                    success: false,
-                    code: 'account_pending_deletion',
-                    message: 'A fiókod admin által törlésre lett kijelölve.',
-                    pendingDeletionUntil: row.pending_deletion_until
-                });
-            }
-            return response.status(403).json({
-                success: false,
-                code: 'account_banned',
-                message: 'A fiók tiltva lett.'
-            });
-        }
-    } catch (error) {
-        console.error('isAuthenticated ban-check hiba:', error.message);
-        // Ha a DB kerdezes hibazik, ne blokkoljuk a kerest — fail-open egy index lookup hibajanal.
-    }
-    return next();
-}
+const { apiGuard, adminGuard } = require('./middleware/auth.js');
 
 const EMAIL_VERIFICATION_REQUIRED_MESSAGE = 'Ez a funkció csak megerősített email cím után érhető el. Ellenőrizd az email fiókod vagy kérj új verifikációs emailt.';
+
+// DEPRECATED — használd az `apiGuard`-ot a `middleware/auth.js`-ből.
+// Ugyanaz a viselkedés (401 + ban/soft-delete check), a régi név csak
+// re-export, hogy a meglévő route-ok ne törjenek.
+const isAuthenticated = apiGuard;
+
+// DEPRECATED — használd az `adminGuard`-ot a `middleware/auth.js`-ből.
+const isAdmin = adminGuard;
 
 async function requireVerifiedEmail(request, response, next) {
     let statusCode = 200;
     let body = null;
     let proceed = false;
     try {
-        const sql = require('../sql/sql_funtions.js');
+        const sql = require('../sql/sql_functions.js');
         const userId = Number(request.session?.userId) || 0;
         if (!userId) {
             statusCode = 401;

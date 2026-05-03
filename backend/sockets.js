@@ -1,5 +1,5 @@
 const { services, notificationService } = require('./services.js');
-const sql = require('./sql/sql_funtions.js');
+const sql = require('./sql/sql_functions.js');
 const { registerPvpHandlers, handlePvpDisconnect } = require('./chess/pvp.js');
 const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
 

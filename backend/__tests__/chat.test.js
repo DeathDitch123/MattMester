@@ -8,7 +8,7 @@ const express = require('express');
 const session = require('express-session');
 
 // Mock database module
-jest.mock('../sql/sql_funtions', () => ({
+jest.mock('../sql/sql_functions', () => ({
     getUserConversations: jest.fn(() => 
         Promise.resolve({
             data: [
@@ -251,7 +251,7 @@ describe('Chat Rate Limiting', () => {
 
 describe('Chat Error Handling', () => {
     test('should handle database errors gracefully', async () => {
-        const sql = require('../sql/sql_funtions');
+        const sql = require('../sql/sql_functions');
         sql.getUserConversations.mockRejectedValueOnce(new Error('Database error'));
 
         const response = await request(app)

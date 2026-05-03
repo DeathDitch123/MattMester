@@ -1,10 +1,26 @@
 # 📋 MattMester – Projekt Átvizsgálás & Teendők
 
+> Utolsó frissítés: 2026-05-03 — záró sprint (N1–N7) végrehajtva.
 > Projekt-szintű review alapján összegyűjtött javaslatok.
 > Prioritás: 🔴 kritikus · 🟠 strukturális · 🟡 kód-szintű · 🟢 funkcionális
 
 > Cél: localhoston futó, érettségi szint feletti, de még jól karbantartható verzió.
 > Emiatt a lista a valóban hasznos, arányos lépésekre fókuszál; az erősen "enterprise" jellegű bónuszok csak akkor maradnak, ha tényleg beleférnek.
+
+---
+
+## 🚀 Záró sprint (2026-05-03)
+
+| # | Teendő | Hely | Státusz |
+|---|--------|------|:------:|
+| N1 | **Chess PvP queue + invite stale-state takarítás** — pending invite timeout `socket.connected` check, `disconnectTimer` `jatekKeres()` + 4-feltétel együttes guard a double-fire ellen, `hasLiveActiveGame` helper. | [backend/chess/pvp.js](backend/chess/pvp.js) | ✅ |
+| N2 | **Maintenance enforce minden tab-on** — `maintenanceClient.js` betöltve `index.html`, `profile.html`, `adminPanel.html`, `chess.html`, `gameRoom.html`-ben; integrity guard, hogy nem natív alert/confirm/prompt. | [frontend/javascript/shared/maintenanceClient.js](frontend/javascript/shared/maintenanceClient.js) | ✅ |
+| N3 | **Halott kód takarítás** — `ipCollisionCheck` törölve, `/profile/verify-current-password` route + `verifyPasswordLimiter` törölve, `REASON_TOO_LONG` külön error-code a túl hosszú reason-re. | backend/sql/modules/admin.js, backend/api/routes/profile.js, backend/api/admin/{constants,middleware}.js | ✅ |
+| N4 | **Auth middleware konszolidáció** — új [backend/api/middleware/auth.js](backend/api/middleware/auth.js): `pageGuard`, `apiGuard`, `adminGuard`, `setSessionFromUser`. `funtions.js` → deprecated re-export. `auth.js` route a `setSessionFromUser`-t hívja login + register + sessionInfo refresh-en is. | [backend/api/middleware/auth.js](backend/api/middleware/auth.js) | ✅ |
+| N5 | **Frontend `_utils.js` + `escapeHtml` egységesítés** — új [frontend/javascript/_utils.js](frontend/javascript/_utils.js) `window.MattMesterUtils`-ban. `index.js`, `profile/01-helpers.js`, `adminPanel/01-helpers.js`, `chessModeChooser.js` mind delegate-pattern-nel hívja. | [frontend/javascript/_utils.js](frontend/javascript/_utils.js) | ✅ |
+| N6 | **Auth/Friend/Notification endpoint smoke tesztek** — 3 új teszt-fájl, 16 új teszt zöld (login pass/fail/missing, register success/dup-email, logout, friends add/accept/reject/list, notifications list/unread/dismiss). | backend/__tests__/{auth,friend,notification}Endpoints.test.js | ✅ |
+| N7 | **Docs konszisztencia** — issues.md frissítés, ROADMAP `Hivatkozások` szekció a `referenciak/`-ra. | [issues.md](issues.md), [ROADMAP.md](ROADMAP.md) | ✅ |
+| N8 | **Rename funtions.js → functions.js** — `git mv` + `sed`-replace 30+ require-en, projectIntegrity guard a régi név visszacsempészése ellen. | backend/api/functions.js, backend/sql/sql_functions.js | ✅ |
 
 ---
 
@@ -15,7 +31,7 @@
 | 1 | **Hardcoded session secret eltávolítása** – fallback secret kódban van, production-ben dobjon hibát ha hiányzik a `SESSION_SECRET` env. | [backend/server.js:22](backend/server.js#L22) | ✅ |
 | 2 | **`saveUninitialized: true` → `false`** – minden látogatónak session-t gyárt (GDPR + memória). | [backend/server.js:26](backend/server.js#L26) | ✅ |
 | 3 | **`cookie.secure` + `sameSite`** – production-ben `secure: true` és `sameSite: 'strict'` env alapján. | [backend/server.js:29](backend/server.js#L29) | ✅ |
-| 5 | **`ipCollisionCheck` bekötése a login flow-ba** – megírva, de nincs használva. | [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ☐ |
+| 5 | ~~`ipCollisionCheck` bekötése a login flow-ba~~ — **N3-ben halott kódként törölve** (localhoston minden 127.0.0.1, értelmetlen). | [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ✅ |
 | 6 | **`helmet` middleware + CSP** – XSS és clickjacking védelem. | [backend/server.js](backend/server.js) | ✅ |
 | 7 | **CSRF védelem** – cookie-alapú session + JSON POST → csrf token vagy `SameSite=strict`. | backend | ☐ |
 
@@ -28,15 +44,15 @@
 | 9 | **`sql_funtions.js` (2415 sor) szétbontása** repo-mintára: `repos/userRepo.js`, `repos/friendRepo.js`, `repos/logRepo.js`, `repos/chessRepo.js`. | [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ☐ |
 | 10 | **`profile.js` (3600 sor) modulokra bontása** – `profile/security.js`, `profile/friends.js`, `profile/settings.js`, `profile/stats.js`. | [frontend/javascript/profile.js](frontend/javascript/profile.js) | ☐ |
 | 11 | **`profile.css` (2456 sor) komponensekre** + közös design tokenek (`tokens.css`). | [frontend/css/profile.css](frontend/css/profile.css) | ☐ |
-| 12 | **Elírások javítása** – `funtions.js` → `functions.js`, `sql_funtions.js` → `sql_functions.js`. | [backend/api/funtions.js](backend/api/funtions.js), [backend/sql/sql_funtions.js](backend/sql/sql_funtions.js) | ☐ |
+| 12 | **Elírások javítása** — N8-ban átnevezve `functions.js` és `sql_functions.js`-re; minden require frissítve. | [backend/api/functions.js](backend/api/functions.js), [backend/sql/sql_functions.js](backend/sql/sql_functions.js) | ✅ |
 | 13 | **Repo-gyökér takarítás** – `FIXES_IMPLEMENTED.md`, `issues.txt`, `.txt` jegyzetek `docs/` alá vagy `.gitignore`. | repo root | ☐ |
 | 14 | **Üres `gameRoom.css` törlése vagy feltöltése**. | [frontend/css/gameRoom.css](frontend/css/gameRoom.css) | ☐ |
 | 15 | **`validation.js` (5 sor)** – vagy valódi validátor-réteg (`zod`/`joi`), vagy összeolvasztás. | [backend/api/validation.js](backend/api/validation.js) | ☐ |
-| 36 | **`requireAuth` / `requireAdmin` duplikáció** – a [server.js:96-108](backend/server.js#L96-L108)-ben lévő guardok az [funtions.js](backend/api/funtions.js) `isAuthenticated` / `isAdmin` megfelelői, csak redirect vs. JSON különbséggel. Közös `middleware/auth.js`-be: `pageGuard` (redirect) + `apiGuard` (JSON). | [backend/server.js](backend/server.js), [backend/api/funtions.js](backend/api/funtions.js) | ☐ |
+| 36 | **`requireAuth` / `requireAdmin` duplikáció** — N4-ben új [backend/api/middleware/auth.js](backend/api/middleware/auth.js) (`pageGuard`, `apiGuard`, `adminGuard`); a régi `funtions.js` deprecated re-exportál. | [backend/api/middleware/auth.js](backend/api/middleware/auth.js) | ✅ |
 | 37 | **Chat konstansok duplikálva** – `CHAT_RATE_LIMIT_MAX_MESSAGES`, `CHAT_RATE_LIMIT_WINDOW_MS`, `CHAT_BLACKLIST_POLICY`, `CHAT_MAX_MESSAGE_LENGTH` kétszer van definiálva a [chat.js](backend/api/routes/chat.js) és [sockets.js](backend/sockets.js) fájlokban. Tedd át a [chatUtils.js](backend/api/chatUtils.js)-be egy konfig-objektumként. | [backend/api/routes/chat.js](backend/api/routes/chat.js), [backend/sockets.js](backend/sockets.js) | ☐ |
 | 38 | **`parsePositiveInteger` duplikáció** – ugyanaz a függvény a [_shared.js](backend/api/routes/_shared.js) és [sockets.js:54](backend/sockets.js#L54) között. Közös `backend/utils/parse.js`. | backend | ☐ |
-| 39 | **Session-mező setter helper** – a login és register ugyanazt a 8 mezőt állítja be a session-ben. `setSessionFromUser(request, user)` helper az [auth.js](backend/api/routes/auth.js)-ben. | [backend/api/routes/auth.js](backend/api/routes/auth.js) | ☐ |
-| 47 | **Duplikált frontend helper függvények** – `runSafely`, `runSafelyAsync` háromszor van definiálva (index.js, profile.js, adminPanel.js); `escapeHtml` kétszer + 1 leaderboard-variáns; `fetchSessionInfo` kétszer. Közös `frontend/javascript/_utils.js` (window-globalon) feloldja. | [index.js:13](frontend/javascript/index.js#L13), [profile.js:120](frontend/javascript/profile.js#L120), [adminPanel.js:4](frontend/javascript/adminPanel.js#L4) | ☐ |
+| 39 | **Session-mező setter helper** — N4-ben `setSessionFromUser` az új [backend/api/middleware/auth.js](backend/api/middleware/auth.js)-ben; login + register + sessionInfo refresh ugyanezt hívja. | [backend/api/middleware/auth.js](backend/api/middleware/auth.js) | ✅ |
+| 47 | **Duplikált frontend helper függvények** — N5-ben új [frontend/javascript/_utils.js](frontend/javascript/_utils.js) `window.MattMesterUtils` névtéren (`runSafely`, `runSafelyAsync`, `escapeHtml`, `fetchSessionInfo`); a 4 hívó delegate-pattern-nel az új helper-re mutat. | [frontend/javascript/_utils.js](frontend/javascript/_utils.js) | ✅ |
 | 48 | **Három különböző szám-normalizáló** – `parsePositiveInteger` ([_shared.js](backend/api/routes/_shared.js) + [sockets.js:54](backend/sockets.js#L54)) és `normalizePositiveInt` ([sql_funtions.js:2280](backend/sql/sql_funtions.js#L2280)) ugyanazt csinálják enyhén eltérő szignatúrával. Közös `backend/utils/numbers.js` (#38 kibővítése). | backend | ☐ |
 | 49 | **`chess_barold` mappa félrevezető néven** – ez nem "régi" chess, hanem az aktuális játékfelület (`frontend/javascript/index.js:860` ide irányít). Átnevezés `chess`-re; egyetlen JS-referencia + HTML ref + 1 mappa-átnevezés. | [frontend/chess_barold/](frontend/chess_barold/) | ☐ |
 | 50 | **`requestController.cancelScheduled` sehol sincs hívva** – a [requestControl.js:41](frontend/javascript/requestControl.js#L41) exportálja, de egyetlen hívó sincs. Vagy bekötni az unmount/logout flow-ba a függő debounce-ok megszakítására, vagy törölni. | [frontend/javascript/requestControl.js](frontend/javascript/requestControl.js) | ☐ |
@@ -56,7 +72,7 @@
 | 21 | **Migráció-runner bevezetése** – `backend/sql/migrations/` létezik, de futtató nincs (pl. `umzug`, `node-pg-migrate` MySQL verzió). | [backend/sql/migrations/](backend/sql/migrations/) | ☐ |
 | 22 | **Socket auth audit** – minden user-specifikus event csekkolje a `socket.request.session.userId`-t. (Admin oldal: az `admin:*` prefixű eventeket a [sockets.js](backend/sockets.js) `socket.use` middleware-e automatikusan védi, plusz `requireAdminSocket` helper is elérhető.) | [backend/sockets.js](backend/sockets.js) | ☐ |
 | 23 | **Típusozás** – minimum `// @ts-check` + JSDoc, ideálisan TypeScript migráció. | projekt egész | ☐ |
-| 24 | **Tesztlefedettség bővítése** – auth / barát / log endpointok. Jelenleg csak chat + rate-limiter. | [backend/__tests__/](backend/__tests__/) | ☐ |
+| 24 | **Tesztlefedettség bővítése** — N6-ban auth + friend + notification smoke-suite hozzáadva (16 teszt zöld). Log-endpoint coverage még nyitott. | [backend/__tests__/](backend/__tests__/) | 🟡 |
 | 25 | **Frontend bundler** – Vite vagy esbuild, hogy ES modulokká bontható legyen. | frontend | ☐ |
 | 26 | **`.env.example`** – új kontribútornak induló sablon. | repo root | ✅ |
 | 27 | **`trust proxy: 1` dokumentálása** – csak reverse proxy mögött helyes. | [backend/server.js:90](backend/server.js#L90) | ✅ |

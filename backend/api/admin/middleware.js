@@ -228,7 +228,7 @@ function requireReasonOnMutate(actionResolver) {
                 } else if (reason.length > REASON_MAX_LENGTH) {
                     errorPayload = {
                         statusCode: 400,
-                        code: ADMIN_ERROR_CODES.REASON_TOO_SHORT,
+                        code: ADMIN_ERROR_CODES.REASON_TOO_LONG,
                         message: `Az indoklas legfeljebb ${REASON_MAX_LENGTH} karakter lehet.`
                     };
                 } else {

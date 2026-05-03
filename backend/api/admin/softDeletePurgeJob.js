@@ -3,7 +3,7 @@
 // A `deleteUserProfileWithTransaction` ugyanazt a hard-delete folyamatot vegzi mint
 // kor reg a self-delete vagy az admin-delete (banned_emails snapshot, FK NULL, stb.).
 
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
 const auditService = require('./auditService.js');
 
 const PURGE_INTERVAL_MS = 60 * 60 * 1000; // 1 ora

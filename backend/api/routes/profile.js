@@ -3,15 +3,14 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs/promises');
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
-const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
+const { isAuthenticated, requireVerifiedEmail } = require('../functions.js');
 const {
     generateVerificationToken,
     sendVerificationEmail
 } = require('../emailVerification.js');
 const {
-    verifyPasswordLimiter,
     profileUpdateLimiter,
     profileImageUploadLimiter,
     profileImageRemoveLimiter,
@@ -52,43 +51,6 @@ const profileImageUpload = multer({
             callback(null, true);
         }
     }
-});
-
-router.post('/profile/verify-current-password', verifyPasswordLimiter, isAuthenticated, async (request, response) => {
-    let statusCode = 200;
-    let result = { success: true, valid: false, message: 'A jelenlegi jelszó hibás.' };
-    try {
-        const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
-        if (!currentPassword) {
-            statusCode = 400;
-            result = { success: false, valid: false, message: 'A jelenlegi jelszó kötelező.' };
-        } else {
-            const user = await sql.getUserAuthById(request.session.userId);
-            if (!user) {
-                statusCode = 404;
-                result = { success: false, valid: false, message: 'A felhasználó nem található.' };
-            } else {
-                const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
-                if (isMatch) {
-                    result = { success: true, valid: true, message: 'A jelenlegi jelszó helyes.' };
-                } else {
-                    await logAuthenticatedAction(request, request.session.userId, {
-                        eventType: 'current_password_verify_failed',
-                        eventCategory: 'security',
-                        severity: 'warning',
-                        source: 'backend',
-                        success: false,
-                        message: 'Sikertelen jelenlegi jelszó ellenőrzés.'
-                    });
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Current password verify hiba:', error);
-        statusCode = 500;
-        result = { success: false, valid: false, message: 'Szerverhiba az ellenőrzés során.' };
-    }
-    return response.status(statusCode).json(result);
 });
 
 router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (request, response) => {

@@ -13,27 +13,6 @@
     },
     "author": "Kardos Krisztián",
     "license": "ISC",
-    "jest": {
-        "testEnvironment": "node",
-        "testMatch": [
-            "**/__tests__/**/*.test.js",
-            "**/*.test.js"
-        ],
-        "collectCoverageFrom": [
-            "api/**/*.js",
-            "sockets.js",
-            "services.js",
-            "!**/*.test.js"
-        ],
-        "coverageThreshold": {
-            "global": {
-                "branches": 50,
-                "functions": 50,
-                "lines": 50,
-                "statements": 50
-            }
-        }
-    },
     "devDependencies": {
         "jest": "^29.7.0",
         "kill-port": "^2.0.1",

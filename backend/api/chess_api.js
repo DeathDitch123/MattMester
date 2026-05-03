@@ -14,7 +14,7 @@ const { idoLeall } = require('../chess/timer.js');
 const chessSql = require('../chess/chess_sql_functions.js');
 const { botLepesValaszt, botKepessegValaszt, nehezsegiSzintInfo, osszesNehezsegiSzint } = require('../chess/bot.js');
 const { eloSzamit, KEZDO_ELO } = require('../chess/elo.js');
-const { requireVerifiedEmail } = require('./funtions.js');
+const { requireVerifiedEmail } = require('./functions.js');
 const { abilityAktival, getKliensConfig, ABILITY_CONFIG } = require('../chess/abilities.js');
 const { isValidMode, getMode, listClient: listModesClient, DEFAULT_MODE } = require('../chess/modes.js');
 

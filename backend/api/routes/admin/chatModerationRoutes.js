@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs/promises');
-const sql = require('../../../sql/sql_funtions.js');
+const sql = require('../../../sql/sql_functions.js');
 const adminRepo = require('../../../sql/adminRepo.js');
 const { passwordRegex } = require('../../validation.js');
 

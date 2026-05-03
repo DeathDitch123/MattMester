@@ -124,20 +124,6 @@ async function syncSocketContextForStartup(reason = 'profile-startup') {
     }
 }
 
-function runSafely(label, handler) {
-    try {
-        return handler();
-    } catch (error) {
-        console.error(`${label} hiba:`, error);
-        return undefined;
-    }
-}
-
-async function runSafelyAsync(label, handler) {
-    try {
-        return await handler();
-    } catch (error) {
-        console.error(`${label} hiba:`, error);
-        return undefined;
-    }
-}
+// Delegate-elve a `_utils.js`-be, egyetlen kanonikus implementáció a frontenden.
+const runSafely = (label, handler) => window.MattMesterUtils.runSafely(label, handler);
+const runSafelyAsync = (label, handler) => window.MattMesterUtils.runSafelyAsync(label, handler);

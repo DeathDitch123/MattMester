@@ -778,3 +778,136 @@ describe('Sanity: nincs duplikat top-level deklaracio (split-on-belul)', () => {
         }
     });
 });
+
+// ─────────────────────────────────────────────────────────────────────
+// N2 maintenanceClient.js minden user-facing oldalon
+// ─────────────────────────────────────────────────────────────────────
+describe('Frontend: maintenanceClient.js minden user-facing HTML-ben', () => {
+    // Maintenance ON-ban a backend `maintenance:enforce` event-et broadcastolja;
+    // minden user-facing tab-on kell legyen kliens, aki ezt fogadja és redirect-el.
+    // Az `adminPanel.html` is benne van: ha az admin ott ül, lássa a kontextust.
+    // Kihagyott: `maintenance.html` (ez maga a target lap), `ban.html` és
+    // `deleted.html` (terminál állapotok), `mailVerified.html` és
+    // `restorePassword.html` (rövid életű intermediate-ek).
+    const REQUIRED = [
+        path.join(FRONTEND, 'html', 'index.html'),
+        path.join(FRONTEND, 'html', 'profile.html'),
+        path.join(FRONTEND, 'html', 'adminPanel.html'),
+        path.join(FRONTEND, 'html', 'gameRoom.html'),
+        path.join(FRONTEND, 'chess_barold', 'html', 'chess.html'),
+    ];
+    for (const file of REQUIRED) {
+        test(`${path.relative(FRONTEND, file)} tartalmaz maintenanceClient.js script-tag-et`, () => {
+            const content = readFile(file);
+            expect(content).toMatch(/<script[^>]+shared\/maintenanceClient\.js/);
+        });
+    }
+});
+
+describe('N8: rename — a régi elgépelés ne térjen vissza', () => {
+    test('a régi rosszul-irt fileNAME elgépelés sehol nem fordul elő', () => {
+        // A régi rosszul-irt fileNAME-t a sed-rename törölte. Itt a guard.
+        // A keresési mintát változó-konkatenációval rakjuk össze, hogy a teszt-fájl
+        // forrása ne tartalmazzon szó-szerinti egyezést — különben self-match lenne.
+        const BAD = ['fun', 'tions'].join('');
+        const re = new RegExp(`\\b${BAD}\\b`);
+        function walk(dir, results) {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const e of entries) {
+                if (e.name === 'node_modules') continue;
+                const full = path.join(dir, e.name);
+                if (e.isDirectory()) walk(full, results);
+                else if (/\.(js|md)$/.test(e.name)) results.push(full);
+            }
+            return results;
+        }
+        const files = walk(BACKEND, []);
+        const offenders = [];
+        for (const f of files) {
+            if (re.test(readFile(f))) {
+                offenders.push(path.relative(BACKEND, f));
+            }
+        }
+        expect(offenders).toEqual([]);
+    });
+});
+
+describe('N5: frontend _utils.js — single source of truth', () => {
+    test('_utils.js létezik és window.MattMesterUtils-on publikálja a 4 helpert', () => {
+        const file = path.join(FRONTEND, 'javascript', '_utils.js');
+        expect(fileExists(file)).toBe(true);
+        const content = readFile(file);
+        expect(content).toMatch(/window\.MattMesterUtils\s*=/);
+        expect(content).toMatch(/runSafely/);
+        expect(content).toMatch(/runSafelyAsync/);
+        expect(content).toMatch(/escapeHtml/);
+        expect(content).toMatch(/fetchSessionInfo/);
+    });
+
+    test('a 4 user-facing HTML page betölti a _utils.js-t', () => {
+        const html = [
+            path.join(FRONTEND, 'html', 'index.html'),
+            path.join(FRONTEND, 'html', 'profile.html'),
+            path.join(FRONTEND, 'html', 'adminPanel.html'),
+            path.join(FRONTEND, 'chess_barold', 'html', 'chess.html')
+        ];
+        for (const h of html) {
+            const c = readFile(h);
+            expect(c).toMatch(/<script[^>]+_utils\.js/);
+        }
+    });
+
+    test('index.js, profile/01-helpers.js, adminPanel/01-helpers.js — nincs lokális escapeHtml IMPLEMENTÁCIÓ (csak delegate)', () => {
+        // A delegate-pattern: arrow-funkció ami window.MattMesterUtils.escapeHtml-t hív.
+        // A "function escapeHtml" kulcsszó-szignatúrát semmilyen formában nem tartalmazza
+        // (kivéve ahol explicit a delegate-fallback van pl. chessModeChooser.js-ben).
+        const files = [
+            path.join(FRONTEND, 'javascript', 'index.js'),
+            path.join(FRONTEND, 'javascript', 'profile', '01-helpers.js'),
+            path.join(FRONTEND, 'javascript', 'adminPanel', '01-helpers.js')
+        ];
+        for (const f of files) {
+            const c = readFile(f);
+            // Egyik fájlban se legyen `function runSafely(label, ...) { try { ... } catch ...`
+            // — a delegate az egyetlen forma.
+            expect(c).not.toMatch(/function\s+runSafely\s*\(/);
+            expect(c).not.toMatch(/async\s+function\s+runSafelyAsync\s*\(/);
+        }
+    });
+});
+
+describe('N3: halott kód NE térjen vissza', () => {
+    // Ezeket az N3 sprint törölte; ha valaki később visszaviszi, ez a guard piros lesz.
+    test('ipCollisionCheck nincs a backend-ben', () => {
+        const adminModule = readFile(path.join(BACKEND, 'sql', 'modules', 'admin.js'));
+        expect(adminModule).not.toMatch(/ipCollisionCheck/);
+        const aggregator = readFile(path.join(BACKEND, 'sql', 'sql_functions.js'));
+        expect(aggregator).not.toMatch(/ipCollisionCheck/);
+    });
+    test('/profile/verify-current-password route nincs', () => {
+        const profile = readFile(path.join(BACKEND, 'api', 'routes', 'profile.js'));
+        expect(profile).not.toMatch(/verify-current-password/);
+        expect(profile).not.toMatch(/verifyPasswordLimiter/);
+    });
+    test('REASON_TOO_LONG külön error-code (a túl hosszú reasonre)', () => {
+        const constants = readFile(path.join(BACKEND, 'api', 'admin', 'constants.js'));
+        expect(constants).toMatch(/REASON_TOO_LONG/);
+        const middleware = readFile(path.join(BACKEND, 'api', 'admin', 'middleware.js'));
+        // A 2 ágon különböző kódot adunk: rövid → REASON_TOO_SHORT, hosszú → REASON_TOO_LONG
+        expect(middleware).toMatch(/length\s*>\s*REASON_MAX_LENGTH[^]*?REASON_TOO_LONG/);
+    });
+});
+
+describe('Frontend: maintenanceClient.js custom modal (NEM natív alert)', () => {
+    test('a kliens nem hív alert/confirm/prompt-et', () => {
+        // A user feedback szerint minden user-facing dialog custom HTML modal —
+        // soha böngésző-natív. Ha bárki visszacsempész egy alert-et, ez a guard
+        // azonnal piros lesz.
+        const file = path.join(FRONTEND, 'javascript', 'shared', 'maintenanceClient.js');
+        expect(fileExists(file)).toBe(true);
+        const content = readFile(file);
+        expect(content).not.toMatch(/\balert\s*\(/);
+        expect(content).not.toMatch(/\bconfirm\s*\(/);
+        expect(content).not.toMatch(/\bprompt\s*\(/);
+    });
+});

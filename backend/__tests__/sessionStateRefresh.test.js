@@ -21,7 +21,7 @@ jest.mock('../chess/pvp.js', () => ({
     handlePvpDisconnect: jest.fn(() => Promise.resolve())
 }));
 
-jest.mock('../sql/sql_funtions.js', () => ({
+jest.mock('../sql/sql_functions.js', () => ({
     getUnreadNotificationCount: jest.fn(() => Promise.resolve(0)),
     getUnreadChatMessageTotal: jest.fn(() => Promise.resolve(0)),
     getPrivateConversationParticipantIds: jest.fn(() => Promise.resolve([])),
@@ -60,7 +60,7 @@ jest.mock('../api/chatUtils.js', () => ({
 }));
 
 const { createSocketHub, SOCKET_ROOMS } = require('../sockets.js');
-const sql = require('../sql/sql_funtions.js');
+const sql = require('../sql/sql_functions.js');
 
 // ─── Mock Socket.IO helpers ────────────────────────────────────────────────
 function createFakeSocket({ clientId = 'c1', tabId = 't1', userId = 0, role = 'player' } = {}) {

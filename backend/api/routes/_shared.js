@@ -1,4 +1,4 @@
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
 
 function getRequestIpAddress(request) {
     const forwarded = request.headers['x-forwarded-for'];

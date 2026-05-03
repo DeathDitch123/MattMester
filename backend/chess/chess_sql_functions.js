@@ -1,7 +1,7 @@
 // ============================================================
 // CHESS SQL FUNCTIONS — Sakk-specifikus adatbázis műveletek
 // ============================================================
-// Saját fájl a chess/ mappában, hogy a kolléga sql_funtions.js-ét
+// Saját fájl a chess/ mappában, hogy a kolléga sql_functions.js-ét
 // ne kelljen módosítani. A közös pool-t a database.js-ből vesszük.
 // ============================================================
 // Használt táblák: games, moves, statistics, users

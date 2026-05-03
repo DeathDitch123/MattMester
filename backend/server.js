@@ -10,7 +10,7 @@ const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
 const { services, leaderboardService } = require('./services.js');
 const { createSocketHub } = require('./sockets.js');
-const sql = require('./sql/sql_funtions');
+const sql = require('./sql/sql_functions');
 
 const envPaths = [
     path.resolve(__dirname, '.env'),
@@ -408,7 +408,7 @@ initDatabase()
         // a containsBlockedWord() in-memory cachebe. A cache az admin endpoint-bol
         // (POST /admin/chat/blocklist/add) van bovitve.
         try {
-            const sqlFns = require('./sql/sql_funtions.js');
+            const sqlFns = require('./sql/sql_functions.js');
             const loadedCount = await sqlFns.refreshDynamicBlockedWords();
             console.log(`[Server] Dynamic chat blocklist loaded: ${loadedCount} word(s).`);
         } catch (err) {

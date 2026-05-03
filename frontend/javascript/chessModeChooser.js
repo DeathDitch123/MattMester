@@ -362,7 +362,13 @@
     // Helper
     // ─────────────────────────────────────────────────────────────────
 
+    // Delegate-elve a `_utils.js`-be — ha valamiért még nem töltődött be (régebbi
+    // page-betöltési race), egysoros fallback inline div+textContent. A normál
+    // user-flow-ban a _utils.js mindig elérhető a többi script ELŐTT.
     function escapeHtml(s) {
+        if (window.MattMesterUtils && window.MattMesterUtils.escapeHtml) {
+            return window.MattMesterUtils.escapeHtml(s);
+        }
         const div = document.createElement('div');
         div.textContent = String(s == null ? '' : s);
         return div.innerHTML;

@@ -1,6 +1,6 @@
 const express = require('express');
-const sql = require('../../sql/sql_funtions.js');
-const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
+const sql = require('../../sql/sql_functions.js');
+const { isAuthenticated, requireVerifiedEmail } = require('../functions.js');
 const { chatMessageLimiter, chatDirectOpenLimiter } = require('../middleware/rateLimiter.js');
 const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('../chatUtils.js');
 const { parsePositiveInteger, getAuthenticatedUserIdOrThrow } = require('./_shared.js');

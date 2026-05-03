@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS admin_tokens (
 ```javascript
 // backend/api/admin/middleware/parseAdminToken.js
 const crypto = require('crypto');
-const sql = require('../../../sql/sql_funtions.js');
+const sql = require('../../../sql/sql_functions.js');
 const { logAdminAlert } = require('../alertingService.js');
 
 async function parseAdminToken(request, response, next) {
@@ -742,7 +742,7 @@ INDEX idx_user_logs_user_metric_time (user_id, metric_key, occurred_at),
 
 ### 12.2 Miért
 
-A teljes kódbázis-keresés (`metricKey|metricValue|metricDelta`) csak az `insertUserLog` író függvényben talált találatot ([backend/sql/sql_funtions.js:601-603](backend/sql/sql_funtions.js#L601-L603)). **Egyetlen hívó sem ad át értéket** ezekhez a paraméterekhez. Az `idx_user_logs_user_metric_time` index szintén holt kód.
+A teljes kódbázis-keresés (`metricKey|metricValue|metricDelta`) csak az `insertUserLog` író függvényben talált találatot ([backend/sql/sql_functions.js:601-603](backend/sql/sql_functions.js#L601-L603)). **Egyetlen hívó sem ad át értéket** ezekhez a paraméterekhez. Az `idx_user_logs_user_metric_time` index szintén holt kód.
 
 ### 12.3 Ha mégis kell numerikus metrika
 
@@ -752,7 +752,7 @@ A `metadata JSON` mezőbe kerül (pl. `{ "elo_before": 1500, "elo_after": 1512, 
 
 - `backend/sql/create_database.sql` — oszlopok és index törölve
 - `backend/sql/database.js` (createTables) — oszlopok és index törölve
-- `backend/sql/sql_funtions.js` (`insertUserLog`) — paraméterek és INSERT törölve
+- `backend/sql/sql_functions.js` (`insertUserLog`) — paraméterek és INSERT törölve
 
 ---
 
@@ -775,7 +775,7 @@ A `metadata JSON` mezőbe kerül (pl. `{ "elo_before": 1500, "elo_after": 1512, 
 - [README.md](readme.md) — projekt setup és környezet
 - [issues.md](issues.md) — projekt-szintű teendők, prioritálva
 - [backend/api/routes/admin.js](backend/api/routes/admin.js) — meglévő admin route (F7-ben átáll az új láncra)
-- [backend/api/funtions.js](backend/api/funtions.js) — meglévő `isAdmin` middleware (F2-ben kibővítve token check-kel)
+- [backend/api/functions.js](backend/api/functions.js) — meglévő `isAdmin` middleware (F2-ben kibővítve token check-kel)
 - [backend/sockets.js](backend/sockets.js) — meglévő socket hub (F4-ben új `/admin` namespace)
 - [backend/sql/create_database.sql](backend/sql/create_database.sql) — séma sablon (F1-ben módosul)
 - [backend/sql/database.js](backend/sql/database.js) — runtime DB init (F1-ben módosul)

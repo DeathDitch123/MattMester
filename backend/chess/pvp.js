@@ -14,7 +14,7 @@ const { jatekUjraIndit, lepesKoordinataval, legalLepesekKliens } = require('./en
 const { idoLeall } = require('./timer.js');
 const { eloMeccsEredmeny } = require('./elo.js');
 const chessSql = require('./chess_sql_functions.js');
-const sql = require('../sql/sql_funtions.js');
+const sql = require('../sql/sql_functions.js');
 const { abilityAktival } = require('./abilities.js');
 const { getMode, isValidMode, queueKey, DEFAULT_MODE } = require('./modes.js');
 
@@ -355,14 +355,18 @@ function registerPvpHandlers(socket, io) {
             jatek.jatekosok.black.userId = userId;
         }
 
-        // Timeout: 60mp után auto-decline
+        // Timeout: 60mp után auto-decline. Védelem: ha az inviter socket-je
+        // időközben elszállt és a 5mp grace cleanup már lefutott, a pendingInvites
+        // bejegyzés már nincs ott — `has(targetUserId)` rejecteli. A `socket.emit` egy
+        // halott socketre noop, az io.to(user-room) a túlélő tab-okra megy.
         const timer = setTimeout(() => {
-            if (pendingInvites.has(targetUserId)) {
-                pendingInvites.delete(targetUserId);
-                jatekTorol(gameId);
+            if (!pendingInvites.has(targetUserId)) return;
+            pendingInvites.delete(targetUserId);
+            jatekTorol(gameId);
+            if (socket.connected) {
                 socket.emit('chess:invite:expired', { targetUserId });
-                io.to(`user-room:${targetUserId}`).emit('chess:invite:expired', { inviterName: username });
             }
+            io.to(`user-room:${targetUserId}`).emit('chess:invite:expired', { inviterName: username });
         }, INVITE_TIMEOUT_MS);
 
         pendingInvites.set(targetUserId, {
@@ -953,11 +957,18 @@ async function handlePvpDisconnect(userId, io) {
     });
 
     jatek.disconnectTimer = setTimeout(async () => {
-        // Ha még mindig disconnectelt → auto-forfeit
-        if (!jatek.vege && jatek.disconnectSzin === szin) {
+        // Ha még mindig disconnectelt → auto-forfeit. Védelem: surrender / draw / abort
+        // beállíthatja a `vege`-t vagy törölheti a játékot időközben — ne fire-eljünk
+        // double end-eseményt. A jatekKeres() ellenőrzi, hogy a játék létezik-e még.
+        const stillExists = jatekKeres(gameId);
+        const meccsAktivMegMindig = stillExists
+            && !stillExists.vege
+            && stillExists.pvpAktiv
+            && stillExists.disconnectSzin === szin;
+        if (meccsAktivMegMindig) {
             const nyertesSzin = getOpponentColor(szin);
-            const uzenet = `${jatek.pvpJatekosNevek[szin]} kilépett — ${jatek.pvpJatekosNevek[nyertesSzin]} nyert`;
-            await jatekVegeKezeles(jatek, nyertesSzin, uzenet, io);
+            const uzenet = `${stillExists.pvpJatekosNevek[szin]} kilépett — ${stillExists.pvpJatekosNevek[nyertesSzin]} nyert`;
+            await jatekVegeKezeles(stillExists, nyertesSzin, uzenet, io);
         }
     }, DISCONNECT_GRACE_MS);
 }

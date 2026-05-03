@@ -1,8 +1,8 @@
 const express = require('express');
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
 const { leaderboardService } = require('../../services.js');
 const { usernameRegex } = require('../validation.js');
-const { isAuthenticated } = require('../funtions.js');
+const { isAuthenticated } = require('../functions.js');
 const { playerSearchLimiter } = require('../middleware/rateLimiter.js');
 
 const router = express.Router();

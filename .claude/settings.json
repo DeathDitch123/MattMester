@@ -128,7 +128,14 @@
       "Bash(node --check \"D:\\\\Letoltesek\\\\GIthub\\\\repo\\\\MattMester\\\\frontend\\\\javascript\\\\chessModeChooser.js\")",
       "Bash(xargs -I {} bash -c \"wc -l '{}' && echo '---'\")",
       "Bash(grep -iE \"\\\\.md$|ADMIN\")",
-      "Bash(grep -iE \"claude|^\\\\.git$\")"
+      "Bash(grep -iE \"claude|^\\\\.git$\")",
+      "Bash(node --check \"D:/Letoltesek/GIthub/repo/MattMester/frontend/javascript/_utils.js\")",
+      "Bash(node --check \"D:/Letoltesek/GIthub/repo/MattMester/frontend/javascript/index.js\")",
+      "Bash(node --check \"D:/Letoltesek/GIthub/repo/MattMester/frontend/javascript/profile/01-helpers.js\")",
+      "Bash(node --check \"D:/Letoltesek/GIthub/repo/MattMester/frontend/javascript/adminPanel/01-helpers.js\")",
+      "Bash(node --check \"D:/Letoltesek/GIthub/repo/MattMester/frontend/javascript/chessModeChooser.js\")",
+      "Bash(git mv *)",
+      "Bash(grep -v \":0$\")"
     ]
   }
 }

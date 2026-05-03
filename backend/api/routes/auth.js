@@ -1,6 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
 const {
     authLoginLimiter,
@@ -10,7 +10,8 @@ const {
     passwordResetRequestLimiter,
     passwordResetTokenLimiter
 } = require('../middleware/rateLimiter.js');
-const { isAuthenticated } = require('../funtions.js');
+const { isAuthenticated } = require('../functions.js');
+const { setSessionFromUser } = require('../middleware/auth.js');
 const {
     generateVerificationToken,
     generatePasswordResetToken,
@@ -134,16 +135,9 @@ router.post('/login', authLoginLimiter, async (request, response) => {
             throw delErr;
         }
 
-        request.session.userId = user.id;
-        request.session.username = user.username;
-        request.session.role = user.role;
-        request.session.elo = user.elo;
-        request.session.elo_MM = user.elo_MM;
-        request.session.elo_bullet = user.elo_bullet;
-        request.session.profile_image = user.profile_image || '/profile_pictures/default.png';
-        request.session.profile_image_status = user.profile_image_status || 'default';
-        request.session.is_email_verified = !!user.is_email_verified;
-        request.session.cookie.maxAge = remember ? 1000 * 60 * 60 * 24 * 7 : null;
+        setSessionFromUser(request, user, {
+            cookieMaxAge: remember ? 1000 * 60 * 60 * 24 * 7 : null
+        });
 
         const ipAddress = getRequestIpAddress(request);
         const userAgent = request.headers['user-agent'] || 'Ismeretlen';
@@ -369,16 +363,17 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
         const passwordHash = await bcrypt.hash(password, 10);
         const result = await sql.insertUser(username, passwordHash, email);
 
-        request.session.userId = result.insertId;
-        request.session.username = username;
-        request.session.role = 'player';
-        request.session.elo = 800;
-        request.session.elo_MM = 800;
-        request.session.elo_bullet = 800;
-        request.session.profile_image = '/profile_pictures/default.png';
-        request.session.profile_image_status = 'default';
-        request.session.is_email_verified = false;   // friss regisztráció — még nincs verify
-        request.session.cookie.maxAge = null;
+        // Friss regisztráció — még nincs email-verify; a setSessionFromUser
+        // is_email_verified=false-ra állítja a flag-et a defaults-ből.
+        setSessionFromUser(request, {
+            id: result.insertId,
+            username,
+            role: 'player',
+            elo: 800,
+            elo_MM: 800,
+            elo_bullet: 800,
+            is_email_verified: false
+        }, { cookieMaxAge: null });
 
         const ipAddress = getRequestIpAddress(request);
         const userAgent = request.headers['user-agent'] || 'Ismeretlen';
@@ -538,15 +533,9 @@ router.get('/sessionInfo', async (request, response) => {
                 console.log(`User (${dbUser.username}) session-je evictalva sessionInfo-n: ${reasonLabel}.`);
             } else {
                 // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
-                request.session.userId = dbUser.id;
-                request.session.username = dbUser.username;
-                request.session.role = dbUser.role;
-                request.session.elo = dbUser.elo;
-                request.session.profile_image = dbUser.profile_image || '/profile_pictures/default.png';
-                request.session.profile_image_status = dbUser.profile_image_status || 'default';
                 // A verify flag-et is frissítjük, hogy a más tabon történt verifikáció
                 // a következő navigáción át megjelenjen ebben a session-ben is.
-                request.session.is_email_verified = !!dbUser.is_email_verified;
+                setSessionFromUser(request, dbUser);
 
                 result.loggedIn = true;
                 result.user = {

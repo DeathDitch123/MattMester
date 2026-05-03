@@ -313,28 +313,6 @@ async function getAllRooms() {
     }
 }
 
-// IP-utkozes ellenorzes: ugyanarrol az IP-rol indultak-e tobbszoros login kiserletek.
-async function ipCollisionCheck(ipAddress) {
-    const pool = getPool();
-    const query = `
-        SELECT user_id, COUNT(*) AS attempts
-        FROM user_logs
-        WHERE ip_address = ?
-          AND event_type = 'login'
-          AND occurred_at > (NOW() - INTERVAL 1 HOUR)
-        GROUP BY user_id
-        HAVING attempts > 5
-    `;
-    let result = [];
-    try {
-        const [rows] = await pool.execute(query, [ipAddress]);
-        result = rows;
-    } catch (error) {
-        throw new Error('Hiba az IP cím ütközés ellenőrzése során.');
-    }
-    return result;
-}
-
 async function ipCollisions() {
     const pool = getPool();
     const query = `
@@ -364,6 +342,5 @@ module.exports = {
     getOnlineGamesCount,
     getAllUsers,
     getAllRooms,
-    ipCollisionCheck,
     ipCollisions
 };

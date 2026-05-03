@@ -1,6 +1,6 @@
 const express = require('express');
-const sql = require('../../sql/sql_funtions.js');
-const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
+const sql = require('../../sql/sql_functions.js');
+const { isAuthenticated, requireVerifiedEmail } = require('../functions.js');
 const { friendActionLimiter } = require('../middleware/rateLimiter.js');
 const { logAuthenticatedAction, parsePositiveInteger } = require('./_shared.js');
 const { notificationService } = require('../../services.js');

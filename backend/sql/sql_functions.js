@@ -1,6 +1,6 @@
-// Aggregator (barrel) modul. A korabbi monolit sql_funtions.js tartalmat
+// Aggregator (barrel) modul. A korabbi monolit sql_functions.js tartalmat
 // rendeltetes szerint csoportositott modulokra bontottuk a `./modules/` ala,
-// ez a fajl pedig kompatibilitasi reteg: a meglevo `require('./sql_funtions')`
+// ez a fajl pedig kompatibilitasi reteg: a meglevo `require('./sql_functions')`
 // hivasok ugyanazokat a fuggvenyneveket talaljak meg, mint korabban.
 
 const profileImage = require('./modules/profileImage.js');
@@ -67,7 +67,6 @@ module.exports = {
     getOnlineGamesCount: admin.getOnlineGamesCount,
     getAllUsers: admin.getAllUsers,
     getAllRooms: admin.getAllRooms,
-    ipCollisionCheck: admin.ipCollisionCheck,
     ipCollisions: admin.ipCollisions,
 
     // bans

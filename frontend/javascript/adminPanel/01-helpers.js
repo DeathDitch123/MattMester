@@ -3,22 +3,11 @@
 const requestController = window.createRequestController(300);
 
 /* =============================================================
-   1) Apró segédek
+   1) Apró segédek — delegate-ek a `_utils.js` egyetlen kanonikus implementációjára
    ============================================================= */
-function runSafely(label, fn) {
-    try { return fn(); }
-    catch (err) { console.error(`${label} hiba:`, err); }
-}
-async function runSafelyAsync(label, fn) {
-    try { return await fn(); }
-    catch (err) { console.error(`${label} hiba:`, err); }
-}
-
-const escapeHtml = (value) => {
-    const div = document.createElement('div');
-    div.textContent = String(value === null || value === undefined ? '' : value);
-    return div.innerHTML;
-};
+const runSafely = (label, fn) => window.MattMesterUtils.runSafely(label, fn);
+const runSafelyAsync = (label, fn) => window.MattMesterUtils.runSafelyAsync(label, fn);
+const escapeHtml = (value) => window.MattMesterUtils.escapeHtml(value);
 
 const formatJSON = (obj) => {
     if (obj === null || obj === undefined) return '<span class="text-secondary">—</span>';

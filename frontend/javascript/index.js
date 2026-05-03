@@ -10,23 +10,10 @@ function rethrowIfAborted(error) {
     if (error?.name === 'AbortError') throw error;
 }
 
-function runSafely(label, handler) {
-    try {
-        return handler();
-    } catch (error) {
-        console.error(`${label} hiba:`, error);
-        return undefined;
-    }
-}
-
-async function runSafelyAsync(label, handler) {
-    try {
-        return await handler();
-    } catch (error) {
-        console.error(`${label} hiba:`, error);
-        return undefined;
-    }
-}
+// A 4 helper egyetlen kanonikus implementációja a frontend/javascript/_utils.js-ben
+// (`window.MattMesterUtils`). Itt csak delegáljuk, hogy a meglévő hívók ne törjenek.
+const runSafely = (label, handler) => window.MattMesterUtils.runSafely(label, handler);
+const runSafelyAsync = (label, handler) => window.MattMesterUtils.runSafelyAsync(label, handler);
 
 let LeaderboardData = {
     elo: [],
@@ -75,25 +62,8 @@ async function parseJson(response) {
 
 
 //sessionInfo
-async function fetchSessionInfo() {
-    let data = { success: false, loggedIn: false };
-
-    try {
-        const response = await fetch('/api/sessionInfo', {
-            signal: requestController.withAbortSignal('sessionInfo')
-        });
-        if (response.ok) {
-            data = await parseJson(response);
-        }
-    } catch (error) {
-        rethrowIfAborted(error);
-        console.error('Hiba a session informacio lekerdezese soran:', error);
-    } finally {
-        requestController.clearSignal('sessionInfo');
-    }
-
-    return data;
-}
+// Delegate-elve a `_utils.js`-be, hogy a teljes frontenden egyetlen forrás-igazság legyen.
+const fetchSessionInfo = () => window.MattMesterUtils.fetchSessionInfo();
 
 async function loadLeaderBoard() {
     try {
@@ -143,15 +113,8 @@ function bindLeaderBoardControls() {
     });
 }
 
-function escapeHtmlForLeaderboard(value) {
-    const text = String(value == null ? '' : value);
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
+// Delegate-elve a `_utils.js` egyetlen kanonikus escapeHtml-re.
+const escapeHtmlForLeaderboard = (value) => window.MattMesterUtils.escapeHtml(value);
 
 function getRankBadgeClass(index) {
     let className = 'rank-default';
