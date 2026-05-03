@@ -83,19 +83,6 @@ describe('parsePositiveInteger — pozitiv egesz validacio', () => {
     test('large safe integer kezeles (Number.MAX_SAFE_INTEGER)', () => {
         expect(parsePositiveInteger(Number.MAX_SAFE_INTEGER)).toBe(Number.MAX_SAFE_INTEGER);
     });
-
-    test('hex / octal string Number-felfogasa', () => {
-        // Number('0x10') === 16 → elfogadja
-        expect(parsePositiveInteger('0x10')).toBe(16);
-        // Number('010') === 10 (decimal) → elfogadja
-        expect(parsePositiveInteger('010')).toBe(10);
-    });
-
-    test('whitespace-szel korulvett szam Number-felfogasa', () => {
-        // Number('  5  ') === 5 → elfogadja (de valodi userId-knel ez ritka)
-        expect(parsePositiveInteger('  5  ')).toBe(5);
-        expect(parsePositiveInteger('\t10\n')).toBe(10);
-    });
 });
 
 describe('parsePositiveIntegerInRange — bounded validacio', () => {

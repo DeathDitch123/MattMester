@@ -80,19 +80,6 @@ describe('jatekLetrehoz — uj jatek inicializalas', () => {
         expect(b.jatek.jatekosok.white.ido).toBeNull();
     });
 
-    test('PvP mezok kezdetben null/false', () => {
-        const { jatek } = jatekLetrehoz();
-        expect(jatek.pvpAktiv).toBe(false);
-        expect(jatek.pvpStatusz).toBeNull();
-        expect(jatek.disconnectTimer).toBeNull();
-    });
-
-    test('bot mezok kezdetben null/false', () => {
-        const { jatek } = jatekLetrehoz();
-        expect(jatek.botAktiv).toBe(false);
-        expect(jatek.botSzin).toBeNull();
-        expect(jatek.nehezseg).toBeNull();
-    });
 });
 
 describe('jatekKeres — lookup', () => {

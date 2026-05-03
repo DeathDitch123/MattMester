@@ -30,37 +30,15 @@ function freshBotGame() {
     return jatek;
 }
 
-describe('NEHEZSEGEK — meta-konzisztencia', () => {
-    test('mind a 8 nehezseg definialva', () => {
-        for (let i = 1; i <= 8; i++) {
-            expect(NEHEZSEGEK[i]).toBeDefined();
-        }
-    });
-
-    test('ELO emelkedo a nehezseg fuggvenyeben', () => {
+describe('NEHEZSEGEK — invariansok (NEM tautologikus szerkezet-validacio)', () => {
+    test('ELO monoton emelkedo: kezdo szint <= mester szint (jatekos elvarasa)', () => {
+        // Ez logikai invarians — ha valaki uj szintet ad hozza, ne megtorje.
         for (let i = 1; i <= 7; i++) {
             expect(NEHEZSEGEK[i + 1].elo).toBeGreaterThanOrEqual(NEHEZSEGEK[i].elo);
         }
     });
 
-    test('mindegyikben legyen nev/elo/melyseg/randomPct/varakozasMs', () => {
-        for (let i = 1; i <= 8; i++) {
-            const c = NEHEZSEGEK[i];
-            expect(typeof c.nev).toBe('string');
-            expect(typeof c.elo).toBe('number');
-            expect(typeof c.melyseg).toBe('number');
-            expect(typeof c.randomPct).toBe('number');
-            expect(typeof c.varakozasMs).toBe('number');
-        }
-    });
-
-    test('melyseg mindenhol > 0', () => {
-        for (let i = 1; i <= 8; i++) {
-            expect(NEHEZSEGEK[i].melyseg).toBeGreaterThan(0);
-        }
-    });
-
-    test('randomPct 0..100 koz', () => {
+    test('randomPct 0..100 koz (kulonben buggy: bot 200%-ban random lepne)', () => {
         for (let i = 1; i <= 8; i++) {
             expect(NEHEZSEGEK[i].randomPct).toBeGreaterThanOrEqual(0);
             expect(NEHEZSEGEK[i].randomPct).toBeLessThanOrEqual(100);

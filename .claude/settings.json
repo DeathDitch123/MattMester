@@ -148,7 +148,14 @@
       "Bash(node --check backend/chess/engine.js)",
       "Bash(node --check backend/chess/state.js)",
       "Bash(node --check backend/chess/pvp.js)",
-      "Read(//c/Users/user/AppData/Local/Temp/claude/d--Letoltesek-GIthub-repo-MattMester/9667b89c-939b-4094-8c00-c1089ef577ed/tasks//**)"
+      "Read(//c/Users/user/AppData/Local/Temp/claude/d--Letoltesek-GIthub-repo-MattMester/9667b89c-939b-4094-8c00-c1089ef577ed/tasks//**)",
+      "Bash(echo \"EXITCODE: $?\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(gh issue *)",
+      "WebFetch(domain:github.com)"
+    ],
+    "additionalDirectories": [
+      "d:\\d\\Letoltesek\\GIthub\\repo\\MattMester\\backend\\__tests__"
     ]
   }
 }

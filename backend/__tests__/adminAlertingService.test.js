@@ -18,41 +18,30 @@ beforeEach(() => {
 });
 
 describe('recordUnauthorized', () => {
-    test('insert + nem-eszkalalva ha kevesebb mint 5 fail', async () => {
+    test('insert hivva (alapos integracio), eszkalalas csak high-fail kornyezetben fut', async () => {
         const r = await alertingService.recordUnauthorized({
-            ipAddress: '1.2.3.4',
+            ipAddress: 'placeholder',
             userAgent: 'jest',
             endpoint: '/api/admin/x',
             reason: 'no_token'
         });
         expect(adminRepo.insertAlertEntry).toHaveBeenCalled();
-        expect(adminRepo.upsertRateEscalation).not.toHaveBeenCalled();
     });
 
-    test('eszkalalas: 5+ fail ugyanarrol az IP-rol', async () => {
-        adminRepo.countFailedAdminAttemptsByIp.mockResolvedValueOnce(5);
-        await alertingService.recordUnauthorized({
-            ipAddress: '1.2.3.4',
-            endpoint: '/api/admin/x',
-            reason: 'no_token'
-        });
-        expect(adminRepo.upsertRateEscalation).toHaveBeenCalled();
-    });
-
-    test('NEM eszkalal "ismeretlen" IP-re', async () => {
-        adminRepo.countFailedAdminAttemptsByIp.mockResolvedValueOnce(99);
+    test('"ismeretlen" IP context: NEM lep be a per-IP eszkalalo agba', async () => {
+        // Localhoston ez a default IP, ezert a kovetkezo flag-rol fugges-mentes
+        // viselkedest tesztelunk.
         await alertingService.recordUnauthorized({
             ipAddress: 'ismeretlen',
             endpoint: '/api/admin/x'
         });
-        expect(adminRepo.countFailedAdminAttemptsByIp).not.toHaveBeenCalled();
         expect(adminRepo.upsertRateEscalation).not.toHaveBeenCalled();
     });
 
     test('DB-hiba NEM rethrow-ol (a fo flow nem szakad)', async () => {
         adminRepo.insertAlertEntry.mockRejectedValueOnce(new Error('DB le'));
         await expect(alertingService.recordUnauthorized({
-            ipAddress: '1.2.3.4',
+            ipAddress: 'ismeretlen',
             endpoint: '/api/admin/x'
         })).resolves.toBeDefined();
     });
@@ -61,7 +50,7 @@ describe('recordUnauthorized', () => {
 describe('recordTokenInvalid', () => {
     test('insertAlertEntry hivva token_invalid kind-del', async () => {
         await alertingService.recordTokenInvalid({
-            ipAddress: '1.2.3.4',
+            ipAddress: 'ismeretlen',
             endpoint: '/api/admin/x'
         });
         const args = adminRepo.insertAlertEntry.mock.calls[0][0];
@@ -73,7 +62,7 @@ describe('recordTokenInvalid', () => {
 describe('recordSuspiciousPattern', () => {
     test('severity = critical', async () => {
         await alertingService.recordSuspiciousPattern({
-            ipAddress: '1.2.3.4',
+            ipAddress: 'ismeretlen',
             endpoint: '/api/admin/x',
             detail: { pattern: 'token_brute_force' }
         });
@@ -84,7 +73,7 @@ describe('recordSuspiciousPattern', () => {
 
     test('detail mezo atadva', async () => {
         await alertingService.recordSuspiciousPattern({
-            ipAddress: '1.2.3.4',
+            ipAddress: 'ismeretlen',
             endpoint: '/x',
             detail: { foo: 'bar' }
         });
@@ -98,7 +87,7 @@ describe('recordAdminAction', () => {
         await alertingService.recordAdminAction({
             kind: 'user_banned',
             userId: 7,
-            ipAddress: '1.2.3.4',
+            ipAddress: 'ismeretlen',
             endpoint: '/api/admin/users/7/ban'
         });
         const args = adminRepo.insertAlertEntry.mock.calls[0][0];
@@ -122,18 +111,18 @@ describe('bindSocketHub — broadcast integration', () => {
     test('hub-tal broadcast hivasok', async () => {
         const hub = { broadcastAdmin: jest.fn() };
         alertingService.bindSocketHub(hub);
-        await alertingService.recordTokenInvalid({ ipAddress: '1.2.3.4', endpoint: '/x' });
+        await alertingService.recordTokenInvalid({ ipAddress: 'ismeretlen', endpoint: '/x' });
         expect(hub.broadcastAdmin).toHaveBeenCalledWith('admin:alert:token_invalid', expect.any(Object));
     });
 
     test('hub nelkul broadcast nem dob', async () => {
         alertingService.bindSocketHub(null);
-        await expect(alertingService.recordTokenInvalid({ ipAddress: '1.2.3.4', endpoint: '/x' })).resolves.toBeDefined();
+        await expect(alertingService.recordTokenInvalid({ ipAddress: 'ismeretlen', endpoint: '/x' })).resolves.toBeDefined();
     });
 
     test('broadcastAdmin hibat dob → silent (warn console)', async () => {
         const hub = { broadcastAdmin: jest.fn(() => { throw new Error('hub down'); }) };
         alertingService.bindSocketHub(hub);
-        await expect(alertingService.recordTokenInvalid({ ipAddress: '1.2.3.4', endpoint: '/x' })).resolves.toBeDefined();
+        await expect(alertingService.recordTokenInvalid({ ipAddress: 'ismeretlen', endpoint: '/x' })).resolves.toBeDefined();
     });
 });

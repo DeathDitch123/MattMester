@@ -1012,3 +1012,47 @@ describe('N9-N13: sakk interaktivitas — kliens-oldali fajlok elerhetoek', () =
         expect(engine).toMatch(/utolsoEntry\.mate\s*=\s*isCheckmateLepes/);
     });
 });
+
+describe('Admin route fajlok auth-guard meglete (kod-szintu)', () => {
+    // Forras-szintu integrity ellenorzes, helyettesiti a korabbi kettos
+    // adminRoutesAuthGuard + adminSubRoutersAuthGuard fajlokat, amelyek
+    // [401, 403, 404]-et fogadtak el → 404 (path mismatch) hamisan zoldnek
+    // jelolt egy tenyleges hianyzo guardot is. Ez a teszt forras-szinten
+    // kovetel parseAdminToken hivatkozast minden admin route-modulban.
+    const ADMIN_ROUTE_FILES = [
+        'alertsRoutes.js',
+        'chatModerationRoutes.js',
+        'exportUsersRoutes.js',
+        'ipBlockRoutes.js',
+        'notificationsRoutes.js',
+        'profileImageRoutes.js',
+        'readOnlyRoutes.js',
+        'securityLoginsRoutes.js',
+        'userDeleteRoutes.js',
+        'userEditRoutes.js',
+        'userReportsRoutes.js'
+    ];
+
+    test.each(ADMIN_ROUTE_FILES)('api/routes/admin/%s tartalmazza a parseAdminToken middleware hivasat', (file) => {
+        const content = readFile(path.join(BACKEND, 'api', 'routes', 'admin', file));
+        // Vagy direktben hivja: parseAdminToken — vagy az adminLimiterChain-en at
+        // (ami szinten parseAdminToken-be torkollik). Igy mindket mintat elfogadjuk.
+        const matches = /parseAdminToken|adminLimiterChain/.test(content);
+        expect(matches).toBe(true);
+    });
+
+    const ADMIN_SUB_ROUTERS = [
+        'superAdminRoutes.js',
+        'abilitiesRoutes.js',
+        'socialRoutes.js',
+        'gamesRoutes.js',
+        'settingsRoutes.js',
+        'testsRoutes.js'
+    ];
+
+    test.each(ADMIN_SUB_ROUTERS)('api/admin/%s tartalmazza a parseAdminToken middleware hivasat', (file) => {
+        const content = readFile(path.join(BACKEND, 'api', 'admin', file));
+        const matches = /parseAdminToken|adminLimiterChain|requireSuperAdmin/.test(content);
+        expect(matches).toBe(true);
+    });
+});
