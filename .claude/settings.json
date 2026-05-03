@@ -152,7 +152,8 @@
       "Bash(echo \"EXITCODE: $?\")",
       "Bash(echo \"EXIT: $?\")",
       "Bash(gh issue *)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(grep -nA 2 \"POST.*conversations/:conversationId/messages\\\\|conversations/:conversationId/messages\" api/routes/chat.js)"
     ],
     "additionalDirectories": [
       "d:\\d\\Letoltesek\\GIthub\\repo\\MattMester\\backend\\__tests__"

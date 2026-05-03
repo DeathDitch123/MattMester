@@ -284,6 +284,9 @@ const SECTIONS = {
                 hasUser
                     ? { label: '', icon: 'bi-eye', variant: 'outline-light', size: 'sm', attrs: 'title="Profil megtekintése" aria-label="Profil megtekintése"', onclick: 'openSelectedUserProfileView()' }
                     : null,
+                hasUser && !isCurrentUser
+                    ? { label: 'Üzenet', icon: 'bi-chat-dots', variant: 'outline-info', size: 'sm', attrs: 'title="Üzenet küldése (Issue #53)"', onclick: 'openAdminQuickChatModal()' }
+                    : null,
                 { label: 'Vissza a listához', icon: 'bi-arrow-left', size: 'sm', onclick: "showSection('users')" }
             ].filter(Boolean)
         })}

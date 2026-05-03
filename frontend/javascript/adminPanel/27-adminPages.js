@@ -869,6 +869,117 @@ function attachAdminSocketListeners(socket) {
 }
 
 // ============================================================
+// Issue #53 — Admin gyors-üzenet (direkt chat user-rel a panelből).
+// ============================================================
+function openAdminQuickChatModal() {
+    const u = state.selectedUser;
+    if (!u || !u.id) {
+        showToast('Nincs kiválasztott felhasználó.', 'warning');
+        return;
+    }
+    if (Number(state.currentUser?.id || 0) === Number(u.id)) {
+        showToast('Önmagadnak nem küldhetsz üzenetet.', 'warning');
+        return;
+    }
+    const modalEl = document.getElementById('adminQuickChatModal');
+    if (!modalEl || !window.bootstrap?.Modal) {
+        showToast('Nem érhető el a modal.', 'danger');
+        return;
+    }
+    const targetEl = document.getElementById('adminQuickChatTargetName');
+    if (targetEl) targetEl.textContent = u.username || `#${u.id}`;
+    const msgEl = document.getElementById('adminQuickChatMessage');
+    if (msgEl) {
+        msgEl.value = '';
+        msgEl.removeAttribute('disabled');
+    }
+    const countEl = document.getElementById('adminQuickChatCount');
+    if (countEl) countEl.textContent = '0';
+    const feedback = document.getElementById('adminQuickChatFeedback');
+    if (feedback) {
+        feedback.classList.add('d-none');
+        feedback.classList.remove('alert-success', 'alert-danger');
+        feedback.textContent = '';
+    }
+    new window.bootstrap.Modal(modalEl).show();
+
+    // Live char-count
+    if (msgEl && countEl) {
+        msgEl.oninput = () => {
+            countEl.textContent = String(msgEl.value.length);
+        };
+    }
+}
+
+async function submitAdminQuickChat() {
+    const u = state.selectedUser;
+    const msgEl = document.getElementById('adminQuickChatMessage');
+    const sendBtn = document.getElementById('adminQuickChatSendBtn');
+    const feedback = document.getElementById('adminQuickChatFeedback');
+    const text = (msgEl?.value || '').trim();
+
+    if (!u?.id) return;
+    if (!text) {
+        if (feedback) {
+            feedback.classList.remove('d-none', 'alert-success');
+            feedback.classList.add('alert-danger');
+            feedback.textContent = 'Üres üzenet — írj valamit.';
+        }
+        return;
+    }
+    if (text.length > 1000) {
+        if (feedback) {
+            feedback.classList.remove('d-none', 'alert-success');
+            feedback.classList.add('alert-danger');
+            feedback.textContent = 'Túl hosszú (max 1000 karakter).';
+        }
+        return;
+    }
+
+    try {
+        if (sendBtn) sendBtn.disabled = true;
+
+        // 1) Direkt conversation létrehozása vagy lekérdezése
+        const openRes = await adminFetchJson('/api/chat/conversations/direct', {
+            method: 'POST',
+            body: { targetUserId: Number(u.id) }
+        });
+        const conversationId = openRes?.data?.conversationId;
+        if (!conversationId) throw new Error('A beszélgetés nem nyitható meg.');
+
+        // 2) Üzenet küldése — a chat.js endpoint a `message` field-et várja a body-ban
+        await adminFetchJson(`/api/chat/conversations/${conversationId}/messages`, {
+            method: 'POST',
+            body: { message: text }
+        });
+
+        if (feedback) {
+            feedback.classList.remove('d-none', 'alert-danger');
+            feedback.classList.add('alert-success');
+            feedback.textContent = 'Üzenet elküldve.';
+        }
+        if (msgEl) msgEl.setAttribute('disabled', 'true');
+        showToast(`Üzenet elküldve ${u.username || '#' + u.id} részére.`, 'success', 'bi-send-check-fill');
+
+        // Auto-close 1.5 mp után
+        setTimeout(() => {
+            const modalEl = document.getElementById('adminQuickChatModal');
+            if (modalEl && window.bootstrap?.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+            }
+        }, 1500);
+    } catch (err) {
+        if (feedback) {
+            feedback.classList.remove('d-none', 'alert-success');
+            feedback.classList.add('alert-danger');
+            feedback.textContent = err?.message || 'Ismeretlen hiba a küldés során.';
+        }
+    } finally {
+        if (sendBtn) sendBtn.disabled = false;
+    }
+}
+
+// ============================================================
 // Issue #41 — Szolgáltatások dashboard loader.
 // ============================================================
 async function loadServicesSnapshot(options = {}) {

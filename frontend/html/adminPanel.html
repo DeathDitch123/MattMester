@@ -753,6 +753,44 @@
         </div>
     </div>
 
+    <!-- Issue #53 — Admin gyors-uzenet modal: admin direkt chat-uzenetet kuld a kivalasztott
+         user-nek a /api/chat/conversations/direct + /messages endpointokon keresztul. A
+         conversation a chat.html oldalon a usernek normal direkt-csev-kent jelenik meg. -->
+    <div class="modal fade" id="adminQuickChatModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-chat-dots-fill me-2 text-gold"></i>
+                        Üzenet küldése — <span id="adminQuickChatTargetName" class="text-gold">—</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3">
+                        Az üzenet egy direkt beszélgetésben (1-az-1) érkezik a felhasználónak.
+                        Ha még nem volt direkt-conv, a rendszer most létrehozza.
+                    </p>
+                    <div class="mb-3">
+                        <label for="adminQuickChatMessage" class="form-label">Üzenet</label>
+                        <textarea id="adminQuickChatMessage" class="form-control" rows="4"
+                                  maxlength="1000" placeholder="Írd ide az üzenetet..."></textarea>
+                        <div class="form-text text-secondary">
+                            <span id="adminQuickChatCount">0</span>/1000 karakter
+                        </div>
+                    </div>
+                    <div id="adminQuickChatFeedback" class="alert d-none" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="adminQuickChatSendBtn" onclick="submitAdminQuickChat()">
+                        <i class="bi bi-send-fill me-1"></i>Küldés
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Admin grant felhasznalo-valaszto modal -->
     <div class="modal fade" id="adminGrantPickerModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">

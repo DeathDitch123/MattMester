@@ -1013,6 +1013,78 @@ describe('N9-N13: sakk interaktivitas — kliens-oldali fajlok elerhetoek', () =
     });
 });
 
+describe('Issue #41 — service dashboard backend route + frontend nav', () => {
+    test('servicesRoutes.js letezik es tartalmazza a /services/snapshot endpoint-ot', () => {
+        const file = path.join(BACKEND, 'api', 'routes', 'admin', 'servicesRoutes.js');
+        expect(fileExists(file)).toBe(true);
+        const content = readFile(file);
+        expect(content).toMatch(/router\.get\(\s*['"]\/services\/snapshot['"]/);
+        // Auth-guard: parseAdminToken vagy adminLimiterChain
+        expect(content).toMatch(/parseAdminToken|adminLimiterChain/);
+    });
+
+    test('admin route index.js mountolja a servicesRoutes-t', () => {
+        const content = readFile(path.join(BACKEND, 'api', 'routes', 'admin', 'index.js'));
+        expect(content).toMatch(/servicesRoutes/);
+    });
+
+    test('frontend NAV_TREE-ben van services entry', () => {
+        const content = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '04-navigation.js'));
+        expect(content).toMatch(/id:\s*['"]services['"]/);
+    });
+
+    test('frontend SECTIONS-ban van services renderer', () => {
+        const content = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '06-sections.js'));
+        expect(content).toMatch(/services:\s*\(\)\s*=>/);
+    });
+});
+
+describe('Issue #45 — CSRF guard', () => {
+    test('csrfGuard middleware letezik', () => {
+        const file = path.join(BACKEND, 'api', 'middleware', 'csrfGuard.js');
+        expect(fileExists(file)).toBe(true);
+        const content = readFile(file);
+        expect(content).toMatch(/CSRF_FORBIDDEN/);
+        expect(content).toMatch(/STATE_CHANGING_METHODS/);
+    });
+
+    test('server.js mountolja a csrfGuard-ot az /api utvonalra', () => {
+        const content = readFile(path.join(BACKEND, 'server.js'));
+        expect(content).toMatch(/csrfGuard/);
+        expect(content).toMatch(/app\.use\(['"]\/api['"]\s*,\s*csrfGuard\)/);
+    });
+});
+
+describe('Issue #53 — admin gyors-uzenet modal', () => {
+    test('adminQuickChatModal HTML letezik az adminPanel.html-ben', () => {
+        const html = readFile(path.join(FRONTEND, 'html', 'adminPanel.html'));
+        expect(html).toMatch(/id="adminQuickChatModal"/);
+        expect(html).toMatch(/id="adminQuickChatMessage"/);
+        expect(html).toMatch(/id="adminQuickChatSendBtn"/);
+    });
+
+    test('frontend openAdminQuickChatModal + submitAdminQuickChat funkciok', () => {
+        const content = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '27-adminPages.js'));
+        expect(content).toMatch(/function openAdminQuickChatModal/);
+        expect(content).toMatch(/async function submitAdminQuickChat/);
+        // A submit a chat.js endpoint-okat hivja
+        expect(content).toMatch(/\/api\/chat\/conversations\/direct/);
+        expect(content).toMatch(/\/messages/);
+    });
+});
+
+describe('Issue #52 — profile.html halott szekciok torolve', () => {
+    test('"Recent Games" placeholder szekcio nincs (a #recentOpponents helyettesiti)', () => {
+        const html = readFile(path.join(FRONTEND, 'html', 'profile.html'));
+        // A halott szekcio jellemzo strigjei NEM lehetnek benne:
+        expect(html).not.toMatch(/id="games"\s/);
+        expect(html).not.toMatch(/Sample game rows/);
+        expect(html).not.toMatch(/data-bs-target="#allGamesModal"/);
+        // De a #recentOpponents (a helyettesito) MEG kell legyen.
+        expect(html).toMatch(/id="recentOpponents"/);
+    });
+});
+
 describe('Admin route fajlok auth-guard meglete (kod-szintu)', () => {
     // Forras-szintu integrity ellenorzes, helyettesiti a korabbi kettos
     // adminRoutesAuthGuard + adminSubRoutersAuthGuard fajlokat, amelyek
