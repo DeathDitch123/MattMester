@@ -148,4 +148,43 @@ describe('POST /api/chess/new-bot — multi-tab guard (Issue #63)', () => {
         jatekTorol(gameId);
         if (res.body?.gameId) jatekTorol(res.body.gameId);
     });
+
+    test('orphan SAJAT BOT meccs → auto-cleanup, uj meccs indithato', async () => {
+        // Felhasznalo bezarta a tabot, a beforeunload surrender nem futott le →
+        // az elozo bot meccs in-memory ottragad. Az uj /new-bot keres ezt automatikusan
+        // takaritsa el es engedje az uj meccset (ne 409-cel utasitsa el).
+        const { gameId, jatek } = jatekLetrehoz({ mode: 'klasszikus' });
+        jatekUjraIndit(jatek);
+        jatek.jatekosok.white.userId = 7;
+        jatek.botAktiv = true;
+        jatek.botSzin = 'black';
+
+        const app = buildApp(7);
+        const res = await supertest(app).post('/api/chess/new-bot').send({ difficulty: 1, mode: 'mattmester' });
+        expect(res.status).toBe(200);
+        expect(res.body?.gameId).toBeDefined();
+        // Regi meccs torolve kell hogy legyen
+        expect(hasAnyActiveGameForUser(7).gameId).toBe(res.body.gameId);
+
+        if (res.body?.gameId) jatekTorol(res.body.gameId);
+    });
+
+    test('aktiv PVP meccs → NE takaritsa el, 409 marad', async () => {
+        // PvP meccset SOHA ne torolje a /new-bot — azt csak a 60mp grace period
+        // vagy a feladas/abort logika lezarhatja. Itt az uj bot meccs blokkolva marad.
+        const { gameId, jatek } = jatekLetrehoz({ mode: 'klasszikus' });
+        jatekUjraIndit(jatek);
+        jatek.jatekosok.white.userId = 7;
+        jatek.pvpAktiv = true;
+        jatek.pvpStatusz = 'active';
+
+        const app = buildApp(7);
+        const res = await supertest(app).post('/api/chess/new-bot').send({ difficulty: 1, mode: 'mattmester' });
+        expect(res.status).toBe(409);
+        expect(res.body.code).toBe('GAME_ALREADY_ACTIVE');
+        // PvP meccs valtozatlanul aktiv
+        expect(hasAnyActiveGameForUser(7).gameId).toBe(gameId);
+
+        jatekTorol(gameId);
+    });
 });

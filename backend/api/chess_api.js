@@ -24,6 +24,22 @@ function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Ha a felhasznalo aktiv meccse egy SAJAT BOT meccs (orphan — a beforeunload
+// surrender valamiert nem futott le, vagy a kliens kontextusbol kiesett), akkor
+// torli es true-t ad vissza. Kulonben (PvP, masik mod) → false. Ezt a /new-bot
+// hivja, hogy egy "ragadt" bot meccs ne blokkolja ujabb meccs inditasat.
+function cleanupOwnAbandonedBotGame(userId) {
+    if (!userId) return false;
+    const active = hasAnyActiveGameForUser(userId);
+    if (!active.hasActive) return false;
+    const jatek = jatekKeres(active.gameId);
+    if (!jatek) return false;
+    if (!jatek.botAktiv || jatek.pvpAktiv) return false;
+    if (jatek.jatekosok?.white?.userId !== userId) return false;
+    jatekTorol(active.gameId);
+    return true;
+}
+
 // requireVerifiedEmail vendég bot-játéknál átugrandó: ha nincs session de a játékban
 // a fehér slot vendég (userId=null) és botAktiv, engedjük tovább ellenőrzés nélkül.
 function requireVerifiedEmailOrGuestBot(req, res, next) {
@@ -162,11 +178,17 @@ router.post('/new-bot', async (req, res) => {
         } else if (modeKey !== undefined && modeKey !== null && (typeof modeKey !== 'string' || !isValidMode(modeKey))) {
             statusCode = 400;
             responseBody = { error: 'Érvénytelen játékmód.' };
-        } else if (req.session?.userId && hasAnyActiveGameForUser(req.session.userId).hasActive) {
+        } else if (req.session?.userId && hasAnyActiveGameForUser(req.session.userId).hasActive
+                   && !cleanupOwnAbandonedBotGame(req.session.userId)) {
             // Issue #63 — multi-tab guard: ugyanaz a fiok max 1 aktiv meccsel.
             // Ha az egyik tab-ban PvP-t jatszik, masik tab-ban ne tudjon bot-meccset
             // inditani (es forditva sem). A pvp.js mar tartalmazza a guard-ot a queue +
             // invite flow-ban, itt a bot-ag fele kotjuk be ugyanazt.
+            //
+            // Kivetel: ha az aktiv meccs egy SAJAT BOT meccs (a felhasznalo bezarta a
+            // tabot, a beforeunload surrender nem futott le → orphan game), akkor
+            // automatikusan eltakaritjuk es engedjuk az uj meccset. PvP-t sosem
+            // takaritunk igy — azt a 60mp grace period kezeli a sockets oldalon.
             statusCode = 409;
             const active = hasAnyActiveGameForUser(req.session.userId);
             responseBody = {

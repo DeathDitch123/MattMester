@@ -15,16 +15,18 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="../css/chess.css">
+    <link rel="stylesheet" href="../../css/shared/chessModeChooser.css">
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../../javascript/_utils.js" defer></script>
     <script src="../../javascript/socketClient.js" defer></script>
     <script src="../../javascript/shared/maintenanceClient.js" defer></script>
+    <script src="../../javascript/chessModeChooser.js" defer></script>
     <script type="module" src="../javascript/main.js"></script>
 </head>
 
 <body>
-    <!-- JÁTÉKMÓD VÁLASZTÓ MODAL -->
-    <div id="mode-modal" class="mode-modal">
+    <!-- JÁTÉKMÓD VÁLASZTÓ MODAL (legacy fallback — alapból rejtve, hogy ne villogjon) -->
+    <div id="mode-modal" class="mode-modal hidden">
         <div class="mode-modal-content">
             <h2 class="mode-title">Mattmester</h2>
             <p class="mode-subtitle">Válassz játékmódot</p>

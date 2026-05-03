@@ -163,6 +163,17 @@ async function apiFeladMagat() {
 let selectedMode = null;
 let selectedRanked = true;
 
+// Az új (frontpage) chooser megnyitása. Ha valamiért nem érhető el (script load
+// hiba vagy timing race), fallback: visszairányítás az index oldalra.
+function ujMeccsChooserNyitas() {
+    const chooser = window.MattMesterChessModeChooser;
+    if (chooser && typeof chooser.open === 'function') {
+        chooser.open();
+        return;
+    }
+    window.location.href = '/';
+}
+
 async function modValasztoMegjelenit() {
     const modal = document.getElementById("mode-modal");
     const stepModes = document.getElementById("mode-step-modes");
@@ -1471,7 +1482,7 @@ function esemenyekUjraKot() {
                 rematchBtnReset.disabled = false;
                 rematchBtnReset.textContent = 'Revans';
             }
-            modValasztoMegjelenit();
+            ujMeccsChooserNyitas();
         });
     }
 
@@ -1621,8 +1632,8 @@ async function init() {
         return;
     }
 
-    // Játékmód választó megjelenítés (legacy fallback — direkt megnyitás)
-    modValasztoMegjelenit();
+    // Játékmód választó megjelenítés — az új (frontpage) chooser-rel
+    ujMeccsChooserNyitas();
 }
 
 // ────────────────────────────────────────────
@@ -1642,7 +1653,7 @@ async function initBotFromQueryParams(params) {
         await jatekIndit(difficulty || 1, mode, false, modal);
     } catch (err) {
         console.error('Bot auto-indítás hiba:', err);
-        modValasztoMegjelenit();
+        ujMeccsChooserNyitas();
     }
 }
 
