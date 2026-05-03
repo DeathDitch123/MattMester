@@ -132,13 +132,16 @@ router.get('/modes', (req, res) => {
 
 // ────────────────────────────────────────────
 // POST /api/chess/new-bot — Új játék robot ellen
-// Body: { difficulty: 1-8, mode?: string, ranked?: boolean }
+// Body: { difficulty: 1-8, mode?: string }
+// FONTOS: bot meccs MINDIG casual (ranked=false). A bot ELO-ja fix, így a
+// ranked módnak nincs értelme — sem ELO update, sem kompetitív mérés.
+// A `ranked` body field-et szándékosan ignoráljuk.
 // ────────────────────────────────────────────
 router.post('/new-bot', async (req, res) => {
     let statusCode = 200;
     let responseBody = null;
     try {
-        const { difficulty, mode: modeKey, ranked } = req.body || {};
+        const { difficulty, mode: modeKey } = req.body || {};
         const nehezseg = parseInt(difficulty, 10);
 
         if (!nehezseg || nehezseg < 1 || nehezseg > 8) {
@@ -150,7 +153,7 @@ router.post('/new-bot', async (req, res) => {
         } else {
             const { gameId, jatek } = jatekLetrehoz({
                 mode: modeKey || DEFAULT_MODE,
-                ranked: ranked !== false
+                ranked: false  // bot meccs MINDIG casual — ELO update nem fut
             });
             const userId = req.session?.userId || null;
             const botInfo = nehezsegiSzintInfo(nehezseg);

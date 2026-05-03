@@ -54,6 +54,22 @@ function getUserColorInGame(jatek, userId) {
     return null;
 }
 
+// Stale-active-game cleanup: ha az `activeGamesByUser` egy halott meccs gameId-jét
+// tartalmazza (pl. a 30mp-os post-game cleanup még nem futott le, vagy a meccs valamilyen
+// edge-case miatt törlődött), törli a bejegyzést. Visszaadja: TRUE ha most is aktív
+// meccs van, FALSE ha nincs (tehát a queue/invite engedélyezhető).
+// `jatekKeres` null/undef-et ad vissza nem létező gameId-re.
+function hasLiveActiveGame(userId) {
+    if (!activeGamesByUser.has(userId)) return false;
+    const gameId = activeGamesByUser.get(userId);
+    const jatek = jatekKeres(gameId);
+    if (!jatek || jatek.vege || !jatek.pvpAktiv || jatek.pvpStatusz === 'finished') {
+        activeGamesByUser.delete(userId);
+        return false;
+    }
+    return true;
+}
+
 function getOpponentColor(szin) {
     return szin === 'white' ? 'black' : 'white';
 }
@@ -290,11 +306,11 @@ function registerPvpHandlers(socket, io) {
             return socket.emit('chess:error', { uzenet: 'Nem hívhatod meg magadat.' });
         }
 
-        if (activeGamesByUser.has(userId)) {
+        if (hasLiveActiveGame(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
         }
 
-        if (activeGamesByUser.has(targetUserId)) {
+        if (hasLiveActiveGame(targetUserId)) {
             return socket.emit('chess:error', { uzenet: 'Az ellenfél már játékban van.' });
         }
 
@@ -515,7 +531,7 @@ function registerPvpHandlers(socket, io) {
         const isRanked = !!(modeMeta.rankedAllowed && ranked !== false);
         const qKey = queueKey(modeKey, isRanked);
 
-        if (activeGamesByUser.has(userId)) {
+        if (hasLiveActiveGame(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
         }
 

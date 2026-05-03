@@ -677,6 +677,17 @@ router.post(
                 console.warn('ban: socket disconnect hiba:', kickErr.message);
             }
 
+            // Ongoing PvP meccs lezárása. Ha az ellenfél is letiltott / soft-deleted
+            // → no-ELO abort. Egyébként az ellenfél nyer + ELO update. Ezen kívül
+            // visszavonjuk a userId KORÁBBI recent abandoned-meccsén kapott ELO-t,
+            // ha mindkét fél most már le van tiltva (sorrend-független "egyik se kap ELO-t").
+            try {
+                const { abortByUserDisable } = require('../../../chess/abortHelpers.js');
+                await abortByUserDisable(userId, 'ban');
+            } catch (abortErr) {
+                console.warn('ban: chess abort hiba:', abortErr.message);
+            }
+
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.USERS_BAN;
             response.locals.adminAudit.severity = 'warning';
             response.locals.adminAudit.targetType = 'user';

@@ -49,6 +49,8 @@
     <script src="../javascript/profile/20-bootstrap.js" defer></script>
     <script src="../javascript/playerActions.js" defer></script>
     <script src="../javascript/shared/houseRules.js" defer></script>
+    <script src="../javascript/chessModeChooser.js" defer></script>
+    <link rel="stylesheet" href="../css/shared/chessModeChooser.css">
 </head>
 
 <body>
@@ -597,7 +599,7 @@
         </div>
     </div>
 
-    <button class="fab-quick-play" type="button" data-bs-toggle="modal" data-bs-target="#quickPlayModal">
+    <button class="fab-quick-play" type="button" onclick="window.MattMesterChessModeChooser?.open()">
         <span class="fab-tooltip">Quick Play</span>
         <i data-lucide="swords" style="width: 26px; height: 26px;"></i>
     </button>

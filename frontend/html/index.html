@@ -30,6 +30,8 @@
     <script src="../javascript/index.js" defer></script>
     <script src="../javascript/playerActions.js" defer></script>
     <script src="../javascript/shared/houseRules.js" defer></script>
+    <script src="../javascript/chessModeChooser.js" defer></script>
+    <link rel="stylesheet" href="../css/shared/chessModeChooser.css">
 </head>
 
 <body>
@@ -115,8 +117,10 @@
 
                         <div class="d-flex justify-content-around">
                             <div class="d-flex flex-wrap gap-2">
-                                <a href="../chess_barold/html/chess.html" class="btn btn-gold btn-lg"><i
-                                        class="bi bi-play-fill me-1"></i> Játék</a>
+                                <button type="button" class="btn btn-gold btn-lg"
+                                    onclick="window.MattMesterChessModeChooser?.open()">
+                                    <i class="bi bi-play-fill me-1"></i> Játék
+                                </button>
                             </div>
                             <a href="#ranglista" class="btn btn-outline-gold btn-lg"><i
                                     class="bi bi-trophy-fill me-1"></i>Ranglista</a>
@@ -404,6 +408,8 @@
             </div>
         </div>
     </div>
+
+    <!-- A chess mode chooser modal HTML-jét a chessModeChooser.js inject-eli első open()-kor -->
 </body>
 
 </html>

@@ -384,6 +384,17 @@ initDatabase()
             console.warn('test_runs cleanup kihagyva:', err.message);
         }
 
+        // Chess games cleanup: server crash / restart utan a `status='ongoing'`
+        // PvP meccsek a memoriaban elvesztek (jatek objektum), DB-ben ottragadnak.
+        // Lezarjuk oket `abandoned`-ra ELO loss NÉLKÜL — a jatekosok nem vesztettek
+        // sajat dontesukbol, igy se a winner_id-t, se az ELO-t nem allitjuk.
+        try {
+            const chessSql = require('./chess/chess_sql_functions.js');
+            await chessSql.startupCleanupOngoingGames();
+        } catch (err) {
+            console.warn('chess startup cleanup kihagyva:', err.message);
+        }
+
         // Site settings cache eager warmup (a maintenance middleware sync-eljen
         // hasznalja, igy az elso request elott legyen a cache feltoltve).
         try {

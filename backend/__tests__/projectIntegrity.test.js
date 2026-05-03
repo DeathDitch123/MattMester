@@ -418,6 +418,123 @@ describe('Frontend: HTML script src kapcsolatok', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
+// 6.a Chess lifecycle invariánsok (server crash, ban, delete, maintenance, bot)
+// ─────────────────────────────────────────────────────────────────────
+
+describe('Chess lifecycle invariánsok', () => {
+    test('startupCleanupOngoingGames létezik a chess_sql_functions-ban', () => {
+        const file = path.join(BACKEND, 'chess', 'chess_sql_functions.js');
+        const content = readFile(file);
+        expect(content).toMatch(/async function startupCleanupOngoingGames/);
+        expect(content).toMatch(/module\.exports\s*=\s*\{[\s\S]*startupCleanupOngoingGames[\s\S]*\}/);
+    });
+
+    test('server.js a startupot bekoti', () => {
+        const content = readFile(path.join(BACKEND, 'server.js'));
+        expect(content).toMatch(/startupCleanupOngoingGames\s*\(\s*\)/);
+    });
+
+    test('abortHelpers.js exportalja a 4 fokozott meccs-abort funkciot', () => {
+        const file = path.join(BACKEND, 'chess', 'abortHelpers.js');
+        expect(fileExists(file)).toBe(true);
+        const content = readFile(file);
+        for (const fn of ['abortGameNoElo', 'abortAndAwardOpponent', 'abortByUserDisable', 'abortAllOngoingForMaintenance']) {
+            expect(content).toMatch(new RegExp(`(async )?function ${fn}\\b`));
+            expect(content).toMatch(new RegExp(`module\\.exports[\\s\\S]*${fn}[\\s\\S]*\\}`));
+        }
+    });
+
+    test('readOnlyRoutes ban handler hivja az abortByUserDisable-t', () => {
+        const content = readFile(path.join(BACKEND, 'api', 'routes', 'admin', 'readOnlyRoutes.js'));
+        expect(content).toMatch(/abortByUserDisable/);
+    });
+
+    test('userDeleteRoutes hivja az abortByUserDisable-t', () => {
+        const content = readFile(path.join(BACKEND, 'api', 'routes', 'admin', 'userDeleteRoutes.js'));
+        expect(content).toMatch(/abortByUserDisable/);
+    });
+
+    test('maintenanceScheduler emitEnforce hivja az abortAllOngoingForMaintenance-t', () => {
+        const content = readFile(path.join(BACKEND, 'api', 'admin', 'maintenanceScheduler.js'));
+        expect(content).toMatch(/abortAllOngoingForMaintenance/);
+    });
+
+    test('Bot meccs MINDIG casual: chess_api.js new-bot route ranked=false-t ad át', () => {
+        const content = readFile(path.join(BACKEND, 'api', 'chess_api.js'));
+        // Az új-bot route-ban explicit `ranked: false` legyen — nincs body-ranked propagálás
+        expect(content).toMatch(/router\.post\(['"]\/new-bot['"]/);
+        // Az adott route blokkban `ranked: false` literál
+        const m = content.match(/router\.post\(['"]\/new-bot['"][\s\S]*?(?=router\.|module\.exports)/);
+        expect(m).toBeTruthy();
+        expect(m[0]).toMatch(/ranked:\s*false/);
+    });
+
+    test('chessModeChooser.js letezik es exportalja a window.MattMesterChessModeChooser-t', () => {
+        const file = path.join(FRONTEND, 'javascript', 'chessModeChooser.js');
+        expect(fileExists(file)).toBe(true);
+        const content = readFile(file);
+        expect(content).toMatch(/window\.MattMesterChessModeChooser\s*=/);
+        expect(content).toMatch(/open\s*[,:]/);
+    });
+
+    test('index.html a chessModeChooser.open()-t hivja a Játék gomb mogul', () => {
+        const content = readFile(path.join(FRONTEND, 'html', 'index.html'));
+        expect(content).toMatch(/MattMesterChessModeChooser\?\.open\(\)/);
+        expect(content).toMatch(/<script[^>]+chessModeChooser\.js/);
+    });
+
+    test('chess.html main.js elismeri a query-string alapú indítást', () => {
+        const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
+        expect(content).toMatch(/initFromQueryParams|initBotFromQueryParams/);
+        expect(content).toMatch(/URLSearchParams\(window\.location\.search\)/);
+    });
+
+    test('Vegtelen idős módok casual: rankedAllowed=false ÉS eloColumn=null', () => {
+        // A `modes.js` egyetlen forrasa az ELO-szabalynak: mattmester és klasszikus
+        // (∞ ido) NE legyen ranked, NE adjon ELO-t. Idokorlatos modok (10p, blitz) ranked.
+        const modesPath = path.join(BACKEND, 'chess', 'modes.js');
+        delete require.cache[require.resolve(modesPath)];
+        const { MODES } = require(modesPath);
+
+        // Vegtelen ido (ido === null) → casual
+        for (const k of Object.keys(MODES)) {
+            const m = MODES[k];
+            if (m.ido === null) {
+                expect(m.rankedAllowed).toBe(false);
+                expect(m.eloColumn).toBeNull();
+            } else {
+                expect(m.rankedAllowed).toBe(true);
+                expect(typeof m.eloColumn).toBe('string');
+                expect(m.eloColumn.length).toBeGreaterThan(0);
+            }
+        }
+    });
+
+    test('chessModeChooser frontpage-en kezeli a queue + invite WS event-eket', () => {
+        const content = readFile(path.join(FRONTEND, 'javascript', 'chessModeChooser.js'));
+        expect(content).toMatch(/chess:queue:join/);
+        expect(content).toMatch(/chess:queue:leave/);
+        expect(content).toMatch(/chess:game:start/);
+        expect(content).toMatch(/chess:invite\b/);
+        expect(content).toMatch(/chess:invite:cancel/);
+        expect(content).toMatch(/updateSubtitle/);
+    });
+
+    test('pvp.js: stale activeGamesByUser bejegyzeseket auto-tisztit (hasLiveActiveGame helper)', () => {
+        const content = readFile(path.join(BACKEND, 'chess', 'pvp.js'));
+        // A helper letezik es a queue:join + invite handler-ek hivjak
+        expect(content).toMatch(/function hasLiveActiveGame/);
+        expect(content).toMatch(/hasLiveActiveGame\(userId\)/);
+        expect(content).toMatch(/hasLiveActiveGame\(targetUserId\)/);
+        // A queue:join mar nem a nyers `activeGamesByUser.has`-t hivja a check-re
+        // (az csak `set` / `delete` helyen lehet)
+        const queueJoinBlock = content.match(/socket\.on\(['"]chess:queue:join['"][\s\S]*?socket\.on\(/);
+        expect(queueJoinBlock).toBeTruthy();
+        expect(queueJoinBlock[0]).not.toMatch(/if\s*\(\s*activeGamesByUser\.has\(userId\)\s*\)/);
+    });
+});
+
+// ─────────────────────────────────────────────────────────────────────
 // 6.b SQL modul-modulok: nincs reserved keyword alias (MariaDB)
 // ─────────────────────────────────────────────────────────────────────
 

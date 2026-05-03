@@ -245,6 +245,43 @@ const abilityIdCache = new Map();
  * Ability DB id lekérdezése key alapján (cache-elve).
  * Ha nincs ilyen ability a táblában, null-t ad vissza.
  */
+/**
+ * Server crash / restart utáni helyreállítás: minden `status='ongoing'` PvP
+ * meccset lezár `status='abandoned'`-ra, ELO frissítés NÉLKÜL.
+ *
+ * Indok: a meccs memória-rezidens `jatek` objektumai a crash-szel együtt
+ * elvesztek — nincs honnan tovább folytatni. A DB-ben ezek a sorok addig
+ * "ongoing"-ban maradnak, ami szennyezi az admin Játszmák listát és a
+ * 24h aktivitás-statisztikákat. ELO-t nem frissítünk, mert egyik játékos
+ * sem vesztette el saját döntéséből a játszmát.
+ *
+ * Tervezett pgn marker: a mentett PGN-be a `[Termination "Server abort"]`
+ * tag kerül a kliens / admin review oldal számára.
+ *
+ * @returns {Promise<{ updated: number }>}
+ */
+async function startupCleanupOngoingGames() {
+    const pool = getPool();
+    let updated = 0;
+    try {
+        const [result] = await pool.execute(
+            `UPDATE games
+             SET status = 'abandoned',
+                 end_time = CURRENT_TIMESTAMP,
+                 pgn = COALESCE(pgn, ?)
+             WHERE status = 'ongoing'`,
+            ['[Termination "Server abort"]\n*']
+        );
+        updated = Number(result?.affectedRows) || 0;
+        if (updated > 0) {
+            console.log(`[chess startup] ${updated} ongoing meccs abortálva (server crash recovery, ELO loss nélkül).`);
+        }
+    } catch (err) {
+        console.warn('startupCleanupOngoingGames hiba:', err.message);
+    }
+    return { updated };
+}
+
 async function abilityIdByKey(key) {
     if (abilityIdCache.has(key)) return abilityIdCache.get(key);
     const pool = getPool();
@@ -304,5 +341,6 @@ module.exports = {
     eloLekerdezDb,
     meccsekSzamDb,
     abilityIdByKey,
-    abilityLogMentDb
+    abilityLogMentDb,
+    startupCleanupOngoingGames
 };

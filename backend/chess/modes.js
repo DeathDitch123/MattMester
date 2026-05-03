@@ -18,20 +18,24 @@
 // SOHA ne adj hozzá felhasználói inputtól származó stringet.
 const ALLOWED_ELO_COLUMNS = new Set(['elo', 'elo_mattmester', 'elo_classical', 'elo_blitz']);
 
+// ELO szabaly: csak az IDOKORLATOS modok adnak ELO-t (3 oszlop a DB-ben:
+// elo_mattmester, elo_classical, elo_blitz). A vegtelen idős módok (ido === null)
+// CASUAL-ok — sem ELO frissítés, sem ranked nincs. Ezzel a fair-play szabaly:
+// idő nélkül a meccs hosszabb lehet a végtelennél, ami torzítaná az ELO-t.
 const MODES = {
     mattmester: {
         id: 'mattmester',
         nev: 'Mattmester',
-        leiras: 'Képességes sakk, végtelen idővel.',
+        leiras: 'Képességes sakk, végtelen idővel — casual (ELO nem frissül).',
         abilities: true,
         ido: null,
-        eloColumn: 'elo_mattmester',
-        rankedAllowed: true
+        eloColumn: null,
+        rankedAllowed: false
     },
     mattmester_10p: {
         id: 'mattmester_10p',
         nev: 'Mattmester 10p',
-        leiras: 'Képességes sakk, 10 perces órával.',
+        leiras: 'Képességes sakk, 10 perces órával — ranked.',
         abilities: true,
         ido: 600,
         eloColumn: 'elo_mattmester',
@@ -40,16 +44,16 @@ const MODES = {
     klasszikus: {
         id: 'klasszikus',
         nev: 'Klasszikus',
-        leiras: 'Hagyományos sakk képességek nélkül, végtelen idővel.',
+        leiras: 'Hagyományos sakk képességek nélkül, végtelen idővel — casual.',
         abilities: false,
         ido: null,
-        eloColumn: 'elo_classical',
-        rankedAllowed: true
+        eloColumn: null,
+        rankedAllowed: false
     },
     klasszikus_10p: {
         id: 'klasszikus_10p',
         nev: 'Klasszikus 10p',
-        leiras: 'Hagyományos sakk képességek nélkül, 10 perces órával.',
+        leiras: 'Hagyományos sakk képességek nélkül, 10 perces órával — ranked.',
         abilities: false,
         ido: 600,
         eloColumn: 'elo_classical',
@@ -58,7 +62,7 @@ const MODES = {
     blitz: {
         id: 'blitz',
         nev: 'Blitz',
-        leiras: 'Gyors sakk képességek nélkül, 5 perces órával.',
+        leiras: 'Gyors sakk képességek nélkül, 5 perces órával — ranked.',
         abilities: false,
         ido: 300,
         eloColumn: 'elo_blitz',

@@ -107,7 +107,28 @@
       "Bash(grep -nE \"STATUS_BADGE\\\\\\\\b\" frontend/javascript/adminPanel/01-helpers.js)",
       "Bash(grep -nA 2 \"^const STATUS_BADGE\")",
       "Bash(grep -nA 6 \"^const STATUS_BADGE\")",
-      "Bash(node --check frontend/javascript/adminPanel/01-helpers.js)"
+      "Bash(node --check frontend/javascript/adminPanel/01-helpers.js)",
+      "Bash(grep -nE \"^module\\\\\\\\.exports|^async function|^function\" backend/chess/chess_sql_functions.js)",
+      "Bash(node --check server.js)",
+      "Bash(node --check chess/chess_sql_functions.js)",
+      "Bash(grep -nE \"aktivJatekok|^module\\\\\\\\.exports|function registerPvpHandlers|function handlePvpDisconnect|jatekosok\\\\\\\\.white|jatekosok\\\\\\\\.black\" backend/chess/pvp.js)",
+      "Bash(node --check backend/chess/abortHelpers.js)",
+      "Bash(node --check backend/api/routes/admin/readOnlyRoutes.js)",
+      "Bash(node --check backend/api/routes/admin/userDeleteRoutes.js)",
+      "Bash(node --check backend/api/chess_api.js)",
+      "Bash(node --check frontend/javascript/chessModeChooser.js)",
+      "Bash(grep -nE \"^async function jatekIndit|^function jatekIndit|jatekIndit\\\\\\\\\\(\" frontend/chess_barold/javascript/main.js)",
+      "Bash(grep -nE \"chess:invite|chess:game:start|on\\\\\\\\\\(|emit\\\\\\\\\\(\" frontend/javascript/chessInviteGlobal.js)",
+      "Bash(node --check backend/chess/modes.js)",
+      "Bash(node --check backend/chess/chess_sql_functions.js)",
+      "PowerShell(npx jest --config jest.config.js __tests__/chessLifecycle.test.js __tests__/projectIntegrity.test.js 2>&1)",
+      "PowerShell(npx jest --config jest.config.js __tests__/projectIntegrity.test.js __tests__/chessLifecycle.test.js 2>&1)",
+      "Bash(node --check ../frontend/chess_barold/javascript/main.js)",
+      "Bash(node --check ../frontend/javascript/chessModeChooser.js)",
+      "Bash(node --check \"D:\\\\Letoltesek\\\\GIthub\\\\repo\\\\MattMester\\\\frontend\\\\javascript\\\\chessModeChooser.js\")",
+      "Bash(xargs -I {} bash -c \"wc -l '{}' && echo '---'\")",
+      "Bash(grep -iE \"\\\\.md$|ADMIN\")",
+      "Bash(grep -iE \"claude|^\\\\.git$\")"
     ]
   }
 }

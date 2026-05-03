@@ -120,6 +120,17 @@ router.post(
                 console.warn('user delete: socket disconnect hiba:', kickErr.message);
             }
 
+            // Ongoing PvP meccs lezárása. Ha az ellenfél is letiltott / soft-deleted
+            // → no-ELO abort. Egyébként az ellenfél nyer + ELO update. Ezen kívül
+            // visszavonjuk a userId KORÁBBI recent abandoned-meccsén kapott ELO-t,
+            // ha mindkét fél most már le van tiltva — ezzel sorrend-független lesz.
+            try {
+                const { abortByUserDisable } = require('../../../chess/abortHelpers.js');
+                await abortByUserDisable(targetUserId, 'soft_delete');
+            } catch (abortErr) {
+                console.warn('soft-delete: chess abort hiba:', abortErr.message);
+            }
+
             // Sessions destroy a session store-ból (mintha banned lenne).
             try {
                 const sessionStore = request.app?.locals?.sessionStore;

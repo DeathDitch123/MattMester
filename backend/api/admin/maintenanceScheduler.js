@@ -85,6 +85,26 @@ function emitEnforce() {
     } catch (error) {
         console.warn('[maintenanceScheduler] emitEnforce hiba:', error.message);
     }
+
+    // Folyamatban levo PvP meccsek lezárása NO-ELO modon — mindkét fél 0
+    // ELO-változást kap. Async, nem blokkoljuk az emit-et, de logjuk az
+    // eredmeenyt. (Tudatosan a `emitEnforce()`-ban van, hogy a grace-mode
+    // elotti reminder-ek alatt meg legyen idejuk a jatekosoknak — a tényleges
+    // abortolas csak az enforcement pillanataban tortenik.)
+    setImmediate(() => {
+        try {
+            const { abortAllOngoingForMaintenance } = require('../../chess/abortHelpers.js');
+            abortAllOngoingForMaintenance('maintenance').then((res) => {
+                if (res && res.abortedGames > 0) {
+                    console.log(`[maintenance] ${res.abortedGames} ongoing PvP meccs aborte-elve karbantartas miatt (no ELO).`);
+                }
+            }).catch((err) => {
+                console.warn('[maintenance] PvP abort hiba:', err.message);
+            });
+        } catch (requireErr) {
+            console.warn('[maintenance] abortHelpers require hiba:', requireErr.message);
+        }
+    });
 }
 
 function emitCancelled() {

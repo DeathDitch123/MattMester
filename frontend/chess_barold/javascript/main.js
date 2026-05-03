@@ -614,9 +614,16 @@ function pvpSocketInit() {
         }
     });
 
-    // Rejoin — ha nincs játék, nincs teendő
+    // Rejoin — ha nincs játék, nincs teendő. KIVÉVE: ha a frontpage chooser
+    // pendingMatch flag-gel ide-küldte a felhasználót de a backend nem talál
+    // aktív meccset (pl. meccs közben befejeződött), mutassuk a fallback modal-t,
+    // különben a user üres oldalon ragadna.
     socket.on('chess:rejoin:none', () => {
-        // csendben
+        if (pvpAktiv) return;
+        const modal = document.getElementById('mode-modal');
+        if (modal && modal.classList.contains('hidden')) {
+            modal.classList.remove('hidden');
+        }
     });
 }
 
@@ -1384,22 +1391,91 @@ async function init() {
     // Socket init + PvP handler regisztráció
     pvpSocketInit();
 
-    // Rejoin próba — ha van aktív PvP játék, visszacsatlakozik
-    setTimeout(() => {
+    // Rejoin próba — ha van aktív PvP játék, visszacsatlakozik. A `chess:rejoin`
+    // emit-et újra-próbáljuk amíg a socket meg nem érkezik (max ~5s), mert a
+    // frontpage-rőL érkezve a meccs adatai csak a backendnél vannak — a kliensnek
+    // ezt kell lekérnie a `chess:rejoin`-nal, különben az index oldalon kapott
+    // `chess:game:start` event "elveszne" (már disconnect-elt socket fogadta).
+    function emitRejoinWhenReady(retriesLeft = 10) {
         const socket = pvpSocketKeres();
         if (socket && socket.connected) {
             socket.emit('chess:rejoin');
             pendingChessInviteAcceptKuld(socket);
-        } else if (socket) {
+            return;
+        }
+        if (socket) {
             socket.once('connect', () => {
                 socket.emit('chess:rejoin');
                 pendingChessInviteAcceptKuld(socket);
             });
+            return;
         }
-    }, 500);
+        if (retriesLeft > 0) {
+            setTimeout(() => emitRejoinWhenReady(retriesLeft - 1), 250);
+        }
+    }
+    setTimeout(() => emitRejoinWhenReady(), 500);
 
-    // Játékmód választó megjelenítés
+    // Query-string alapú auto-indítás (frontpage chess mode chooser-ből):
+    //   - `?type=bot&mode=X&difficulty=Y` → bot meccs azonnal (nincs modal)
+    //   - egyébként ha sessionStorage-ben van pendingMatch (queue / friend
+    //     invite match-et kapott a frontpage) → modal NEM jelenik meg, a
+    //     `chess:rejoin` flow tölti be a meccset
+    //   - különben (direkt URL látogatás vagy backwards-compat) → modal
+    const params = new URLSearchParams(window.location.search);
+    const autoType = params.get('type');
+    const autoMode = params.get('mode');
+    if (autoType === 'bot' && autoMode) {
+        await initBotFromQueryParams(params);
+        return;
+    }
+
+    let hasPendingMatch = false;
+    try {
+        const raw = window.sessionStorage.getItem('mattmester.chessPendingMatch');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.gameId && (Date.now() - (parsed.ts || 0)) < 30_000) {
+                hasPendingMatch = true;
+            }
+            window.sessionStorage.removeItem('mattmester.chessPendingMatch');
+        }
+    } catch (_) { /* ignore */ }
+
+    const modal = document.getElementById('mode-modal');
+    if (hasPendingMatch || autoType === 'pvp') {
+        if (modal) modal.classList.add('hidden');
+        return;
+    }
+
+    // Játékmód választó megjelenítés (legacy fallback — direkt megnyitás)
     modValasztoMegjelenit();
+}
+
+// ────────────────────────────────────────────
+// Query-paraméteres BOT auto-indítás (frontpage chooser-ből)
+// ────────────────────────────────────────────
+async function initBotFromQueryParams(params) {
+    const mode = params.get('mode');
+    const difficulty = parseInt(params.get('difficulty') || '0', 10);
+
+    selectedMode = mode;
+    selectedRanked = false; // bot MINDIG casual
+
+    const modal = document.getElementById('mode-modal');
+    if (modal) modal.classList.add('hidden');
+
+    try {
+        await jatekIndit(difficulty || 1, mode, false, modal);
+    } catch (err) {
+        console.error('Bot auto-indítás hiba:', err);
+        modValasztoMegjelenit();
+    }
+}
+
+// Backwards-compat alias — projectIntegrity teszt erre is utal
+async function initFromQueryParams(params) {
+    return initBotFromQueryParams(params);
 }
 
 // ────────────────────────────────────────────
