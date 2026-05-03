@@ -31,7 +31,8 @@
                         <nav class="house-rules-toc" aria-label="Tartalomjegyzék">
                             <a href="#hr-chess">1. Sakk szabályok</a>
                             <a href="#hr-conduct">2. Házirend</a>
-                            <a href="#hr-tips">3. Hasznos tudnivalók</a>
+                            <a href="#hr-maintenance">3. Karbantartás</a>
+                            <a href="#hr-tips">4. Hasznos tudnivalók</a>
                         </nav>
 
                         <section id="hr-chess" class="house-rules-section">
@@ -152,8 +153,47 @@
 
                         <hr class="house-rules-divider">
 
+                        <section id="hr-maintenance" class="house-rules-section">
+                            <h6 class="house-rules-h6">3. Karbantartási mód</h6>
+                            <p class="text-secondary small mb-3">
+                                A platform időnként karbantartási módba kerül — ilyenkor a szerver-oldali frissítések, biztonsági javítások vagy adatbázis-migrációk futnak. A karbantartást egy super-admin kapcsolja be a Beállítások oldalról.
+                            </p>
+
+                            <div class="house-rules-callout" style="background: rgba(255, 140, 26, 0.08); border-left-color: #ff8c1a;">
+                                <strong style="color:#ffd9b3;">Mi történik karbantartás bekapcsolásakor?</strong>
+                                <ul class="house-rules-list mb-0 mt-2">
+                                    <li><strong>30 perces ablak</strong> — élesben minden online felhasználó kap egy <em>"Karbantartás közeledik"</em> figyelmeztetést a jobb alsó sarokban (5 mp-ig látszik).</li>
+                                    <li>Visszaszámláló-értesítések: <strong>30 perc múlva</strong> → 15 perc múlva → 5 perc múlva → 1 perc múlva. Mindegyik 5 mp-ig látszik a jobb alsó sarokban, automatikusan eltűnik.</li>
+                                    <li>Az ablak alatt minden funkció megszokottan elérhető — érdemes a folyamatban lévő meccset befejezni / rajzolni / abbahagyni.</li>
+                                    <li>A 30 perc letelte után a szerver automatikusan a <strong>karbantartási oldalra</strong> irányít minden non-admin felhasználót (narancs színű <em>"Karbantartás folyamatban"</em> oldal).</li>
+                                    <li><strong>Adatvesztés nincs</strong>: a meccsek állása a feloldás után visszaállítható (a befejezetlen játszmák megmaradnak).</li>
+                                </ul>
+                            </div>
+
+                            <strong class="house-rules-h7">A karbantartási oldal</strong>
+                            <ul class="house-rules-list">
+                                <li>Két gomb áll rendelkezésre: <em>Oldal elhagyása</em> (about:blank-ra navigál) és <em>Újrapróbálkozás</em> (azonnali ping a szervernek, hogy lejárt-e a karbantartás).</li>
+                                <li>A háttérben automatikusan 30 mp-enként pingel — amint a karbantartás kikapcsol, automatikusan visszairányít a főoldalra.</li>
+                                <li>A support email (<a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>) sürgős kérdés esetén elérhető — a karbantartási oldalon link jelenik meg rá.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Karbantartás visszavonása</strong>
+                            <ul class="house-rules-list">
+                                <li>Ha a super-admin kikapcsolja a karbantartást a 30 perces ablak alatt, minden online user kap egy zöld <em>"Karbantartás visszavonva"</em> toast-ot, és tovább használhatja az oldalt megszakítás nélkül.</li>
+                                <li>A már elnavigált felhasználók a karbantartási oldal automatikus pingelése révén visszakerülnek 30 mp-en belül.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Adminok és karbantartás</strong>
+                            <ul class="house-rules-list">
+                                <li>A karbantartási mód <strong>nem érinti az admin felhasználókat</strong> — a Bearer-token alapú admin API kéréseik tovább működnek, így a kikapcsolás bármikor lehetséges.</li>
+                                <li>A regisztráció szintén külön kapcsolható: a Beállítások oldalon a <em>"Regisztráció engedélyezve"</em> kapcsoló a karbantartástól függetlenül blokkolja az új fiókokat.</li>
+                            </ul>
+                        </section>
+
+                        <hr class="house-rules-divider">
+
                         <section id="hr-tips" class="house-rules-section">
-                            <h6 class="house-rules-h6">3. Hasznos tudnivalók (rejtett tippek)</h6>
+                            <h6 class="house-rules-h6">4. Hasznos tudnivalók (rejtett tippek)</h6>
 
                             <strong class="house-rules-h7">ELO rendszer</strong>
                             <ul class="house-rules-list">
@@ -196,6 +236,20 @@
                             <ul class="house-rules-list">
                                 <li>A felső sávban a &quot;harang&quot; ikon mutatja a kéretlen értesítéseket: barátkérés, üzenet, admin közlemény stb.</li>
                                 <li>Admin által végrehajtott profilmódosítás real-time frissíti a profil oldaladat.</li>
+                                <li>Karbantartási visszaszámláló <em>nem perzisztens toast</em> — a jobb alsó sarokban jelenik meg 5 mp-ig, majd automatikusan eltűnik (nem rögzítjük az értesítések közé).</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Meccs admin-megszakítás (force-end)</strong>
+                            <ul class="house-rules-list">
+                                <li>Súlyos szabálysértés (cheat-gyanú, rendszer-bug) esetén az admin egy folyamatban lévő meccset kívülről befejezhet — a meccs <em>"abandoned"</em> státuszra vált.</li>
+                                <li>Ilyenkor egyik fél sem nyer / veszít ELO-t; a meccs a History-ban marad megtekinthető marad.</li>
+                                <li>A művelet naplózva (audit log, severity: critical), és az érintett spectator-admin élőben látja a befejezést.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Blokk-feloldás admin által</strong>
+                            <ul class="house-rules-list">
+                                <li>Ha valaki tévedésből blokkolt téged (pl. fellebbezés alapján), egy admin kívülről feloldhatja a blokkot.</li>
+                                <li>A művelet naplózva — a felhasználók normál módon látni fogják egymás üzeneteit / barátkéréseit ezután.</li>
                             </ul>
 
                             <strong class="house-rules-h7">IP-tiltás működése</strong>

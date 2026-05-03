@@ -325,9 +325,9 @@
                     <div class="critical-warning">
                         <i class="bi bi-info-circle-fill"></i>
                         <div>
-                            Ez a művelet <strong>naplózásra kerül</strong> (severity: <code>critical</code>) és
+                            Ez a művelet <strong>naplózásra kerül</strong> és
                             <strong>nem visszavonható</strong>. A folytatáshoz add meg az indokot
-                            <strong>min. 30 karakterben</strong> és a saját jelszavadat.
+                            <strong>min. 10 karakterben</strong> és a saját jelszavadat.
                         </div>
                     </div>
 
@@ -337,11 +337,11 @@
                         <label for="criticalReason" class="form-label">
                             Indok <span class="text-danger">*</span>
                             <span class="critical-reason-counter ms-2">
-                                <span id="criticalReasonCount">0</span> / 30
+                                <span id="criticalReasonCount">0</span> / 10
                             </span>
                         </label>
                         <textarea id="criticalReason" class="form-control" rows="3"
-                            placeholder="Részletes, naplózásra kerülő indok (min. 30 karakter)..."></textarea>
+                            placeholder="Naplozasra kerulo indok (min. 10 karakter)..."></textarea>
                     </div>
 
                     <div class="mb-1">
@@ -406,7 +406,7 @@
                     </div>
 
                     <div class="mb-1">
-                        <label for="ipBlockReason" class="form-label">Indok (opcionális)</label>
+                        <label for="ipBlockReason" class="form-label">Indok <span class="text-danger">*</span> <span class="text-secondary fw-normal small">(min. 10 karakter)</span></label>
                         <textarea id="ipBlockReason" class="form-control" rows="2"
                                   placeholder="Például: ismétlődő spam regisztráció, token brute-force..."></textarea>
                     </div>
@@ -497,11 +497,11 @@
                         <label for="chatBlocklistAddReason" class="form-label">
                             Indok <span class="text-danger">*</span>
                             <span class="critical-reason-counter ms-2">
-                                <span id="chatBlocklistAddReasonCount">0</span> / 30
+                                <span id="chatBlocklistAddReasonCount">0</span> / 10
                             </span>
                         </label>
                         <textarea id="chatBlocklistAddReason" class="form-control" rows="3"
-                            placeholder="Min. 30 karakter — pl. ismétlődő szabálysértés, sértő tartalom, közösségi normák megsértése..."></textarea>
+                            placeholder="Min. 10 karakter — pl. ismétlődő szabálysértés, sértő tartalom, közösségi normák megsértése..."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -679,14 +679,10 @@
                         </div>
                         <div class="col-12">
                             <label for="abilityEditorReason" class="form-label">
-                                Indoklas <span class="text-danger">*</span>
-                                <span class="critical-reason-counter ms-2">
-                                    <span id="abilityEditorReasonCount">0</span> / 30
-                                </span>
+                                Indoklas <span class="text-secondary fw-normal small ms-1">(opcionalis)</span>
                             </label>
                             <textarea id="abilityEditorReason" class="form-control" rows="2"
-                                      placeholder="Reszletes, naplozasra kerulo indoklas (min. 30 karakter)..."
-                                      oninput="abilityEditorReasonInput(this.value)"></textarea>
+                                      placeholder="Naplozasra kerulo indoklas — uresen is hagyhato."></textarea>
                         </div>
                     </div>
                 </div>
@@ -718,6 +714,40 @@
                 <div class="modal-footer">
                     <small class="text-secondary me-auto">A meccs lepesei elo realtime jonnek a /admin WebSocketrol.</small>
                     <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" onclick="closeSpectator()">Bezar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tesztek futtatasa egyszeru megerosito modal (nem kritikus muvelet) -->
+    <div class="modal fade" id="testsRunConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-play-circle-fill me-2 text-gold"></i>
+                        Tesztek futtatása
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3">
+                        A backend Jest + Supertest tesztkészlete fut le (~5-10 mp). Egyszerre csak egy futás
+                        lehetséges. A futás naplózva lesz az audit log-ba (info szintű bejegyzés).
+                    </p>
+                    <div class="mb-1">
+                        <label for="testsRunReason" class="form-label">
+                            Megjegyzés <span class="text-secondary fw-normal small ms-1">(opcionális)</span>
+                        </label>
+                        <textarea id="testsRunReason" class="form-control" rows="2"
+                                  placeholder="Pl.: utolso PR előtti smoke-test — uresen is hagyhato."></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-gold" onclick="submitTestsRunFromConfirm()">
+                        <i class="bi bi-play-fill me-1"></i>Indítás
+                    </button>
                 </div>
             </div>
         </div>

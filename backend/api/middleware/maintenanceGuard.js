@@ -22,11 +22,12 @@ const ALWAYS_ALLOWED_PREFIXES = [
     '/api/logout'
 ];
 
-// Read-only tipusu utvonalak amelyek szinten elerhetoek (statikus contentbol
-// kell hogy mukodjon a maintenance landing). Mas /html/* viszont blockolva.
+// Read-only tipusu utvonalak amelyek szinten elerhetoek (kizarolag az auth-check
+// ezen az ablakon keresztul mehet at — a maintenance.html ezt poll-olja).
+// FONTOS: a `/api/me` szandekosan NINCS itt. A non-admin user 503-at kap, igy
+// a maintenance.html `retryConnection()` helyesen detektalja a karbantartast.
+// Az admin user egyebkent is atmegy az isAdminRequest() vagdal session-rolen.
 const ALWAYS_ALLOWED_PATHS = new Set([
-    '/api/me',
-    '/api/auth/me',
     '/api/auth/check'
 ]);
 
@@ -73,9 +74,11 @@ function maintenanceGuard() {
         }
 
         const settings = siteSettings.getSettingsCachedSync();
+        // HTML request (browser navigation) -> redirect a teljes maintenance landing
+        // page-re. Az api request-ek (XHR / fetch) JSON 503-at kapnak.
         const acceptsHtml = String(request.headers?.accept || '').includes('text/html');
         if (acceptsHtml) {
-            response.status(503).send(`<!doctype html><html lang="hu"><head><meta charset="utf-8"><title>Karbantartas</title></head><body style="font-family:system-ui,sans-serif;background:#0e1117;color:#e6e6e6;min-height:100vh;display:flex;align-items:center;justify-content:center;margin:0;"><div style="text-align:center;max-width:520px;padding:32px;"><h1 style="font-size:1.6rem;margin-bottom:12px;">Karbantartas folyamatban</h1><p style="opacity:.8;margin-bottom:8px;">A MattMester jelenleg karbantartas alatt all, kerlek probalkozz keson ujra.</p><p style="opacity:.6;font-size:.9rem;">Kerdes eseten: <a href="mailto:${settings?.supportEmail || 'mattmester.support@gmail.com'}" style="color:#f0c97a;">${settings?.supportEmail || 'mattmester.support@gmail.com'}</a></p></div></body></html>`);
+            response.redirect(302, '/html/maintenance.html');
             return;
         }
 
@@ -89,4 +92,73 @@ function maintenanceGuard() {
     };
 }
 
-module.exports = { maintenanceGuard };
+// Root-level middleware: HTML lap-keresekre redirect-el a /html/maintenance.html-re,
+// ha a site karbantartas alatt all es a kero NEM admin. Static asset-eket (css/js/img/font)
+// es magat a maintenance/ban/deleted oldalt szandekosan atengedi, hogy a maintenance.html
+// betoltese helyesen mukodjon.
+const HTML_PAGE_BYPASS_PREFIXES = [
+    '/javascript/', '/css/', '/profile_pictures/',
+    '/socket.io/', '/favicon', '/img/', '/images/', '/fonts/'
+];
+const HTML_PAGE_BYPASS_PATHS = new Set([
+    '/html/maintenance.html',
+    '/html/ban.html',
+    '/html/deleted.html',
+    '/html/mailVerified.html'
+]);
+const HTML_PAGE_BYPASS_EXTENSIONS = new Set([
+    '.css', '.js', '.map', '.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg',
+    '.ico', '.woff', '.woff2', '.ttf', '.otf', '.eot', '.pgn'
+]);
+
+function isStaticAsset(urlPath) {
+    if (!urlPath) return false;
+    for (const prefix of HTML_PAGE_BYPASS_PREFIXES) {
+        if (urlPath.startsWith(prefix)) return true;
+    }
+    const lastDot = urlPath.lastIndexOf('.');
+    if (lastDot > -1) {
+        const ext = urlPath.slice(lastDot).toLowerCase();
+        if (HTML_PAGE_BYPASS_EXTENSIONS.has(ext)) return true;
+    }
+    return false;
+}
+
+function maintenanceHtmlGuard() {
+    siteSettings.getSettings().catch(() => {});
+
+    return function maintenanceHtmlGuardMiddleware(request, response, next) {
+        try {
+            // Csak GET kereseknel ertelmes (POST formok stb. mar API-utvonalon mennek).
+            if (request.method !== 'GET') return next();
+
+            const settings = siteSettings.getSettingsCachedSync();
+            if (!settings?.maintenanceMode) return next();
+
+            const url = String(request.originalUrl || request.url || '').split('?')[0];
+
+            // /api/* utvonalakat hagyjuk a /api/-en belul lévő maintenanceGuard-nak (JSON 503).
+            if (url.startsWith('/api/')) return next();
+
+            // Bypass: maintenance/ban/deleted/mailVerified oldal + static asset-ek.
+            if (HTML_PAGE_BYPASS_PATHS.has(url)) return next();
+            if (isStaticAsset(url)) return next();
+
+            // Admin atengedese (Bearer token vagy session role).
+            if (isAdminRequest(request)) return next();
+
+            // HTML page request — redirect a maintenance landing-re.
+            const acceptsHtml = String(request.headers?.accept || '').includes('text/html');
+            if (acceptsHtml || url === '/' || url.endsWith('.html')) {
+                return response.redirect(302, '/html/maintenance.html');
+            }
+            // Egyebkent (pl. egyeb ismeretlen mime-tipusu request) hagyjuk.
+            return next();
+        } catch (error) {
+            console.warn('maintenanceHtmlGuard hiba:', error.message);
+            return next();
+        }
+    };
+}
+
+module.exports = { maintenanceGuard, maintenanceHtmlGuard };

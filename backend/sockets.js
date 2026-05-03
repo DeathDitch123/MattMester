@@ -530,6 +530,30 @@ function createSocketHub(io) {
             socket.join(SOCKET_ROOMS.admin);
         }
 
+        // Maintenance enforce: ha eppen aktiv a karbantartas modus, az uj non-admin
+        // socket kapcsolat azonnal kap egy "maintenance:enforce" eventet — a frontend
+        // erre redirectel a /html/maintenance.html-re. Igy egy uj browser tab nyitas
+        // is helyesen kerul a karbantartasi oldalra (akkor is, ha eppen pl. statikusan
+        // jott be az index.html-re).
+        // FONTOS: getSettings()-t (async) hasznalunk, NEM getSettingsCachedSync-et —
+        // a cold-start race eseteben (server restart kozben uj kapcsolat) a sync
+        // verzio meg ures cache-t adna vissza. Az async version DB-bol tolt ha kell.
+        (async () => {
+            try {
+                const siteSettings = require('./sql/modules/siteSettings.js');
+                const settings = await siteSettings.getSettings();
+                if (settings?.maintenanceMode && context.role !== 'admin') {
+                    socket.emit('maintenance:enforce', {
+                        kind: 'maintenance:enforce',
+                        message: 'A karbantartás folyamatban van.',
+                        sentAt: new Date().toISOString()
+                    });
+                }
+            } catch (mErr) {
+                console.warn('[sockets] maintenance check on connect hiba:', mErr.message);
+            }
+        })();
+
         // Automatikus védelem: az 'admin:' előtagú eventeket csak admin role fogadja el.
         socket.use((packet, next) => {
             const eventName = Array.isArray(packet) ? packet[0] : null;
@@ -1047,6 +1071,22 @@ function createSocketHub(io) {
             io.to(`user-room:${normalized}`).emit(String(eventName), payload || {});
             return true;
         },
+        // Rendszer-szintu broadcast minden csatlakozott klienshez (auth nelkul is).
+        // A namespace a default '/' (a /admin namespace nem kapja meg). Csak NEM-perzisztens
+        // payload-okhoz hasznald (pl. maintenance countdown, deploy figyelmeztetes).
+        broadcastSystemEvent(eventName, payload) {
+            try {
+                if (!eventName) return false;
+                io.emit(String(eventName), payload || {});
+                return true;
+            } catch (error) {
+                console.warn('[socketHub] broadcastSystemEvent hiba:', error.message);
+                return false;
+            }
+        },
+        // Az `io` objektum hozzaferese — extension-ok hasznalhatjak (pl. tesztek
+        // vagy plugin-ok ad-hoc namespace-eket).
+        io,
         pushNotification(targetUserId, notification) {
             const payload = {
                 ...notification,

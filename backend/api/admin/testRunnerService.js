@@ -125,19 +125,24 @@ async function startRun({ adminUserId, emit }) {
 
     const cwd = path.resolve(__dirname, '..', '..');
     const isWin = process.platform === 'win32';
-    const cmd = isWin ? 'npx.cmd' : 'npx';
+    // Windows: shell:true szukseges a .cmd batch fileok (npx.cmd, npm.cmd)
+    // futtatasahoz Node 20+ alatt — kulonben spawn EINVAL.
+    // Linux/Mac: shell:false eleg, de a shell:true is mukodik (escape-elve adjuk at az argokat).
     // --json: egy JSON objektum a stdout-ra a vegen
     // --silent: tesztek console.log-jait nem nyomja a stdout-ra (igy a JSON tisztabb)
     // --ci: nem kerdez interactiv promptot
-    // --testPathIgnorePatterns: kihagyja a test runner sajat tesztjet (ha valaha lenne)
-    const args = ['jest', '--json', '--silent', '--ci'];
+    const cmd = isWin ? 'npx.cmd' : 'npx';
+    // --config jest.config.js: explicit konfig — a backend/package.json-ban is van
+    // egy `jest` kulcs, igy implicit feloldas "Multiple configurations found" hibat dobna.
+    const args = ['jest', '--config', 'jest.config.js', '--json', '--silent', '--ci'];
 
     try {
         run.child = spawn(cmd, args, {
             cwd,
             env: { ...process.env, CI: 'true' },
             stdio: ['ignore', 'pipe', 'pipe'],
-            windowsHide: true
+            windowsHide: true,
+            shell: isWin
         });
     } catch (spawnErr) {
         currentRun = null;
@@ -214,29 +219,68 @@ async function startRun({ adminUserId, emit }) {
             failed: counts.failed,
             skipped: counts.skipped,
             durationMs,
-            rawSummary: jestResult ? {
-                numTotalTestSuites: jestResult.numTotalTestSuites,
-                numPassedTestSuites: jestResult.numPassedTestSuites,
-                numFailedTestSuites: jestResult.numFailedTestSuites,
-                numTotalTests: jestResult.numTotalTests,
-                numPassedTests: jestResult.numPassedTests,
-                numFailedTests: jestResult.numFailedTests,
-                numPendingTests: jestResult.numPendingTests,
-                numTodoTests: jestResult.numTodoTests,
-                startTime: jestResult.startTime,
-                success: jestResult.success,
-                testResults: Array.isArray(jestResult.testResults)
-                    ? jestResult.testResults.slice(0, 50).map((tr) => ({
-                        name: tr.name,
-                        status: tr.status,
-                        numFailingTests: tr.numFailingTests,
-                        numPassingTests: tr.numPassingTests,
-                        numPendingTests: tr.numPendingTests,
-                        numTodoTests: tr.numTodoTests,
+            rawSummary: jestResult ? (() => {
+                const suites = Array.isArray(jestResult.testResults) ? jestResult.testResults : [];
+                // Jest CLI --json kimenete a testResults[i] szinten NEM ad numPassingTests
+                // mezot — csak assertionResults arrayt + status (passed/failed). Manualisan
+                // szamoljuk meg, hogy a frontend tudjon ertelmes szamokat mutatni.
+                const mapped = suites.slice(0, 100).map((tr) => {
+                    const assertions = Array.isArray(tr.assertionResults) ? tr.assertionResults : [];
+                    let passing = 0, failing = 0, pending = 0, todo = 0;
+                    for (const a of assertions) {
+                        switch (a.status) {
+                            case 'passed':  passing += 1; break;
+                            case 'failed':  failing += 1; break;
+                            case 'pending':
+                            case 'skipped':
+                            case 'disabled': pending += 1; break;
+                            case 'todo':    todo += 1; break;
+                            default: break;
+                        }
+                    }
+                    // Jest tenyleges suite-szintu ideje (ms) — (endTime - startTime).
+                    const suiteDurationMs = (Number.isFinite(tr.endTime) && Number.isFinite(tr.startTime))
+                        ? Math.max(0, tr.endTime - tr.startTime)
+                        : null;
+                    return {
+                        name: tr.name || tr.testFilePath,
+                        status: tr.status || (failing > 0 ? 'failed' : 'passed'),
+                        numFailingTests: failing,
+                        numPassingTests: passing,
+                        numPendingTests: pending,
+                        numTodoTests: todo,
+                        durationMs: suiteDurationMs,
                         message: tr.message ? String(tr.message).slice(0, 4000) : null
-                    }))
-                    : []
-            } : null,
+                    };
+                });
+
+                // Jest tenyleges futasi ideje (a cli "Time:" az egesz process-szet meri,
+                // ami includes npx + jest startup + test execution + cleanup). A tesztek
+                // tenyleges futasa: max(endTime) - jestResult.startTime.
+                let jestRunMs = null;
+                if (Number.isFinite(jestResult.startTime) && suites.length > 0) {
+                    let lastEnd = jestResult.startTime;
+                    for (const tr of suites) {
+                        if (Number.isFinite(tr.endTime) && tr.endTime > lastEnd) lastEnd = tr.endTime;
+                    }
+                    jestRunMs = Math.max(0, lastEnd - jestResult.startTime);
+                }
+
+                return {
+                    numTotalTestSuites: jestResult.numTotalTestSuites,
+                    numPassedTestSuites: jestResult.numPassedTestSuites,
+                    numFailedTestSuites: jestResult.numFailedTestSuites,
+                    numTotalTests: jestResult.numTotalTests,
+                    numPassedTests: jestResult.numPassedTests,
+                    numFailedTests: jestResult.numFailedTests,
+                    numPendingTests: jestResult.numPendingTests,
+                    numTodoTests: jestResult.numTodoTests,
+                    startTime: jestResult.startTime,
+                    success: jestResult.success,
+                    jestRunMs,
+                    testResults: mapped
+                };
+            })() : null,
             stderrTail: stderr ? String(stderr).slice(-4096) : (timedOut ? 'TIMEOUT — a futas elerte a 10 perces hatart, megszakitva.' : null)
         };
 

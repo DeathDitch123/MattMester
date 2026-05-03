@@ -18,7 +18,8 @@ const {
     REASON_MIN_LENGTH_NORMAL,
     REASON_MIN_LENGTH_CRITICAL,
     REASON_MAX_LENGTH,
-    CRITICAL_ACTIONS
+    CRITICAL_ACTIONS,
+    OPTIONAL_REASON_ACTIONS
 } = require('./constants.js');
 
 function getRequestIp(request) {
@@ -190,10 +191,29 @@ function requireReasonOnMutate(actionResolver) {
                     ? actionResolver(request)
                     : String(actionResolver || '');
                 const isCritical = CRITICAL_ACTIONS.has(action);
+                const isOptional = OPTIONAL_REASON_ACTIONS.has(action);
                 const minLength = isCritical ? REASON_MIN_LENGTH_CRITICAL : REASON_MIN_LENGTH_NORMAL;
                 const reason = String(request.body?.reason || '').trim();
 
-                if (!reason) {
+                if (isOptional && !reason) {
+                    // Opcionalis reason: nem kotelezo. Default placeholder a naplozashoz.
+                    request.adminReason = `${action} — opcionalis reason mellozve`;
+                    request.adminAction = action;
+                    request.adminIsCritical = isCritical;
+                    proceed = true;
+                } else if (isOptional && reason.length > REASON_MAX_LENGTH) {
+                    errorPayload = {
+                        statusCode: 400,
+                        code: ADMIN_ERROR_CODES.REASON_TOO_SHORT,
+                        message: `Az indoklas legfeljebb ${REASON_MAX_LENGTH} karakter lehet.`
+                    };
+                } else if (isOptional) {
+                    // Opcionalis reason megadva: nincs minimum karaktererkövetelmény (akar 1 char is OK).
+                    request.adminReason = reason;
+                    request.adminAction = action;
+                    request.adminIsCritical = isCritical;
+                    proceed = true;
+                } else if (!reason) {
                     errorPayload = {
                         statusCode: 400,
                         code: ADMIN_ERROR_CODES.REASON_REQUIRED,
@@ -203,7 +223,7 @@ function requireReasonOnMutate(actionResolver) {
                     errorPayload = {
                         statusCode: 400,
                         code: ADMIN_ERROR_CODES.REASON_TOO_SHORT,
-                        message: `Az indoklas legalabb ${minLength} karakter kell legyen${isCritical ? ' (kritikus muvelet)' : ''}.`
+                        message: `Az indoklas legalabb ${minLength} karakter kell legyen.`
                     };
                 } else if (reason.length > REASON_MAX_LENGTH) {
                     errorPayload = {

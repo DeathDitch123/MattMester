@@ -220,6 +220,14 @@ app.get('/html/adminPanel.html', requireAdmin, (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/html/adminPanel.html'));
 });
 
+// Karbantartas mod globalis HTML guard: a static middleware ELOTT, hogy a `/`,
+// `/html/index.html`, `/html/profile.html` stb. requesteket is atiranyitsa a
+// maintenance.html-re. A /api/* utvonalakat es a static asset-eket szandekosan
+// atengedi (azokat az api-on beluli maintenanceGuard kezeli, illetve a
+// maintenance.html maga is kell a CSS/JS-ekhez).
+const { maintenanceHtmlGuard } = require('./api/middleware/maintenanceGuard.js');
+app.use(maintenanceHtmlGuard());
+
 //!Szerver futtatása
 app.use(express.static(path.join(__dirname, '../frontend'))); //?frontend mappa tartalmának betöltése az oldal működéséhez
 app.use('/profile_pictures', express.static(path.join(__dirname, 'profile_pictures')));

@@ -754,6 +754,22 @@
             });
         });
 
+        // Karbantartas eventek: window-szintu CustomEvent-tel tovabbitjuk, hogy
+        // barmelyik kliens-modul (pl. maintenanceClient.js) hallgathassa azokat
+        // socket-referencia kotes nelkul (robust a betoltesi sorrendre).
+        socket.on('maintenance:countdown', (payload = {}) => {
+            console.log('[socketClient] maintenance:countdown erkezett:', payload);
+            dispatchSocketClientEvent('mattmester:maintenance:countdown', payload);
+        });
+        socket.on('maintenance:enforce', (payload = {}) => {
+            console.log('[socketClient] maintenance:enforce erkezett:', payload);
+            dispatchSocketClientEvent('mattmester:maintenance:enforce', payload);
+        });
+        socket.on('maintenance:cancelled', (payload = {}) => {
+            console.log('[socketClient] maintenance:cancelled erkezett:', payload);
+            dispatchSocketClientEvent('mattmester:maintenance:cancelled', payload);
+        });
+
         socket.on('notification:badge:update', (payload = {}) => {
             // Authoritative badge frissítés a szerverről (DB alapú olvasatlan szám).
             try {
@@ -1025,4 +1041,13 @@
         // Ha a DOM már kész, azonnal frissítünk.
         updateSocketInfoPanel(socketState);
     }
+
+    // Globalis hozzaferes kuldonek (pl. MattMesterMaintenance modul a 'maintenance:*'
+    // eventeket figyeli a default namespace socketen). Csak read-only socket
+    // referenciat exposalunk — a state-et nem.
+    globalScope.MattMesterSocketClient = {
+        socket,
+        get connected() { return socketState.connected; },
+        get socketId() { return socketState.socketId; }
+    };
 })(window);

@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Karbantartás — MattMester</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --gold: #c9a84c;
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --border: #30363d;
+            --text-muted: #8b949e;
+            --warn-orange: #ff8c1a;
+            --warn-orange-soft: #ffa64d;
+            --warn-orange-bg: rgba(255, 140, 26, 0.10);
+            --warn-orange-border: rgba(255, 140, 26, 0.45);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: #e6edf3;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        /* Diagonal "construction tape" hatter*/
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background-image: repeating-linear-gradient(
+                -45deg,
+                rgba(255, 140, 26, 0.04) 0px,
+                rgba(255, 140, 26, 0.04) 24px,
+                transparent 24px,
+                transparent 48px
+            );
+            pointer-events: none;
+            z-index: 0;
+        }
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+            position: relative;
+            z-index: 1;
+        }
+        .maintenance-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 3rem 2.5rem;
+            max-width: 560px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 0 0 1px var(--warn-orange-border) inset;
+        }
+        .maintenance-icon {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: var(--warn-orange-bg);
+            border: 2px solid var(--warn-orange-border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2.75rem;
+            color: var(--warn-orange);
+            animation: maintenancePulse 2.4s ease-in-out infinite;
+        }
+        @keyframes maintenancePulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 140, 26, 0.45); }
+            50%      { box-shadow: 0 0 0 12px rgba(255, 140, 26, 0); }
+        }
+        .maintenance-title {
+            font-size: 1.85rem;
+            font-weight: 700;
+            color: #ffd9b3;
+            margin-bottom: 0.75rem;
+            letter-spacing: 0.01em;
+        }
+        .maintenance-subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        .maintenance-info {
+            background: var(--warn-orange-bg);
+            border: 1px solid var(--warn-orange-border);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            color: var(--warn-orange-soft);
+            text-align: left;
+        }
+        .maintenance-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1.75rem;
+        }
+        .maintenance-meta-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            text-align: left;
+        }
+        .maintenance-meta-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+        .maintenance-meta-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--warn-orange-soft);
+        }
+        @media (max-width: 480px) {
+            .maintenance-meta { grid-template-columns: 1fr; }
+        }
+
+        .btn-leave {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--warn-orange);
+            color: #1a1a1a;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.75rem;
+            font-size: 0.95rem;
+            font-weight: 700;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.1s;
+            cursor: pointer;
+        }
+        .btn-leave:hover { background: var(--warn-orange-soft); color: #0d1117; }
+        .btn-leave:active { transform: translateY(1px); }
+        .btn-retry {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: border-color 0.2s, color 0.2s;
+        }
+        .btn-retry:hover { border-color: var(--warn-orange-border); color: var(--warn-orange-soft); }
+        .btn-retry:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-retry .spin { animation: maintenanceSpin 0.9s linear infinite; display: inline-block; }
+        @keyframes maintenanceSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .maintenance-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
+
+        .retry-feedback {
+            min-height: 1.6rem;
+            margin-top: 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+        }
+        .retry-feedback.is-info  { color: var(--text-muted); }
+        .retry-feedback.is-still { color: var(--warn-orange-soft); }
+        .retry-feedback.is-error { color: #ff8b95; }
+        .retry-feedback.is-ok    { color: #6ee7b7; }
+        .retry-feedback i { margin-right: 0.4rem; }
+
+        footer {
+            background: var(--bg-card);
+            border-top: 1px solid var(--border);
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            position: relative;
+            z-index: 1;
+        }
+        footer a { color: var(--gold); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        .brand { font-weight: 700; color: var(--gold); letter-spacing: 0.05em; }
+    </style>
+</head>
+
+<body>
+    <main>
+        <div class="maintenance-card">
+            <div class="maintenance-icon">
+                <i class="bi bi-cone-striped"></i>
+            </div>
+            <h1 class="maintenance-title">Karbantartás folyamatban</h1>
+            <p class="maintenance-subtitle" id="maintenanceSubtitle">
+                A MattMester ideiglenesen le van állítva, hogy az adminisztrátorok
+                karbantartási műveleteket végezzenek. Köszönjük a türelmet — visszatérünk
+                amint a szerver ismét üzemképes.
+            </p>
+
+            <div class="maintenance-meta" id="maintenanceMeta" style="display:none;">
+                <div class="maintenance-meta-item">
+                    <div class="maintenance-meta-label">Indult</div>
+                    <div class="maintenance-meta-value" id="maintenanceStartedValue">—</div>
+                </div>
+                <div class="maintenance-meta-item">
+                    <div class="maintenance-meta-label">Várható befejezés</div>
+                    <div class="maintenance-meta-value" id="maintenanceEtaValue">—</div>
+                </div>
+            </div>
+
+            <div class="maintenance-info">
+                <i class="bi bi-info-circle me-2"></i>
+                A karbantartás alatt sem új meccs indítása, sem chat, sem profil-szerkesztés
+                nem érhető el. Az aktuális meccsek megszakítva — a játszmák állása
+                a feloldás után újraindítható lesz. Adatvesztés nem történik.
+            </div>
+
+            <div class="maintenance-actions">
+                <button type="button" class="btn-leave" onclick="leavePage()">
+                    <i class="bi bi-box-arrow-right"></i>
+                    Oldal elhagyása
+                </button>
+                <button type="button" class="btn-retry" id="retryBtn" onclick="retryConnection(true)">
+                    <i class="bi bi-arrow-clockwise" id="retryBtnIcon"></i>
+                    <span id="retryBtnLabel">Újrapróbálkozás</span>
+                </button>
+            </div>
+
+            <div id="retryFeedback" class="retry-feedback" aria-live="polite"></div>
+        </div>
+    </main>
+
+    <footer>
+        <span class="brand">MATTMESTER</span> &middot; Modern sakkélmény &middot;
+        <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>
+        &middot; <small>&copy; 2026 MattMester</small>
+    </footer>
+
+    <script>
+        // Bongeszo-fuggetlen "ures kezdolap" detektalas. A modern bongeszok kozos
+        // megoldasa: about:blank, ami megbizhatóan megnyilik mindenutt es szandekosan
+        // ures (chrome://newtab, edge://newtab, stb. NEM nyilnak meg programatikailag).
+        function leavePage() {
+            try {
+                // Ha tudjuk, hogy a window.opener miatt zarhato, akkor zarjuk be a tabot.
+                // Egyebkent navigaljunk az about:blank-ra.
+                if (window.history.length <= 1) {
+                    // Egyetlen lap — nem tud "vissza" — ures lapra megyunk.
+                    window.location.replace('about:blank');
+                } else {
+                    // Volt elozmeny: probaljunk visszamenni eggyel az elozohoz.
+                    // Ha az is a maintenance-be torzult, vegul about:blank-on koszunk el.
+                    const before = window.location.href;
+                    window.history.back();
+                    setTimeout(() => {
+                        if (window.location.href === before) {
+                            window.location.replace('about:blank');
+                        }
+                    }, 250);
+                }
+            } catch (_) {
+                window.location.replace('about:blank');
+            }
+        }
+
+        // Karbantartas allapot detektalas KONZOL-HIBA NELKUL: a `/` URL-t hivjuk,
+        // ami karbantartas alatt 302 redirect → /html/maintenance.html (final 200),
+        // egyebkent 200 index.html. Mindketto 200 → a bongeszo nem logol piros hibat.
+        // A redirected URL-t (r.url) elemezzuk, hogy eldontsuk: meg karbantartas-e.
+        //
+        // userTriggered=true: manualis kattintas, vizualis feedback (gomb spin + szoveg)
+        // userTriggered=false: auto-retry (csendes, csak akkor mutat valamit, ha sikerul)
+        let retryInFlight = false;
+        async function retryConnection(userTriggered) {
+            if (retryInFlight) return;
+            retryInFlight = true;
+
+            const btn = document.getElementById('retryBtn');
+            const icon = document.getElementById('retryBtnIcon');
+            const label = document.getElementById('retryBtnLabel');
+            const feedback = document.getElementById('retryFeedback');
+
+            if (userTriggered) {
+                if (btn) btn.disabled = true;
+                if (icon) icon.classList.add('spin');
+                if (label) label.textContent = 'Ellenőrzés...';
+                if (feedback) {
+                    feedback.className = 'retry-feedback is-info';
+                    feedback.innerHTML = '<i class="bi bi-arrow-repeat"></i>Csatlakozás ellenőrzése...';
+                }
+            }
+
+            let result = 'still'; // 'still' (mar karbantartas), 'ok' (recovered), 'error' (network)
+            try {
+                // A `/` request a meglevo maintenance middleware miatt 302 redirect-tel
+                // a /html/maintenance.html-re iranyit (text/html accept). A fetch followt-tel
+                // koveti, az r.url a vegso URL-t adja vissza — abbol latszik a status.
+                const r = await fetch('/', {
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: { Accept: 'text/html' }
+                });
+                if (!r.ok) {
+                    // Nem 2xx valasz — hiba (pl. 5xx). Halozati problema-jellegu.
+                    result = 'error';
+                } else if (r.url && r.url.includes('/html/maintenance.html')) {
+                    // Redirect a karbantartasi oldalra → meg karbantartas alatt vagyunk.
+                    result = 'still';
+                } else {
+                    // 200 valasz, NEM redirectelt a maintenance-be → a szerver ismet ele.
+                    result = 'ok';
+                }
+            } catch (_) {
+                // Halozati hiba (DNS, offline, refused) — szandekosan nem logoljuk a konzolra.
+                result = 'error';
+            }
+
+            if (result === 'ok') {
+                if (feedback) {
+                    feedback.className = 'retry-feedback is-ok';
+                    feedback.innerHTML = '<i class="bi bi-check-circle-fill"></i>A szerver ismét elérhető — visszairányítás...';
+                }
+                setTimeout(() => window.location.replace('/'), 600);
+                return;
+            }
+
+            if (userTriggered && feedback) {
+                if (result === 'still') {
+                    feedback.className = 'retry-feedback is-still';
+                    feedback.innerHTML = '<i class="bi bi-cone-striped"></i>A karbantartás még folyamatban — később próbáld újra.';
+                } else {
+                    feedback.className = 'retry-feedback is-error';
+                    feedback.innerHTML = '<i class="bi bi-wifi-off"></i>Hálózati hiba — ellenőrizd a kapcsolatot.';
+                }
+            }
+
+            if (btn) btn.disabled = false;
+            if (icon) icon.classList.remove('spin');
+            if (label) label.textContent = 'Újrapróbálkozás';
+
+            // 5 mp utan toroljuk a feedback szoveget hogy ne maradjon ott orokre
+            if (userTriggered && feedback) {
+                setTimeout(() => {
+                    if (feedback.classList.contains('is-still') || feedback.classList.contains('is-error')) {
+                        feedback.className = 'retry-feedback';
+                        feedback.innerHTML = '';
+                    }
+                }, 5000);
+            }
+
+            retryInFlight = false;
+        }
+
+        // Auto-retry 30 mp-enkent — a felhasznalonak nem kell manualisan kattintania.
+        // Csendes (no userTriggered flag) — csak akkor mutat valamit, ha sikerul.
+        setInterval(() => retryConnection(false), 30 * 1000);
+    </script>
+</body>
+
+</html>

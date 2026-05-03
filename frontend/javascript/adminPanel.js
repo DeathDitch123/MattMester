@@ -507,7 +507,16 @@ const state = {
     // Tesztek
     testsAdmin: {
         latestLoaded: false, historyLoaded: false,
-        latest: null, history: [],
+        // `latest` ephemeral: csak a session ELEN (page reload reseteli, nem
+        // perziszteljuk localStorage-ban) es csak a futtatas utan 1 percig
+        // marad lathato (latestExpireTimerId). A History tabla ettol fuggetlenul
+        // a backend DB-bol toltodik.
+        latest: null,
+        latestExpiresAt: null,
+        latestExpireTimerId: null,   // 60s -> grace start
+        latestTickerId: null,        // 1s pill update
+        latestGraceTimerId: null,    // 2s grace -> teljes clear
+        history: [],
         running: null,    // { runId, startedAt, elapsedMs } amíg fut
         loading: false, error: null
     }
@@ -1782,7 +1791,7 @@ const SECTIONS = {
             body: `
                         <div class="alert alert-warning bg-warning bg-opacity-10 border-warning small mb-3">
                             <i class="bi bi-info-circle-fill me-1"></i>
-                            A tiltás kritikus művelet — min. <strong>30 karakter indok</strong> és <strong>jelszó megerősítés</strong> szükséges.
+                            A tiltás mutáló művelet — min. <strong>10 karakter indok</strong> és <strong>jelszó megerősítés</strong> szükséges.
                         </div>
                         ${hasUser ? `
                             <div class="ban-target-card mb-3">
@@ -2037,11 +2046,7 @@ const SECTIONS = {
     chats: () => `
         ${h.header({
             icon: 'bi-chat-dots-fill', title: 'Chat moderálás',
-            subtitle: 'Megjelölt és bejelentett üzenetek áttekintése',
-            actions: [{
-                label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
-                attrs: 'id="chatModerationRefresh"'
-            }]
+            subtitle: 'Megjelölt és bejelentett üzenetek áttekintése'
         })}
         ${h.card({
             title: `<span id="chatModerationCardTitle">Megjelölt üzenetek</span>`,
@@ -2067,11 +2072,7 @@ const SECTIONS = {
     profileImageReview: () => `
         ${h.header({
         icon: 'bi-image', title: 'Függő profilképek',
-        subtitle: 'Új profilképek jóváhagyása vagy elutasítása',
-        actions: [{
-            label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
-            attrs: 'id="profileImageReviewRefresh"'
-        }]
+        subtitle: 'Új profilképek jóváhagyása vagy elutasítása'
     })}
         ${h.card({
         body: `
@@ -2104,11 +2105,7 @@ const SECTIONS = {
     moderationReports: () => `
         ${h.header({
         icon: 'bi-flag-fill', title: 'Bejelentések',
-        subtitle: 'Felhasználók által beküldött player-bejelentések',
-        actions: [{
-            label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm',
-            attrs: 'id="reportsModerationRefresh"'
-        }]
+        subtitle: 'Felhasználók által beküldött player-bejelentések'
     })}
         ${h.card({
             title: `<span id="reportsModerationCardTitle">Bejelentések</span>`,
@@ -2183,8 +2180,7 @@ const SECTIONS = {
         return `
             ${h.header({
                 icon: 'bi-knight-fill', title: 'Játszmák',
-                subtitle: g.loaded ? `${g.list.length} jatszma listazva` : 'Lefutott és folyamatban lévő játszmák',
-                actions: [{ label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminGames()' }]
+                subtitle: g.loaded ? `${g.list.length} jatszma listazva` : 'Lefutott és folyamatban lévő játszmák'
             })}
             ${h.stats([
                 { icon: 'bi-play-circle-fill', value: c.ongoing, label: 'Folyamatban', color: 'success' },
@@ -2240,8 +2236,7 @@ const SECTIONS = {
                 icon: 'bi-magic', title: 'Képességek / Erősítők',
                 subtitle: a.loaded ? `${a.list.length} képesség` : 'Speciális játékos képességek kezelése',
                 actions: [
-                    { label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold', onclick: 'openAbilityEditor()' },
-                    { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminAbilities()' }
+                    { label: 'Új képesség', icon: 'bi-plus-lg', variant: 'gold', onclick: 'openAbilityEditor()' }
                 ]
             })}
             ${a.error ? `<div class="alert alert-danger">${escapeHtml(a.error)}</div>` : ''}
@@ -2503,8 +2498,7 @@ const SECTIONS = {
                 icon: 'bi-stars', title: 'Super admin',
                 subtitle: s.loaded ? `${s.list.length} admin felhasznalo` : 'Admin szerepkörök kiosztása és visszavonása',
                 actions: [
-                    { label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold', onclick: "openAdminGrantPicker()" },
-                    { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminAdminsList()' }
+                    { label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold', onclick: "openAdminGrantPicker()" }
                 ]
             })}
             <div class="alert alert-warning bg-warning bg-opacity-10 border-warning d-flex align-items-start gap-2">
@@ -2560,8 +2554,7 @@ const SECTIONS = {
         return `
             ${h.header({
                 icon: 'bi-people', title: 'Közösségi kapcsolatok',
-                subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen',
-                actions: [{ label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminSocial()' }]
+                subtitle: 'Barátkérelmek, kapcsolatok és blokkolások egy helyen'
             })}
             ${h.stats([
                 { icon: 'bi-diagram-3-fill', value: c.totalFriendships || 0, label: 'Összes barátság', color: 'primary' },
@@ -2609,11 +2602,20 @@ const SECTIONS = {
         const isSuper = Boolean(state.isSuperAdmin);
         const runDisabled = running ? 'disabled' : (!isSuper ? 'disabled title="Csak super-admin futtathat tesztet."' : '');
 
+        // A Jest tenyleges futasi ideje (rawSummary.jestRunMs) tisztabb metrika,
+        // mint a teljes spawn idotartam (durationMs = npx + jest setup + tesztek + exit).
+        // Ha van jestRunMs, azt mutatjuk; subtitle-ben a teljes spawn idot.
+        const jestRunMs = latest?.rawSummary?.jestRunMs;
+        const displayDurationMs = Number.isFinite(jestRunMs) ? jestRunMs : (latest?.durationMs ?? null);
+        const durationSubtitle = (latest && Number.isFinite(jestRunMs) && Number.isFinite(latest.durationMs) && latest.durationMs > jestRunMs + 200)
+            ? `+ ${fmtDur(latest.durationMs - jestRunMs)} startup`
+            : '';
+
         const statsRow = h.stats([
             { icon: 'bi-check-circle-fill', value: latest ? latest.passed  : '—', label: 'Sikeres', color: 'success' },
             { icon: 'bi-x-circle-fill',     value: latest ? latest.failed  : '—', label: 'Sikertelen', color: 'danger' },
             { icon: 'bi-skip-forward-fill', value: latest ? latest.skipped : '—', label: 'Kihagyott', color: 'warning' },
-            { icon: 'bi-stopwatch',         value: latest ? fmtDur(latest.durationMs) : '—', label: 'Futási idő', color: 'primary' }
+            { icon: 'bi-stopwatch',         value: latest ? fmtDur(displayDurationMs) : '—', label: durationSubtitle ? `Jest idő (${durationSubtitle})` : 'Jest idő', color: 'primary' }
         ]);
 
         const historyRows = (t.history || []).map((r) => `
@@ -2635,8 +2637,7 @@ const SECTIONS = {
                     ? `Utolso futas: ${fmt(latest.startedAt)} — ${escapeHtml(latest.status)}`
                     : 'Backend Jest + Supertest tesztek',
                 actions: [
-                    { label: running ? 'Fut...' : 'Tesztek futtatasa', icon: running ? 'bi-arrow-repeat' : 'bi-play-fill', variant: 'gold', size: 'sm', onclick: 'confirmRunTests()', attrs: runDisabled },
-                    { label: 'Frissítés', icon: 'bi-arrow-clockwise', size: 'sm', onclick: 'loadAdminTests()' }
+                    { label: running ? 'Fut...' : 'Tesztek futtatasa', icon: running ? 'bi-arrow-repeat' : 'bi-play-fill', variant: 'gold', size: 'sm', onclick: 'confirmRunTests()', attrs: runDisabled }
                 ]
             })}
 
@@ -2655,28 +2656,42 @@ const SECTIONS = {
             <div class="row g-4">
                 <div class="col-lg-7">
                     ${h.card({
-                        title: 'Test suite-ok (utolso futas)', icon: 'bi-list-check',
+                        title: 'Test suite-ok',
+                        icon: 'bi-list-check',
+                        headerExtra: latest ? `<span class="badge bg-warning text-dark" id="testsAutoClearPillSuites" data-tests-autoclear><i class="bi bi-clock-history me-1"></i>auto-clear: <span data-tests-autoclear-seconds>—</span>s</span>` : '',
                         noBodyPadding: true,
                         body: latest && latest.rawSummary && Array.isArray(latest.rawSummary.testResults)
                             ? `<div class="test-list">${latest.rawSummary.testResults.map((tr) => {
-                                const status = tr.numFailingTests > 0 ? 'fail' : 'pass';
-                                const label = tr.numFailingTests > 0 ? 'FAIL' : 'PASS';
+                                const failing = Number(tr.numFailingTests) || 0;
+                                const passing = Number(tr.numPassingTests) || 0;
+                                const pending = Number(tr.numPendingTests) || 0;
+                                const total = passing + failing + pending;
+                                const status = failing > 0 ? 'fail' : 'pass';
+                                const label = failing > 0 ? 'FAIL' : 'PASS';
                                 const fileName = String(tr.name || '').split(/[\\/]/).pop();
+                                const durTxt = Number.isFinite(tr.durationMs) ? fmtDur(tr.durationMs) : '';
                                 return `<div class="test-row test-${status}">
                                     <div class="test-status-dot"></div>
                                     <span class="test-suite">${escapeHtml(fileName)}</span>
-                                    <span class="test-name">${tr.numPassingTests}/${tr.numPassingTests + tr.numFailingTests + (tr.numPendingTests || 0)} pass</span>
+                                    <span class="test-name">${passing}/${total}${pending > 0 ? ` (${pending} skipped)` : ''}</span>
+                                    ${durTxt ? `<span class="test-duration text-secondary small me-2">${durTxt}</span>` : ''}
                                     <span class="test-status-label">${label}</span>
                                 </div>`;
                             }).join('')}</div>`
-                            : `<div class="text-center text-secondary py-4">${t.latestLoaded ? 'Meg nincs futas, kattints a "Tesztek futtatasa" gombra.' : 'Toltes...'}</div>`
+                            : `<div class="text-center text-secondary py-4">${t.latestLoaded ? 'A reszletek csak a session alatt es csak a futtatas utan 1 percig lathatok. Kattints a "Tesztek futtatasa" gombra a friss eredmenyhez.' : 'Toltes...'}</div>`
                     })}
                 </div>
                 <div class="col-lg-5">
                     ${h.card({
                         title: 'Stderr (utolso 4KB)', icon: 'bi-terminal-fill',
+                        headerExtra: latest ? `<span class="badge bg-warning text-dark" id="testsAutoClearPillStderr" data-tests-autoclear><i class="bi bi-clock-history me-1"></i>auto-clear: <span data-tests-autoclear-seconds>—</span>s</span>` : '',
                         body: latest && latest.stderrTail
-                            ? `<pre class="json-block" style="max-height:280px;overflow:auto;white-space:pre-wrap;">${escapeHtml(latest.stderrTail)}</pre>`
+                            ? (() => {
+                                // Jest natívan "X passed, Y total" formaban irja — a felhasznalo
+                                // logikailag elobb a totalt szeretne latni: "Y total, X passed".
+                                const swapped = latest.stderrTail.replace(/(\d+)\s+passed,\s+(\d+)\s+total/g, '$2 total, $1 passed');
+                                return `<pre class="json-block" style="max-height:280px;overflow:auto;white-space:pre-wrap;">${escapeHtml(swapped)}</pre>`;
+                            })()
                             : `<pre class="json-block" style="max-height:280px;overflow:auto;">${latest ? '(Nincs stderr output)' : '(Meg nincs futas)'}</pre>`
                     })}
                 </div>
@@ -3836,6 +3851,33 @@ function reconnectAdminSocket() {
     }
 }
 
+// Section-aware refresh map: minden szekciohoz a saját adatainak frissítese.
+// A "Kézi frissítés" gomb a stats tick mellett az aktualis szekciot is frissiti,
+// igy a felhasznalonak nem kell kulon "Frissites" gombot keresnie.
+function refreshCurrentSection() {
+    const id = state.currentSectionId;
+    try {
+        switch (id) {
+            case 'users':              return loadAdminUsersList({ silent: true });
+            case 'alerts':             return loadAlerts();
+            case 'security':           return loadLogins();
+            case 'chats':              return window.MattMesterAdminChatModeration?.refresh?.();
+            case 'profileImageReview': return window.MattMesterAdminProfileImages?.refresh?.();
+            case 'moderationReports':  return window.MattMesterAdminReports?.refresh?.();
+            case 'tests':              return loadAdminTests();
+            case 'games':              return loadAdminGames();
+            case 'abilities':          return loadAdminAbilities();
+            case 'superAdmin':         return loadAdminAdminsList();
+            case 'friends':            return loadAdminSocial();
+            case 'settings':           return loadSiteSettings();
+            // 'auditLog' es 'dashboard' WS auto-update-tel mukodnek, nincs sajat REST loader
+            default: return null;
+        }
+    } catch (err) {
+        console.warn('refreshCurrentSection hiba:', err.message);
+    }
+}
+
 function requestStatsTick() {
     try {
         const sock = state.adminSocket;
@@ -3848,6 +3890,8 @@ function requestStatsTick() {
             sock.emit('admin:stats:request');
             // A 24h chart-ot is frissitjuk (REST), hogy a kezi gomb teljes egeszet jelentsen.
             loadActivityChart({ silent: true });
+            // Az aktualis szekcio sajat adatait is frissitjuk (section-aware refresh).
+            refreshCurrentSection();
             // Loading state: 2 mp-ig disabled + spin ikon
             state.manualRefreshLockUntil = Date.now() + 2000;
             if (refreshBtn) {
@@ -3906,8 +3950,8 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId, extras = 
                 'settings.edit': 'Beállítások mentése',
                 'abilities.edit': 'Képesség módosítása',
                 'social.unblock': 'Blokk feloldása',
-                'games.force_end': 'Meccs erőszakos befejezése',
-                'tests.run': 'Tesztek futtatása'
+                'games.force_end': 'Meccs erőszakos befejezése'
+                // tests.run sajat modallal megy (testsRunConfirmModal) — nem kerulhet ide
             };
             // Pozitiv (zold) styling: a tiltas-feloldas vissza-allitja a hozzaferest, nem destruktiv.
             const positiveActions = new Set(['users.unban']);
@@ -3925,7 +3969,17 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId, extras = 
             }
             const reasonField = document.getElementById('criticalReason');
             const counter = document.getElementById('criticalReasonCount');
-            const isOptionalReason = action === 'users.delete';
+            // Reason opcionalis kategoria: ezeknel a counter "valid" mindig, es a "/10" jelolés nem mutatódik.
+            // Egyezzen a backend-OPTIONAL_REASON_ACTIONS-szal (constants.js).
+            const OPTIONAL_REASON = new Set([
+                'users.delete',
+                'chat.delete',
+                'games.force_end',
+                'abilities.edit',
+                'social.unblock',
+                'profile_image.review'
+            ]);
+            const isOptionalReason = OPTIONAL_REASON.has(action);
             // Ha az inline panelen már megadta az indokot (ban vagy delete), vegyük át (nincs duplikáció).
             const inlineReason = (document.getElementById('banReason')?.value?.trim()
                 || document.getElementById('deleteReason')?.value?.trim()
@@ -3934,17 +3988,44 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId, extras = 
                 reasonField.value = inlineReason;
                 const initLen = inlineReason.length;
                 counter.textContent = String(initLen);
-                // users.delete esetén az indok opcionális — a counter mindig "valid" jelleggel
-                const isValid = isOptionalReason ? true : (initLen >= 30);
+                const isValid = isOptionalReason ? true : (initLen >= 10);
                 counter.parentElement.classList.toggle('valid', isValid);
                 reasonField.oninput = () => {
                     const len = reasonField.value.length;
                     counter.textContent = String(len);
-                    counter.parentElement.classList.toggle('valid', isOptionalReason ? true : (len >= 30));
+                    counter.parentElement.classList.toggle('valid', isOptionalReason ? true : (len >= 10));
                 };
-                // Counter szöveg: opcionális reason-nél nincs "min" elvárás
                 counter.textContent = String(initLen);
-                if (counter.nextSibling) counter.nextSibling.textContent = isOptionalReason ? '' : ' / 30';
+                if (counter.nextSibling) counter.nextSibling.textContent = isOptionalReason ? '' : ' / 10';
+                // A reason mezo label-jet is jelolni ki a "*" piros csillaggal csak akkor
+                // ha kotelezo. Opcionalisnal "(opcionalis)" felirat jelenik meg helyette.
+                const reasonLabel = document.querySelector('label[for="criticalReason"]');
+                if (reasonLabel) {
+                    if (isOptionalReason) {
+                        // Opcionalis reason: nincs char-szamlalo, nincs csillag, csak "(opcionalis)" felirat.
+                        reasonLabel.innerHTML = `Indok <span class="text-secondary fw-normal small ms-1">(opcionális)</span>`;
+                    } else {
+                        reasonLabel.innerHTML = `Indok <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="criticalReasonCount">${initLen}</span> / 10
+                            </span>`;
+                        // A label-en belul ujraepitett "criticalReasonCount"-ra ujra rakni az event listenert
+                        const newCounter = document.getElementById('criticalReasonCount');
+                        if (newCounter) {
+                            const newCounterParent = newCounter.parentElement;
+                            newCounterParent.classList.toggle('valid', initLen >= 10);
+                            reasonField.oninput = () => {
+                                const len = reasonField.value.length;
+                                newCounter.textContent = String(len);
+                                newCounterParent.classList.toggle('valid', len >= 10);
+                            };
+                        }
+                    }
+                }
+                // Placeholder is logic-fuggore valtoztatassa
+                reasonField.placeholder = isOptionalReason
+                    ? 'Indoklas (opcionalis) — uresen is hagyhato.'
+                    : 'Naplozasra kerulo indok (min. 10 karakter)...';
             }
             const passwordField = document.getElementById('criticalPassword');
             if (passwordField) {
@@ -3966,6 +4047,10 @@ async function executeCriticalAction() {
     await runSafelyAsync('executeCriticalAction', async () => {
         const modalEl = document.getElementById('criticalActionModal');
         if (modalEl && window.bootstrap?.Modal) {
+            // aria-hidden warning vedelem: blur az aktiv elemen mielott bezarjuk a modalt
+            if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                document.activeElement.blur();
+            }
             window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
         }
 
@@ -3973,10 +4058,14 @@ async function executeCriticalAction() {
         const reason = document.getElementById('criticalReason')?.value?.trim() || '';
         const currentPassword = document.getElementById('criticalPassword')?.value || '';
 
-        // users.delete: indok opcionális; minden más kritikus művelet: min 30 char.
-        const reasonOptional = action === 'users.delete';
-        if (!reasonOptional && reason.length < 30) {
-            showToast('Az indoknak legalább 30 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+        // Opcionalis reason action-ok (egyezzen az openCriticalAction OPTIONAL_REASON setjevel).
+        const REASON_OPTIONAL_ACTIONS = new Set([
+            'users.delete', 'chat.delete', 'games.force_end',
+            'abilities.edit', 'social.unblock', 'profile_image.review'
+        ]);
+        const reasonOptional = REASON_OPTIONAL_ACTIONS.has(action);
+        if (!reasonOptional && reason.length < 10) {
+            showToast('Az indoknak legalább 10 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
             return;
         }
 
@@ -7650,7 +7739,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                     document.querySelectorAll('#chatBlocklistAddWordsContainer input[type="checkbox"]:checked')
                 ).map((cb) => String(cb.value || '').trim()).filter(Boolean);
 
-                if (!id || reason.length < 30 || !checkedWords.length) return;
+                if (!id || reason.length < 10 || !checkedWords.length) return;
 
                 blConfirmBtn.disabled = true;
                 const ok = await performAddBlocklist(id, checkedWords, reason);
@@ -7681,7 +7770,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
 
         const reasonLen = reasonField.value.trim().length;
         counter.textContent = String(reasonLen);
-        const reasonValid = reasonLen >= 30 && reasonLen <= 1000;
+        const reasonValid = reasonLen >= 10 && reasonLen <= 1000;
         counter.parentElement?.classList.toggle('valid', reasonValid);
 
         const checked = document.querySelectorAll('#chatBlocklistAddWordsContainer input[type="checkbox"]:checked').length;
@@ -8531,16 +8620,31 @@ function initResponsiveSidebar() {
    ============================================================= */
 
 // Section-loader: amikor a felhasznalo egy oldalra navigal, elinditja a fetch-et.
+// FONTOS: a `loading` mezot IS ellenorizni kell, kulonben a loaderek belso
+// re-render hivasai (showSection silent) ujra triggernek a maybeLoad-ot, mielott
+// a `loaded` true-ra valtana → vegtelen loop.
 function maybeLoadSectionData(sectionId) {
     if (!state.adminToken) return;
     try {
         switch (sectionId) {
-            case 'settings':    if (!state.siteSettings.loaded)        loadSiteSettings(); break;
-            case 'superAdmin':  if (!state.adminsList.loaded)          loadAdminAdminsList(); break;
-            case 'abilities':   if (!state.abilities.loaded)           loadAdminAbilities(); break;
-            case 'friends':     if (!state.socialAdmin.requestsLoaded) loadAdminSocial(); break;
-            case 'games':       if (!state.gamesAdmin.loaded)          loadAdminGames(); break;
-            case 'tests':       if (!state.testsAdmin.latestLoaded)    loadAdminTests(); break;
+            case 'settings':
+                if (!state.siteSettings.loaded && !state.siteSettings.loading) loadSiteSettings();
+                break;
+            case 'superAdmin':
+                if (!state.adminsList.loaded && !state.adminsList.loading) loadAdminAdminsList();
+                break;
+            case 'abilities':
+                if (!state.abilities.loaded && !state.abilities.loading) loadAdminAbilities();
+                break;
+            case 'friends':
+                if (!state.socialAdmin.requestsLoaded && !state.socialAdmin.loading) loadAdminSocial();
+                break;
+            case 'games':
+                if (!state.gamesAdmin.loaded && !state.gamesAdmin.loading) loadAdminGames();
+                break;
+            case 'tests':
+                if (!state.testsAdmin.latestLoaded && !state.testsAdmin.loading) loadAdminTests();
+                break;
         }
     } catch (err) {
         console.warn('maybeLoadSectionData hiba:', err.message);
@@ -8596,8 +8700,12 @@ async function loadSiteSettings() {
 }
 
 async function submitSiteSettings() {
+    console.log('[settings] submitSiteSettings hivva');
     const form = document.getElementById('settingsForm');
-    if (!form) return;
+    if (!form) {
+        console.warn('[settings] form elem nem talalhato — abort');
+        return;
+    }
     const before = state.siteSettings.data || {};
     const patch = {
         siteName:            document.getElementById('settingsSiteName')?.value?.trim() || '',
@@ -8607,12 +8715,15 @@ async function submitSiteSettings() {
         registrationEnabled: Boolean(document.getElementById('settingsRegistration')?.checked),
         maintenanceMode:     Boolean(document.getElementById('settingsMaintenance')?.checked)
     };
+    console.log('[settings] before=', before, 'patch=', patch);
     const enablingMaintenance = patch.maintenanceMode && !before.maintenanceMode;
-    state.criticalActionData = { action: 'settings.edit', patch };
     const desc = enablingMaintenance
         ? '<strong class="text-warning">Figyelem:</strong> a karbantartasi mod aktivalasa minden NEM-admin user-t kizar a platformrol!<br>'
         : '';
-    openCriticalAction('settings.edit', `Beallitasok mentese${enablingMaintenance ? ' (karbantartas BE)' : ''}`);
+    console.log('[settings] openCriticalAction("settings.edit") hivasa');
+    // FONTOS: a patch-et az `extras` paraméterben adjuk at — különben az
+    // openCriticalAction felülírja a state.criticalActionData-t a sajat objektumaval.
+    openCriticalAction('settings.edit', `Beallitasok mentese${enablingMaintenance ? ' (karbantartas BE)' : ''}`, null, { patch });
     // openCriticalAction megnyitja a modalt; a leiras-szoveg felulirasahoz toldjunk:
     setTimeout(() => {
         const descEl = document.getElementById('criticalActionDescription');
@@ -8623,18 +8734,25 @@ async function submitSiteSettings() {
 }
 
 async function applySettingsEditFromCritical(reason) {
+    console.log('[settings] applySettingsEditFromCritical hivva, reason=', reason);
     const patch = state.criticalActionData?.patch;
-    if (!patch) return;
+    if (!patch) {
+        console.warn('[settings] state.criticalActionData.patch hianyzik — abort');
+        return;
+    }
     try {
+        console.log('[settings] PUT /api/admin/settings inditasa, body=', { ...patch, reason });
         const json = await adminFetchJson('/api/admin/settings', {
             method: 'PUT',
             body: { ...patch, reason }
         });
+        console.log('[settings] PUT sikeres, valasz=', json);
         state.siteSettings.data = json.data;
         state.siteSettings.loaded = true;
         showToast('Beallitasok mentve.', 'success', 'bi-check-circle-fill');
         if (state.currentSectionId === 'settings') showSection('settings', null, { silent: true });
     } catch (err) {
+        console.error('[settings] PUT hiba:', err);
         showToast(err.message || 'Hiba a settings mentes soran.', 'danger');
     }
 }
@@ -8680,7 +8798,8 @@ async function adminGrantPickerSubmit() {
         if (!target) { showToast(`Nincs ilyen felhasznalo: ${username}`, 'warning'); return; }
         const modalEl = document.getElementById('adminGrantPickerModal');
         if (modalEl && window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
-        state.criticalActionData = { action: 'admin.grant', targetUserId: target.id, targetLabel: target.username, makeSuper };
+        // openCriticalAction felulirja a state.criticalActionData-t — minden szukseges
+        // mezot az `extras` paramen keresztul kell atadni, hogy megmaradjon.
         openCriticalAction('admin.grant', target.username, target.id, { makeSuper });
     } catch (err) {
         showToast(err.message || 'Hiba a user keresenel.', 'danger');
@@ -8762,7 +8881,7 @@ async function abilityEditorSubmit() {
     const cooldownTurns = Number(document.getElementById('abilityEditorCooldown')?.value) || 0;
     const reason = document.getElementById('abilityEditorReason')?.value?.trim() || '';
     if (!name) { showToast('A nev kotelezo.', 'warning'); return; }
-    if (reason.length < 30) { showToast('Indoklas: legalabb 30 karakter (kritikus muvelet).', 'warning'); return; }
+    // abilities.edit opcionalis reason muvelet — uresen is OK
 
     try {
         if (editing.id) {
@@ -8789,8 +8908,8 @@ async function abilityEditorSubmit() {
 function confirmDeleteAbility(id) {
     const ab = state.abilities.list.find((a) => a.id === Number(id));
     if (!ab) return;
-    state.criticalActionData = { action: 'abilities.edit', abilityId: id, deleteFlow: true };
-    openCriticalAction('abilities.edit', `Kepesseg torles: ${ab.name}`);
+    // openCriticalAction felulirja a state.criticalActionData-t — extras-be tesszuk a custom mezoket.
+    openCriticalAction('abilities.edit', `Kepesseg torles: ${ab.name}`, null, { abilityId: id, deleteFlow: true });
 }
 
 async function applyAbilityDeleteFromCritical(reason) {
@@ -8837,8 +8956,9 @@ async function loadAdminSocial() {
 
 function confirmAdminUnblock(blockerId, blockedId, blockerName, blockedName) {
     if (!blockerId || !blockedId) return;
-    state.criticalActionData = { action: 'social.unblock', blockerId, blockedId, blockerName, blockedName };
-    openCriticalAction('social.unblock', `Blokk feloldas: ${blockerName} → ${blockedName}`);
+    // openCriticalAction felulirja a state.criticalActionData-t — extras-be tesszuk a custom mezoket.
+    openCriticalAction('social.unblock', `Blokk feloldas: ${blockerName} → ${blockedName}`, null,
+        { blockerId, blockedId, blockerName, blockedName });
 }
 
 async function applySocialUnblockFromCritical(reason) {
@@ -8923,8 +9043,8 @@ function downloadGamePgn(gameId) {
 
 function confirmForceEndGame(gameId) {
     if (!gameId) return;
-    state.criticalActionData = { action: 'games.force_end', gameId };
-    openCriticalAction('games.force_end', `Meccs eroszakos befejezese: #${gameId}`);
+    // openCriticalAction felulirja a state.criticalActionData-t — extras-be tesszuk.
+    openCriticalAction('games.force_end', `Meccs eroszakos befejezese: #${gameId}`, null, { gameId });
 }
 
 async function applyGameForceEndFromCritical(reason) {
@@ -9039,19 +9159,100 @@ function onAdminGamesMove(payload) {
 
 // ────────────── TESZTEK ──────────────
 
+// Ephemeral latest helpers: a "Test suite-ok" + "Stderr" reszek csak a session
+// alatt es csak a futtatas utan 1 percig lathatok. Page reload, admin oldalrol
+// kilepes, vagy 60s lejarata utan eltunnek.
+//
+// Visualis viselkedes: visszaszamlalo pill jelenik meg mind a ket kartya
+// jobb felso sarkaban. 60s -> 0 -> meg 2 mp grace -> teljes clear.
+const TESTS_LATEST_VISIBILITY_MS = 60 * 1000;
+const TESTS_LATEST_GRACE_MS = 2 * 1000;
+
+function updateTestsAutoClearPills() {
+    const remainMs = state.testsAdmin.latestExpiresAt
+        ? Math.max(0, state.testsAdmin.latestExpiresAt - Date.now())
+        : 0;
+    const remainSec = Math.ceil(remainMs / 1000);
+    document.querySelectorAll('[data-tests-autoclear-seconds]').forEach((el) => {
+        el.textContent = String(remainSec);
+    });
+    // Ha 0 ala ert, valtsuk pirosra a pillt (grace period)
+    document.querySelectorAll('[data-tests-autoclear]').forEach((el) => {
+        if (remainSec <= 0) {
+            el.classList.remove('bg-warning', 'text-dark');
+            el.classList.add('bg-danger');
+            const inner = el.querySelector('[data-tests-autoclear-seconds]');
+            if (inner) inner.textContent = '0';
+        }
+    });
+}
+
+function clearTestsLatest() {
+    if (state.testsAdmin.latestExpireTimerId) {
+        clearTimeout(state.testsAdmin.latestExpireTimerId);
+        state.testsAdmin.latestExpireTimerId = null;
+    }
+    if (state.testsAdmin.latestTickerId) {
+        clearInterval(state.testsAdmin.latestTickerId);
+        state.testsAdmin.latestTickerId = null;
+    }
+    if (state.testsAdmin.latestGraceTimerId) {
+        clearTimeout(state.testsAdmin.latestGraceTimerId);
+        state.testsAdmin.latestGraceTimerId = null;
+    }
+    state.testsAdmin.latest = null;
+    state.testsAdmin.latestExpiresAt = null;
+    if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+}
+
+function setTestsLatest(latest) {
+    // Elozo timerek teljes takaritasa
+    if (state.testsAdmin.latestExpireTimerId) {
+        clearTimeout(state.testsAdmin.latestExpireTimerId);
+        state.testsAdmin.latestExpireTimerId = null;
+    }
+    if (state.testsAdmin.latestTickerId) {
+        clearInterval(state.testsAdmin.latestTickerId);
+        state.testsAdmin.latestTickerId = null;
+    }
+    if (state.testsAdmin.latestGraceTimerId) {
+        clearTimeout(state.testsAdmin.latestGraceTimerId);
+        state.testsAdmin.latestGraceTimerId = null;
+    }
+
+    state.testsAdmin.latest = latest;
+    state.testsAdmin.latestExpiresAt = Date.now() + TESTS_LATEST_VISIBILITY_MS;
+
+    // 1 mp-enkenti pill update (csak a DOM-on, nem teljes re-render).
+    state.testsAdmin.latestTickerId = setInterval(() => {
+        updateTestsAutoClearPills();
+    }, 1000);
+
+    // 60 mp utan: 2 mp grace, aztan teljes clear.
+    state.testsAdmin.latestExpireTimerId = setTimeout(() => {
+        // 0-ra ert; a tickerunk a pillt 0-ra es danger sztilusra rakja az
+        // updateTestsAutoClearPills() kovetkezo hivasakor (1 mp-en belul).
+        // Egyetlen extra render: egy 2 mp-es grace delay.
+        state.testsAdmin.latestGraceTimerId = setTimeout(() => {
+            clearTestsLatest();
+        }, TESTS_LATEST_GRACE_MS);
+    }, TESTS_LATEST_VISIBILITY_MS);
+}
+
 async function loadAdminTests() {
     state.testsAdmin.loading = true;
     state.testsAdmin.error = null;
     if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
     try {
-        const [latest, history, running] = await Promise.all([
-            adminFetchJson('/api/admin/tests/latest'),
+        // FONTOS: a `latest` mezot szandekosan NEM tigetjuk fel itt — csak akkor
+        // jelenitjuk meg, ha a session alatt frissen futtattunk tesztet
+        // (admin:tests:finished WS event). A History tabla ettol fuggetlenul tolt.
+        const [history, running] = await Promise.all([
             adminFetchJson('/api/admin/tests/history'),
             adminFetchJson('/api/admin/tests/running')
         ]);
-        state.testsAdmin.latest = latest.data;
         state.testsAdmin.history = Array.isArray(history.data) ? history.data : [];
-        state.testsAdmin.latestLoaded = true;
+        state.testsAdmin.latestLoaded = true;  // a "page-loaded" jelzes
         state.testsAdmin.historyLoaded = true;
         if (running.data?.inProcess) {
             state.testsAdmin.running = {
@@ -9074,17 +9275,39 @@ async function loadAdminTests() {
 function confirmRunTests() {
     if (state.testsAdmin.running) { showToast('Mar fut egy teszt.', 'warning'); return; }
     if (!state.isSuperAdmin) { showToast('Csak super-admin futtathat tesztet.', 'warning'); return; }
-    state.criticalActionData = { action: 'tests.run' };
-    openCriticalAction('tests.run', 'Tesztek futtatasa');
+    const modalEl = document.getElementById('testsRunConfirmModal');
+    if (!modalEl || !window.bootstrap?.Modal) {
+        // Fallback: ha valamiert nem lenne modal, kozvetlenul futtatas reason nelkul.
+        runTestsDirectly('');
+        return;
+    }
+    const reasonField = document.getElementById('testsRunReason');
+    if (reasonField) reasonField.value = '';
+    new window.bootstrap.Modal(modalEl).show();
 }
 
-async function applyTestsRunFromCritical(reason) {
+function submitTestsRunFromConfirm() {
+    const modalEl = document.getElementById('testsRunConfirmModal');
+    if (modalEl && window.bootstrap?.Modal) {
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+        }
+        window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+    }
+    const reason = document.getElementById('testsRunReason')?.value?.trim() || '';
+    runTestsDirectly(reason);
+}
+
+async function runTestsDirectly(reason) {
     try {
         const json = await adminFetchJson('/api/admin/tests/run', {
             method: 'POST',
-            body: { reason }
+            body: { reason: reason || '' }
         });
         showToast(`Teszt futas elinditva (run #${json.data?.runId}).`, 'success', 'bi-play-fill');
+        // Uj run inditasakor toroljuk a regi latest-et (ha volt) — a felhasznalo
+        // explicit kerese: ne lassa a regi adatokat amig az uj fut.
+        clearTestsLatest();
         state.testsAdmin.running = {
             runId: json.data?.runId,
             startedAt: json.data?.startedAt,
@@ -9094,6 +9317,12 @@ async function applyTestsRunFromCritical(reason) {
     } catch (err) {
         showToast(err.message || 'Hiba a teszt inditasanal.', 'danger');
     }
+}
+
+// Backwards-compat: ha a critical action wrapper meg ezt hivna a tests.run action-re,
+// menjen at a kozvetlen runner-re.
+async function applyTestsRunFromCritical(reason) {
+    return runTestsDirectly(reason);
 }
 
 // ────────────── Critical action dispatch hook ──────────────
@@ -9117,27 +9346,47 @@ async function applyTestsRunFromCritical(reason) {
             return Promise.resolve();
         },
         'social.unblock':   (reason) => applySocialUnblockFromCritical(reason),
-        'games.force_end':  (reason) => applyGameForceEndFromCritical(reason),
-        'tests.run':        (reason) => applyTestsRunFromCritical(reason)
+        'games.force_end':  (reason) => applyGameForceEndFromCritical(reason)
+        // tests.run szandekosan nincs itt — sajat egyszeru modalja van (testsRunConfirmModal),
+        // nem a "Kritikus muvelet" flow-ban megy
     };
+
+    // Opcionalis reason action-ok: ezeknel nincs char-minimum sem.
+    const OPTIONAL_REASON_ACTIONS = new Set([
+        'users.delete', 'chat.delete', 'games.force_end',
+        'abilities.edit', 'social.unblock', 'profile_image.review'
+    ]);
 
     window.executeCriticalAction = async function patchedExecuteCriticalAction() {
         const action = state.criticalActionData?.action;
+        console.log('[critical] executeCriticalAction hivva, action=', action);
         if (action && NEW_ACTION_HANDLERS[action]) {
             const modalEl = document.getElementById('criticalActionModal');
             if (modalEl && window.bootstrap?.Modal) {
+                // Bootstrap modal hide() utan aria-hidden=true keruli a modalra, de ha a
+                // focus meg a "Muvelet vegrehajtasa" gombon van, az accessibility warning-ot
+                // dob. Blur-oljuk az aktiv elemet, hogy a focus a body-ra menjen.
+                if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                    document.activeElement.blur();
+                }
                 window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
             }
             const reason = document.getElementById('criticalReason')?.value?.trim() || '';
-            if (reason.length < 30) {
-                showToast('Az indoklasnak legalabb 30 karakter hosszunak kell lennie.', 'warning');
+            console.log('[critical] reason length=', reason.length, 'optional=', OPTIONAL_REASON_ACTIONS.has(action));
+            if (!OPTIONAL_REASON_ACTIONS.has(action) && reason.length < 10) {
+                console.warn('[critical] reason tul rovid (<10 char) — abort');
+                showToast('Az indoklasnak legalabb 10 karakter hosszunak kell lennie.', 'warning');
                 return;
             }
-            try { await NEW_ACTION_HANDLERS[action](reason); } catch (err) {
+            try {
+                console.log('[critical] handler hivasa', action);
+                await NEW_ACTION_HANDLERS[action](reason);
+            } catch (err) {
                 console.error('extra critical handler hiba:', err);
             }
             return;
         }
+        console.log('[critical] action nem az uj handlerek kozott, originalExecute()');
         return originalExecute();
     };
 })();
@@ -9149,6 +9398,11 @@ async function applyTestsRunFromCritical(reason) {
     window.showSection = function patchedShowSection(sectionId, event, options) {
         const result = originalShow(sectionId, event, options);
         try { maybeLoadSectionData(sectionId); } catch (_) { /* ignore */ }
+        // Tesztek oldalon a pill DOM elemek a re-render utan azonnal kapjak a friss erteket
+        // a "—" placeholder helyett.
+        if (sectionId === 'tests' && state.testsAdmin.latestExpiresAt) {
+            try { updateTestsAutoClearPills(); } catch (_) {}
+        }
         return result;
     };
 })();
@@ -9194,6 +9448,8 @@ function attachAdminSocketListeners(socket) {
         showToast('A nezett meccs adminisztratorian befejezve.', 'warning');
     });
     socket.on('admin:tests:started', (payload) => {
+        // Uj run kezdodik (akar mas admin tab-bol) -> regi latest takaritasa.
+        clearTestsLatest();
         state.testsAdmin.running = {
             runId: payload?.runId,
             startedAt: payload?.startedAt,
@@ -9207,9 +9463,25 @@ function attachAdminSocketListeners(socket) {
             if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
         }
     });
-    socket.on('admin:tests:finished', () => {
+    socket.on('admin:tests:finished', async () => {
         state.testsAdmin.running = null;
-        loadAdminTests();
+        // Frissitsuk a history-t es kerjuk le a friss latest-et — ezt 60 mp-ig
+        // mutatjuk, aztan auto-clear (setTestsLatest belso timerje).
+        try {
+            const [latest, history] = await Promise.all([
+                adminFetchJson('/api/admin/tests/latest'),
+                adminFetchJson('/api/admin/tests/history')
+            ]);
+            if (latest?.data) {
+                setTestsLatest(latest.data);
+            }
+            state.testsAdmin.history = Array.isArray(history?.data) ? history.data : [];
+        } catch (err) {
+            console.warn('admin:tests:finished refresh hiba:', err.message);
+        }
+        if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
+        // A render utan azonnal frissitsuk a pill ertekeket, hogy ne lassa a felhasznalo a "—" placeholder-t.
+        setTimeout(() => updateTestsAutoClearPills(), 50);
     });
 }
 

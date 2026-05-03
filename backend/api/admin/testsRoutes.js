@@ -103,19 +103,26 @@ router.get(
     }
 );
 
+// Tests.run: a reason explicit opcionalis a felhasznalo kerese alapjan, semmilyen
+// karakter-minimum nincs. Ha ures, default placeholder-t hasznal a naplozashoz;
+// ha barmilyen reason-t megadnak, naplozzuk (max 1000 char, ami a DB constraint).
 router.post(
     '/run',
     adminLimiterChain,
     parseAdminToken,
     requireSuperAdmin,
     express.json(),
-    requireReasonOnMutate(ADMIN_PERMISSIONS.TESTS_RUN),
     auditContext,
     auditFlush,
     async (request, response) => {
         let statusCode = 200;
         let payload = { success: false, message: 'Belso hiba.' };
         try {
+            const rawReason = String(request.body?.reason || '').trim().slice(0, 1000);
+            request.adminReason = rawReason || 'Tesztek admin altal indítva — opcionalis reason mellozve.';
+            request.adminAction = ADMIN_PERMISSIONS.TESTS_RUN;
+            request.adminIsCritical = false;
+
             const adminAuth = request.adminAuth;
             const hub = request.app?.locals?.adminSocketHub;
             const emit = hub && typeof hub.broadcastAdmin === 'function'
@@ -128,7 +135,7 @@ router.post(
             });
 
             response.locals.adminAudit.action = ADMIN_PERMISSIONS.TESTS_RUN;
-            response.locals.adminAudit.severity = 'critical';
+            response.locals.adminAudit.severity = 'info';
             response.locals.adminAudit.targetType = 'test_run';
             response.locals.adminAudit.targetId = startResult.id;
             response.locals.adminAudit.targetLabel = `test_run#${startResult.id}`;

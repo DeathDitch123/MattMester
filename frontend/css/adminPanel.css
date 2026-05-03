@@ -2032,7 +2032,7 @@ body::before {
 
 .test-row {
     display: grid;
-    grid-template-columns: 12px 90px 1fr auto auto;
+    grid-template-columns: 12px minmax(140px, 230px) minmax(0, 1fr) auto auto;
     align-items: center;
     gap: 0.85rem;
     padding: 0.7rem 1.25rem;
@@ -2068,11 +2068,18 @@ body::before {
     letter-spacing: 0.6px;
     color: var(--text-secondary);
     font-weight: 600;
-    padding: 0.18rem 0.5rem;
+    padding: 0.18rem 0.6rem;
     background: rgba(212, 175, 55, 0.08);
     border: 1px solid rgba(212, 175, 55, 0.2);
     border-radius: 999px;
     text-align: center;
+    /* A grid track maximumon belul ellipsis, hogy soha ne folyjon at a kovetkezo oszlopba (test-name). */
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    justify-self: start;
 }
 
 .test-name {

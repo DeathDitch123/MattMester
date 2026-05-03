@@ -6,9 +6,10 @@ const ADMIN_TOKEN_TTL_MS = 15 * 60 * 1000;
 // Plain token byte hossz (32 byte = ~43 char base64url).
 const ADMIN_TOKEN_RAW_BYTES = 32;
 
-// Indoklas minimum hossz: normal mutalo muvelet 10, kritikus 30.
+// Indoklas minimum hossz: minden mutalo muveletnel egysegesen 10 karakter
+// (regen kritikus muveleteknel 30 volt — leszedve UX okokbol).
 const REASON_MIN_LENGTH_NORMAL = 10;
-const REASON_MIN_LENGTH_CRITICAL = 30;
+const REASON_MIN_LENGTH_CRITICAL = 10;
 const REASON_MAX_LENGTH = 1000;
 
 // Admin elevate brute-force vedelem: 15 perc / 5 sikertelen.
@@ -115,18 +116,29 @@ const SUPER_ONLY_PERMISSIONS = Object.freeze(new Set([
 
 const CRITICAL_ACTIONS = Object.freeze(new Set([
     ADMIN_PERMISSIONS.USERS_DELETE,
-    // USERS_BAN: szandekosan NEM kritikus -> requireReasonOnMutate 10 char minimumot kovetel
+    // USERS_BAN: szandekosan NEM kritikus
     // (a ban-form inline hold-to-confirm + jelszo-ellenorzes elegendo vedelem).
-    ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE,
     ADMIN_PERMISSIONS.NOTIFICATIONS_BROADCAST,
     ADMIN_PERMISSIONS.ADMIN_GRANT,
     ADMIN_PERMISSIONS.ADMIN_REVOKE,
     ADMIN_PERMISSIONS.IP_BLOCK_CREATE,
-    ADMIN_PERMISSIONS.GAMES_FORCE_END,
-    ADMIN_PERMISSIONS.ABILITIES_EDIT,
-    ADMIN_PERMISSIONS.SOCIAL_UNBLOCK,
-    ADMIN_PERMISSIONS.TESTS_RUN,
+    // TESTS_RUN szandekosan NEM kritikus: read-only muvelet a kodbazisra,
+    // semmit nem mutal, csak Jest-et futtat. Audit severity: 'info'.
     ADMIN_PERMISSIONS.SETTINGS_EDIT
+]));
+
+// Opcionalis reason action-ok: az indoklas mezo kihagyhato, vagy 1-9 char is OK.
+// A requireReasonOnMutate middleware ennek megfeleloen lazitja a validaciot.
+// Ezek a muveletek vagy mar massik vedelmi reteggel rendelkeznek (pl. password
+// jelszo-megerositese a delete-nel), vagy elegge trivialis admin overridek
+// amelyekre a 10-char audit log nem feltetlen ad hozzaadott erteket.
+const OPTIONAL_REASON_ACTIONS = Object.freeze(new Set([
+    ADMIN_PERMISSIONS.USERS_DELETE,        // password kotelezo, reason audit-trail
+    ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE, // gyors moderacios akcio
+    ADMIN_PERMISSIONS.GAMES_FORCE_END,     // ritkan hasznalt, audit log automata
+    ADMIN_PERMISSIONS.ABILITIES_EDIT,      // config change, nem felhasznaloi adat
+    ADMIN_PERMISSIONS.SOCIAL_UNBLOCK,      // admin override egy felhasznalo-paron
+    ADMIN_PERMISSIONS.PROFILE_IMAGE_REVIEW // reject akcional opcionalis (approve mar most is az)
 ]));
 
 // Egyseges hibakodok az admin response-okhoz.
@@ -165,6 +177,7 @@ module.exports = {
     ADMIN_PERMISSIONS,
     SUPER_ONLY_PERMISSIONS,
     CRITICAL_ACTIONS,
+    OPTIONAL_REASON_ACTIONS,
     ADMIN_ERROR_CODES,
     ADMIN_UI_TOKEN_TICK_INTERVAL_MS,
     ADMIN_UI_TOKEN_REFRESH_THRESHOLD_SEC,

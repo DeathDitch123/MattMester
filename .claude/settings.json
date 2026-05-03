@@ -13,7 +13,18 @@
       "Bash(node --check sql/modules/gamesAdmin.js)",
       "Bash(node --check sql/modules/testRuns.js)",
       "Bash(node --check frontend/javascript/adminPanel.js)",
-      "Bash(npm test *)"
+      "Bash(npm test *)",
+      "Bash(node --check backend/api/admin/testRunnerService.js)",
+      "Bash(node --check backend/api/admin/testsRoutes.js)",
+      "Bash(node --check backend/api/admin/constants.js)",
+      "Bash(node --check backend/api/admin/middleware.js)",
+      "Bash(node --check backend/api/admin/maintenanceScheduler.js)",
+      "Bash(node --check backend/api/admin/settingsRoutes.js)",
+      "Bash(node --check backend/api/middleware/maintenanceGuard.js)",
+      "Bash(node --check backend/sockets.js)",
+      "Bash(node --check frontend/javascript/shared/maintenanceClient.js)",
+      "Bash(node --check frontend/javascript/socketClient.js)",
+      "Bash(node --check backend/server.js)"
     ]
   }
 }
