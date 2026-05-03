@@ -142,7 +142,13 @@
       "Bash(node --check ../frontend/chess_barold/javascript/UI-megjelenites.js)",
       "Bash(node --check ../frontend/chess_barold/javascript/audio.js)",
       "Bash(node --check chess/pvp.js)",
-      "Bash(node --check chess/engine.js)"
+      "Bash(node --check chess/engine.js)",
+      "Bash(node --check frontend/chess_barold/javascript/UI-megjelenites.js)",
+      "Bash(node --check frontend/chess_barold/javascript/settings.js)",
+      "Bash(node --check backend/chess/engine.js)",
+      "Bash(node --check backend/chess/state.js)",
+      "Bash(node --check backend/chess/pvp.js)",
+      "Read(//c/Users/user/AppData/Local/Temp/claude/d--Letoltesek-GIthub-repo-MattMester/9667b89c-939b-4094-8c00-c1089ef577ed/tasks//**)"
     ]
   }
 }

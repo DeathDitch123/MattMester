@@ -17,6 +17,8 @@ const { eloSzamit, KEZDO_ELO } = require('../chess/elo.js');
 const { requireVerifiedEmail } = require('./functions.js');
 const { abilityAktival, getKliensConfig, ABILITY_CONFIG } = require('../chess/abilities.js');
 const { isValidMode, getMode, listClient: listModesClient, DEFAULT_MODE } = require('../chess/modes.js');
+// N15-input-hardening: szigoru integer-validacio (parseInt elfogad floatot, '1abc'-t).
+const { parsePositiveIntegerInRange } = require('../utils/parse.js');
 
 function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -147,13 +149,17 @@ router.post('/new-bot', async (req, res) => {
     let statusCode = 200;
     let responseBody = null;
     try {
-        const { difficulty, mode: modeKey } = req.body || {};
-        const nehezseg = parseInt(difficulty, 10);
+        const body = (req.body && typeof req.body === 'object' && !Array.isArray(req.body)) ? req.body : {};
+        const difficulty = body.difficulty;
+        const modeKey = body.mode;
 
-        if (!nehezseg || nehezseg < 1 || nehezseg > 8) {
+        // Szigoru integer-validacio: 1..8 tartomany, NEM fogad el float-ot, NEM "1abc"-t.
+        const nehezseg = parsePositiveIntegerInRange(difficulty, 1, 8, null);
+
+        if (nehezseg === null) {
             statusCode = 400;
             responseBody = { error: 'Érvénytelen nehézségi szint (1-8).' };
-        } else if (modeKey && !isValidMode(modeKey)) {
+        } else if (modeKey !== undefined && modeKey !== null && (typeof modeKey !== 'string' || !isValidMode(modeKey))) {
             statusCode = 400;
             responseBody = { error: 'Érvénytelen játékmód.' };
         } else {
