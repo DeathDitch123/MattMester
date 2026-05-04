@@ -794,34 +794,30 @@ describe('Chess lifecycle invariánsok', () => {
         });
     });
 
-    // Regresszio: orphan bot meccs auto-cleanup. A helper 2026-05-04 ota
-    // a state.js-bol export-alva (kozos modul), igy a /new-bot ES a PvP queue/
-    // invite handlerei is hasznaljak ugyanazt a takarito logikat.
-    test('state.js export-olja a cleanupOwnAbandonedBotGame helper-t', () => {
+    // First-tab-priority: ha a felhasznalonak van AKTIV meccse (akar bot, akar PvP),
+    // egy masik tab nem indithat ujat — 409 GAME_ALREADY_ACTIVE. A regi auto-cleanup
+    // viselkedes (cleanupOwnAbandonedBotGame) eltavolitva, mert exploitolhato volt:
+    // 2. tab elinditasa kilokte az 1. tab aktiv meccsebol a felhasznalot.
+    test('state.js NEM tartalmaz cleanupOwnAbandonedBotGame helper-t (first-tab-priority)', () => {
         const content = readFile(path.join(BACKEND, 'chess', 'state.js'));
-        expect(content).toMatch(/function\s+cleanupOwnAbandonedBotGame\s*\(/);
-        // A helper csak BOT meccset takarit, PvP-t nem
-        expect(content).toMatch(/!jatek\.botAktiv\s*\|\|\s*jatek\.pvpAktiv/);
-        // Export-ban benne van
-        expect(content).toMatch(/cleanupOwnAbandonedBotGame[\s,}]/);
+        expect(content).not.toMatch(/cleanupOwnAbandonedBotGame/);
     });
 
-    test('chess_api.js /new-bot importalja es hivja a cleanupOwnAbandonedBotGame-t', () => {
+    test('chess_api.js /new-bot 409-et ad ha barmilyen aktiv meccs van', () => {
         const content = readFile(path.join(BACKEND, 'api', 'chess_api.js'));
-        // Import a state.js-bol
-        expect(content).toMatch(/cleanupOwnAbandonedBotGame[^=]*=\s*require\(['"]\.\.\/chess\/state\.js['"]\)/);
-        // A helper hivva van userId-vel (a tenyleges valtozonev lehet `userIdEarly`,
-        // `userId` vagy `req.session.userId` — mindharom elfogadott).
-        expect(content).toMatch(/cleanupOwnAbandonedBotGame\s*\(\s*(req\.session\.userId|userId\w*)/);
+        // Auto-cleanup eltavolitva
+        expect(content).not.toMatch(/cleanupOwnAbandonedBotGame/);
+        // hasAnyActiveGameForUser hivassal blokkol
+        expect(content).toMatch(/hasAnyActiveGameForUser\s*\(\s*\w+\s*\)\.hasActive/);
+        // GAME_ALREADY_ACTIVE statusz kod
+        expect(content).toMatch(/GAME_ALREADY_ACTIVE/);
     });
 
-    test('pvp.js queue+invite handlerei meghivjak a cleanupOwnAbandonedBotGame-t (Bug 2026-05-04)', () => {
-        // Bug-fix: F5 / tab-bezar utan ragadt orphan bot meccs ne blokkolja
-        // a PvP queue / invite csatlakozast "Mar van aktiv jatszmad" hibaval.
+    test('pvp.js queue+invite NEM hivja a cleanupOwnAbandonedBotGame-t (first-tab-priority)', () => {
         const content = readFile(path.join(BACKEND, 'chess', 'pvp.js'));
-        expect(content).toMatch(/cleanupOwnAbandonedBotGame[^=]*=\s*require\(['"]\.\/state\.js['"]\)/);
-        // Legalabb ket helyen hivva (queue + invite)
-        const hits = content.match(/cleanupOwnAbandonedBotGame\s*\(/g) || [];
+        expect(content).not.toMatch(/cleanupOwnAbandonedBotGame/);
+        // Mindket helyen hasAnyActiveGameForUser blokkol
+        const hits = content.match(/hasAnyActiveGameForUser\s*\(\s*userId\s*\)\.hasActive/g) || [];
         expect(hits.length).toBeGreaterThanOrEqual(2);
     });
 

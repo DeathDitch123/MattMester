@@ -72,6 +72,57 @@
         }
     }
 
+    // First-tab-priority guard: lekerdezi a backend-tol, hogy a felhasznalonak
+    // van-e mar aktiv meccse, es az "live" (masik tab elen jatszik) vagy "orphan"
+    // (60s+ ota inaktiv / disconnect grace alatt). Visszater true-val ha a hivo
+    // flow ALLJON LE (modal vagy redirect tortent), false-szal ha mehet tovabb.
+    //
+    //   - !hasActive            → false (nincs aktiv meccs, indulhat uj)
+    //   - hasActive && isLive   → modal "Egy masik oldalrol mar fut..." → return true
+    //   - hasActive && !isLive  → AUTO-REJOIN: sessionStorage pendingMatch flag
+    //     + redirect chess.html-re. A 60s window alatt a felhasznalo igy
+    //     visszater a futo meccsbe (PvP: chess:rejoin emit; bot: ?type=botRejoin
+    //     URL parameter). → return true
+    //
+    // Network hiba eseten engedjuk tovabbmenni a flow-t — a backend /new-bot
+    // ill. socket guard ujrarancigalja a usert ha kell.
+    async function osszbeBlokkolHaAktivMeccsVan() {
+        let data;
+        try {
+            const res = await fetch('/api/chess/active', { credentials: 'same-origin' });
+            if (!res.ok) return false;
+            data = await res.json();
+        } catch (_) {
+            return false;
+        }
+        if (!data || !data.hasActive) return false;
+
+        if (data.isLive) {
+            // Masik tab elen jatszik → modal blokkol
+            if (typeof window.mmAlert === 'function') {
+                await window.mmAlert({
+                    title: 'Már fut egy meccsed',
+                    message: 'Egy másik oldalról már fut egy játék ezzel a felhasználóval. Fejezd be vagy add fel előbb a meccset.'
+                });
+            }
+            return true;
+        }
+
+        // 60s window alatt vagyunk: automatikus rejoin a meccshez
+        try {
+            window.sessionStorage.setItem('mattmester.chessPendingMatch', JSON.stringify({
+                gameId: Number(data.gameId) || 0,
+                ts: Date.now()
+            }));
+        } catch (_) {}
+        STATE.navigatingToGame = true;
+        const target = (data.type === 'bot' && data.gameId)
+            ? `/chess_barold/html/chess.html?type=botRejoin&gameId=${encodeURIComponent(data.gameId)}`
+            : '/chess_barold/html/chess.html';
+        window.location.href = target;
+        return true;
+    }
+
     // ─────────────────────────────────────────────────────────────────
     // Step navigáció + subtitle
     // ─────────────────────────────────────────────────────────────────
@@ -259,27 +310,23 @@
         // Backend hibaüzenetek
         socket.on('chess:error', (data) => {
             const msg = (data && data.uzenet) || 'Ismeretlen hiba.';
-            // "Mar van aktiv ..." hiba — a felhasznalonak van egy F5/disconnect
-            // utan ragadt PvP meccse. Ne csak hibakent jelezzuk, hanem ajanljuk
-            // fel a folytatast: navigaljunk a chess.html-re, ahol a rejoin flow
-            // (main.js init -> chess:rejoin emit -> chess:game:start) azonnal
-            // visszateszi a felhasznalot a meccsbe. Az ido a backend-ben
-            // tovabbfut, nem veszit semmit.
+            // First-tab-priority: a "Mar van aktiv ..." backend uzenet azt
+            // jelenti, hogy a felhasznalonak van mar aktiv meccse egy masik
+            // tab-on. Korabban a frontend automatikusan rejoin-olt (atvitte a
+            // user-t a chess.html-re), most viszont az ELSO TAB elvez prioritast,
+            // a 2. tab maradjon a chooser-en es kapjon custom modal-t.
             const isActiveMatchError = /m[aá]r van akt[ií]v/i.test(msg);
             if (isActiveMatchError) {
-                setFeedback('Aktív meccsedhez visszacsatlakozás folyamatban…', 'info');
                 STATE.queueActive = false;
                 STATE.inviteTargetUserId = 0;
-                STATE.navigatingToGame = true;
-                try {
-                    // sessionStorage flag, hogy a chess.html init() ne nyissa meg
-                    // a chooser-t — varja a rejoin flow-t.
-                    window.sessionStorage.setItem('mattmester.chessPendingMatch', JSON.stringify({
-                        gameId: 0,   // ismeretlen — a rejoin handler talalja meg
-                        ts: Date.now()
-                    }));
-                } catch (_) {}
-                window.location.href = '/chess_barold/html/chess.html';
+                showStep('pvp');
+                setFeedback('');
+                if (typeof window.mmAlert === 'function') {
+                    window.mmAlert({
+                        title: 'Már fut egy meccsed',
+                        message: 'Egy másik oldalról már fut egy játék ezzel a felhasználóval. Fejezd be vagy add fel előbb a meccset.'
+                    });
+                }
                 return;
             }
             setFeedback(msg, 'error');
@@ -299,12 +346,15 @@
     // Queue start/cancel
     // ─────────────────────────────────────────────────────────────────
 
-    function startQueue() {
+    async function startQueue() {
         const socket = getSocket();
         if (!socket) {
             setFeedback('Nincs socket kapcsolat — frissítsd az oldalt.', 'error');
             return;
         }
+        // First-tab-priority: emit ELOTT ellenorizzuk, hogy van-e mar aktiv meccs.
+        // Ha igen → modal + maradunk a pvp step-en (NE indítsunk queue-t).
+        if (await osszbeBlokkolHaAktivMeccsVan()) return;
         bindSocketListeners();
 
         STATE.queueActive = true;
@@ -334,12 +384,15 @@
     // Friend invite start/cancel
     // ─────────────────────────────────────────────────────────────────
 
-    function startFriendInvite(targetUserId, targetName) {
+    async function startFriendInvite(targetUserId, targetName) {
         const socket = getSocket();
         if (!socket) {
             setFeedback('Nincs socket kapcsolat — frissítsd az oldalt.', 'error');
             return;
         }
+        // First-tab-priority: invite emit ELOTT ellenorizzuk, hogy van-e mar
+        // aktiv meccs. Ha igen → modal + maradunk a friends step-en.
+        if (await osszbeBlokkolHaAktivMeccsVan()) return;
         bindSocketListeners();
 
         STATE.inviteTargetUserId = Number(targetUserId) || 0;
@@ -371,7 +424,11 @@
     // Navigáció chess.html-re query-paraméterekkel (BOT eset)
     // ─────────────────────────────────────────────────────────────────
 
-    function navigateToBotGame(difficulty) {
+    async function navigateToBotGame(difficulty) {
+        // First-tab-priority: a chess.html-re navigalas ELOTT ellenorizzuk,
+        // hogy van-e mar aktiv meccs. Ha igen → modal + maradunk a chooser-en.
+        if (await osszbeBlokkolHaAktivMeccsVan()) return;
+
         const params = new URLSearchParams({
             type: 'bot',
             mode: STATE.selectedMode,

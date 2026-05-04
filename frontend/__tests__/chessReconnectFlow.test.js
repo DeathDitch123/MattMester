@@ -122,7 +122,10 @@ describe('main.js (chess.html) — chooser nyitas csak a rejoin valasz utan', ()
         // Bug-fix: korabban azonnal kinyitotta a chooser-t es a rejoin valasz
         // (chess:game:start) a chooser mogott rendelodott. Most a pvpSocketInit
         // listenerei nyitjak (chess:rejoin:none) vagy a pvpJatekKezdet zarja
-        // (chess:game:start). A direct hivas csak a safety-timeout-ban van.
+        // (chess:game:start). A direkt hivasok feltetelhez kotottek:
+        //   1. safety setTimeout fallback (ha 5s alatt nincs valasz)
+        //   2. ?type=botRejoin URL eseten ha a gameId hibas (nincs mire rejoin-olni)
+        // — mindketto explicit error/timeout, NEM unconditional.
         const initIdx = src.indexOf('async function init(');
         expect(initIdx).toBeGreaterThan(-1);
         const openBrace = src.indexOf('{', initIdx);
@@ -135,11 +138,9 @@ describe('main.js (chess.html) — chooser nyitas csak a rejoin valasz utan', ()
             i++;
         }
         const initBody = src.substring(openBrace + 1, i - 1);
-        // Csak a safety setTimeout-ban legyen ujMeccsChooserNyitas hivas.
         const hivasok = (initBody.match(/ujMeccsChooserNyitas\s*\(/g) || []).length;
-        // Egy hivas a setTimeout-on belul (safety fallback) — egyebkent a
-        // pvpSocketInit handler-ek intezik a chooser-nyitast.
-        expect(hivasok).toBeLessThanOrEqual(1);
+        // Max 2 explicit error-fallback hivas (safety timeout + botRejoin invalid gameId).
+        expect(hivasok).toBeLessThanOrEqual(2);
     });
 
     test('safety timeout: ha nem jon rejoin valasz, a chooser kinyilik (5000ms)', () => {

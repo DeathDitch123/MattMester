@@ -340,42 +340,6 @@ function pvpSocketInit() {
         if (popup) popup.classList.add('hidden');
     });
 
-    // Multi-tab bot-meccs csere ertesites: ha a felhasznalo egy MASIK tab-on
-    // uj bot-meccset inditott, a backend /new-bot endpoint-ja kitakaritotta a
-    // regi (sajat) bot-meccset es ezt az eventet emittalta a user-room minden
-    // tabjara. Ha a sajat (regi) gameId egyezik az `oldGameId`-vel, a frontend
-    // resetel: leallitja a polling-ot, eldobja az utolso allapotot, megnyitja
-    // a chooser-t. Igy a regi tab nem polling-ol 404-et vegtelenul, hanem
-    // tisztan ujraindithat egy uj meccset.
-    socket.on('chess:bot:replaced', (data) => {
-        if (!data || !data.oldGameId) return;
-        // Csak akkor reagaljunk, ha a sajat gameId egyezik (vagy ha botInfo
-        // megvan, de gameId hianyzik — defenziv).
-        if (gameId && Number(gameId) !== Number(data.oldGameId)) return;
-        console.log('[chess:bot:replaced] regi bot meccs kitakaritva masik tab altal:', data);
-        // Polling leallitas
-        idoPollingLeall();
-        if (botPollTimer) {
-            clearInterval(botPollTimer);
-            botPollTimer = null;
-        }
-        integritasEllenorzesLeall();
-        // State reset
-        gameId = null;
-        botInfo = null;
-        utolsoAllapot = null;
-        lepesKuldesLezar();
-        pvpAllapotReset();
-        // Felhasznaloi visszajelzes + chooser ujramegnyitas
-        if (typeof window.mmAlert === 'function') {
-            window.mmAlert({
-                title: 'Másik tab átvette a meccset',
-                message: 'Egy másik böngésző-tabon új bot-meccset indítottál — a régi automatikusan törölve. Új meccs kiválasztása.'
-            });
-        }
-        ujMeccsChooserNyitas();
-    });
-
     // Random queue
     socket.on('chess:queue:joined', () => {
         // Már megjelent a "keresés..." lépésben — nincs plusz teendő
@@ -1986,6 +1950,20 @@ async function init() {
         await initBotFromQueryParams(params);
         return;
     }
+    if (autoType === 'botRejoin') {
+        // 60s grace window-on belul rejoin egy futo bot meccshez. Az 1. tab
+        // elhagyta az oldalt (close/F5/disconnect), a 2. tab a frontpage chooser-bol
+        // ide jott. Nem indit uj meccset (nincs /new-bot hivas), helyette a
+        // meglevo gameId-vel folytatja.
+        rejoinOverlayElrejt();
+        const rejoinGameId = parseInt(params.get('gameId') || '0', 10);
+        if (rejoinGameId > 0) {
+            await initBotRejoinFromQueryParams(rejoinGameId);
+        } else {
+            ujMeccsChooserNyitas();
+        }
+        return;
+    }
 
     let hasPendingMatch = false;
     try {
@@ -2037,6 +2015,64 @@ async function initBotFromQueryParams(params) {
         await jatekIndit(difficulty || 1, mode, false, null);
     } catch (err) {
         console.error('Bot auto-indítás hiba:', err);
+        ujMeccsChooserNyitas();
+    }
+}
+
+// ────────────────────────────────────────────
+// Bot rejoin a 60s grace window-on belul (frontpage chooser → smart guard).
+// Az 1. tab elhagyta az oldalt, az allapot in-memory megmaradt; itt az uj
+// tab visszacsatlakozik a regi gameId-vel — nincs /new-bot hivas, csak state
+// lekerdezes + render + polling.
+// ────────────────────────────────────────────
+async function initBotRejoinFromQueryParams(rejoinGameId) {
+    try {
+        // Globalis state beallitas — a tobbi flow (jatekIndit, allapotFrissit,
+        // idoPollingIndit, abilitiesInit) erre hagyatkozik.
+        gameId = rejoinGameId;
+
+        // /api/chess/active → botInfo + mode (a /state nem ad nev/elo-t, csak nehezseg-et).
+        let activeData = null;
+        try {
+            const res = await fetch('/api/chess/active', { credentials: 'same-origin' });
+            if (res.ok) activeData = await res.json();
+        } catch (_) {}
+
+        if (!activeData || !activeData.hasActive || activeData.gameId !== rejoinGameId) {
+            // A meccs idokozben befejezodott / kileptek a 60s window-bol →
+            // chooser-re dobjuk a felhasznalot, ne ragadjon ures kepernyon.
+            gameId = null;
+            ujMeccsChooserNyitas();
+            return;
+        }
+
+        botInfo = activeData.botInfo || null;
+        selectedMode = activeData.mode || null;
+        selectedRanked = false;
+
+        const allapot = await apiAllapot();
+
+        nevekFrissit();
+        allapotFrissit(allapot);
+        idoPollingIndit();
+
+        await abilitiesInit({
+            getGameId: () => gameId,
+            getSzin:   () => 'white',
+            isPvp:     () => false,
+            getSocket: () => null,
+            onAllapotValtozas: (uj) => allapotFrissit(uj)
+        });
+        abilitiesAllapotFrissit(allapot);
+
+        chatPanelMutat();
+        chatPanelBotPlaceholder();
+        chatPanelEnged(true);
+
+        console.log(`[REJOIN] Bot meccs folytatva (gameId=${gameId}, ${botInfo ? botInfo.nev : '?'})`);
+    } catch (err) {
+        console.error('Bot rejoin hiba:', err);
+        gameId = null;
         ujMeccsChooserNyitas();
     }
 }

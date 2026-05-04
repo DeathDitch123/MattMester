@@ -8,7 +8,7 @@
 const express = require('express');
 const router = express.Router();
 
-const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser, cleanupOwnAbandonedBotGame } = require('../chess/state.js');
+const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser } = require('../chess/state.js');
 const { jatekUjraIndit, legalLepesekKliens, lepesKoordinataval } = require('../chess/engine.js');
 const { idoLeall } = require('../chess/timer.js');
 const chessSql = require('../chess/chess_sql_functions.js');
@@ -23,10 +23,6 @@ const { parsePositiveIntegerInRange } = require('../utils/parse.js');
 function varakozas(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
-
-// `cleanupOwnAbandonedBotGame` mostantol a state.js-ben elhelyezve (kozos helper),
-// hogy a pvp.js queue/invite handlerei is hasznalhassak ugyanazt a takarito logikat
-// a multi-tab guard elott (ne maradjon ragadt bot-meccs ami blokkolja a PvP-t).
 
 // requireVerifiedEmail vendég bot-játéknál átugrandó: ha nincs session de a játékban
 // a fehér slot vendég (userId=null) és botAktiv, engedjük tovább ellenőrzés nélkül.
@@ -143,6 +139,79 @@ router.get('/modes', (req, res) => {
 });
 
 // ────────────────────────────────────────────
+// GET /api/chess/active — Felhasznalo aktiv meccsenek lekerdezese
+// (FONTOS: a /:id route-ok ELŐTT kell legyen!)
+//
+// First-tab-priority guard: a frontpage chooser meghivja MIELOTT bot-meccset
+// inditana vagy PvP queue/invite-ot kuldene, hogy ha a felhasznalonak van mar
+// aktiv meccse (egy masik tab-on), ne navigaljon at a chess.html-re feleslegesen.
+//
+// Ket scenario:
+//   1. isLive === true → masik tab MEG mindig elen jatszik → modal blokkolja
+//      az uj meccset ("Egy masik oldalrol mar fut egy jatek...")
+//   2. isLive === false → a meccs orphan (60s+ ota nincs aktivitas / PvP eseten
+//      lejart a disconnect grace) → a frontend automatikusan rejoin-olhat,
+//      a felhasznalo folytathatja a meccset.
+//
+// Live-detect (60s grace window):
+//   - PvP: ha disconnectTimer NEM fut → live (a jatekos jelen van valahol →
+//          masik tab kilepve maradjon, modal blokkol).
+//          Ha disconnectTimer FUT → 60s grace alatt vagyunk → !live (a regi
+//          tab leesett, az uj tab rejoin-olhat: ez a kifejezett 60s window).
+//   - Bot: lastActivityAt < 60s → live (recent polling van, masik tab elen).
+//          Egyebkent !live (orphan, rejoin engedett a masik tab-rol).
+//
+// Vendegnek (no session) mindig hasActive:false.
+// ────────────────────────────────────────────
+const ACTIVE_LIVE_THRESHOLD_MS = 60_000;
+
+router.get('/active', (req, res) => {
+    const userId = req.session?.userId || null;
+    if (!userId) {
+        return res.status(200).json({ hasActive: false, isLive: false, gameId: null, mode: null, type: null });
+    }
+    const active = hasAnyActiveGameForUser(userId);
+    if (!active.hasActive) {
+        return res.status(200).json({ hasActive: false, isLive: false, gameId: null, mode: null, type: null });
+    }
+    const jatek = jatekKeres(active.gameId);
+    let type = null;
+    let isLive = false;
+    let botInfo = null;
+    if (jatek) {
+        if (jatek.pvpAktiv) {
+            type = 'pvp';
+            // PvP: disconnectTimer fut → 60s grace window aktiv → !live, a 2. tab
+            // rejoin-olhat. Ha disconnectTimer null → a jatekos jelen van valahol
+            // → live, a 2. tab modal-blokkba kerul.
+            isLive = !jatek.disconnectTimer;
+        } else if (jatek.botAktiv) {
+            type = 'bot';
+            // Bot: lastActivityAt alapjan dontunk. 60s+ inaktivitas = orphan.
+            const last = Number(jatek.lastActivityAt) || 0;
+            isLive = (Date.now() - last) < ACTIVE_LIVE_THRESHOLD_MS;
+            // Bot rejoin-hoz a frontend-nek kell a botInfo (nev/elo/szint),
+            // hogy a player-badge-eket es a chat-panelt korrekt allapotba allitsa
+            // anelkul, hogy uj /new-bot kerest kuldene.
+            const info = nehezsegiSzintInfo(jatek.nehezseg);
+            botInfo = {
+                nev: info.nev,
+                elo: info.elo,
+                szint: jatek.nehezseg
+            };
+        }
+    }
+    return res.status(200).json({
+        hasActive: true,
+        isLive,
+        gameId: active.gameId,
+        mode: active.mode,
+        type,
+        botInfo
+    });
+});
+
+// ────────────────────────────────────────────
 // POST /api/chess/new-bot — Új játék robot ellen
 // Body: { difficulty: 1-8, mode?: string }
 // FONTOS: bot meccs MINDIG casual (ranked=false). A bot ELO-ja fix, így a
@@ -160,22 +229,7 @@ router.post('/new-bot', async (req, res) => {
         // Szigoru integer-validacio: 1..8 tartomany, NEM fogad el float-ot, NEM "1abc"-t.
         const nehezseg = parsePositiveIntegerInRange(difficulty, 1, 8, null);
 
-        // Multi-tab bot-game replacement detection: ha az uj /new-bot kérés
-        // egy korabban aktív SAJAT BOT meccset takarit el, a regi tab(ok)nak
-        // tudnia kell errol — kulonben ott vegtelenul polling-ol /api/chess/<old>/state
-        // 404-eket. A `replacedOldGameId`-t capture-oljuk, hogy a vegen socket-szel
-        // ertesitsuk a tab(ok)at.
-        let replacedOldGameId = null;
-        const userIdEarly = req.session?.userId || null;
-        if (userIdEarly) {
-            const activeEarly = hasAnyActiveGameForUser(userIdEarly);
-            if (activeEarly.hasActive) {
-                // cleanupOwnAbandonedBotGame csak BOT meccset takarit (PvP-t nem).
-                // Ha valoban kitisztitottuk, a regi gameId visszamondhato.
-                const cleaned = cleanupOwnAbandonedBotGame(userIdEarly);
-                if (cleaned) replacedOldGameId = activeEarly.gameId;
-            }
-        }
+        const sessionUserId = req.session?.userId || null;
 
         if (nehezseg === null) {
             statusCode = 400;
@@ -183,19 +237,14 @@ router.post('/new-bot', async (req, res) => {
         } else if (modeKey !== undefined && modeKey !== null && (typeof modeKey !== 'string' || !isValidMode(modeKey))) {
             statusCode = 400;
             responseBody = { error: 'Érvénytelen játékmód.' };
-        } else if (userIdEarly && hasAnyActiveGameForUser(userIdEarly).hasActive) {
-            // A cleanup utan is van aktiv meccs => PvP. Nem takarithatjuk.
-            // Issue #63 — multi-tab guard: ugyanaz a fiok max 1 aktiv meccsel.
-            // Ha az egyik tab-ban PvP-t jatszik, masik tab-ban ne tudjon bot-meccset
-            // inditani (es forditva sem). A pvp.js mar tartalmazza a guard-ot a queue +
-            // invite flow-ban, itt a bot-ag fele kotjuk be ugyanazt.
-            //
-            // Kivetel: ha az aktiv meccs egy SAJAT BOT meccs (a felhasznalo bezarta a
-            // tabot, a beforeunload surrender nem futott le → orphan game), akkor
-            // automatikusan eltakaritjuk es engedjuk az uj meccset. PvP-t sosem
-            // takaritunk igy — azt a 60mp grace period kezeli a sockets oldalon.
+        } else if (sessionUserId && hasAnyActiveGameForUser(sessionUserId).hasActive) {
+            // Issue #63 — first-tab-priority: ugyanaz a fiok max 1 aktiv meccsel,
+            // BARMILYEN tipusu meccs (bot vagy PvP). Az ELSO tab amelyik elinditotta
+            // a meccset prioritast elvez — masik tab-bol indulo /new-bot keres elutasitva.
+            // Az aktiv meccs befejezese (mate / surrender / 60s grace disconnect) utan
+            // lehet uj meccset inditani.
             statusCode = 409;
-            const active = hasAnyActiveGameForUser(req.session.userId);
+            const active = hasAnyActiveGameForUser(sessionUserId);
             responseBody = {
                 error: 'Mar van egy aktiv jatszmad — fejezd be elobb, vagy add fel.',
                 code: 'GAME_ALREADY_ACTIVE',
@@ -240,27 +289,6 @@ router.post('/new-bot', async (req, res) => {
                     szint: nehezseg
                 }
             };
-
-            // Multi-tab bot-game replacement notification: ha kitakaritottunk
-            // egy korabbi SAJAT BOT meccset (mas tab indithatott uj-at), tudasunk
-            // a felhasznalo OSSZES tab-jat ertesiteni, hogy a regi gameId mar
-            // ervenytelen. A frontend (lasd main.js#chess:bot:replaced handler)
-            // erre reset-eli a state-et es a chooser-t nyitja meg, NE polling-oljon
-            // tovabb 404-ert. Bug 2026-05-04: regen csak silent 404 volt.
-            if (replacedOldGameId && userId) {
-                try {
-                    const socketHub = req.app?.locals?.socketHub;
-                    if (socketHub && typeof socketHub.emitToUser === 'function') {
-                        socketHub.emitToUser(userId, 'chess:bot:replaced', {
-                            oldGameId: replacedOldGameId,
-                            newGameId: gameId,
-                            at: new Date().toISOString()
-                        });
-                    }
-                } catch (emitErr) {
-                    console.warn('chess:bot:replaced emit hiba:', emitErr.message);
-                }
-            }
         }
 
         return res.status(statusCode).json(responseBody);
@@ -279,6 +307,11 @@ router.get('/:id/state', (req, res) => {
     try {
         const jatek = findGameOrThrow(req.params.id);
         requireParticipant(req, jatek);
+        // Aktivitas-nyomkovetes: a bot meccs HTTP polling-on megy, igy itt
+        // frissitjuk a lastActivityAt-t, hogy az /api/chess/active endpoint
+        // tudja eldonteni "live" (60s-en belul polling) vagy "orphan" (60s+
+        // ota inaktiv → masik tab-rol rejoin-olhato).
+        jatek.lastActivityAt = Date.now();
         payload = jatekAllapotKliens(jatek);
         if (jatek.idoVegeUzenet) {
             payload.uzenet = jatek.idoVegeUzenet;

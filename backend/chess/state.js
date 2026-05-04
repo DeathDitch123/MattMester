@@ -83,6 +83,14 @@ function jatekLetrehoz(options = {}) {
         disconnectSzin: null,       // melyik szín disconnectelt
         onIdoLejar: null,           // callback: timer.js hívja amikor lejár az idő
         drawAjanlat: null,          // melyik szín ajánlott döntetlent: 'white' | 'black' | null
+        // ── AKTIVITAS-NYOMKOVETES ──
+        // Bot meccs nincs socket-hez kotve (HTTP polling), igy itt frissitjuk
+        // minden /state, /move, /ability hivasnal — a /api/chess/active endpoint
+        // ez alapjan donti el, hogy a meccs "live" (60s-en belul volt aktivitas)
+        // vagy "orphan" (60s+ ota inaktiv, lehet ujra-csatlakozni). PvP-re a
+        // disconnectTimer az elsodleges live-jel, de a lastActivityAt-t is
+        // frissitjuk konzisztencia kedveert.
+        lastActivityAt: Date.now(),
         // ── KÉPESSÉGEK — csak akkor inicializálva ha a mód engedi ──
         abilities: mode.abilities ? abilitiesAlapallapot() : null
     };
@@ -133,29 +141,6 @@ function jatekTorol(gameId) {
         if (jatek.disconnectTimer) clearTimeout(jatek.disconnectTimer);
         jatekok.delete(gameId);
     }
-}
-
-/**
- * Ha a felhasznalo aktiv meccse egy SAJAT BOT meccs (orphan — pl. F5 / tab-bezar
- * utan a beforeunload surrender nem futott le), akkor torli es true-t ad vissza.
- * PvP meccset SOSEM takarit el — azt csak a 60s grace period kezeli.
- *
- * Hasznalat: a /new-bot endpoint, valamint a PvP queue/invite handlerek hivjak
- * a multi-tab guard ELOTT, hogy egy "ragadt" bot meccs ne blokkolja se uj bot,
- * se PvP meccs inditasat.
- *
- * Returns: true ha takaritottunk, false ha nem (nincs aktiv meccs / PvP / nem sajat).
- */
-function cleanupOwnAbandonedBotGame(userId) {
-    if (!userId) return false;
-    const active = hasAnyActiveGameForUser(userId);
-    if (!active.hasActive) return false;
-    const jatek = jatekKeres(active.gameId);
-    if (!jatek) return false;
-    if (!jatek.botAktiv || jatek.pvpAktiv) return false;
-    if (jatek.jatekosok?.white?.userId !== userId) return false;
-    jatekTorol(active.gameId);
-    return true;
 }
 
 /**
@@ -297,6 +282,5 @@ module.exports = {
     mezoKeres,
     jatekAllapotKliens,
     abilitiesAlapallapot,
-    hasAnyActiveGameForUser,
-    cleanupOwnAbandonedBotGame
+    hasAnyActiveGameForUser
 };

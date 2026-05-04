@@ -9,7 +9,7 @@
 //   - ELO frissítés mindkét játékosra
 // ============================================================
 
-const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser, cleanupOwnAbandonedBotGame } = require('./state.js');
+const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser } = require('./state.js');
 const { jatekUjraIndit, lepesKoordinataval, legalLepesekKliens } = require('./engine.js');
 const { idoLeall } = require('./timer.js');
 const { eloMeccsEredmeny } = require('./elo.js');
@@ -321,10 +321,11 @@ function registerPvpHandlers(socket, io) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
         }
 
-        // Issue #63 — multi-tab guard: bot-meccs is blokkolja a PvP invite-ot.
-        // Sajat orphan bot meccs (F5/tab-bezar) automatikusan eltakaritodik, hogy
-        // ne ragadjon a felhasznalo a "Mar van aktiv jatszmad" hibauzenetben.
-        if (hasAnyActiveGameForUser(userId).hasActive && !cleanupOwnAbandonedBotGame(userId)) {
+        // Issue #63 — first-tab-priority: BARMILYEN aktiv meccs (bot vagy PvP)
+        // blokkolja az uj PvP invite-ot. Az elso tab amelyik a meccset elinditotta
+        // prioritast elvez. A meccs lezarasa (mate/surrender/60s grace) utan lehet
+        // ujat inditani.
+        if (hasAnyActiveGameForUser(userId).hasActive) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
         }
 
@@ -557,11 +558,11 @@ function registerPvpHandlers(socket, io) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
         }
 
-        // Issue #63 — multi-tab guard: queue-csatlakozas elott a bot-meccs is blokkol.
-        // Ha az aktiv meccs egy SAJAT, ORPHAN BOT meccs (F5/tab-bezar utan ragadt),
-        // automatikusan eltakaritjuk es engedjuk a queue csatlakozast. PvP meccs
-        // sosem takaritodik el itt — azt a 60s grace period kezeli.
-        if (hasAnyActiveGameForUser(userId).hasActive && !cleanupOwnAbandonedBotGame(userId)) {
+        // Issue #63 — first-tab-priority: BARMILYEN aktiv meccs (bot vagy PvP)
+        // blokkolja a queue csatlakozast. Az elso tab amelyik a meccset elinditotta
+        // prioritast elvez. A meccs lezarasa (mate/surrender/60s grace) utan lehet
+        // ujat inditani.
+        if (hasAnyActiveGameForUser(userId).hasActive) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
         }
 
