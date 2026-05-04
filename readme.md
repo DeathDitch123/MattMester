@@ -16,6 +16,7 @@
 - [Email verifikáció (SMTP)](#email-verifikáció-smtp)
 - [Rate limiterek](#rate-limiterek)
 - [Hibakeresés](#hibakeresés)
+- [Nyelvválasztás (i18n)](#nyelvválasztás-i18n)
 - [Projekt struktúra](#projekt-struktúra)
 - [Konfigurációs sablonok](#konfigurációs-sablonok)
 
@@ -377,6 +378,50 @@ window.io('/admin').on('admin:audit:created', (payload) => console.log('📋 aud
 
 ---
 
+## Nyelvválasztás (i18n)
+
+Az oldal **magyar (alapértelmezett)** és **angol** nyelven is használható. A nyelvváltó a felső navbar jobb oldalán található **HU / EN** gombpárral azonnal vált — newer a teljes oldal, beleértve a dinamikusan injektált tartalmakat (toastok, validation üzenetek, leaderboard sorok, admin táblázatok, sakk-játszma feliratok, modal-ok stb.) is frissül.
+
+### Architektúra
+
+| Réteg | Fájl | Felelősség |
+|---|---|---|
+| Központ | `frontend/javascript/shared/i18n.js` | DICT (HU+EN), `tx()`, `set()`, `get()`, `applyAll()`, `onLangChange()`, `formatDate()`, `formatDateTime()` |
+| Static HTML | `data-i18n="kulcs"`, `data-i18n-attr="placeholder:kulcs"`, `data-i18n-html="kulcs"` | A `MutationObserver` automatikusan újrafordítja a beszúrt DOM-ot is |
+| Toggle UI | `[data-i18n-toggle="hu"|"en"|"cycle"]` | Nyelvváltó gombok bárhol az oldalon |
+| Dinamikus JS-tartalom | `MattMesterI18n.tx('Magyar', 'English')` | Inline kapcsoló — nem kell DICT-be írni az egyszer használt stringeket |
+| Re-render lang-changekor | `MattMesterI18n.onLangChange(fn)` | Nézet újra-renderelés (leaderboard, friends list, security log stb.) |
+| Lokalizált dátum | `MattMesterI18n.formatDate(value)` / `formatDateTime(value)` | `hu-HU` / `en-GB` automatikusan |
+
+### Példa — kódból új nyelvi szöveg
+
+```js
+// Inline (nem kell DICT-bővítés):
+showToast(MattMesterI18n.tx('Sikeres mentés.', 'Saved successfully.'));
+
+// Statikus HTML (DICT-be tedd a kulcsot):
+<span data-i18n="profile.title">Profil</span>
+
+// Re-render lang-váltáskor:
+MattMesterI18n.onLangChange(() => {
+    renderFriendsList();
+    renderRecentGames();
+});
+```
+
+### Tárolás
+
+A választott nyelv `localStorage`-ben perzisztál (`mattmester.lang` kulcs alatt). Server-side render nincs — minden fordítás kliens-oldali, így a backend nyelv-agnosztikus marad.
+
+### Új nyelv hozzáadása
+
+1. `i18n.js` `SUPPORTED` tömbjébe vedd fel a kódot (pl. `'de'`).
+2. `DICT.de = { ... }` — másold a meglévő `hu` blokkot, fordítsd le.
+3. Adj hozzá egy `[data-i18n-toggle="de"]` gombot a navbar-hoz (`frontend/css/shared/topNavbar.css` + `frontend/html/*.html`).
+4. A `tx()` kapcsoló **csak HU↔EN-t támogat** jelenleg; ha 3+ nyelv kell, írd át `tx()`-et `t(key)`-re és tedd a stringeket DICT-be.
+
+---
+
 ## Projekt struktúra
 
 ```
@@ -417,8 +462,16 @@ MattMester/
 │   ├── html/                     # index, profile, adminPanel, gameRoom, mailVerified, restorePassword
 │   ├── javascript/
 │   │   ├── index.js              # Főoldal: login/register, leaderboard, chess launcher
-│   │   ├── profile.js            # Profil oldal: friends, settings, notifications, chat
-│   │   ├── adminPanel.js         # Admin felület
+│   │   ├── profile/              # Profil oldal modulok (01–21, sidebar, security log, friends…)
+│   │   ├── adminPanel/           # Admin felület modulok (01–29, sections, moderation, audit log…)
+│   │   ├── shared/
+│   │   │   ├── i18n.js           # HU/EN nyelv-rendszer (DICT, tx, onLangChange, formatDate)
+│   │   │   ├── topNavbar.js      # Felső navbar dinamikus elemek
+│   │   │   ├── confirmModal.js   # Custom HTML alert/confirm (natív alert helyett)
+│   │   │   ├── houseRules.js     # Játékszabályzat modal
+│   │   │   ├── maintenanceClient.js # Karbantartás-mód kliens
+│   │   │   ├── adminAuthFlow.js  # Admin step-up token + Bearer header
+│   │   │   └── validationRules.js # Username/email/password regex + üzenetek
 │   │   ├── socketClient.js       # Socket.IO kliens-oldali wrapper + event bus
 │   │   ├── chatModal.js          # Chat modal logika
 │   │   ├── gameRoom.js           # Sakk szoba

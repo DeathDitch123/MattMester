@@ -1,13 +1,14 @@
 // ============================================================
 // AUTH MIDDLEWARE — egyetlen forrás-igazság
 // ============================================================
-// Három guard:
-//   - pageGuard:  HTML lap-okhoz (redirect /-ra, ha nincs session)
-//   - apiGuard:   JSON endpointokhoz (401 JSON, ha nincs session)
-//   - adminGuard: admin endpointokhoz (403 JSON, ha nincs session.role==='admin')
+// Négy guard, KÖZÖS belső _authenticate() pipeline:
+//   - pageGuard:      HTML lap-okhoz (redirect /-ra, ha nincs session)
+//   - apiGuard:       JSON endpointokhoz (401 JSON, ha nincs session)
+//   - adminGuard:     admin JSON endpointokhoz (403 JSON, ha nincs role==='admin')
+//   - pageAdminGuard: admin HTML lap-okhoz (redirect /, ha nincs admin)
 //
-// Mindkét apiGuard / pageGuard checkeli a ban / soft-delete state-et és
-// destroy-olja a session-t, ha a fiók időközben tiltva lett.
+// Mindegyik guard ugyanazt a session + ban + soft-delete ellenőrzést futtatja,
+// csak a válasz-stratégia (redirect string vs JSON payload) különböző.
 //
 // setSessionFromUser(request, user) — single-source-of-truth a session-mezők
 // beállítására (login + register + session-refresh ugyanezt hívja).
@@ -80,32 +81,71 @@ async function checkAccountActiveStatus(request, response) {
 }
 
 /**
- * apiGuard — JSON-os endpoint-okhoz. 401, ha nincs session; 403, ha banned/deleted.
+ * BELSŐ segédfüggvény — az összes guard közös pipeline-ja:
+ *   1) Session-ellenőrzés (van-e userId)
+ *   2) Opcionális role-ellenőrzés (requireRole)
+ *   3) Account-aktív státusz (ban / soft-delete) ellenőrzés
+ *
+ * Visszatérés:
+ *   { ok: true }                              — minden rendben, hívható next()
+ *   { ok: false, reason: 'no_session' }       — nincs userId
+ *   { ok: false, reason: 'forbidden_role' }   — nem felel meg a requireRole-nak
+ *   { ok: false, reason: 'banned' }           — fiók tiltva
+ *   { ok: false, reason: 'pending_deletion',
+ *     pendingDeletionUntil: <Date> }          — fiók törlésre kijelölve
+ *
+ * A guard-ok ezt a struktúrát fordítják saját válasz-formátumra (redirect / JSON).
  */
-async function apiGuard(request, response, next) {
+async function _authenticate(request, response, options) {
+    const opts = options || {};
     if (!request.session || !request.session.userId) {
-        response.status(401).json({ success: false, message: 'Bejelentkezés szükséges.' });
-        return;
+        return { ok: false, reason: 'no_session' };
+    }
+    if (opts.requireRole && request.session.role !== opts.requireRole) {
+        return { ok: false, reason: 'forbidden_role' };
     }
     const status = await checkAccountActiveStatus(request, response);
     if (status.evicted) {
-        if (status.reason === 'pending_deletion') {
-            response.status(403).json({
-                success: false,
-                code: 'account_pending_deletion',
-                message: 'A fiókod admin által törlésre lett kijelölve.',
-                pendingDeletionUntil: status.pendingDeletionUntil
-            });
-        } else {
-            response.status(403).json({
-                success: false,
-                code: 'account_banned',
-                message: 'A fiók tiltva lett.'
-            });
-        }
+        return {
+            ok: false,
+            reason: status.reason, // 'banned' | 'pending_deletion'
+            pendingDeletionUntil: status.pendingDeletionUntil
+        };
+    }
+    return { ok: true };
+}
+
+/**
+ * apiGuard — JSON-os endpoint-okhoz. 401, ha nincs session; 403, ha banned/deleted.
+ */
+async function apiGuard(request, response, next) {
+    const result = await _authenticate(request, response);
+    if (result.ok) {
+        return next();
+    }
+    if (result.reason === 'no_session') {
+        response.status(401).json({ success: false, message: 'Bejelentkezés szükséges.' });
         return;
     }
-    next();
+    if (result.reason === 'pending_deletion') {
+        response.status(403).json({
+            success: false,
+            code: 'account_pending_deletion',
+            message: 'A fiókod admin által törlésre lett kijelölve.',
+            pendingDeletionUntil: result.pendingDeletionUntil
+        });
+        return;
+    }
+    if (result.reason === 'banned') {
+        response.status(403).json({
+            success: false,
+            code: 'account_banned',
+            message: 'A fiók tiltva lett.'
+        });
+        return;
+    }
+    // Fallback (nem kéne idáig elérni)
+    response.status(403).json({ success: false, message: 'Hozzáférés megtagadva.' });
 }
 
 /**
@@ -113,45 +153,78 @@ async function apiGuard(request, response, next) {
  * a `/ban.html` vagy `/deleted.html` page-re redirect (a kliens-side natívan kezeli).
  */
 async function pageGuard(request, response, next) {
-    if (!request.session || !request.session.userId) {
+    const result = await _authenticate(request, response);
+    if (result.ok) {
+        return next();
+    }
+    if (result.reason === 'no_session') {
         response.redirect('/');
         return;
     }
-    const status = await checkAccountActiveStatus(request, response);
-    if (status.evicted) {
-        const target = status.reason === 'pending_deletion' ? '/deleted.html' : '/ban.html';
-        response.redirect(target);
+    if (result.reason === 'pending_deletion') {
+        response.redirect('/deleted.html');
         return;
     }
-    next();
+    if (result.reason === 'banned') {
+        response.redirect('/ban.html');
+        return;
+    }
+    // Fallback
+    response.redirect('/');
 }
 
 /**
- * adminGuard — admin route-okhoz. apiGuard + role==='admin' check.
+ * adminGuard — admin JSON route-okhoz. apiGuard + role==='admin' check.
  * NEM helyettesíti a `parseAdminToken` step-up token middleware-t — az külön réteg
  * a kritikus mutáló műveleteken.
  */
 async function adminGuard(request, response, next) {
-    if (!request.session || !request.session.userId) {
+    const result = await _authenticate(request, response, { requireRole: 'admin' });
+    if (result.ok) {
+        return next();
+    }
+    if (result.reason === 'no_session') {
         response.status(401).json({ success: false, message: 'Bejelentkezés szükséges.' });
         return;
     }
-    if (request.session.role !== 'admin') {
+    if (result.reason === 'forbidden_role') {
         response.status(403).json({ success: false, message: 'Nincs jogosultságod ehhez a művelethez.' });
         return;
     }
-    const status = await checkAccountActiveStatus(request, response);
-    if (status.evicted) {
-        response.status(403).json({ success: false, message: 'A fiók tiltva lett vagy törölve van.' });
+    // banned / pending_deletion → egységes 403
+    response.status(403).json({ success: false, message: 'A fiók tiltva lett vagy törölve van.' });
+}
+
+/**
+ * pageAdminGuard — admin HTML lap-okhoz (pl. /html/adminPanel.html).
+ * Ugyanaz a logika, mint az adminGuard, de redirect-tel válaszol JSON helyett.
+ *   - nincs session  → redirect '/'
+ *   - nem admin      → redirect '/'
+ *   - banned         → redirect '/ban.html'
+ *   - pending_delete → redirect '/deleted.html'
+ */
+async function pageAdminGuard(request, response, next) {
+    const result = await _authenticate(request, response, { requireRole: 'admin' });
+    if (result.ok) {
+        return next();
+    }
+    if (result.reason === 'pending_deletion') {
+        response.redirect('/deleted.html');
         return;
     }
-    next();
+    if (result.reason === 'banned') {
+        response.redirect('/ban.html');
+        return;
+    }
+    // no_session vagy forbidden_role → vissza a főoldalra
+    response.redirect('/');
 }
 
 module.exports = {
     pageGuard,
     apiGuard,
     adminGuard,
+    pageAdminGuard,
     setSessionFromUser,
     checkAccountActiveStatus
 };

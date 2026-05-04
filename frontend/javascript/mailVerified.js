@@ -1,5 +1,4 @@
-const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
-
+// `tx` globalis a `_utils.js`-bol (window.tx).
 function getQueryParams() {
     const params = new URLSearchParams(window.location.search || '');
     return {

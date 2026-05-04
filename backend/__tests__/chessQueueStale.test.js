@@ -45,10 +45,23 @@ describe('N1.2 disconnectTimer: stale game guard', () => {
 
 describe('N1.3 handlePvpDisconnect: queue + userQueueIndex stale entry takarítás', () => {
     test('a disconnect handler eltávolítja a usert a queue-ból ÉS a userQueueIndex-ből', () => {
-        // A meglévő impl: const qKey = userQueueIndex.get(userId); ha van, splice + delete.
-        // Ez biztosítja, hogy disconnect után nem marad stale entry sehol.
-        const re = /async\s+function\s+handlePvpDisconnect[^]*?const\s+qKey\s*=\s*userQueueIndex\.get\(userId\)[^]*?queue\.splice\(idx,\s*1\)[^]*?userQueueIndex\.delete\(userId\)/;
+        // A meglévő impl: const qKey = userQueueIndex.get(userId); ha van, indul egy
+        // 30mp-es grace setTimeout. A timer-callback a *.splice + userQueueIndex.delete
+        // hívásokat tartalmazza (csak ha a felhasználó tényleg offline maradt).
+        // Ez biztosítja, hogy disconnect + stillOffline → nincs stale entry sehol.
+        const re = /async\s+function\s+handlePvpDisconnect[^]*?const\s+qKey\s*=\s*userQueueIndex\.get\(userId\)[^]*?\.splice\(idx,\s*1\)[^]*?userQueueIndex\.delete\(userId\)/;
         expect(pvpSrc).toMatch(re);
+    });
+
+    test('a queue eltavolitas grace-szel keslelteve fut (QUEUE_DISCONNECT_GRACE_MS)', () => {
+        // Reconnect-tolerancia: a takaritas 30mp-pel keslelteve fut le, hogy
+        // mobil-internet kis kihagyasanal ne kelljen ujra sorbaalni.
+        expect(pvpSrc).toMatch(/QUEUE_DISCONNECT_GRACE_MS\s*=\s*30_000/);
+        const handlerStart = pvpSrc.indexOf('async function handlePvpDisconnect(');
+        expect(handlerStart).toBeGreaterThan(-1);
+        const torzs = pvpSrc.substring(handlerStart);
+        expect(torzs).toMatch(/setTimeout\(/);
+        expect(torzs).toMatch(/QUEUE_DISCONNECT_GRACE_MS/);
     });
 });
 

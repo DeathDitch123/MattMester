@@ -7,10 +7,13 @@
 // updateTokenPill, showElevateModal, showToast, redirect, flashPill) es a fetchFn-t.
 // Igy node oldalrol mockolhato.
 
-const tx = (hu, en) => {
+// `tx` mar globalis a `_utils.js`-bol (window.tx). NE deklaraljuk itt ujra
+// const-tal, mert tobb top-level <script> tag kozos scope-jaban a `const tx`
+// duplikacio SyntaxError-t okoz a bongeszoben.
+function _txAuthFlow(hu, en) {
     if (typeof window !== 'undefined' && window.MattMesterI18n?.tx) return window.MattMesterI18n.tx(hu, en);
     return hu;
-};
+}
 
 function createAdminAuthFlow(deps) {
     const config = deps || {};
@@ -38,7 +41,7 @@ function createAdminAuthFlow(deps) {
                 if (typeof clearAdminToken === 'function') clearAdminToken();
                 if (typeof updateTokenPill === 'function') updateTokenPill();
                 if (typeof showToast === 'function') {
-                    showToast(tx('A session megszűnt — visszairányítunk a főoldalra.', 'Session expired — redirecting to the home page.'), 'danger', 'bi-shield-fill-x');
+                    showToast(_txAuthFlow('A session megszűnt — visszairányítunk a főoldalra.', 'Session expired — redirecting to the home page.'), 'danger', 'bi-shield-fill-x');
                 }
                 if (typeof redirect === 'function') redirect('/');
                 handled = true;
@@ -49,7 +52,7 @@ function createAdminAuthFlow(deps) {
                 if (typeof clearAdminToken === 'function') clearAdminToken();
                 if (typeof updateTokenPill === 'function') updateTokenPill();
                 if (typeof showToast === 'function') {
-                    showToast(tx('Az admin jogosultságod visszavonásra került — visszairányítunk a főoldalra.', 'Your admin privileges have been revoked — redirecting to the home page.'), 'danger', 'bi-shield-fill-x');
+                    showToast(_txAuthFlow('Az admin jogosultságod visszavonásra került — visszairányítunk a főoldalra.', 'Your admin privileges have been revoked — redirecting to the home page.'), 'danger', 'bi-shield-fill-x');
                 }
                 if (typeof redirect === 'function') redirect('/');
                 handled = true;
@@ -61,7 +64,7 @@ function createAdminAuthFlow(deps) {
                 if (typeof clearAdminToken === 'function') clearAdminToken();
                 if (typeof updateTokenPill === 'function') updateTokenPill();
                 if (typeof showToast === 'function') {
-                    showToast(tx('Az admin token érvénytelen — kérj új elevate-et.', 'Admin token invalid — please re-elevate.'), 'warning', 'bi-shield-fill-x');
+                    showToast(_txAuthFlow('Az admin token érvénytelen — kérj új elevate-et.', 'Admin token invalid — please re-elevate.'), 'warning', 'bi-shield-fill-x');
                 }
                 if (typeof showElevateModal === 'function') showElevateModal();
                 handled = true;
@@ -115,14 +118,14 @@ function createAdminAuthFlow(deps) {
                 await callRefresh();
                 if (typeof updateTokenPill === 'function') updateTokenPill();
                 if (typeof showToast === 'function') {
-                    showToast(tx('Admin token meghosszabbítva.', 'Admin token extended.'), 'success', 'bi-shield-fill-check');
+                    showToast(_txAuthFlow('Admin token meghosszabbítva.', 'Admin token extended.'), 'success', 'bi-shield-fill-check');
                 }
                 success = true;
             } catch (error) {
                 console.error('refreshAdminToken hiba:', error && error.message);
                 const handled = handleAdminAuthError((error && error.code) || '');
                 if (!handled && typeof showToast === 'function') {
-                    showToast(tx('Hálózati hiba a token frissítése során. Próbáld újra később.', 'Network error while refreshing token. Please try again later.'), 'warning', 'bi-wifi-off');
+                    showToast(_txAuthFlow('Hálózati hiba a token frissítése során. Próbáld újra később.', 'Network error while refreshing token. Please try again later.'), 'warning', 'bi-wifi-off');
                 }
             }
         }

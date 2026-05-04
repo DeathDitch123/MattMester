@@ -41,8 +41,13 @@ function defaultSettings() {
 }
 
 async function loadFromDb() {
-    const pool = getPool();
-    if (!pool) return defaultSettings();
+    let pool;
+    try {
+        pool = getPool();
+    } catch (_) {
+        // getPool() most dob, ha nincs init pool — graceful fallback default-ra.
+        return defaultSettings();
+    }
     try {
         const [rows] = await pool.execute(
             `SELECT site_name, support_email, default_language, timezone,
@@ -80,8 +85,14 @@ function invalidateCache() {
 
 // Patch field-by-field validacio + UPDATE. Visszaadja a frissitett settings-t.
 async function updateSettings(patch, adminUserId) {
-    const pool = getPool();
-    if (!pool) throw new Error('Adatbazis nem elerheto.');
+    // getPool() dob ha nincs init — a hibaüzenet legacy kompatibilis marad
+    // a meglévő frontend hibakezeléssel ('Adatbazis nem elerheto.').
+    let pool;
+    try {
+        pool = getPool();
+    } catch (_) {
+        throw new Error('Adatbazis nem elerheto.');
+    }
 
     const before = await getSettings();
     const updates = [];

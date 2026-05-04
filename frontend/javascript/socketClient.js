@@ -536,7 +536,38 @@
         }
     }
 
+    // In-flight singleton: ha már fut egy syncSocketContextOrReconnect, az új
+    // hívók ugyanazt a Promise-t kapják vissza (kivéve forceReconnect-et). Race
+    // condition védelem login/register után gyors párhuzamos hívásokra (pl. egy
+    // login + azonnal másik request, ahol a socket session-ID még nem frissült).
+    // forceReconnect: true MINDIG új handshake-et kényszerít, megkerüli a singleton-t.
+    let inFlightSyncPromise = null;
+
     async function syncSocketContextOrReconnect(socketInstance, reason = 'session-mutation', options = {}) {
+        // Singleton bypass forceReconnect esetén — új handshake kell, nem
+        // csatlakozhatunk egy korabban inditott (es maskepp parameterezett) sync-hez.
+        if (!options.forceReconnect && inFlightSyncPromise) {
+            return inFlightSyncPromise;
+        }
+
+        const runPromise = _runSyncSocketContextOrReconnect(socketInstance, reason, options);
+
+        if (!options.forceReconnect) {
+            inFlightSyncPromise = runPromise;
+            // Singleton törlése sikerre ÉS hibára egyaránt — máskülönben "beragad"
+            // és minden későbbi hívás a régi (meghiúsult) Promise-t kapná.
+            const clearInFlight = () => {
+                if (inFlightSyncPromise === runPromise) {
+                    inFlightSyncPromise = null;
+                }
+            };
+            runPromise.then(clearInFlight, clearInFlight);
+        }
+
+        return runPromise;
+    }
+
+    async function _runSyncSocketContextOrReconnect(socketInstance, reason = 'session-mutation', options = {}) {
         // Első körben normál sync; hiba esetén fallback: disconnect -> reconnect -> új sync.
         // `options.forceReconnect: true` esetén KIHAGYJUK az optimista első próbálkozást
         // és azonnal disconnect+reconnect-et csinálunk. Ez a login/register/logout flow-ban

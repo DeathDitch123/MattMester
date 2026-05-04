@@ -19,6 +19,7 @@ const {
     pageGuard,
     apiGuard,
     adminGuard,
+    pageAdminGuard,
     setSessionFromUser,
     checkAccountActiveStatus
 } = require('../api/middleware/auth.js');
@@ -199,6 +200,66 @@ describe('adminGuard — admin endpoint-ok', () => {
         await adminGuard(req, res, next);
         expect(res.status).toHaveBeenCalledWith(403);
         expect(next).not.toHaveBeenCalled();
+    });
+});
+
+describe('pageAdminGuard — admin HTML lap-ok', () => {
+    test('nincs session → redirect /', async () => {
+        const req = makeReq();
+        const res = makeRes();
+        const next = jest.fn();
+        await pageAdminGuard(req, res, next);
+        expect(res.redirect).toHaveBeenCalledWith('/');
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('player session (nem admin) → redirect /', async () => {
+        const req = makeReq({ userId: 7, role: 'player' });
+        const res = makeRes();
+        const next = jest.fn();
+        await pageAdminGuard(req, res, next);
+        expect(res.redirect).toHaveBeenCalledWith('/');
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('admin session → next() hivva', async () => {
+        const req = makeReq({ userId: 1, role: 'admin' });
+        const res = makeRes();
+        const next = jest.fn();
+        await pageAdminGuard(req, res, next);
+        expect(next).toHaveBeenCalledTimes(1);
+        expect(res.redirect).not.toHaveBeenCalled();
+    });
+
+    test('banned admin → redirect /ban.html', async () => {
+        sql.checkUserBanStatus.mockResolvedValueOnce({ is_banned: true });
+        const req = makeReq({ userId: 1, role: 'admin' });
+        const res = makeRes();
+        const next = jest.fn();
+        await pageAdminGuard(req, res, next);
+        expect(res.redirect).toHaveBeenCalledWith('/ban.html');
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('pending_deletion admin → redirect /deleted.html', async () => {
+        sql.checkUserBanStatus.mockResolvedValueOnce({
+            is_banned: false,
+            pending_deletion_until: new Date(Date.now() + 86400_000)
+        });
+        const req = makeReq({ userId: 1, role: 'admin' });
+        const res = makeRes();
+        const next = jest.fn();
+        await pageAdminGuard(req, res, next);
+        expect(res.redirect).toHaveBeenCalledWith('/deleted.html');
+        expect(next).not.toHaveBeenCalled();
+    });
+
+    test('JSON valaszt SOHA nem ad (HTML-redirect strategia)', async () => {
+        const req = makeReq({ userId: 7, role: 'player' });
+        const res = makeRes();
+        await pageAdminGuard(req, res, jest.fn());
+        expect(res.status).not.toHaveBeenCalled();
+        expect(res.json).not.toHaveBeenCalled();
     });
 });
 

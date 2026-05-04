@@ -621,41 +621,41 @@
                         <div id="chatLayout" class="chat-layout">
                             <aside class="chat-left">
                                 <div class="chat-sidebar-header">
-                                    <h2 class="chat-sidebar-title">Csevegések</h2>
-                                    <button type="button" class="chat-icon-button chat-sidebar-close-button" data-bs-dismiss="modal" aria-label="Bezaras">&times;</button>
+                                    <h2 class="chat-sidebar-title">${tx('Csevegések', 'Conversations')}</h2>
+                                    <button type="button" class="chat-icon-button chat-sidebar-close-button" data-bs-dismiss="modal" aria-label="${tx('Bezárás', 'Close')}">&times;</button>
                                 </div>
                                 <div class="chat-search-wrap">
                                     <div class="chat-search-group">
                                         <span class="chat-search-icon" aria-hidden="true">&#128269;</span>
-                                        <input id="chatConversationSearch" class="chat-search-input" type="text" placeholder="Keresés a partnerek között..." />
+                                        <input id="chatConversationSearch" class="chat-search-input" type="text" placeholder="${tx('Keresés a partnerek között...', 'Search partners...')}" />
                                     </div>
                                 </div>
-                                <div id="chatConversationLoading" class="chat-placeholder d-none">Beszelgetesek betoltese...</div>
-                                <div id="chatConversationEmpty" class="chat-placeholder d-none">Nincs beszelgetes.</div>
+                                <div id="chatConversationLoading" class="chat-placeholder d-none">${tx('Beszélgetések betöltése...', 'Loading conversations...')}</div>
+                                <div id="chatConversationEmpty" class="chat-placeholder d-none">${tx('Nincs beszélgetés.', 'No conversations.')}</div>
                                 <div id="chatConversationList" class="chat-conversation-list" role="list"></div>
                             </aside>
                             <section class="chat-right">
                                 <div id="chatRightEmpty" class="chat-right-empty">
-                                    <div class="chat-right-empty-title">Valassz egy beszelgetest</div>
-                                    <div class="chat-right-empty-body">Valassz egy meglevo beszelgetest a bal oldali listabol, vagy keress ra egy jatekosra.</div>
+                                    <div class="chat-right-empty-title">${tx('Válassz egy beszélgetést', 'Select a conversation')}</div>
+                                    <div class="chat-right-empty-body">${tx('Válassz egy meglévő beszélgetést a bal oldali listából, vagy keress rá egy játékosra.', 'Pick an existing conversation on the left, or search for a player.')}</div>
                                 </div>
                                 <div class="chat-conversation-area">
                                     <header class="chat-header">
-                                        <button type="button" id="chatBackButton" class="chat-icon-button chat-back-button" aria-label="Vissza">&#8592;</button>
+                                        <button type="button" id="chatBackButton" class="chat-icon-button chat-back-button" aria-label="${tx('Vissza', 'Back')}">&#8592;</button>
                                         <img id="chatHeaderAvatar" class="chat-header-avatar" alt="" />
                                         <div class="chat-header-info">
-                                            <div id="chatHeaderTitle" class="chat-header-title">Valassz beszelgetest</div>
-                                            <div id="chatHeaderSubtitle" class="chat-header-subtitle">Realtime chat</div>
+                                            <div id="chatHeaderTitle" class="chat-header-title">${tx('Válassz beszélgetést', 'Select a conversation')}</div>
+                                            <div id="chatHeaderSubtitle" class="chat-header-subtitle">${tx('Realtime chat', 'Realtime chat')}</div>
                                         </div>
                                     </header>
-                                    <div id="chatMessageLoading" class="chat-placeholder d-none">Uzenetek betoltese...</div>
-                                    <div id="chatMessageEmpty" class="chat-placeholder d-none">Nincs megjelenitheto uzenet.</div>
+                                    <div id="chatMessageLoading" class="chat-placeholder d-none">${tx('Üzenetek betöltése...', 'Loading messages...')}</div>
+                                    <div id="chatMessageEmpty" class="chat-placeholder d-none">${tx('Nincs megjeleníthető üzenet.', 'No messages to display.')}</div>
                                     <div id="chatMessageList" class="chat-message-list" role="log" aria-live="polite"></div>
                                     <div class="chat-composer">
                                         <div id="chatFeedback" class="chat-feedback d-none"></div>
                                         <div class="chat-input-row">
-                                            <input id="chatMessageInput" class="chat-input" type="text" maxlength="1000" placeholder="Irj uzenetet..." />
-                                            <button id="chatSendButton" class="chat-send-button" type="button">Kuldes</button>
+                                            <input id="chatMessageInput" class="chat-input" type="text" maxlength="1000" placeholder="${tx('Írj üzenetet...', 'Type a message...')}" />
+                                            <button id="chatSendButton" class="chat-send-button" type="button">${tx('Küldés', 'Send')}</button>
                                         </div>
                                     </div>
                                 </div>
@@ -670,35 +670,35 @@
                         <div class="modal-header">
                             <h5 class="modal-title">
                                 <span style="color:#ef4444;">&#9873;</span>
-                                Üzenet bejelentése
+                                ${tx('Üzenet bejelentése', 'Report message')}
                             </h5>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezarás"></button>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="${tx('Bezárás', 'Close')}"></button>
                         </div>
                         <div class="modal-body">
                             <p class="mb-2" style="font-size: 13px; color:#94a3b8;">
-                                Ha az üzenetet trágárnak vagy nem odaillőnek érzed, küldd el az adminisztrátoroknak felülvizsgálatra. Az indok megadása ajánlott (max. 500 karakter).
+                                ${tx('Ha az üzenetet trágárnak vagy nem odaillőnek érzed, küldd el az adminisztrátoroknak felülvizsgálatra. Az indok megadása ajánlott (max. 500 karakter).', 'If you find the message offensive or inappropriate, send it to the moderators for review. Providing a reason is recommended (max. 500 characters).')}
                             </p>
                             <div class="mb-3">
-                                <label class="form-label" style="font-size:12px; color:#94a3b8;">Bejelentett üzenet</label>
+                                <label class="form-label" style="font-size:12px; color:#94a3b8;">${tx('Bejelentett üzenet', 'Reported message')}</label>
                                 <div id="chatReportTargetBody" class="chat-report-quote">—</div>
                                 <small id="chatReportTargetMeta" style="display:block; margin-top:4px; color:#64748b; font-size:11px;">—</small>
                             </div>
                             <div class="mb-1">
                                 <label for="chatReportReason" class="form-label" style="font-size:12px; color:#cbd5e1;">
-                                    Indok (opcionális)
+                                    ${tx('Indok (opcionális)', 'Reason (optional)')}
                                     <span class="chat-report-counter ms-2">
                                         <span id="chatReportReasonCount">0</span> / 500
                                     </span>
                                 </label>
                                 <textarea id="chatReportReason" class="form-control" rows="3" maxlength="500"
-                                    placeholder="Pl. trágár, sértő, spam, fenyegetés..."></textarea>
+                                    placeholder="${tx('Pl. trágár, sértő, spam, fenyegetés...', 'E.g. profanity, abusive, spam, threats...')}"></textarea>
                             </div>
                             <div id="chatReportFeedback" class="alert d-none mt-2 mb-0" role="alert" style="font-size:13px;"></div>
                         </div>
                         <div class="modal-footer">
-                            <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                            <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">${tx('Mégse', 'Cancel')}</button>
                             <button type="button" class="btn btn-danger" id="chatReportConfirmBtn">
-                                Bejelentés elküldése
+                                ${tx('Bejelentés elküldése', 'Submit report')}
                             </button>
                         </div>
                     </div>
@@ -1024,7 +1024,7 @@
                     reportBtn.dataset.senderUsername = String(message.senderUsername || '');
                     reportBtn.dataset.body = String(message.body || '');
                     reportBtn.title = tx('Üzenet bejelentése moderátoroknak', 'Report message to moderators');
-                    reportBtn.innerHTML = '<span aria-hidden="true">&#9873;</span> Bejelentés';
+                    reportBtn.innerHTML = `<span aria-hidden="true">&#9873;</span> ${tx('Bejelentés', 'Report')}`;
                     actions.appendChild(reportBtn);
 
                     element.appendChild(actions);

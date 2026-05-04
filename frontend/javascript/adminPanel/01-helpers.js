@@ -1,7 +1,9 @@
 // MINDEN API AMI ITT MEG VAN HÍVVA ISADMIN() VALIDÁLÁSSAL KELL TÖRTÉNJEN A BACKENDEN,
 // HOGY CSAK ADMINOK FÉRHESSENEK HOZZÁJUK
 const requestController = window.createRequestController(300);
-const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+// `tx` mar globalis a `_utils.js`-bol (window.tx) — top-level `const tx`-et
+// nem deklaralhatunk, mert a tobbi <script>-ben is jelen lenne ez a binding
+// es kozos script-scope-ban a duplikacio SyntaxError-t okozna.
 
 /* =============================================================
    1) Apró segédek — delegate-ek a `_utils.js` egyetlen kanonikus implementációjára

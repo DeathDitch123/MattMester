@@ -38,6 +38,11 @@ function getQueue(modeKey, ranked) {
 // hogy a `chess:queue:leave` és a disconnect cleanup tudja hol keresni.
 const userQueueIndex = new Map(); // userId → queueKey
 
+// Matchmaking queue grace timerek: userId → setTimeout handle. Ha a felhasznalo
+// disconnect-elt a queue-ban allas kozben, itt eltaroljuk a 30mp-es reconnect-grace
+// timert. Ha kozben reconnect-el (uj socket + chess:queue:join), torold a timert.
+const queueDisconnectTimers = new Map();
+
 // Aktív PvP játékok userId → gameId (reconnect-hez)
 const activeGamesByUser = new Map();
 
@@ -51,6 +56,11 @@ const REMATCH_TIMEOUT_MS = 30_000;
 const INVITE_TIMEOUT_MS = 60_000;        // 60mp meghívás lejárat
 const DISCONNECT_GRACE_MS = 60_000;      // 60mp disconnect grace period
 const CLEANUP_DELAY_MS = 30_000;         // 30mp játék cleanup vége után
+// Matchmaking queue grace: ha a felhasznalo lecsatlakozik a queue-ban allas
+// kozben, NE dobjuk ki azonnal — adjunk 30mp-et a reconnect-re. Tipikus
+// mobil-internet kihagyas / tab reload eseten (ami 1-3mp) igy nem kell ujra
+// sorba allni. Ha a 30mp alatt sem ter vissza, akkor takaritunk.
+const QUEUE_DISCONNECT_GRACE_MS = 30_000;
 
 // ── Segédfüggvények ──
 
@@ -548,6 +558,15 @@ function registerPvpHandlers(socket, io) {
         const userId = context.userId;
         const username = context.username;
 
+        // Reconnect-grace cancel: ha disconnect utan a felhasznalo visszater es ujra
+        // queue-ba akar allni, a fuggoben levo 30mp-es queue-grace timert torold,
+        // hogy ne takaritsa ki a queue-bol az uj bejegyzeset.
+        const pendingGraceTimer = queueDisconnectTimers.get(userId);
+        if (pendingGraceTimer) {
+            clearTimeout(pendingGraceTimer);
+            queueDisconnectTimers.delete(userId);
+        }
+
         // Mode + ranked validáció
         const modeKey = mode && isValidMode(mode) ? mode : DEFAULT_MODE;
         const modeMeta = getMode(modeKey);
@@ -628,6 +647,14 @@ function registerPvpHandlers(socket, io) {
     socket.on('chess:queue:leave', () => {
         const context = socket.data.socketContext;
         if (!context.userId) return;
+
+        // Explicit leave eseten torold a fuggoben levo disconnect-grace timert is —
+        // a felhasznalo szandekosan elhagyta a queue-t, ne legyen visszamarado timer.
+        const pendingGraceTimer = queueDisconnectTimers.get(context.userId);
+        if (pendingGraceTimer) {
+            clearTimeout(pendingGraceTimer);
+            queueDisconnectTimers.delete(context.userId);
+        }
 
         const qKey = userQueueIndex.get(context.userId);
         if (!qKey) return;
@@ -1170,15 +1197,39 @@ async function handleRematchAccept(socket, io, gameId) {
 async function handlePvpDisconnect(userId, io) {
     if (!userId) return;
 
-    // Queue-ból eltávolítás (per-mode index alapján)
+    // Queue-bol eltavolitas — GRACE-pel (QUEUE_DISCONNECT_GRACE_MS = 30s).
+    // Bug-fix 2026-05-04: a regi kod azonnal kidobta a usert a queue-bol disconnectkor,
+    // ami mobil-internet rovid kihagyasanal (vagy tab reload eseten) ujra-sorbaallast
+    // kovetelt. Most 30mp-et adunk: ha kozben a felhasznalo bejon (uj socket lett a
+    // user-roomba), a setTimeout meglatja, hogy mar online es nem nyul a queue-hoz.
+    // Ha tenyleg eltunt, akkor takaritunk.
     const qKey = userQueueIndex.get(userId);
     if (qKey) {
-        const queue = matchmakingQueueByMode.get(qKey);
-        if (queue) {
-            const idx = queue.findIndex(q => q.userId === userId);
-            if (idx !== -1) queue.splice(idx, 1);
-        }
-        userQueueIndex.delete(userId);
+        // Ha mar van fuggoben grace timer (peldaul ket egymast koveto disconnect),
+        // ne duplazzuk — torold a regit es indits ujat.
+        const existingTimer = queueDisconnectTimers.get(userId);
+        if (existingTimer) clearTimeout(existingTimer);
+
+        const graceTimer = setTimeout(async () => {
+            queueDisconnectTimers.delete(userId);
+            // Reconnect check: ha a userhez van legalabb egy elo socket a user-room-ban,
+            // bent maradhat a queue-ban — nem takaritunk.
+            try {
+                const stillOnline = (await io.in(`user-room:${userId}`).fetchSockets()).length > 0;
+                if (stillOnline) return;
+            } catch (_) {
+                // io fetchSockets hiba eseten biztonsagosabb takaritani.
+            }
+            const currentKey = userQueueIndex.get(userId);
+            if (!currentKey) return;
+            const q = matchmakingQueueByMode.get(currentKey);
+            if (q) {
+                const idx = q.findIndex(qe => qe.userId === userId);
+                if (idx !== -1) q.splice(idx, 1);
+            }
+            userQueueIndex.delete(userId);
+        }, QUEUE_DISCONNECT_GRACE_MS);
+        queueDisconnectTimers.set(userId, graceTimer);
     }
 
     // N13 — Pending rematch cleanup. Ha a disconnect-elt user resztvesz egy fuggoben
@@ -1276,5 +1327,16 @@ async function handlePvpDisconnect(userId, io) {
 
 module.exports = {
     registerPvpHandlers,
-    handlePvpDisconnect
+    handlePvpDisconnect,
+    // Tesztelhetoseg + monitoring vegett expose-oljuk a grace konstansokat
+    // es a fuggoben levo timereket. Ne hasznald produkcios kodbol mas
+    // konvencional helyrol — kizarolag tesztek olvashatjak.
+    QUEUE_DISCONNECT_GRACE_MS,
+    DISCONNECT_GRACE_MS,
+    _internals: {
+        userQueueIndex,
+        matchmakingQueueByMode,
+        queueDisconnectTimers,
+        activeGamesByUser
+    }
 };

@@ -18,6 +18,14 @@ const SOCKET_ROOMS = Object.freeze({
     notifications: 'notifications-room'
 });
 
+// Presence broadcast grace: ha egy felhasznalo OSSZES socketje lecsatlakozott
+// (page reload, tab valto, mobil-internet rovid kihagyasa), 10mp-et adunk a
+// "offline"-na valtas elott. Igy a tobbi kliens nem lat azonnal flicker-t,
+// es egy nehany masodperces F5-tel sem valtozik a presence allapot.
+// Ha a 10mp alatt visszater a felhasznalo (uj socket ugyanazzal a userId-vel),
+// a timer-t toroljuk es a presence-state nem valtozik.
+const PRESENCE_DISCONNECT_GRACE_MS = 10_000;
+
 const SOCKET_FEATURES = Object.freeze([
     {
         key: 'presence',
@@ -133,6 +141,11 @@ function createSocketHub(io) {
     const clientsById = new Map();
     const roomStateById = new Map();
     const chatRateLimitByUserId = new Map();
+    // Presence-grace timerek: clientId → setTimeout handle. Egy bejegyzes akkor
+    // jon letre, ha a clientRecord-ban mar nincs socket. A timer 10mp utan vegzi
+    // el a `clientsById.delete(...)` muveletet + syncPresence broadcast-ot.
+    // Reconnect (uj socket ugyanazzal a clientId-vel) eseten torolni kell.
+    const presenceGraceTimers = new Map();
 
     function notifyConversationDeleted(conversationId, affectedUserIds = [], reason = 'unavailable') {
         const normalizedConversationId = parsePositiveInteger(conversationId, null);
@@ -481,6 +494,16 @@ function createSocketHub(io) {
     function registerSocket(socket) {
         const context = createContextFromSocket(socket);
         socketsById.set(socket.id, context);
+
+        // Presence-grace cancel: ha a kliens (clientId) eppen a 10mp-es offline-grace
+        // ablakaban van, az uj socket reconnect-nek minosul — torold a fuggoben levo
+        // takarito timert, hogy a record ne kerueljon torleshe es a syncPresence-be
+        // ne vagjon offline-state-et.
+        const pendingPresenceTimer = presenceGraceTimers.get(context.clientId);
+        if (pendingPresenceTimer) {
+            clearTimeout(pendingPresenceTimer);
+            presenceGraceTimers.delete(context.clientId);
+        }
 
         if (!clientsById.has(context.clientId)) {
             clientsById.set(context.clientId, createEmptyPresenceRecord(context));
@@ -963,6 +986,13 @@ function createSocketHub(io) {
             const currentContext = socketsById.get(socket.id);
             socketsById.delete(socket.id);
 
+            // Presence-grace logika: ha a clientRecord-ban tobb socket is van, csak
+            // azt az egy socketet vesszuk ki — a presence azonnal frissul (de a
+            // user marad "online", mert van masik tab/eszkoz). Ha viszont ez volt
+            // az UTOLSO socket, ne taroljunk azonnal — adjunk 10mp grace-et a
+            // reconnect-re. Ez kuszobbe ki a flicker-t: rapid reload-nal vagy
+            // mobil-internet kihagyasanal nem latnak masok "offline" allapotot.
+            let lastSocketGone = false;
             if (currentContext) {
                 const clientRecord = clientsById.get(currentContext.clientId);
                 if (clientRecord) {
@@ -971,7 +1001,7 @@ function createSocketHub(io) {
                     clientRecord.lastSeenAt = new Date().toISOString();
 
                     if (clientRecord.socketIds.size === 0) {
-                        clientsById.delete(currentContext.clientId);
+                        lastSocketGone = true;
                     }
                 }
             }
@@ -983,26 +1013,49 @@ function createSocketHub(io) {
                 });
             }
 
-            // last_active bump: ha a felhasznalo utolso clientje is lecsatlakozott
-            // (osszes nyitott tab/eszkoz lement), akkor offline-ra vált. A users.last_active
-            // `ON UPDATE CURRENT_TIMESTAMP` szabaly nem trigger-el sor-modositas nelkul,
-            // ezert explicit beirjuk a NOW()-t. Ez biztositja, hogy az admin panel
-            // "Utolso aktivitas" oszlopa pontosan az offline-ra valtas pillanatat
-            // mutassa, ne pedig a regi (pl. login-kori) timestampet.
-            if (currentContext && currentContext.userId) {
-                const stillOnline = [...clientsById.values()]
-                    .some((rec) => Number(rec.userId) === Number(currentContext.userId));
-                if (!stillOnline) {
-                    sql.touchUserLastActive(currentContext.userId).catch((error) => {
-                        console.warn('socket disconnect last_active touch hiba:', error.message);
-                    });
-                }
-            }
+            if (lastSocketGone && currentContext) {
+                const clientId = currentContext.clientId;
+                const userIdAtDisconnect = currentContext.userId;
 
-            syncPresence();
-            services.refreshStats(io).catch((error) => {
-                console.error('Socket disconnect utáni statisztika frissítési hiba:', error);
-            });
+                // Ha mar fut grace timer (gyors egymas utani disconnect-ek), reseteljuk.
+                const existingTimer = presenceGraceTimers.get(clientId);
+                if (existingTimer) clearTimeout(existingTimer);
+
+                const timer = setTimeout(() => {
+                    presenceGraceTimers.delete(clientId);
+                    // Reconnect check: ha kozben uj socket csatlakozott ugyanazzal a
+                    // clientId-vel, a clientRecord.socketIds.size > 0 — akkor NE
+                    // takaritsunk, csak no-op.
+                    const rec = clientsById.get(clientId);
+                    if (rec && rec.socketIds.size > 0) return;
+
+                    if (rec) clientsById.delete(clientId);
+
+                    // last_active bump: csak akkor irunk az adatbazisba, ha tenyleg
+                    // egyetlen tabon sincs jelen a user (a fenti delete utan).
+                    if (userIdAtDisconnect) {
+                        const stillOnline = [...clientsById.values()]
+                            .some((r) => Number(r.userId) === Number(userIdAtDisconnect));
+                        if (!stillOnline) {
+                            sql.touchUserLastActive(userIdAtDisconnect).catch((error) => {
+                                console.warn('socket disconnect last_active touch hiba:', error.message);
+                            });
+                        }
+                    }
+                    syncPresence();
+                    services.refreshStats(io).catch((error) => {
+                        console.error('Presence-grace utani statisztika frissitesi hiba:', error);
+                    });
+                }, PRESENCE_DISCONNECT_GRACE_MS);
+                presenceGraceTimers.set(clientId, timer);
+            } else {
+                // Volt meg masik socket / tab a felhasznalonal — nincs offline-valtas,
+                // de a resz-presence (pl. tab szam) frissul.
+                syncPresence();
+                services.refreshStats(io).catch((error) => {
+                    console.error('Socket disconnect utáni statisztika frissítési hiba:', error);
+                });
+            }
 
             console.log('Socket.io kapcsolat megszakadt:', socket.id, reason || 'ismeretlen ok');
         });

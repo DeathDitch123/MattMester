@@ -159,7 +159,8 @@ export function renderMoveList(allapot) {
     if (!panel) return;
     const lepesek = (allapot && Array.isArray(allapot.lepesTortenet)) ? allapot.lepesTortenet : [];
     if (lepesek.length === 0) {
-        panel.innerHTML = '<li class="move-list-empty">Még nincs lépés</li>';
+        const txm = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+        panel.innerHTML = `<li class="move-list-empty">${txm('Még nincs lépés', 'No moves yet')}</li>`;
         return;
     }
     const html = [];
@@ -185,7 +186,10 @@ export function renderMoveList(allapot) {
  */
 export function clearMoveList() {
     const panel = document.getElementById("move-list-body");
-    if (panel) panel.innerHTML = '<li class="move-list-empty">Még nincs lépés</li>';
+    if (panel) {
+        const txm = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+        panel.innerHTML = `<li class="move-list-empty">${txm('Még nincs lépés', 'No moves yet')}</li>`;
+    }
 }
 
 /**

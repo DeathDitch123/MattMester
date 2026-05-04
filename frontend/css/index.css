@@ -605,6 +605,33 @@ h6 {
     padding: 20px 0 30px;
 }
 
+/* House-rules gomb a footer-ben — link-szeruen jelenjen meg, ne torje a flex-row alignmentet.
+   A default <button> stilus (border, background, kulonbozo magassag) miatt szetcsuszott
+   az index.html footere — ez a szabaly normalizalja a megjelenest. */
+.footer .house-rules-footer-link {
+    background: transparent;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: inherit;
+    line-height: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.2s ease;
+    font-family: inherit;
+}
+.footer .house-rules-footer-link:hover {
+    color: var(--accent-gold);
+}
+.footer .house-rules-footer-link:focus-visible {
+    outline: 2px solid var(--accent-gold);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
 .toast {
     --bs-toast-bg: rgba(15, 23, 42, 0.95);
     --bs-toast-border-color: var(--border-color);

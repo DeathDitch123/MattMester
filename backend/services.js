@@ -82,7 +82,15 @@ const services = {
 
     async refreshStats(io) {
         try {
-            const pool = getPool();
+            // getPool() most dob, ha nincs init pool. Tesztkörnyezetben a mock
+            // pool-t (pl. { _closed: false } vagy `null`) ad — a `null`-t saját kezűleg
+            // detektaljuk a graceful "DB nem elerheto" agakhoz.
+            let pool = null;
+            try {
+                pool = getPool();
+            } catch (_) {
+                pool = null;
+            }
             if (pool) {
                 const presenceCounts = computeOnlinePresenceCounts(io);
 

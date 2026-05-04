@@ -84,4 +84,11 @@
         fetchSessionInfo,
         tx
     };
+
+    // Globalis `tx` — minden script-tag elerheti `tx('hu','en')` formaban,
+    // anelkul hogy minden fajl `const tx = ...`-t deklaralna (concatenated
+    // <script> tagek kozos top-level scope-ja miatt a redeklaracio SyntaxError).
+    if (typeof window.tx === 'undefined') {
+        window.tx = tx;
+    }
 })();

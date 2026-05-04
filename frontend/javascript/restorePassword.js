@@ -1,4 +1,4 @@
-const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+// `tx` globalis a `_utils.js`-bol (window.tx).
 const RESTORE_PASSWORD_REGEX = window.MattMesterValidationRules?.PASSWORD_REGEX || /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const RESET_TOKEN = new URLSearchParams(window.location.search).get('token') || '';
 let resetTokenState = RESET_TOKEN ? 'pending' : 'invalid';

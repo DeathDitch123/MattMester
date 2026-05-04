@@ -48,12 +48,16 @@ function normalizeMessage(value, maxLen = 1000) {
 // gameId-t csendben null-re allitjuk - a bejelentes meg lement, csak meccs
 // nelkul. Ez igy jobb mint kemenyen elutasitani.
 async function createUserReport({ reporterUserId, reportedUserId, category, message, gameId }) {
-    const pool = getPool();
+    // Input validacio ELOSZOR — igy a hibas hivasok DB pool nelkul is olvashato
+    // hibat dobnak (getPool() most dob ha nincs init, ezert a validation-t a
+    // pool-szerzes ele toltuk).
     const reporter = normalizePositiveInt(reporterUserId, 0);
     const reported = normalizePositiveInt(reportedUserId, 0);
     if (!reporter) throw new Error('Hianyzo bejelento.');
     if (!reported) throw new Error('Hianyzo bejelentett felhasznalo.');
     if (reporter === reported) throw new Error('Onmagadat nem jelentheted be.');
+
+    const pool = getPool();
 
     // Letezik-e a bejelentett user es nincs-e mar torolve.
     const [userRows] = await pool.execute(

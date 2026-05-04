@@ -196,37 +196,34 @@ adminAlertingService.bindSocketHub(adminSocketHub);
 const adminStatsTickService = require('./api/admin/statsTickService.js');
 adminStatsTickService.start({ adminSocketHub, socketHub });
 
-// Belepett felhasznalo ellenorzese vedett oldalakhoz
-function requireAuth(req, res, next) {
-    if (!req.session || !req.session.userId) {
-        return res.redirect('/');
-    }
-    next();
-}
-
-function requireAdmin(req, res, next) {
-    if (!req.session || !req.session.userId || req.session.role !== 'admin') {
-        return res.redirect('/');
-    }
-    next();
-}
-
-// Vedett oldalak: ha nincs session, visszadob az indexre
-app.get('/html/profile.html', requireAuth, (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/html/profile.html'));
-});
-
-app.get('/html/adminPanel.html', requireAdmin, (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/html/adminPanel.html'));
-});
+// Belepett felhasznalo ellenorzese vedett oldalakhoz —
+// az auth.js egysegesitett pageGuard / pageAdminGuard middleware-jet hasznaljuk.
+// Igy a session-check, ban-check es soft-delete ellenorzes egy helyen tortenik
+// (ld. backend/api/middleware/auth.js).
+const { pageGuard, pageAdminGuard } = require('./api/middleware/auth.js');
 
 // Karbantartas mod globalis HTML guard: a static middleware ELOTT, hogy a `/`,
 // `/html/index.html`, `/html/profile.html` stb. requesteket is atiranyitsa a
 // maintenance.html-re. A /api/* utvonalakat es a static asset-eket szandekosan
 // atengedi (azokat az api-on beluli maintenanceGuard kezeli, illetve a
 // maintenance.html maga is kell a CSS/JS-ekhez).
+//
+// FONTOS: a maintenanceHtmlGuard-ot a vedett HTML route-ok (/html/profile.html,
+// /html/adminPanel.html) REGISZTRACIOJA ELOTT mountoljuk. Korabban forditva volt,
+// ezert a maintenance modban is el lehetett erni a profile.html-t es az
+// adminPanel.html-t (a kek pageGuard utan a sendFile lefutott, mielott a
+// maintenance guard egyaltalan szohoz jutott volna).
 const { maintenanceHtmlGuard } = require('./api/middleware/maintenanceGuard.js');
 app.use(maintenanceHtmlGuard());
+
+// Vedett oldalak: ha nincs session, visszadob az indexre (vagy /ban.html / /deleted.html-re).
+app.get('/html/profile.html', pageGuard, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/html/profile.html'));
+});
+
+app.get('/html/adminPanel.html', pageAdminGuard, (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/html/adminPanel.html'));
+});
 
 //!Szerver futtatása
 app.use(express.static(path.join(__dirname, '../frontend'))); //?frontend mappa tartalmának betöltése az oldal működéséhez

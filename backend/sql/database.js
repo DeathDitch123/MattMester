@@ -893,8 +893,26 @@ async function closeDatabase() {
     }
 }
 
+// getPool() most KÖTELEZŐEN dob, ha nincs inicializált pool. Ezzel egy ponton
+// kezeljük a "pool-nincs" hibát ahelyett, hogy minden caller külön null-checkkel
+// védekezzen (és a hiányzó null-checkek crash-eljenek a forró úton, pl. tesztben).
+// A graceful fallback logikát hívóoldalon try/catch-csel kell megoldani.
+function getPool() {
+    if (!pool) {
+        throw new Error('DB pool nincs inicializalva');
+    }
+    return pool;
+}
+
+// Belső használatra: nyersen megadja a pool-t (lehet null is). Csak a database.js
+// belső close/init logikájához kell — külső modulok ne használják.
+function _getPoolRaw() {
+    return pool;
+}
+
 module.exports = {
     initDatabase,
     closeDatabase,
-    getPool: () => pool
+    getPool,
+    _getPoolRaw
 };

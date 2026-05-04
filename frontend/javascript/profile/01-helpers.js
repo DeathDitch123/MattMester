@@ -1,4 +1,6 @@
-const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+// `tx` mar globalis a `_utils.js`-bol (window.tx) — top-level `const tx`-et
+// nem deklaralhatunk, mert a tobbi <script>-ben is jelen lenne ez a binding
+// es kozos script-scope-ban a duplikacio SyntaxError-t okozna.
 
 const USERNAME_REGEX = /^[a-zA-ZáéíóöőúüűÁÉÍÓÖŐÚÜŰ0-9._-]+$/;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

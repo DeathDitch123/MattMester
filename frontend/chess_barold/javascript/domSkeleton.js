@@ -11,20 +11,22 @@
 
 
 // Hardcoded HTML template — a chess.html .app belseje, board tartalma nélkül
+// `data-i18n` attributumok jelzik a leforditando szovegeket — az i18n.js
+// MutationObserver-e automatikusan lecsereli oket lang-valtaskor.
 const OLDAL_VAZ = `
         <div id="game-corner-status" class="game-corner-status">
             <div class="status-row">
-                Aktív: <strong id="turn-name">fehér</strong>
+                <span data-i18n="chess.active">Aktív</span>: <strong id="turn-name" data-i18n="chess.white">fehér</strong>
             </div>
-            <div id="status" class="status">játékon</div>
+            <div id="status" class="status" data-i18n="chess.in_game">játékon</div>
         </div>
-        <button id="feladBtn" class="felad-btn felad-btn-fixed">Feladás</button>
+        <button id="feladBtn" class="felad-btn felad-btn-fixed" data-i18n="chess.surrender">Feladás</button>
 
         <header class="topbar">
             <div class="player player-black">
                 <!-- captured-pieces eltavolitva 2026-05-04 — lasd chess.html komment. -->
                 <span id="material-black" class="material-adv hidden">+0</span>
-                <div class="name" id="name-black">Ellenfél</div>
+                <div class="name" id="name-black" data-i18n="chess.opponent">Ellenfél</div>
                 <div class="player-abilities" id="player-abilities-black"></div>
                 <div class="clock" id="clock-black">10:00</div>
             </div>
@@ -36,7 +38,7 @@ const OLDAL_VAZ = `
 
                 <!-- TÁBLAKITAKARÁS overlay -->
                 <div id="board-hide-overlay" class="board-hide-overlay hidden">
-                    <span>Tábla eltakarva</span>
+                    <span data-i18n="chess.board_hidden_label">Tábla eltakarva</span>
                     <span id="board-hide-countdown">5</span>
                 </div>
 
@@ -55,7 +57,7 @@ const OLDAL_VAZ = `
                 <!-- KÉPESSÉG BAR (legacy — most rejtve, helyette player-badge ability sorok) -->
                 <div id="ability-bar" class="ability-bar hidden">
                     <div class="ability-points">
-                        <span class="ap-label">Pontok</span>
+                        <span class="ap-label" data-i18n="chess.points">Pontok</span>
                         <span class="ap-mine" id="ap-mine">0</span>
                         <span class="ap-sep">vs</span>
                         <span class="ap-opp" id="ap-opp">0</span>
@@ -64,21 +66,21 @@ const OLDAL_VAZ = `
                     <div id="ability-hint" class="ability-hint hidden"></div>
                 </div>
 
-                <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
+                <div id="bot-thinking" class="bot-thinking hidden" data-i18n="chess.bot_thinking">🤖 A bot gondolkodik...</div>
                 <!-- Az #opponent-disconnected ELTAVOLITVA a sidebar-bol -
                      body-szinten van a chess.html-ben (parent display:none
                      miatt itt sosem latszodott). -->
                 <div id="elo-change" class="elo-change hidden"></div>
-                <button id="drawOfferBtn" class="draw-btn hidden">Döntetlen ajánlat</button>
+                <button id="drawOfferBtn" class="draw-btn hidden" data-i18n="chess.draw_offer_btn">Döntetlen ajánlat</button>
                 <div id="draw-offer-received" class="draw-offer hidden">
-                    <p>Ellenfeled döntetlent ajánl</p>
+                    <p data-i18n="chess.opp_offers_draw">Ellenfeled döntetlent ajánl</p>
                     <div class="draw-offer-buttons">
-                        <button id="draw-accept" class="pvp-invite-btn accept">Elfogad</button>
-                        <button id="draw-decline" class="pvp-invite-btn decline">Elutasít</button>
+                        <button id="draw-accept" class="pvp-invite-btn accept" data-i18n="chess.accept">Elfogad</button>
+                        <button id="draw-decline" class="pvp-invite-btn decline" data-i18n="chess.decline">Elutasít</button>
                     </div>
                 </div>
-                <button id="rematchBtn" class="rematch-btn hidden">Revans</button>
-                <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
+                <button id="rematchBtn" class="rematch-btn hidden" data-i18n="chess.rematch">Revans</button>
+                <button id="newGameBtn" class="new-game-btn hidden" data-i18n="chess.new_game">Új játék</button>
             </aside>
         </main>
 
@@ -86,7 +88,7 @@ const OLDAL_VAZ = `
             <div class="player player-white">
                 <!-- captured-pieces eltavolitva 2026-05-04 — lasd chess.html komment. -->
                 <span id="material-white" class="material-adv hidden">+0</span>
-                <div class="name" id="name-white">Te</div>
+                <div class="name" id="name-white" data-i18n="chess.you_label">Te</div>
                 <div class="player-abilities" id="player-abilities-white"></div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
