@@ -16,8 +16,10 @@
         rel="stylesheet">
     <link rel="stylesheet" href="../css/chess.css">
     <link rel="stylesheet" href="../../css/shared/chessModeChooser.css">
+    <link rel="stylesheet" href="../../css/shared/confirmModal.css">
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../../javascript/_utils.js" defer></script>
+    <script src="../../javascript/shared/confirmModal.js" defer></script>
     <script src="../../javascript/socketClient.js" defer></script>
     <script src="../../javascript/shared/maintenanceClient.js" defer></script>
     <script src="../../javascript/chessModeChooser.js" defer></script>
@@ -25,80 +27,9 @@
 </head>
 
 <body>
-    <!-- JÁTÉKMÓD VÁLASZTÓ MODAL (legacy fallback — alapból rejtve, hogy ne villogjon) -->
-    <div id="mode-modal" class="mode-modal hidden">
-        <div class="mode-modal-content">
-            <h2 class="mode-title">Mattmester</h2>
-            <p class="mode-subtitle">Válassz játékmódot</p>
-
-            <!-- 1. LÉPÉS: Játékmód (5 mód) — dinamikusan a /api/chess/modes-ból -->
-            <div id="mode-step-modes" class="mode-step">
-                <div id="mode-list" class="mode-list">
-                    <!-- gombok dinamikus generálással -->
-                </div>
-            </div>
-
-            <!-- 2. LÉPÉS: Bot vs Játékos + Ranked toggle -->
-            <div id="mode-step-opponent" class="mode-step hidden">
-                <p class="mode-subtitle"><span id="selected-mode-label">Mód</span></p>
-                <div class="ranked-toggle-row">
-                    <label class="ranked-toggle">
-                        <input type="checkbox" id="ranked-toggle-input" checked>
-                        <span class="ranked-toggle-label">Ranked (ELO frissül)</span>
-                    </label>
-                </div>
-                <button class="mode-btn" id="mode-bot">
-                    <span class="mode-icon">🤖</span>
-                    <span class="mode-label">Robot ellen</span>
-                </button>
-                <button class="mode-btn" id="mode-pvp">
-                    <span class="mode-icon">👥</span>
-                    <span class="mode-label">Játékos ellen</span>
-                </button>
-                <button class="mode-back-btn" id="mode-back-modes">← Vissza</button>
-            </div>
-
-            <!-- 3. LÉPÉS: Nehézség választás (bot) -->
-            <div id="mode-step2" class="mode-step hidden">
-                <p class="mode-subtitle">Robot nehézség</p>
-                <div id="difficulty-list" class="difficulty-list"></div>
-                <button class="mode-back-btn" id="mode-back">← Vissza</button>
-            </div>
-
-            <!-- 3b. LÉPÉS: PvP almenü -->
-            <div id="mode-step-pvp" class="mode-step hidden">
-                <p class="mode-subtitle">Játékos ellen</p>
-                <button class="mode-btn" id="pvp-friend">
-                    <span class="mode-icon">👤</span>
-                    <span class="mode-label">Barát meghívása</span>
-                </button>
-                <button class="mode-btn" id="pvp-random">
-                    <span class="mode-icon">🎲</span>
-                    <span class="mode-label">Random ellenfél</span>
-                </button>
-                <button class="mode-back-btn" id="mode-back-pvp-menu">← Vissza</button>
-            </div>
-
-            <!-- 4. LÉPÉS: Barát lista -->
-            <div id="mode-step-friends" class="mode-step hidden">
-                <p class="mode-subtitle">Válassz ellenfelet</p>
-                <div id="friend-list" class="friend-list"></div>
-                <button class="mode-back-btn" id="mode-back-friends">← Vissza</button>
-            </div>
-
-            <!-- 5. LÉPÉS: Random queue várakozás -->
-            <div id="mode-step-queue" class="mode-step hidden">
-                <p class="mode-subtitle">Ellenfél keresése...</p>
-                <div class="queue-spinner"></div>
-                <button class="mode-back-btn" id="queue-cancel">Mégsem</button>
-            </div>
-
-            <!-- ELO kijelzés -->
-            <div id="user-elo-display" class="user-elo-display">
-                Az ELO-d: <strong id="user-elo-value">800</strong>
-            </div>
-        </div>
-    </div>
+    <!-- A regi #mode-modal jatekmod-valaszto el lett tavolitva — az uj
+         frontpage chooser-t hasznaljuk (chessModeChooser.js), amit a
+         ujMeccsChooserNyitas() nyit meg minden esetben. -->
 
     <!-- PVP VÁRAKOZÁS OVERLAY (meghívás elküldve) -->
     <div id="pvp-waiting" class="pvp-waiting hidden">

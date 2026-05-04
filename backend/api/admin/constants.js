@@ -56,6 +56,7 @@ const ADMIN_PERMISSIONS = Object.freeze({
     USERS_BAN: 'users.ban',
     USERS_UNBAN: 'users.unban',
     USERS_DELETE: 'users.delete',
+    USERS_CREATE: 'users.create',
     USERS_EDIT_PROFILE: 'users.edit',
     USERS_FORCE_LOGOUT: 'users.force_logout',
     USERS_RESET_PASSWORD: 'users.reset_password',

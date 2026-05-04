@@ -13,19 +13,32 @@
         href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="../css/adminPanel.css" />
+    <link rel="stylesheet" href="../css/shared/topNavbar.css" />
+    <link rel="stylesheet" href="../css/shared/confirmModal.css" />
 </head>
 
-<body>
+<body class="has-mm-top-navbar">
+    <!-- Kozos felso navbar (kerul be ide az adminPanel + profile altal megosztott
+         topNavbar.js + topNavbar.css alapjan). data-page="admin" donti el a
+         logout viselkedeset (csak admin token-clear, fooldal session marad). -->
+    <nav class="mm-top-navbar" data-page="admin" aria-label="Felső navigáció">
+        <div class="mm-top-navbar-inner">
+            <a class="mm-top-navbar-brand" href="/">
+                <i class="bi bi-king-fill"></i>
+                <span>MATTMESTER</span>
+            </a>
+            <div class="mm-top-navbar-actions">
+                <span class="mm-top-navbar-greeting">Szia, <span id="mmTopNavbarUsername">…</span>!</span>
+                <a class="mm-top-navbar-btn" href="/html/profile.html">Profil beállítás</a>
+                <button type="button" class="mm-top-navbar-btn mm-top-navbar-btn--danger" id="mmTopNavbarLogoutBtn">Kijelentkezés</button>
+            </div>
+        </div>
+    </nav>
+
     <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
 
-    <!-- Sidebar -->
+    <!-- Sidebar (a felso MATTMESTER navbar mar adja a brand-et — itt csak a menu) -->
     <nav class="sidebar" id="sidebar" aria-label="Admin navigáció">
-        <div class="sidebar-header">
-            <a href="#" class="sidebar-brand">
-                <i class="bi bi-king-fill"></i>
-                <span>MattAdmin</span>
-            </a>
-        </div>
         <div class="sidebar-menu" id="sidebarMenu"><!-- JS render --></div>
     </nav>
 
@@ -37,12 +50,6 @@
                 <button class="toggle-sidebar" onclick="toggleSidebar()" aria-label="Sidebar váltása">
                     <i class="bi bi-list"></i>
                 </button>
-                <div class="search-box">
-                    <i class="bi bi-search"></i>
-                    <label for="adminTopSearchInput" class="visually-hidden">Játékos vagy játék keresése</label>
-                    <input id="adminTopSearchInput" name="adminTopSearchInput" type="text"
-                        placeholder="Játékos vagy játék keresése...">
-                </div>
             </div>
             <div class="d-flex align-items-center gap-2 gap-md-3">
                 <!-- Admin token visszaszámláló (15 perc sliding TTL) -->
@@ -58,28 +65,16 @@
                     <span
                         class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">3</span>
                 </button>
-                <div class="user-profile dropdown">
-                    <div data-bs-toggle="dropdown">
-                        <img id="headerAvatar"
-                            src="/profile_pictures/default.png" alt="Admin"
-                            class="user-avatar">
-                        <div class="d-none d-md-block">
-                            <div class="fw-bold text-white" id="headerUsername">Betöltés...</div>
-                            <small class="text-muted" id="headerRole">—</small>
-                        </div>
-                        <i class="bi bi-chevron-down text-secondary ms-2"></i>
-                    </div>
-                    <ul class="dropdown-menu dropdown-menu-end bg-dark border-secondary">
-                        <li><a class="dropdown-item text-light" href="#"><i class="bi bi-person me-2"></i>Profil</a>
-                        </li>
-                        <li><a class="dropdown-item text-light" href="#"><i class="bi bi-gear me-2"></i>Beállítások</a>
-                        </li>
-                        <li>
-                            <hr class="dropdown-divider border-secondary">
-                        </li>
-                        <li><a class="dropdown-item text-danger" href="#" onclick="logout(); return false;"><i
-                                    class="bi bi-box-arrow-right me-2"></i>Kijelentkezés</a></li>
-                    </ul>
+                <!-- A user-profile dropdown (avatar + Profil/Beallitasok/Kijelentkezes)
+                     tovabbra is rejtett DOM-ban hagyjuk, mert a 09-auth.js a
+                     #headerUsername / #headerRole / #headerAvatar ID-kbol etti a
+                     populateHeaderFromUser-t. A felso MATTMESTER navbar a tartalmi
+                     reszt (Szia/Profil/Kijelentkezes) atveszi, igy itt csak az
+                     adatkotes el. -->
+                <div class="user-profile dropdown d-none" aria-hidden="true">
+                    <img id="headerAvatar" src="/profile_pictures/default.png" alt="Admin" class="user-avatar">
+                    <span id="headerUsername">Betöltés...</span>
+                    <span id="headerRole">—</span>
                 </div>
             </div>
         </div>
@@ -259,12 +254,20 @@
                     <div class="mb-3">
                         <label for="createUserInitialElo" class="form-label">Kezdeti ELO</label>
                         <input id="createUserInitialElo" name="createUserInitialElo" type="number" class="form-control"
-                            value="1200">
+                            value="1200" min="0" max="4000">
                     </div>
+                    <div class="mb-3">
+                        <label for="createUserReason" class="form-label">Indok (audit)</label>
+                        <textarea id="createUserReason" name="createUserReason" class="form-control" rows="2"
+                            placeholder="Pl.: Új csapat-tag onboarding (legalább 10 karakter)"></textarea>
+                        <div class="form-text text-secondary">Az indok az admin audit logba kerul.</div>
+                    </div>
+                    <div id="createUserFeedback" class="alert d-none" role="alert"></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
-                    <button type="button" class="btn btn-gold">Felhasználó létrehozása</button>
+                    <button type="button" class="btn btn-gold" id="createUserSubmitBtn"
+                        onclick="submitCreateUser()">Felhasználó létrehozása</button>
                 </div>
             </div>
         </div>
@@ -835,6 +838,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script src="../javascript/_utils.js"></script>
+    <script src="../javascript/shared/confirmModal.js"></script>
     <script src="../javascript/profileImageUtils.js"></script>
     <script src="../javascript/socketClient.js"></script>
     <script src="../javascript/shared/maintenanceClient.js"></script>
@@ -870,7 +874,9 @@
     <script src="../javascript/adminPanel/25-moderationReports.js"></script>
     <script src="../javascript/adminPanel/26-init.js"></script>
     <script src="../javascript/adminPanel/27-adminPages.js"></script>
+    <script src="../javascript/adminPanel/29-userCreate.js"></script>
     <script src="../javascript/adminPanel/28-bootstrap.js"></script>
+    <script src="../javascript/shared/topNavbar.js" defer></script>
 </body>
 
 </html>

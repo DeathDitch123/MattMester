@@ -31,12 +31,12 @@ const profileImageRoutes = require('./profileImageRoutes.js');
 const chatModerationRoutes = require('./chatModerationRoutes.js');
 const userReportsRoutes = require('./userReportsRoutes.js');
 const userEditRoutes = require('./userEditRoutes.js');
+const userCreateRoutes = require('./userCreateRoutes.js');
 const readOnlyRoutes = require('./readOnlyRoutes.js');
 const userDeleteRoutes = require('./userDeleteRoutes.js');
 const alertsRoutes = require('./alertsRoutes.js');
 const ipBlockRoutes = require('./ipBlockRoutes.js');
 const securityLoginsRoutes = require('./securityLoginsRoutes.js');
-const servicesRoutes = require('./servicesRoutes.js');
 
 const router = express.Router();
 
@@ -86,11 +86,11 @@ router.use('/', profileImageRoutes);
 router.use('/', chatModerationRoutes);
 router.use('/', userReportsRoutes);
 router.use('/', userEditRoutes);
+router.use('/', userCreateRoutes);
 router.use('/', readOnlyRoutes);
 router.use('/', userDeleteRoutes);
 router.use('/', alertsRoutes);
 router.use('/', ipBlockRoutes);
 router.use('/', securityLoginsRoutes);
-router.use('/', servicesRoutes);
 
 module.exports = router;

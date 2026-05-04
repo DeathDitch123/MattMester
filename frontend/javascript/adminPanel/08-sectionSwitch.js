@@ -111,24 +111,6 @@ function showSection(sectionId, event, options = {}) {
         // event vagy fetch-after callback, nem trigger-elhet ujabb fetch-et.)
         loadLogins();
     }
-    if (sectionId === 'services' && !silent) {
-        // Issue #41 — Szolgaltatasok dashboard. Initial load + 5mp auto-refresh.
-        if (typeof loadServicesSnapshot === 'function') loadServicesSnapshot();
-        if (state.servicesAdmin.autoRefreshTimerId) clearInterval(state.servicesAdmin.autoRefreshTimerId);
-        state.servicesAdmin.autoRefreshTimerId = setInterval(() => {
-            if (state.currentSectionId === 'services') {
-                if (typeof loadServicesSnapshot === 'function') loadServicesSnapshot({ silent: true });
-            } else {
-                clearInterval(state.servicesAdmin.autoRefreshTimerId);
-                state.servicesAdmin.autoRefreshTimerId = null;
-            }
-        }, 5000);
-    } else if (state.servicesAdmin?.autoRefreshTimerId) {
-        // Mas oldalra navigaltunk — leallitjuk a polling-t.
-        clearInterval(state.servicesAdmin.autoRefreshTimerId);
-        state.servicesAdmin.autoRefreshTimerId = null;
-    }
-
     if (window.innerWidth < 992) {
         const sidebar = document.getElementById('sidebar');
         const overlay = document.getElementById('mobileOverlay');

@@ -148,7 +148,15 @@ async function dismissAllAlerts() {
         showToast('Nincs elrejtendő riasztás.', 'info', 'bi-info-circle');
         return;
     }
-    if (!confirm(`Biztosan elrejti az összes (${undismissedCount}) aktív riasztást? Az adatok megmaradnak — az "Elrejtettek mutatása" szűrővel bármikor visszanézheted.`)) return;
+    const ok = await (typeof window.mmConfirm === 'function'
+        ? window.mmConfirm({
+            title: 'Összes aktív riasztás elrejtése',
+            message: `Biztosan elrejti az összes (${undismissedCount}) aktív riasztást?\n\nAz adatok megmaradnak — az "Elrejtettek mutatása" szűrővel bármikor visszanézheted.`,
+            confirmLabel: 'Elrejtés',
+            danger: true
+        })
+        : Promise.resolve(window.confirm(`Biztosan elrejti az összes (${undismissedCount}) aktív riasztást?`)));
+    if (!ok) return;
     return runSafelyAsync('dismissAllAlerts', async () => {
         try {
             const res = await fetch(`/api/admin/alerts/dismiss-all`, {

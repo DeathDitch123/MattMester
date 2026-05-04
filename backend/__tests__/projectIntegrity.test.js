@@ -166,22 +166,25 @@ describe('Backend: admin route split', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// 2. Frontend profile.js split — 20 fajl + bootstrap a vegen
+// 2. Frontend profile.js split — 21 fajl + bootstrap (20-bootstrap utan
+//    bekerult a 21-dashboardStats.js a dashboard header dinamikus
+//    populacio-jara).
 // ─────────────────────────────────────────────────────────────────────
 
-describe('Frontend: profile.js split (20 fajl)', () => {
+describe('Frontend: profile.js split (21 fajl)', () => {
     const PROFILE_DIR = path.join(FRONTEND, 'javascript', 'profile');
     const EXPECTED_PREFIX_RE = /^\d{2}-[a-zA-Z]+\.js$/;
+    const EXPECTED_PROFILE_FILE_COUNT = 21;
 
     test('a regi monolit profile.js TÖRÖLVE van', () => {
         const oldPath = path.join(FRONTEND, 'javascript', 'profile.js');
         expect(fileExists(oldPath)).toBe(false);
     });
 
-    test('profile/ konyvtar letezik 20 fajllal', () => {
+    test('profile/ konyvtar letezik 21 fajllal', () => {
         expect(dirExists(PROFILE_DIR)).toBe(true);
         const files = fs.readdirSync(PROFILE_DIR).filter((f) => f.endsWith('.js'));
-        expect(files.length).toBe(20);
+        expect(files.length).toBe(EXPECTED_PROFILE_FILE_COUNT);
         for (const f of files) {
             expect(f).toMatch(EXPECTED_PREFIX_RE);
         }
@@ -219,12 +222,12 @@ describe('Frontend: profile.js split (20 fajl)', () => {
         }
     });
 
-    test('profile.html mind a 20 split-et betolti helyes sorrendben', () => {
+    test('profile.html mind a 21 split-et betolti helyes sorrendben', () => {
         const html = readFile(path.join(FRONTEND, 'html', 'profile.html'));
         const profileScripts = extractScriptSrcs(html).filter((s) => s.includes('profile/'));
-        expect(profileScripts.length).toBe(20);
-        // 01- ... 20- prefixes, sorrendben
-        for (let i = 0; i < 20; i++) {
+        expect(profileScripts.length).toBe(EXPECTED_PROFILE_FILE_COUNT);
+        // 01- ... 21- prefixes, sorrendben
+        for (let i = 0; i < EXPECTED_PROFILE_FILE_COUNT; i++) {
             const expectedPrefix = String(i + 1).padStart(2, '0') + '-';
             expect(profileScripts[i]).toContain('/profile/' + expectedPrefix);
         }
@@ -232,21 +235,23 @@ describe('Frontend: profile.js split (20 fajl)', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// 3. Frontend adminPanel.js split — 28 fajl
+// 3. Frontend adminPanel.js split — 29 fajl (29-userCreate.js bekerult
+//    az "Uj felhasznalo" modal handler-evel a 28-bootstrap.js elott).
 // ─────────────────────────────────────────────────────────────────────
 
-describe('Frontend: adminPanel.js split (28 fajl)', () => {
+describe('Frontend: adminPanel.js split (29 fajl)', () => {
     const ADMIN_PANEL_DIR = path.join(FRONTEND, 'javascript', 'adminPanel');
+    const EXPECTED_ADMIN_FILE_COUNT = 29;
 
     test('a regi monolit adminPanel.js TÖRÖLVE van', () => {
         const oldPath = path.join(FRONTEND, 'javascript', 'adminPanel.js');
         expect(fileExists(oldPath)).toBe(false);
     });
 
-    test('adminPanel/ konyvtar letezik 28 fajllal', () => {
+    test('adminPanel/ konyvtar letezik 29 fajllal', () => {
         expect(dirExists(ADMIN_PANEL_DIR)).toBe(true);
         const files = fs.readdirSync(ADMIN_PANEL_DIR).filter((f) => f.endsWith('.js'));
-        expect(files.length).toBe(28);
+        expect(files.length).toBe(EXPECTED_ADMIN_FILE_COUNT);
     });
 
     test('minden adminPanel/*.js parse-olhato', () => {
@@ -259,10 +264,10 @@ describe('Frontend: adminPanel.js split (28 fajl)', () => {
         }
     });
 
-    test('adminPanel.html mind a 28 split-et betolti', () => {
+    test('adminPanel.html mind a 29 split-et betolti', () => {
         const html = readFile(path.join(FRONTEND, 'html', 'adminPanel.html'));
         const scripts = extractScriptSrcs(html).filter((s) => s.includes('adminPanel/'));
-        expect(scripts.length).toBe(28);
+        expect(scripts.length).toBe(EXPECTED_ADMIN_FILE_COUNT);
     });
 
     test('a 3 IIFE module assignment intakt (ProfileImages, ChatModeration, Reports)', () => {
@@ -488,6 +493,315 @@ describe('Chess lifecycle invariánsok', () => {
         const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
         expect(content).toMatch(/initFromQueryParams|initBotFromQueryParams/);
         expect(content).toMatch(/URLSearchParams\(window\.location\.search\)/);
+    });
+
+    // Regresszio: a regi #mode-modal jatekmod-valaszto NEM kerulhet vissza chess.html-be.
+    // A teljes flow az uj chessModeChooser.js-en keresztul megy. Ha barki visszateszi,
+    // ez a teszt fog bukni — ne meresszek ujra a "Mattmester / Valassz jatekmodot / Az ELO-d"
+    // popup-ot a betoltesi villogassal egyutt.
+    describe('Regi #mode-modal jatekmod-valaszto vegleg eltavolitva (anti-regression)', () => {
+        test('chess.html NEM tartalmazza a regi #mode-modal markupot', () => {
+            const html = readFile(path.join(FRONTEND, 'chess_barold', 'html', 'chess.html'));
+            expect(html).not.toMatch(/id=["']mode-modal["']/);
+            expect(html).not.toMatch(/Válassz játékmódot/);
+            expect(html).not.toMatch(/Az ELO-d:/);
+            expect(html).not.toMatch(/id=["']mode-list["']/);
+            expect(html).not.toMatch(/id=["']difficulty-list["']/);
+        });
+
+        test('chess.html bekoti az uj chessModeChooser.js-t es CSS-t', () => {
+            const html = readFile(path.join(FRONTEND, 'chess_barold', 'html', 'chess.html'));
+            expect(html).toMatch(/<script[^>]+chessModeChooser\.js/);
+            expect(html).toMatch(/<link[^>]+chessModeChooser\.css/);
+        });
+
+        test('main.js semmilyen kodutvonalon NEM hivja meg a regi modValasztoMegjelenit-et', () => {
+            const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
+            // Csak a fuggveny DEFINICIO (`function modValasztoMegjelenit()`) maradhat
+            // dead code-ként, HIVAS (`modValasztoMegjelenit()`) NEM lehet sehol.
+            const allMatches = content.match(/(?:^|[^a-zA-Z0-9_$])(\w*\s*function\s+)?modValasztoMegjelenit\s*\(\s*\)/gm) || [];
+            const callsOnly = allMatches.filter(s => !/function\s+modValasztoMegjelenit/.test(s));
+            expect(callsOnly.length).toBe(0);
+        });
+
+        test('main.js az uj ujMeccsChooserNyitas helper-t hasznalja', () => {
+            const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
+            expect(content).toMatch(/function\s+ujMeccsChooserNyitas\s*\(/);
+            expect(content).toMatch(/MattMesterChessModeChooser/);
+            // Legalabb 2 hivasi hely (rejoin-none + new-game gomb + fallback)
+            const calls = content.match(/ujMeccsChooserNyitas\s*\(\s*\)/g) || [];
+            expect(calls.length).toBeGreaterThanOrEqual(2);
+        });
+
+        test('chess:rejoin:none socket handler NEM nyulhat a regi mode-modal-hoz', () => {
+            const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
+            const m = content.match(/socket\.on\(['"]chess:rejoin:none['"][\s\S]*?\}\s*\)\s*;/);
+            expect(m).toBeTruthy();
+            expect(m[0]).not.toMatch(/mode-modal/);
+            // Legyen benne az uj chooser-hivas
+            expect(m[0]).toMatch(/ujMeccsChooserNyitas|MattMesterChessModeChooser/);
+        });
+    });
+
+    describe('Kozos felso navbar (adminPanel + profile) — markup + behavior', () => {
+        const TOP_NAVBAR_CSS = path.join(FRONTEND, 'css', 'shared', 'topNavbar.css');
+        const TOP_NAVBAR_JS = path.join(FRONTEND, 'javascript', 'shared', 'topNavbar.js');
+        const ADMIN_HTML = path.join(FRONTEND, 'html', 'adminPanel.html');
+        const PROFILE_HTML = path.join(FRONTEND, 'html', 'profile.html');
+
+        test('topNavbar.css es topNavbar.js letezik a shared mappakban', () => {
+            expect(fileExists(TOP_NAVBAR_CSS)).toBe(true);
+            expect(fileExists(TOP_NAVBAR_JS)).toBe(true);
+        });
+
+        test('topNavbar.css: az adminPanel belso .top-navbar sticky-scroll override-ja megvan (a fix navbar alatt ragadjon)', () => {
+            const css = readFile(TOP_NAVBAR_CSS);
+            // A body.has-mm-top-navbar .top-navbar selector le kell hogy lenyomja
+            // a sticky top-ot a navbar magassagaval, hogy ne csusszon a fix navbar
+            // moge gorgetes kozben
+            const m = css.match(/body\.has-mm-top-navbar\s+\.top-navbar\s*\{[^}]*\}/);
+            expect(m).toBeTruthy();
+            expect(m[0]).toMatch(/top:\s*calc\(var\(--mm-tnb-h\)/);
+        });
+
+        test('topNavbar.js a /api/sessionInfo-t hivja es ket data-page agat ker el', () => {
+            const js = readFile(TOP_NAVBAR_JS);
+            expect(js).toMatch(/\/api\/sessionInfo/);
+            expect(js).toMatch(/data-page.*admin|getAttribute\(['"]data-page['"]\)/);
+            expect(js).toMatch(/bindAdminLogout/);
+            expect(js).toMatch(/bindProfileLogout/);
+            // Admin Kijelentkezes most TELJES logout: POST /api/logout + clearAdminToken
+            // (kulonben azonos lenne a MATTMESTER nav linkkel — UX-ban megkulonboztetheto kell legyen)
+            expect(js).toMatch(/performFullLogout/);
+            expect(js).toMatch(/['"]\/api\/logout['"]/);
+            expect(js).toMatch(/clearAdminToken/);
+            // Profile agon a meglevo #logoutModal-t kell nyitni (handleLogout /api/logout)
+            expect(js).toMatch(/['"]logoutModal['"]/);
+        });
+
+        test('topNavbar.js role==="admin" eseten felfedi a #mmTopNavbarAdminBtn gombot', () => {
+            const js = readFile(TOP_NAVBAR_JS);
+            expect(js).toMatch(/revealAdminButtonIfAdmin/);
+            expect(js).toMatch(/mmTopNavbarAdminBtn/);
+            // A felfedo logikanak ellenoriznie kell hogy role === 'admin'
+            const m = js.match(/function\s+revealAdminButtonIfAdmin[\s\S]{0,400}/);
+            expect(m).toBeTruthy();
+            expect(m[0]).toMatch(/role\s*!==\s*['"]admin['"]|role\s*===\s*['"]admin['"]/);
+            expect(m[0]).toMatch(/hidden\s*=\s*false/);
+        });
+
+        test('adminPanel.html bekoti a kozos navbart, data-page="admin", body.has-mm-top-navbar', () => {
+            const html = readFile(ADMIN_HTML);
+            expect(html).toMatch(/<link[^>]+css\/shared\/topNavbar\.css/);
+            expect(html).toMatch(/<script[^>]+javascript\/shared\/topNavbar\.js/);
+            expect(html).toMatch(/<body[^>]*class=["'][^"']*has-mm-top-navbar/);
+            expect(html).toMatch(/<nav[^>]*class=["']mm-top-navbar["'][^>]*data-page=["']admin["']/);
+            expect(html).toMatch(/id=["']mmTopNavbarUsername["']/);
+            expect(html).toMatch(/id=["']mmTopNavbarLogoutBtn["']/);
+            // Profil beallitas link eleresi utvonal
+            expect(html).toMatch(/href=["']\/html\/profile\.html["']/);
+        });
+
+        test('adminPanel.html: nincs duplikalt sidebar-header (MattAdmin brand) — csak a felso navbar a brand', () => {
+            const html = readFile(ADMIN_HTML);
+            expect(html).not.toMatch(/<div\s+class=["']sidebar-header["']/);
+            expect(html).not.toMatch(/class=["']sidebar-brand["']/);
+            // A sidebar nav-tag tovabbra is letezik
+            expect(html).toMatch(/<nav[^>]*class=["']sidebar["']/);
+        });
+
+        test('adminPanel.html: top-navbar search bar es chevron-down ikon EL VAN TAVOLITVA, user-profile dropdown D-NONE-ra teve', () => {
+            const html = readFile(ADMIN_HTML);
+            // A keresomezo nem latszik
+            expect(html).not.toMatch(/id=["']adminTopSearchInput["']/);
+            expect(html).not.toMatch(/Játékos vagy játék keresése/);
+            expect(html).not.toMatch(/<div\s+class=["']search-box["']/);
+            // user-profile dropdown rejtett (d-none) hogy a #headerUsername / #headerAvatar
+            // tovabbra is meglegyen a 09-auth.js populateHeaderFromUser-hoz, de ne latszodjon
+            const userProfileMatch = html.match(/<div\s+class=["']user-profile[^"']*d-none[^"']*["']/);
+            expect(userProfileMatch).toBeTruthy();
+            // A duplikalt dropdown menu (Profil/Beallitasok/Kijelentkezes) torolve
+            expect(html).not.toMatch(/<a[^>]*class=["']dropdown-item[^"']*text-danger["'][^>]*onclick=["']logout\(\)/);
+            expect(html).not.toMatch(/bi-chevron-down/);
+        });
+
+        test('profile.html bekoti a kozos navbart, data-page="profile", body.has-mm-top-navbar', () => {
+            const html = readFile(PROFILE_HTML);
+            expect(html).toMatch(/<link[^>]+css\/shared\/topNavbar\.css/);
+            expect(html).toMatch(/<script[^>]+javascript\/shared\/topNavbar\.js/);
+            expect(html).toMatch(/<body[^>]*class=["'][^"']*has-mm-top-navbar/);
+            expect(html).toMatch(/<nav[^>]*class=["']mm-top-navbar["'][^>]*data-page=["']profile["']/);
+            expect(html).toMatch(/id=["']mmTopNavbarLogoutBtn["']/);
+        });
+
+        test('profile.html: van egy "Admin felulet" gomb (alapbol hidden) a /html/adminPanel.html-re mutatva', () => {
+            const html = readFile(PROFILE_HTML);
+            const m = html.match(/<a[^>]*id=["']mmTopNavbarAdminBtn["'][^>]*>/);
+            expect(m).toBeTruthy();
+            expect(m[0]).toMatch(/href=["']\/html\/adminPanel\.html["']/);
+            expect(m[0]).toMatch(/\bhidden\b/);
+        });
+
+        test('profile.html: nincs duplikalt sidebar MATTMESTER brand es nincs sidebar-alji Logout gomb', () => {
+            const html = readFile(PROFILE_HTML);
+            // Stripoljuk az HTML komenteket, mert azokban szerepelhet MATTMESTER szo
+            // (magyarazo komment), de az nem renderelt markup
+            const sidebarMatch = html.match(/<nav\s+class=["']sidebar["']\s+id=["']sidebar["'][\s\S]*?<\/nav>/);
+            expect(sidebarMatch).toBeTruthy();
+            const sidebarStripped = sidebarMatch[0].replace(/<!--[\s\S]*?-->/g, '');
+            // A sidebar-brand div torolve (MATTMESTER duplikalva volt a felso navbarral)
+            expect(sidebarStripped).not.toMatch(/sidebar-brand/);
+            expect(sidebarStripped).not.toMatch(/<span[^>]*>\s*MATTMESTER\s*<\/span>/);
+            // A sidebar-alji "Logout" gomb (data-bs-target="#logoutModal") torolve
+            expect(sidebarStripped).not.toMatch(/data-bs-target=["']#logoutModal["']/);
+        });
+
+        test('profile.html mar tartalmazza a #logoutModal-t (a navbar logout gombja erre tamaszkodik)', () => {
+            const html = readFile(PROFILE_HTML);
+            expect(html).toMatch(/id=["']logoutModal["']/);
+            expect(html).toMatch(/id=["']confirmLogoutButton["']/);
+        });
+    });
+
+    // ===========================================================================
+    // BIG AUDIT BUNDLE — A/B/C/D/E/F javitasok rogzitese (anti-regression).
+    // Ezek mind az "audit + javitsd ami torott" kor utan keszultek, hogy a kovetkezo
+    // kor barmilyen visszaterese azonnal piros tesztet adjon.
+    // ===========================================================================
+    describe('Audit bundle: shared confirmModal + dead-code cleanup + add-user + dashboard', () => {
+        const CONFIRM_CSS = path.join(FRONTEND, 'css', 'shared', 'confirmModal.css');
+        const CONFIRM_JS = path.join(FRONTEND, 'javascript', 'shared', 'confirmModal.js');
+        const ADMIN_HTML = path.join(FRONTEND, 'html', 'adminPanel.html');
+        const PROFILE_HTML = path.join(FRONTEND, 'html', 'profile.html');
+        const INDEX_HTML = path.join(FRONTEND, 'html', 'index.html');
+        const CHESS_HTML = path.join(FRONTEND, 'chess_barold', 'html', 'chess.html');
+        const CHESS_MAIN_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js');
+        const SIDEBAR_CSS = path.join(FRONTEND, 'css', 'adminPanel', '03-sidebar.css');
+
+        test('shared/confirmModal.css es .js letezik es exportalja mmConfirm + mmAlert-et', () => {
+            expect(fileExists(CONFIRM_CSS)).toBe(true);
+            expect(fileExists(CONFIRM_JS)).toBe(true);
+            const js = readFile(CONFIRM_JS);
+            expect(js).toMatch(/window\.mmConfirm\s*=/);
+            expect(js).toMatch(/window\.mmAlert\s*=/);
+        });
+
+        test('confirmModal CSS+JS be van toltve mind a 4 fooldalon', () => {
+            for (const html of [ADMIN_HTML, PROFILE_HTML, INDEX_HTML, CHESS_HTML]) {
+                const content = readFile(html);
+                expect(content).toMatch(/css\/shared\/confirmModal\.css/);
+                expect(content).toMatch(/javascript\/shared\/confirmModal\.js/);
+            }
+        });
+
+        test('NINCS native confirm()/alert() a 7 korabban kiszurt user-facing pontnal', () => {
+            // chessInviteGlobal.js: confirm() helyett mmConfirm
+            const inv = readFile(path.join(FRONTEND, 'javascript', 'chessInviteGlobal.js'));
+            expect(inv).toMatch(/mmConfirm/);
+            expect(inv).not.toMatch(/^\s*const elfogadta = globalScope\.confirm\(/m);
+            // chess main.js: ket alert helyett mmAlert
+            const main = readFile(CHESS_MAIN_JS);
+            expect(main).toMatch(/mmAlert/);
+            // Az `alert(` mar nem hivva (a kommenteket strippoljuk a count elott)
+            const mainStripped = main.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+            const alertCalls = mainStripped.match(/(?<![a-zA-Z0-9_$.])alert\s*\(/g) || [];
+            expect(alertCalls.length).toBe(0);
+            // adminPanel modulok
+            const sec = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '16-security.js'));
+            expect(sec).toMatch(/mmConfirm/);
+            const ud = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '18-userDelete.js'));
+            expect(ud).toMatch(/mmConfirm/);
+            const lo = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '21-logout.js'));
+            expect(lo).toMatch(/mmConfirm/);
+        });
+
+        test('chess main.js: torolt dead modValasztoMegjelenit es kapcsolt segedek', () => {
+            const main = readFile(CHESS_MAIN_JS);
+            expect(main).not.toMatch(/function\s+modValasztoMegjelenit/);
+            expect(main).not.toMatch(/function\s+baratListaMegjelenit/);
+            expect(main).not.toMatch(/function\s+meghivasKuld/);
+            expect(main).not.toMatch(/function\s+randomQueueIndit/);
+            expect(main).not.toMatch(/function\s+randomQueueMegse/);
+            expect(main).not.toMatch(/function\s+apiModes/);
+            expect(main).not.toMatch(/function\s+apiNehezsegek/);
+            expect(main).not.toMatch(/function\s+apiUserElo/);
+        });
+
+        test('chess main.js: NINCS aktiv mode-modal getElementById hivas (csak ha komment-ben)', () => {
+            const main = readFile(CHESS_MAIN_JS);
+            const stripped = main.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+            expect(stripped).not.toMatch(/getElementById\(['"]mode-modal['"]\)/);
+        });
+
+        test('adminPanel sidebar CSS: orphan .sidebar-header / .sidebar-brand torolve', () => {
+            const css = readFile(SIDEBAR_CSS);
+            expect(css).not.toMatch(/^\.sidebar-header\s*\{/m);
+            expect(css).not.toMatch(/^\.sidebar-brand\s*\{/m);
+        });
+
+        test('Add User: backend /users/create endpoint letezik + index.js mountolja', () => {
+            const file = path.join(BACKEND, 'api', 'routes', 'admin', 'userCreateRoutes.js');
+            expect(fileExists(file)).toBe(true);
+            const content = readFile(file);
+            expect(content).toMatch(/router\.post\(\s*['"]\/users\/create['"]/);
+            expect(content).toMatch(/generateTempPassword/);
+            expect(content).toMatch(/USERS_CREATE/);
+
+            const indexJs = readFile(path.join(BACKEND, 'api', 'routes', 'admin', 'index.js'));
+            expect(indexJs).toMatch(/userCreateRoutes/);
+        });
+
+        test('Add User: USERS_CREATE permission konstans definialva', () => {
+            const constants = readFile(path.join(BACKEND, 'api', 'admin', 'constants.js'));
+            expect(constants).toMatch(/USERS_CREATE:\s*['"]users\.create['"]/);
+        });
+
+        test('Add User: frontend modal Sumbit gomb onclick="submitCreateUser()" + handler letezik', () => {
+            const html = readFile(ADMIN_HTML);
+            expect(html).toMatch(/id=["']createUserSubmitBtn["'][^>]*onclick=["']submitCreateUser\(\)["']/);
+            // Reason field is mandatory
+            expect(html).toMatch(/id=["']createUserReason["']/);
+            const handlerFile = path.join(FRONTEND, 'javascript', 'adminPanel', '29-userCreate.js');
+            expect(fileExists(handlerFile)).toBe(true);
+            const handlerJs = readFile(handlerFile);
+            expect(handlerJs).toMatch(/async function submitCreateUser/);
+            expect(handlerJs).toMatch(/\/api\/admin\/users\/create/);
+            // adminPanel.html load order
+            expect(html).toMatch(/<script[^>]+adminPanel\/29-userCreate\.js/);
+        });
+
+        test('Profile dashboard: 21-dashboardStats.js letezik es a hardcoded testdata torolve', () => {
+            const dashJs = path.join(FRONTEND, 'javascript', 'profile', '21-dashboardStats.js');
+            expect(fileExists(dashJs)).toBe(true);
+            const js = readFile(dashJs);
+            expect(js).toMatch(/\/api\/sessionInfo/);
+            expect(js).toMatch(/profileDashboardName/);
+            expect(js).toMatch(/profileEloClassic/);
+            expect(js).toMatch(/profileStatWins/);
+
+            const html = readFile(PROFILE_HTML);
+            // hardcoded szovegek mar nincsenek
+            expect(html).not.toMatch(/GrandMaster_99/);
+            expect(html).not.toMatch(/admin@mattmester\.com/);
+            expect(html).not.toMatch(/>247</);  // wins
+            expect(html).not.toMatch(/>1,500</); // ELO
+            // Az IDs jelen vannak
+            expect(html).toMatch(/id=["']profileDashboardName["']/);
+            expect(html).toMatch(/id=["']profileEloMM["']/);
+            expect(html).toMatch(/id=["']profileStatWinRate["']/);
+            // a 21-dashboardStats.js script bekotve
+            expect(html).toMatch(/<script[^>]+profile\/21-dashboardStats\.js/);
+        });
+    });
+
+    // Regresszio: orphan bot meccs auto-cleanup a /new-bot endpoint-ban
+    test('chess_api.js /new-bot tartalmazza a cleanupOwnAbandonedBotGame helper-t', () => {
+        const content = readFile(path.join(BACKEND, 'api', 'chess_api.js'));
+        expect(content).toMatch(/function\s+cleanupOwnAbandonedBotGame\s*\(/);
+        // A guard-ban hivva van
+        expect(content).toMatch(/cleanupOwnAbandonedBotGame\s*\(\s*req\.session\.userId\s*\)/);
+        // A helper csak BOT meccset takarit, PvP-t nem
+        expect(content).toMatch(/!jatek\.botAktiv\s*\|\|\s*jatek\.pvpAktiv/);
     });
 
     test('Vegtelen idős módok casual: rankedAllowed=false ÉS eloColumn=null', () => {
@@ -1013,29 +1327,42 @@ describe('N9-N13: sakk interaktivitas — kliens-oldali fajlok elerhetoek', () =
     });
 });
 
-describe('Issue #41 — service dashboard backend route + frontend nav', () => {
-    test('servicesRoutes.js letezik es tartalmazza a /services/snapshot endpoint-ot', () => {
+// Issue #41 — service dashboard tesztek torolve. A "Szolgaltatasok" admin oldal
+// teljesen el lett tavolitva (servicesRoutes.js + frontend renderer + nav entry +
+// state + loader). Anti-regression: az alabbi describe ellenorzi hogy nem kerul
+// vissza veletlenul.
+describe('Szolgaltatasok admin oldal vegleg eltavolitva (anti-regression)', () => {
+    test('servicesRoutes.js NEM letezik', () => {
         const file = path.join(BACKEND, 'api', 'routes', 'admin', 'servicesRoutes.js');
-        expect(fileExists(file)).toBe(true);
-        const content = readFile(file);
-        expect(content).toMatch(/router\.get\(\s*['"]\/services\/snapshot['"]/);
-        // Auth-guard: parseAdminToken vagy adminLimiterChain
-        expect(content).toMatch(/parseAdminToken|adminLimiterChain/);
+        expect(fileExists(file)).toBe(false);
     });
 
-    test('admin route index.js mountolja a servicesRoutes-t', () => {
+    test('admin route index.js NEM hivatkozik servicesRoutes-ra', () => {
         const content = readFile(path.join(BACKEND, 'api', 'routes', 'admin', 'index.js'));
-        expect(content).toMatch(/servicesRoutes/);
+        expect(content).not.toMatch(/servicesRoutes/);
     });
 
-    test('frontend NAV_TREE-ben van services entry', () => {
+    test('frontend NAV_TREE-ben NINCS services entry', () => {
         const content = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '04-navigation.js'));
-        expect(content).toMatch(/id:\s*['"]services['"]/);
+        expect(content).not.toMatch(/id:\s*['"]services['"]/);
+        expect(content).not.toMatch(/Szolgáltatások/);
     });
 
-    test('frontend SECTIONS-ban van services renderer', () => {
+    test('frontend SECTIONS-ban NINCS services renderer', () => {
         const content = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '06-sections.js'));
-        expect(content).toMatch(/services:\s*\(\)\s*=>/);
+        expect(content).not.toMatch(/^\s*services:\s*\(\)\s*=>/m);
+    });
+
+    test('frontend state-ban NINCS servicesAdmin objektum', () => {
+        const content = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '02-state.js'));
+        expect(content).not.toMatch(/servicesAdmin\s*:/);
+    });
+
+    test('frontend NEM tartalmaz loadServicesSnapshot funkciot', () => {
+        const adminPages = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '27-adminPages.js'));
+        const sectionSwitch = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '08-sectionSwitch.js'));
+        expect(adminPages).not.toMatch(/loadServicesSnapshot/);
+        expect(sectionSwitch).not.toMatch(/loadServicesSnapshot/);
     });
 });
 
@@ -1100,7 +1427,7 @@ describe('Admin route fajlok auth-guard meglete (kod-szintu)', () => {
         'profileImageRoutes.js',
         'readOnlyRoutes.js',
         'securityLoginsRoutes.js',
-        'servicesRoutes.js',
+        'userCreateRoutes.js',
         'userDeleteRoutes.js',
         'userEditRoutes.js',
         'userReportsRoutes.js'

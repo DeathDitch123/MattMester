@@ -74,14 +74,19 @@ async function submitDeleteInline(btn) {
 }
 
 // Soft-deleted user visszaallitasa (24h grace-en belul). Modal popup-ban kerunk megerositest.
-function restoreUserDeletion(userId) {
+async function restoreUserDeletion(userId) {
     if (!userId) return;
     const modalEl = document.getElementById('restoreUserModal');
     if (!modalEl || !window.bootstrap?.Modal) {
-        // Fallback: ha valamiert nincs modal, browser confirm
-        if (confirm('Visszaállítja a felhasználót?')) {
-            executeUserRestore(userId);
-        }
+        // Fallback: ha valamiert nincs Bootstrap modal, custom mmConfirm
+        const ok = typeof window.mmConfirm === 'function'
+            ? await window.mmConfirm({
+                title: 'Felhasználó visszaállítása',
+                message: 'Visszaállítja a felhasználót?',
+                confirmLabel: 'Visszaállítás'
+              })
+            : window.confirm('Visszaállítja a felhasználót?');
+        if (ok) executeUserRestore(userId);
         return;
     }
     // Username megjelenitese a modalban (csak ha a state.users.list-ben van).
@@ -381,10 +386,16 @@ async function adminRevokeUserSessions(userId, event) {
             return;
         }
 
-        // Biztonsági megerősítés kérése
-        if (!confirm(`Biztosan meg akarod szakítani ${user.username || 'a felhasználó'} összes aktív munkamenetét (kijelentkeztetés minden eszközről)?`)) {
-            return;
-        }
+        // Biztonsági megerősítés kérése — custom HTML modal (no native confirm)
+        const ok = typeof window.mmConfirm === 'function'
+            ? await window.mmConfirm({
+                title: 'Munkamenetek megszakítása',
+                message: `Biztosan meg akarod szakítani ${user.username || 'a felhasználó'} összes aktív munkamenetét (kijelentkeztetés minden eszközről)?`,
+                confirmLabel: 'Megszakítás',
+                danger: true
+              })
+            : window.confirm(`Biztosan meg akarod szakítani ${user.username || 'a felhasználó'} összes aktív munkamenetét?`);
+        if (!ok) return;
 
         const btn = event ? event.target.closest('button') : null;
         const originalText = btn ? btn.innerHTML : '';

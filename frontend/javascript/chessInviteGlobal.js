@@ -18,7 +18,7 @@
         if (!socket || socket._chessInviteGlobalRegistered) return;
         socket._chessInviteGlobalRegistered = true;
 
-        socket.on('chess:invite:received', (data) => {
+        socket.on('chess:invite:received', async (data) => {
             // A sakk oldalon a chess main.js saját popupja kezeli — ne nyissunk dupla popupot.
             if (aSakkOldalon()) return;
 
@@ -26,7 +26,20 @@
             const gameId = data && data.gameId;
             if (!gameId) return;
 
-            const elfogadta = globalScope.confirm(`${inviter} sakkpartira hív! Elfogadod?`);
+            // Custom HTML modal (mmConfirm) a natív confirm() helyett.
+            // Fallback (ha a confirmModal.js nem toltodott be): native confirm.
+            let elfogadta;
+            if (typeof globalScope.mmConfirm === 'function') {
+                elfogadta = await globalScope.mmConfirm({
+                    title: 'Sakk meghívás',
+                    message: `${inviter} sakkpartira hív! Elfogadod?`,
+                    confirmLabel: 'Elfogadom',
+                    cancelLabel: 'Elutasítom'
+                });
+            } else {
+                elfogadta = globalScope.confirm(`${inviter} sakkpartira hív! Elfogadod?`);
+            }
+
             if (elfogadta) {
                 try {
                     globalScope.sessionStorage.setItem(PENDING_ACCEPT_KEY, JSON.stringify({

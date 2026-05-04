@@ -103,26 +103,8 @@ async function apiUjBotJatek(difficulty, mode, ranked) {
     return data.allapot;
 }
 
-async function apiModes() {
-    const res = await fetch('/api/chess/modes');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Hiba a mód-lista lekérésekor.');
-    return data;
-}
-
-async function apiNehezsegek() {
-    const res = await fetch('/api/chess/difficulties');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Hiba');
-    return data.szintek;
-}
-
-async function apiUserElo() {
-    const res = await fetch('/api/chess/user-elo');
-    const data = await res.json();
-    if (!res.ok) return { elo: 800, bejelentkezve: false };
-    return data;
-}
+// apiModes / apiNehezsegek / apiUserElo torolve — csak a regi (mostmar torolt)
+// modValasztoMegjelenit hasznalta. A frontpage chessModeChooser sajat fetch-ekkel hivja.
 
 async function apiAllapot() {
     const { res, data } = await fetchJsonWithTimeout(`/api/chess/${gameId}/state`, {}, 6000);
@@ -174,262 +156,6 @@ function ujMeccsChooserNyitas() {
     window.location.href = '/';
 }
 
-async function modValasztoMegjelenit() {
-    const modal = document.getElementById("mode-modal");
-    const stepModes = document.getElementById("mode-step-modes");
-    const stepOpponent = document.getElementById("mode-step-opponent");
-    const step2 = document.getElementById("mode-step2");
-    const stepPvp = document.getElementById("mode-step-pvp");
-    const stepFriends = document.getElementById("mode-step-friends");
-    const stepQueue = document.getElementById("mode-step-queue");
-    const diffList = document.getElementById("difficulty-list");
-
-    const mindElrejt = () => {
-        if (stepModes) stepModes.classList.add("hidden");
-        if (stepOpponent) stepOpponent.classList.add("hidden");
-        if (step2) step2.classList.add("hidden");
-        if (stepPvp) stepPvp.classList.add("hidden");
-        if (stepFriends) stepFriends.classList.add("hidden");
-        if (stepQueue) stepQueue.classList.add("hidden");
-    };
-
-    modal.classList.remove("hidden");
-    mindElrejt();
-    stepModes.classList.remove("hidden");
-
-    // 1. lépés: 5 mód-gomb dinamikus generálás
-    try {
-        const { modes } = await apiModes();
-        const list = document.getElementById("mode-list");
-        if (list) {
-            list.innerHTML = "";
-            for (const k in modes) {
-                const m = modes[k];
-                const card = document.createElement("button");
-                card.className = "mode-card";
-                const idoTag = m.ido === null
-                    ? '<span class="mc-tag mc-tag-time">∞ idő</span>'
-                    : `<span class="mc-tag mc-tag-time">${m.ido / 60} perc</span>`;
-                const abilityTag = m.abilities
-                    ? '<span class="mc-tag mc-tag-abilities">Képességes</span>'
-                    : '<span class="mc-tag">Klasszikus</span>';
-                card.innerHTML = `
-                    <span class="mc-name">${m.nev}</span>
-                    <span class="mc-meta">
-                        ${abilityTag}
-                        ${idoTag}
-                    </span>
-                `;
-                card.addEventListener("click", () => {
-                    selectedMode = k;
-                    selectedRanked = !!m.rankedAllowed;
-                    document.getElementById("selected-mode-label").textContent = m.nev;
-                    const rankedInput = document.getElementById("ranked-toggle-input");
-                    if (rankedInput) {
-                        rankedInput.checked = selectedRanked;
-                        rankedInput.disabled = !m.rankedAllowed;
-                    }
-                    mindElrejt();
-                    if (stepOpponent) stepOpponent.classList.remove("hidden");
-                });
-                list.appendChild(card);
-            }
-        }
-    } catch (e) {
-        console.error("Mode-lista lekérdezés hiba:", e);
-    }
-
-    // ELO lekérdezés
-    try {
-        const userData = await apiUserElo();
-        const eloElem = document.getElementById("user-elo-value");
-        if (eloElem) eloElem.textContent = userData.elo;
-    } catch (e) {
-        console.error("ELO lekérdezés hiba:", e);
-    }
-
-    // Ranked toggle change handler
-    const rankedInput = document.getElementById("ranked-toggle-input");
-    if (rankedInput) {
-        rankedInput.addEventListener("change", (e) => {
-            selectedRanked = e.target.checked;
-        });
-    }
-
-    // 2. lépés "Robot ellen" gomb
-    document.getElementById("mode-bot").onclick = async () => {
-        mindElrejt();
-        step2.classList.remove("hidden");
-
-        try {
-            const szintek = await apiNehezsegek();
-            diffList.innerHTML = "";
-
-            for (let i = 0; i < szintek.length; i++) {
-                const s = szintek[i];
-                const btn = document.createElement("button");
-                btn.className = "diff-btn";
-                btn.innerHTML = `
-                    <span class="diff-name">${s.nev}</span>
-                    <span class="diff-elo">Ajánlott ELO: ${s.elo}</span>
-                `;
-                btn.addEventListener("click", () => {
-                    modal.classList.add("hidden");
-                    jatekIndit(s.szint, selectedMode, selectedRanked);
-                });
-                diffList.appendChild(btn);
-            }
-        } catch (e) {
-            console.error("Nehézségek lekérdezés hiba:", e);
-            diffList.innerHTML = '<p style="color:#f88">Hiba a szintek betöltésekor.</p>';
-        }
-    };
-
-    // 2. lépés "Játékos ellen" gomb
-    const pvpBtn = document.getElementById("mode-pvp");
-    if (pvpBtn) {
-        pvpBtn.onclick = () => {
-            mindElrejt();
-            if (stepPvp) stepPvp.classList.remove("hidden");
-        };
-    }
-
-    // PvP → Barát
-    const pvpFriendBtn = document.getElementById("pvp-friend");
-    if (pvpFriendBtn) {
-        pvpFriendBtn.onclick = async () => {
-            mindElrejt();
-            if (stepFriends) stepFriends.classList.remove("hidden");
-            await baratListaMegjelenit();
-        };
-    }
-
-    // PvP → Random queue
-    const pvpRandomBtn = document.getElementById("pvp-random");
-    if (pvpRandomBtn) {
-        pvpRandomBtn.onclick = () => {
-            mindElrejt();
-            if (stepQueue) stepQueue.classList.remove("hidden");
-            randomQueueIndit();
-        };
-    }
-
-    // Vissza gombok
-    const backModes = document.getElementById("mode-back-modes");
-    if (backModes) {
-        backModes.onclick = () => {
-            mindElrejt();
-            stepModes.classList.remove("hidden");
-        };
-    }
-    document.getElementById("mode-back").onclick = () => {
-        mindElrejt();
-        if (stepOpponent) stepOpponent.classList.remove("hidden");
-    };
-    const backPvp = document.getElementById("mode-back-pvp-menu");
-    if (backPvp) {
-        backPvp.onclick = () => {
-            mindElrejt();
-            if (stepOpponent) stepOpponent.classList.remove("hidden");
-        };
-    }
-    const backFriends = document.getElementById("mode-back-friends");
-    if (backFriends) {
-        backFriends.onclick = () => {
-            mindElrejt();
-            if (stepPvp) stepPvp.classList.remove("hidden");
-        };
-    }
-    const queueCancel = document.getElementById("queue-cancel");
-    if (queueCancel) {
-        queueCancel.onclick = () => {
-            randomQueueMegse();
-            mindElrejt();
-            if (stepPvp) stepPvp.classList.remove("hidden");
-        };
-    }
-}
-
-// ────────────────────────────────────────────
-// PVP — BARÁT LISTA + QUEUE + MEGHÍVÁS
-// ────────────────────────────────────────────
-
-async function apiBaratLista() {
-    const res = await fetch('/api/friends/list?status=friend');
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.message || 'Hiba a barátlista lekérésekor.');
-    return data.data || [];
-}
-
-async function baratListaMegjelenit() {
-    const listaElem = document.getElementById("friend-list");
-    if (!listaElem) return;
-    listaElem.innerHTML = '<p style="color:#aaa">Betöltés...</p>';
-
-    try {
-        const baratok = await apiBaratLista();
-        listaElem.innerHTML = "";
-        if (baratok.length === 0) {
-            listaElem.innerHTML = '<p style="color:#aaa">Nincsenek barátaid.</p>';
-            return;
-        }
-        for (let i = 0; i < baratok.length; i++) {
-            const b = baratok[i];
-            const btn = document.createElement("button");
-            btn.className = "friend-btn";
-            const uid = b.userId || b.id;
-            const uname = b.username || 'Ismeretlen';
-            btn.innerHTML = `
-                <span class="friend-name">${uname}</span>
-                <span class="friend-action">Meghívás</span>
-            `;
-            btn.addEventListener("click", () => meghivasKuld(uid, uname));
-            listaElem.appendChild(btn);
-        }
-    } catch (e) {
-        listaElem.innerHTML = `<p style="color:#f88">${e.message}</p>`;
-    }
-}
-
-function meghivasKuld(targetUserId, targetName) {
-    const socket = pvpSocketKeres();
-    if (!socket) return;
-
-    // Mode + ranked az aktuális mod-választás állapotából
-    socket.emit('chess:invite', {
-        targetUserId,
-        mode: selectedMode,
-        ranked: selectedRanked
-    });
-
-    const waiting = document.getElementById("pvp-waiting");
-    const waitingName = document.getElementById("pvp-waiting-name");
-    if (waitingName) waitingName.textContent = targetName || "";
-    if (waiting) waiting.classList.remove("hidden");
-
-    const cancelBtn = document.getElementById("pvp-cancel");
-    if (cancelBtn) {
-        cancelBtn.onclick = () => {
-            socket.emit('chess:invite:cancel');
-            if (waiting) waiting.classList.add("hidden");
-        };
-    }
-}
-
-function randomQueueIndit() {
-    const socket = pvpSocketKeres();
-    if (!socket) return;
-    socket.emit('chess:queue:join', {
-        mode: selectedMode,
-        ranked: selectedRanked
-    });
-}
-
-function randomQueueMegse() {
-    const socket = pvpSocketKeres();
-    if (!socket) return;
-    socket.emit('chess:queue:leave');
-}
 
 // ────────────────────────────────────────────
 // PVP — SOCKET.IO INTEGRÁCIÓ
@@ -529,8 +255,10 @@ function pvpSocketInit() {
     // Hiba
     socket.on('chess:error', (data) => {
         console.warn('[PvP hiba]', data.uzenet);
-        // Vizuális popup, hogy a tesztelő észrevegye
-        try { alert('PvP hiba: ' + (data.uzenet || 'ismeretlen')); } catch (_) {}
+        // Custom HTML modal a natív alert() helyett (memoria-szabaly).
+        if (typeof window.mmAlert === 'function') {
+            window.mmAlert({ title: 'PvP hiba', message: data.uzenet || 'Ismeretlen hiba.' });
+        }
         const statusElem = document.getElementById('status');
         if (statusElem) {
             statusElem.textContent = data.uzenet || 'Hiba';
@@ -569,7 +297,9 @@ function pvpSocketInit() {
     socket.on('chess:invite:declined', () => {
         const waiting = document.getElementById('pvp-waiting');
         if (waiting) waiting.classList.add('hidden');
-        alert('Az ellenfél elutasította a meghívást.');
+        if (typeof window.mmAlert === 'function') {
+            window.mmAlert({ title: 'Meghívás elutasítva', message: 'Az ellenfél elutasította a meghívást.' });
+        }
     });
 
     // Meghívás lejárt/cancel
@@ -657,14 +387,20 @@ function pvpSocketInit() {
 
     // Rejoin — ha nincs játék, nincs teendő. KIVÉVE: ha a frontpage chooser
     // pendingMatch flag-gel ide-küldte a felhasználót de a backend nem talál
-    // aktív meccset (pl. meccs közben befejeződött), mutassuk a fallback modal-t,
+    // aktív meccset (pl. meccs közben befejeződött), nyissuk meg az UJ chooser-t,
     // különben a user üres oldalon ragadna.
+    // FONTOS: ha az URL-ben van `?type=bot|pvp`, a bot/pvp init-flow eppen
+    // most letrehozza a meccset — ne nyissuk meg a chooser-t, mert csak villanna
+    // egyet feleslegesen.
     socket.on('chess:rejoin:none', () => {
         if (pvpAktiv) return;
-        const modal = document.getElementById('mode-modal');
-        if (modal && modal.classList.contains('hidden')) {
-            modal.classList.remove('hidden');
-        }
+        if (gameId) return; // mar van bot/pvp meccs folyamatban
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const t = params.get('type');
+            if (t === 'bot' || t === 'pvp') return;
+        } catch (_) { /* ignore */ }
+        ujMeccsChooserNyitas();
     });
 }
 
@@ -672,11 +408,9 @@ let pvpGameId = null;
 
 function pvpJatekKezdet(data) {
     console.log('[PvP] game:start', { sajatSzin: data.sajatSzin, sajatNev: data.sajatNev, ellenfelNev: data.ellenfelNev, gameId: data.gameId });
-    // Modal elrejtés + játék állapot beállítás
-    const modal = document.getElementById('mode-modal');
+    // PVP overlay-k elrejtese (a regi #mode-modal HTML mar nincs, ne keressuk).
     const waiting = document.getElementById('pvp-waiting');
     const popup = document.getElementById('pvp-invite');
-    if (modal) modal.classList.add('hidden');
     if (waiting) waiting.classList.add('hidden');
     if (popup) popup.classList.add('hidden');
 
@@ -1626,9 +1360,8 @@ async function init() {
         }
     } catch (_) { /* ignore */ }
 
-    const modal = document.getElementById('mode-modal');
     if (hasPendingMatch || autoType === 'pvp') {
-        if (modal) modal.classList.add('hidden');
+        // PvP/pending match: a chess:rejoin / chess:game:start eventek tovabb intezik
         return;
     }
 
@@ -1646,11 +1379,8 @@ async function initBotFromQueryParams(params) {
     selectedMode = mode;
     selectedRanked = false; // bot MINDIG casual
 
-    const modal = document.getElementById('mode-modal');
-    if (modal) modal.classList.add('hidden');
-
     try {
-        await jatekIndit(difficulty || 1, mode, false, modal);
+        await jatekIndit(difficulty || 1, mode, false, null);
     } catch (err) {
         console.error('Bot auto-indítás hiba:', err);
         ujMeccsChooserNyitas();

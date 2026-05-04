@@ -153,7 +153,16 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(gh issue *)",
       "WebFetch(domain:github.com)",
-      "Bash(grep -nA 2 \"POST.*conversations/:conversationId/messages\\\\|conversations/:conversationId/messages\" api/routes/chat.js)"
+      "Bash(grep -nA 2 \"POST.*conversations/:conversationId/messages\\\\|conversations/:conversationId/messages\" api/routes/chat.js)",
+      "Bash(Get-ChildItem -Path \"d:\\\\Letoltesek\\\\GIthub\\\\repo\\\\MattMester\" -Recurse -Filter \"adminPanel*\")",
+      "Bash(Select-Object FullName)",
+      "Bash(Get-ChildItem -Path \"d:\\\\Letoltesek\\\\GIthub\\\\repo\\\\MattMester\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(grep \"\\\\.js$\")",
+      "Bash(awk '{print $NF}')",
+      "Bash(awk 'NR<177 || NR>437' \"d:/Letoltesek/GIthub/repo/MattMester/frontend/chess_barold/javascript/main.js\")",
+      "Bash(node -c \"d:/Letoltesek/GIthub/repo/MattMester/frontend/chess_barold/javascript/main.js\")",
+      "Bash(node --input-type=module -e \"import\\('file:///d:/Letoltesek/GIthub/repo/MattMester/frontend/chess_barold/javascript/main.js'\\).catch\\(e => { if \\(e.code === 'ERR_MODULE_NOT_FOUND' || e.message.includes\\('Cannot use import'\\)\\) console.log\\('SyntaxOK \\(import resolution skipped\\)'\\); else console.error\\('SYNTAX ERROR:', e.message\\); }\\);\")"
     ],
     "additionalDirectories": [
       "d:\\d\\Letoltesek\\GIthub\\repo\\MattMester\\backend\\__tests__"

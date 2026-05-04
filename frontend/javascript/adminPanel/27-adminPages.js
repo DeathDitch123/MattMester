@@ -979,28 +979,3 @@ async function submitAdminQuickChat() {
     }
 }
 
-// ============================================================
-// Issue #41 — Szolgáltatások dashboard loader.
-// ============================================================
-async function loadServicesSnapshot(options = {}) {
-    const silent = options.silent === true;
-    try {
-        if (!silent) {
-            state.servicesAdmin.loading = true;
-            state.servicesAdmin.error = null;
-            if (state.currentSectionId === 'services') showSection('services', null, { silent: true });
-        }
-        const json = await adminFetchJson('/api/admin/services/snapshot');
-        if (!json?.success || !json.data) {
-            throw new Error(json?.message || 'Ismeretlen valasz a szervertol.');
-        }
-        state.servicesAdmin.data = json.data;
-        state.servicesAdmin.loading = false;
-        state.servicesAdmin.error = null;
-        if (state.currentSectionId === 'services') showSection('services', null, { silent: true });
-    } catch (err) {
-        state.servicesAdmin.loading = false;
-        state.servicesAdmin.error = err.message || 'Hiba a szolgaltatasok lekerdezese soran.';
-        if (state.currentSectionId === 'services') showSection('services', null, { silent: true });
-    }
-}
