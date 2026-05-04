@@ -34,7 +34,7 @@ function getProfileImageStatusMeta(statusInput) {
 }
 
 function applyProfileImagePresentation(user) {
-    const username = user?.username || 'Felhasznalo';
+    const username = user?.username || 'Felhasználó';
     const statusMeta = getProfileImageStatusMeta(user?.profile_image_status);
 
     const avatars = [
@@ -46,7 +46,7 @@ function applyProfileImagePresentation(user) {
     avatars.forEach((avatarElement) => {
         const applied = window.MattMesterProfileImage.applyProfileImagePresentation(avatarElement, {
             source: user,
-            alt: `${username} profilkepe`
+            alt: `${username} profilképe`
         });
         if (applied) {
             viewModel = applied;
@@ -74,7 +74,7 @@ function applyProfileImagePresentation(user) {
     const removeButton = document.getElementById('removeAvatarButton');
     if (removeButton) {
         removeButton.disabled = viewModel.isDefault;
-        removeButton.title = viewModel.isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet' : 'Profilkép eltávolítása';
+        removeButton.title = viewModel.isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet.' : 'Profilkép eltávolítása';
     }
 }
 
@@ -82,7 +82,7 @@ function showStats(sessionInfo) {
     try {
         const user = sessionInfo?.user || sessionInfo?.data?.user || null;
         if (!user) {
-            throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
+            throw new Error('Nincs bejelentkezett felhasználó a statisztikák megjelenítéséhez.');
         }
 
         const stats = user.stats || sessionInfo?.stats || {
@@ -90,10 +90,10 @@ function showStats(sessionInfo) {
             losses: user.losses,
             draws: user.draws
         };
-        const username = user.username || 'Ismeretlen jatekos';
+        const username = user.username || 'Ismeretlen játékos';
         const email = user.email || '';
         const role = user.role || 'player';
-        const roleText = role.charAt(0).toUpperCase() + role.slice(1);
+        const roleText = role === 'admin' ? 'Adminisztrátor' : (role === 'player' ? 'Játékos' : (role.charAt(0).toUpperCase() + role.slice(1)));
 
         const toNumber = (value) => {
             const parsed = Number(value);

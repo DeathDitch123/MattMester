@@ -109,8 +109,8 @@ function openCriticalAction(action, targetLabel, overrideTargetUserId, extras = 
                 }
                 // Placeholder is logic-fuggore valtoztatassa
                 reasonField.placeholder = isOptionalReason
-                    ? 'Indoklas (opcionalis) — uresen is hagyhato.'
-                    : 'Naplozasra kerulo indok (min. 10 karakter)...';
+                    ? 'Indoklás (opcionális) — üresen is hagyható.'
+                    : 'Naplózásra kerülő indok (min. 10 karakter)…';
             }
             const passwordField = document.getElementById('criticalPassword');
             if (passwordField) {

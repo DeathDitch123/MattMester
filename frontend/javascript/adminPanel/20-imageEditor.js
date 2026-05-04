@@ -220,7 +220,7 @@ async function submitAdminImageUpload() {
 
     adminImageEditorState.uploading = true;
     els.saveButton.disabled = true;
-    els.saveButton.textContent = 'Feltöltés...';
+    els.saveButton.textContent = 'Feltöltés…';
     setAdminImageEditorMessage('info', 'Feltöltés folyamatban — azonnali jóváhagyással.');
 
     try {
@@ -346,7 +346,7 @@ async function handleAdminUserDetailImageInputChange(event) {
 
         bindAdminImageEditorEvents();
         await openAdminImageEditorFromFile(file, selectedUser.id);
-        setAdminUserDetailImageMessage('info', 'Kép szerkesztése folyamatban...');
+        setAdminUserDetailImageMessage('info', 'Kép szerkesztése folyamatban…');
     } catch (err) {
         setAdminUserDetailImageMessage('danger', err?.message || 'A kiválasztott kép nem nyitható meg.');
     } finally {

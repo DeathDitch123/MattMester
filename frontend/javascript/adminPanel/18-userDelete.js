@@ -280,7 +280,7 @@ async function saveAdminUserDetailChanges() {
 
         if (saveBtn) {
             saveBtn.disabled = true;
-            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Mentés...';
+            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Mentés…';
         }
 
         const response = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}/edit`, {
@@ -401,7 +401,7 @@ async function adminRevokeUserSessions(userId, event) {
         const originalText = btn ? btn.innerHTML : '';
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Folyamatban...';
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Folyamatban…';
         }
 
         const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/revoke-sessions`, {

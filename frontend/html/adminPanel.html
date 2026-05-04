@@ -263,7 +263,7 @@
                         <label for="createUserReason" class="form-label">Indok (audit)</label>
                         <textarea id="createUserReason" name="createUserReason" class="form-control" rows="2"
                             placeholder="Pl.: Új csapat-tag onboarding (legalább 10 karakter)"></textarea>
-                        <div class="form-text text-secondary">Az indok az admin audit logba kerul.</div>
+                        <div class="form-text text-secondary">Az indok az admin audit logba kerül.</div>
                     </div>
                     <div id="createUserFeedback" class="alert d-none" role="alert"></div>
                 </div>
@@ -347,7 +347,7 @@
                             </span>
                         </label>
                         <textarea id="criticalReason" class="form-control" rows="3"
-                            placeholder="Naplozasra kerulo indok (min. 10 karakter)..."></textarea>
+                            placeholder="Naplózásra kerülő indok (min. 10 karakter)..."></textarea>
                     </div>
 
                     <div class="mb-1">
@@ -665,14 +665,14 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-magic me-2 text-gold"></i>
-                        <span id="abilityEditorTitle">Kepesseg</span>
+                        <span id="abilityEditorTitle">Képesség</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="abilityEditorName" class="form-label">Nev <span class="text-danger">*</span></label>
+                            <label for="abilityEditorName" class="form-label">Név <span class="text-danger">*</span></label>
                             <input type="text" id="abilityEditorName" class="form-control" maxlength="100" required>
                         </div>
                         <div class="col-md-6">
@@ -680,22 +680,22 @@
                             <input type="number" id="abilityEditorCooldown" class="form-control" min="0" max="999" value="0">
                         </div>
                         <div class="col-12">
-                            <label for="abilityEditorDescription" class="form-label">Leiras</label>
+                            <label for="abilityEditorDescription" class="form-label">Leírás</label>
                             <textarea id="abilityEditorDescription" class="form-control" rows="3" maxlength="2000"></textarea>
                         </div>
                         <div class="col-12">
                             <label for="abilityEditorReason" class="form-label">
-                                Indoklas <span class="text-secondary fw-normal small ms-1">(opcionalis)</span>
+                                Indoklás <span class="text-secondary fw-normal small ms-1">(opcionális)</span>
                             </label>
                             <textarea id="abilityEditorReason" class="form-control" rows="2"
-                                      placeholder="Naplozasra kerulo indoklas — uresen is hagyhato."></textarea>
+                                      placeholder="Naplózásra kerülő indoklás — üresen is hagyható."></textarea>
                         </div>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-gold" onclick="abilityEditorSubmit()">
-                        <i class="bi bi-check2 me-1"></i>Mentes
+                        <i class="bi bi-check2 me-1"></i>Mentés
                     </button>
                 </div>
             </div>
@@ -709,17 +709,17 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-eye me-2 text-gold"></i>
-                        <span id="spectatorTitle">Spectator</span>
+                        <span id="spectatorTitle">Megfigyelő</span>
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
-                            onclick="closeSpectator()" aria-label="Bezaras"></button>
+                            onclick="closeSpectator()" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body" id="spectatorBody">
-                    <div class="text-center py-4 text-secondary">Toltes...</div>
+                    <div class="text-center py-4 text-secondary">Töltés...</div>
                 </div>
                 <div class="modal-footer">
-                    <small class="text-secondary me-auto">A meccs lepesei elo realtime jonnek a /admin WebSocketrol.</small>
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" onclick="closeSpectator()">Bezar</button>
+                    <small class="text-secondary me-auto">A meccs lépései élőben, valós időben jönnek az /admin WebSocketről.</small>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" onclick="closeSpectator()">Bezár</button>
                 </div>
             </div>
         </div>
@@ -734,7 +734,7 @@
                         <i class="bi bi-play-circle-fill me-2 text-gold"></i>
                         Tesztek futtatása
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-secondary small mb-3">
@@ -746,11 +746,11 @@
                             Megjegyzés <span class="text-secondary fw-normal small ms-1">(opcionális)</span>
                         </label>
                         <textarea id="testsRunReason" class="form-control" rows="2"
-                                  placeholder="Pl.: utolso PR előtti smoke-test — uresen is hagyhato."></textarea>
+                                  placeholder="Pl.: utolsó PR előtti smoke-test — üresen is hagyható."></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-gold" onclick="submitTestsRunFromConfirm()">
                         <i class="bi bi-play-fill me-1"></i>Indítás
                     </button>
@@ -804,18 +804,18 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-stars me-2 text-gold"></i>
-                        Admin szerep adasa
+                        Admin szerep adása
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-secondary small mb-3">
-                        Add meg a felhasznalonevet, akinek admin szerepet szeretnel adni. A muvelet
-                        kritikus, ezert egy tovabbi indoklast es jelszo-megerositest is kerni fogunk.
+                        Add meg a felhasználónevet, akinek admin szerepet szeretnél adni. A művelet
+                        kritikus, ezért egy további indoklást és jelszó-megerősítést is kérni fogunk.
                     </p>
                     <div class="mb-3">
-                        <label for="adminGrantUsername" class="form-label">Felhasznalonev <span class="text-danger">*</span></label>
-                        <input type="text" id="adminGrantUsername" class="form-control" placeholder="pelda: SakkMester99">
+                        <label for="adminGrantUsername" class="form-label">Felhasználónév <span class="text-danger">*</span></label>
+                        <input type="text" id="adminGrantUsername" class="form-control" placeholder="példa: SakkMester99">
                     </div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="adminGrantMakeSuper">
@@ -825,9 +825,9 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
                     <button type="button" class="btn btn-gold" onclick="adminGrantPickerSubmit()">
-                        <i class="bi bi-arrow-right me-1"></i>Tovabb
+                        <i class="bi bi-arrow-right me-1"></i>Tovább
                     </button>
                 </div>
             </div>

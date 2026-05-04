@@ -274,9 +274,9 @@ const h = {
    3) Severity / alert helperek
    ============================================================= */
 const SEVERITY = {
-    info: { label: 'Info', icon: 'bi-info-circle-fill', cls: 'sev-info' },
-    warning: { label: 'Warning', icon: 'bi-exclamation-triangle-fill', cls: 'sev-warning' },
-    critical: { label: 'Critical', icon: 'bi-exclamation-octagon-fill', cls: 'sev-critical' }
+    info: { label: 'Információ', icon: 'bi-info-circle-fill', cls: 'sev-info' },
+    warning: { label: 'Figyelmeztetés', icon: 'bi-exclamation-triangle-fill', cls: 'sev-warning' },
+    critical: { label: 'Kritikus', icon: 'bi-exclamation-octagon-fill', cls: 'sev-critical' }
 };
 const ALERT_KIND = {
     unauthorized: { label: 'Jogosulatlan próba', icon: 'bi-shield-fill-x' },

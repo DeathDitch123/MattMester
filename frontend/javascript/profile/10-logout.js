@@ -15,7 +15,7 @@ async function handleLogout() {
             const result = await parseJson(response);
 
             if (!response.ok) {
-                throw new Error(result.message || 'Sikertelen kijelentkezes.');
+                throw new Error(result.message || 'Sikertelen kijelentkezés.');
             }
 
             if (socket) {

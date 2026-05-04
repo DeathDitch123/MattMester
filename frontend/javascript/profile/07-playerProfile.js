@@ -43,22 +43,22 @@ function formatNumberHu(value) {
 function getRankForEloValue(eloValue) {
     const elo = toNumberSafe(eloValue);
     if (elo < 1100) {
-        return { label: 'Beginner', className: 'rank-beginner' };
+        return { label: 'Kezdő', className: 'rank-beginner' };
     }
     if (elo < 1400) {
-        return { label: 'Intermediate', className: 'rank-intermediate' };
+        return { label: 'Középhaladó', className: 'rank-intermediate' };
     }
     if (elo < 1700) {
-        return { label: 'Advanced', className: 'rank-advanced' };
+        return { label: 'Haladó', className: 'rank-advanced' };
     }
     if (elo < 2000) {
-        return { label: 'Expert', className: 'rank-expert' };
+        return { label: 'Szakértő', className: 'rank-expert' };
     }
     if (elo < 2300) {
-        return { label: 'Master', className: 'rank-master' };
+        return { label: 'Mester', className: 'rank-master' };
     }
 
-    return { label: 'Grandmaster', className: 'rank-grandmaster' };
+    return { label: 'Nagymester', className: 'rank-grandmaster' };
 }
 
 function applyRankBadge(rankElement, eloValue) {
@@ -135,7 +135,7 @@ function fillPlayerProfileModal(player) {
 
     if (elements.role) {
         const roleValue = String(player.role || 'player').toLowerCase();
-        elements.role.textContent = roleValue === 'admin' ? 'Admin' : 'Player';
+        elements.role.textContent = roleValue === 'admin' ? 'Adminisztrátor' : 'Játékos';
         elements.role.classList.remove('admin');
         if (roleValue === 'admin') {
             elements.role.classList.add('admin');

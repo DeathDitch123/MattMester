@@ -53,7 +53,7 @@ function handleEmailNotVerifiedCta(payload) {
     let handled = false;
     if (code === EMAIL_VERIFICATION_REQUIRED_CODE) {
         handled = true;
-        setAccountStatusFeedback('warning', 'A funkció használatához előbb erősítsd meg az email címed. Nyisd meg az Account Status szekciót és küldd újra a verifikációs emailt.');
+        setAccountStatusFeedback('warning', 'A funkció használatához előbb erősítsd meg az email címed. Nyisd meg a Fiók állapota szekciót és küldd újra a verifikációs emailt.');
         scrollToAccountStatusAndHighlightResend();
     }
     return handled;
@@ -69,7 +69,7 @@ function renderAccountStatus(sessionInfo) {
 
         const isVerified = Boolean(user.is_email_verified);
         const role = String(user.role || 'player').toLowerCase();
-        const roleLabel = role === 'admin' ? 'Administrator' : 'Player';
+        const roleLabel = role === 'admin' ? 'Adminisztrátor' : 'Játékos';
         const memberDate = user.created_at ? new Date(user.created_at) : null;
         const memberSinceText = memberDate && !Number.isNaN(memberDate.getTime())
             ? memberDate.toLocaleDateString('hu-HU')
@@ -77,7 +77,7 @@ function renderAccountStatus(sessionInfo) {
 
         if (elements.emailBadge) {
             elements.emailBadge.className = `badge ${isVerified ? 'bg-success' : 'bg-warning text-dark'}`;
-            elements.emailBadge.textContent = isVerified ? 'Verified' : 'Not Verified';
+            elements.emailBadge.textContent = isVerified ? 'Megerősítve' : 'Nincs megerősítve';
         }
 
         if (elements.roleBadge) {
@@ -87,7 +87,7 @@ function renderAccountStatus(sessionInfo) {
 
         if (elements.activeBadge) {
             elements.activeBadge.className = `badge ${user.is_banned ? 'bg-danger' : 'bg-success'}`;
-            elements.activeBadge.textContent = user.is_banned ? 'Banned' : 'Active';
+            elements.activeBadge.textContent = user.is_banned ? 'Letiltva' : 'Aktív';
         }
 
         if (elements.emailIconWrap) {
@@ -147,7 +147,7 @@ function mapResendVerificationErrorMessage(payload, statusCode) {
     } else if (responseCode === EMAIL_SEND_FAILED_CODE) {
         message = payload?.message || 'Email küldés sikertelen, ellenőrizd az SMTP beállításokat vagy próbáld újra később.';
     } else if (responseCode === EMAIL_VERIFICATION_REQUIRED_CODE) {
-        message = payload?.message || 'A fiókod még nincs megerősítve. Küldj új verifikációs emailt az Account Status részből.';
+        message = payload?.message || 'A fiókod még nincs megerősítve. Küldj új verifikációs emailt a Fiók állapota részből.';
     } else if (payload?.message) {
         message = payload.message;
     }

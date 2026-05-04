@@ -174,7 +174,7 @@ function createFriendListItem(friend) {
     avatar.className = 'friend-avatar rounded-circle';
     window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
         source: friend,
-        alt: `${friend.username || 'Jatekos'} profilkepe`,
+        alt: `${friend.username || 'Játékos'} profilképe`,
         size: 40
     });
 
@@ -189,7 +189,7 @@ function createFriendListItem(friend) {
     const username = document.createElement('h6');
     username.className = 'mb-0 text-white text-truncate';
     username.style.fontSize = '0.9rem';
-    username.textContent = friend.username || 'Ismeretlen jatekos';
+    username.textContent = friend.username || 'Ismeretlen játékos';
 
     const relation = document.createElement('small');
     relation.className = `${relationMeta.statusClass} d-block text-truncate`;

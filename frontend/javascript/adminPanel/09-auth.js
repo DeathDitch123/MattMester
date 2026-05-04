@@ -77,7 +77,7 @@ async function performElevate() {
         } else {
             if (submitBtn) {
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Aktiválás...';
+                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Aktiválás…';
             }
 
             const res = await fetch('/api/admin/auth/elevate', {

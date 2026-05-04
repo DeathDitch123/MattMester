@@ -38,7 +38,7 @@ function createSearchResultListItem(player) {
     avatar.className = 'friend-avatar rounded-circle';
     window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
         source: player,
-        alt: `${player.username || 'Jatekos'} profilkepe`,
+        alt: `${player.username || 'Játékos'} profilképe`,
         size: 40
     });
     avatarWrap.appendChild(avatar);
@@ -49,7 +49,7 @@ function createSearchResultListItem(player) {
     const name = document.createElement('h6');
     name.className = 'mb-0 text-white text-truncate';
     name.style.fontSize = '0.9rem';
-    name.textContent = player.username || 'Ismeretlen jatekos';
+    name.textContent = player.username || 'Ismeretlen játékos';
     info.appendChild(name);
 
     const actions = document.createElement('div');

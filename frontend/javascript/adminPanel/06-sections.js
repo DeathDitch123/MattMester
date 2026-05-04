@@ -75,8 +75,8 @@ const SECTIONS = {
                     ${h.tickChip({ icon: 'bi-shield-fill', label: 'Adminok', valueId: 'tickAdmins', value: stats.online?.totalAdmins ?? 0, color: 'gold', nav: 'superAdmin', hint: 'Online admin felhasználók — super admin nézet' })}
                     ${h.tickChip({ icon: 'bi-trophy-fill', label: 'Játékban', valueId: 'tickInGame', value: stats.online?.inGame ?? 0, color: inGameEmpty ? 'secondary' : 'success', nav: 'games', hint: 'Folyamatban lévő játszmák' })}
                     ${h.tickChip({ icon: 'bi-search', label: 'Matchmakingben', valueId: 'tickMatchmaking', value: stats.online?.inMatchmaking ?? 0, color: 'primary', nav: 'games', hint: 'Matchmakingben várakozó játékosok' })}
-                    ${h.tickChip({ icon: 'bi-image', label: 'Pending kép', valueId: 'tickPendingImages', value: stats.pending?.profileImages ?? 0, color: 'warning', nav: 'profileImageReview', hint: 'Jóváhagyásra váró profilképek' })}
-                    ${h.tickChip({ icon: 'bi-person-plus', label: 'Pending barát', valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary', nav: 'friends', hint: 'Függőben lévő barátkérelmek' })}
+                    ${h.tickChip({ icon: 'bi-image', label: 'Függő kép', valueId: 'tickPendingImages', value: stats.pending?.profileImages ?? 0, color: 'warning', nav: 'profileImageReview', hint: 'Jóváhagyásra váró profilképek' })}
+                    ${h.tickChip({ icon: 'bi-person-plus', label: 'Függő barát', valueId: 'tickPendingFriends', value: stats.pending?.friendRequests ?? 0, color: 'primary', nav: 'friends', hint: 'Függőben lévő barátkérelmek' })}
                     ${h.tickChip({ icon: 'bi-speedometer2', label: 'Aktív rate esc.', valueId: 'tickRateEsc', value: stats.rateLimit?.activeEscalations ?? 0, color: 'secondary', nav: 'alerts', hint: 'Rate limit szigorítások — riasztások' })}
                 </div>
             </div>
@@ -890,7 +890,7 @@ const SECTIONS = {
                     <div id="chatModerationMessage" class="alert d-none" role="alert"></div>
                 </div>
                 <div class="moderation-list" id="chatModerationList">
-                    <div class="text-center text-secondary py-4">Töltés...</div>
+                    <div class="text-center text-secondary py-4">Töltés…</div>
                 </div>
             `
         })}
@@ -917,7 +917,7 @@ const SECTIONS = {
                             </tr>
                         </thead>
                         <tbody id="profileImageReviewTableBody">
-                            <tr><td colspan="4" class="text-center text-secondary py-4">Töltés...</td></tr>
+                            <tr><td colspan="4" class="text-center text-secondary py-4">Töltés…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -963,7 +963,7 @@ const SECTIONS = {
                     <div id="reportsModerationMessage" class="alert d-none" role="alert"></div>
                 </div>
                 <div class="moderation-list" id="reportsModerationList">
-                    <div class="text-center text-secondary py-4">Töltés...</div>
+                    <div class="text-center text-secondary py-4">Töltés…</div>
                 </div>
             `
         })}
@@ -986,11 +986,11 @@ const SECTIONS = {
         const rows = (g.list || []).map((row) => {
             const winner = row.winner ? `<span class="text-success">${escapeHtml(row.winner.username || '—')}</span>` : '<span class="text-secondary">—</span>';
             const buttons = [];
-            buttons.push(`<button type="button" class="btn btn-sm btn-outline-gold" onclick="openSpectator(${row.id})" title="Megnez"><i class="bi bi-eye"></i></button>`);
+            buttons.push(`<button type="button" class="btn btn-sm btn-outline-gold" onclick="openSpectator(${row.id})" title="Megnéz"><i class="bi bi-eye"></i></button>`);
             if (row.status === 'ongoing') {
-                buttons.push(`<button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmForceEndGame(${row.id})" title="Force end"><i class="bi bi-stop-circle"></i></button>`);
+                buttons.push(`<button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmForceEndGame(${row.id})" title="Játszma kényszerített befejezése"><i class="bi bi-stop-circle"></i></button>`);
             } else {
-                buttons.push(`<button type="button" class="btn btn-sm btn-outline-secondary" onclick="downloadGamePgn(${row.id})" title="PGN letoltes"><i class="bi bi-download"></i></button>`);
+                buttons.push(`<button type="button" class="btn btn-sm btn-outline-secondary" onclick="downloadGamePgn(${row.id})" title="PGN letöltés"><i class="bi bi-download"></i></button>`);
             }
             return [
                 `<span class="font-monospace text-gold">#${row.id}</span>`,
@@ -1008,7 +1008,7 @@ const SECTIONS = {
         return `
             ${h.header({
                 icon: 'bi-knight-fill', title: 'Játszmák',
-                subtitle: g.loaded ? `${g.list.length} jatszma listazva` : 'Lefutott és folyamatban lévő játszmák'
+                subtitle: g.loaded ? `${g.list.length} játszma listázva` : 'Lefutott és folyamatban lévő játszmák'
             })}
             ${h.stats([
                 { icon: 'bi-play-circle-fill', value: c.ongoing, label: 'Folyamatban', color: 'success' },
@@ -1018,14 +1018,14 @@ const SECTIONS = {
             ])}
             <div class="alerts-filter-bar mb-3">
                 <div class="btn-group btn-group-sm" role="group">${filterButtons}</div>
-                <input type="text" class="form-control form-control-sm" placeholder="Felhasznalonev keresese..."
+                <input type="text" class="form-control form-control-sm" placeholder="Felhasználónév keresése…"
                        value="${escapeHtml(g.search || '')}" onchange="setGamesSearch(this.value)" style="max-width:280px;">
             </div>
             ${g.error ? `<div class="alert alert-danger">${escapeHtml(g.error)}</div>` : ''}
             ${g.loading
-                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Töltés…</div>`
                 : (rows.length === 0 && g.loaded
-                    ? `<div class="content-card text-center py-5 text-secondary">Nincs jatszma a megadott szurokre.</div>`
+                    ? `<div class="content-card text-center py-5 text-secondary">Nincs játszma a megadott szűrőkre.</div>`
                     : h.table({
                         title: 'Játszmák listája',
                         headers: ['Azonosító', 'Világos', 'Sötét', 'Állapot', 'Győztes', 'Lépések', 'Időkontroll', 'Indult', ''],
@@ -1043,15 +1043,15 @@ const SECTIONS = {
             <div class="col-md-6 col-lg-4">
                 ${h.card({
                     title: escapeHtml(ab.name),
-                    headerExtra: h.badge(`${ab.cooldownTurns} kor cooldown`, 'warning'),
+                    headerExtra: h.badge(`${ab.cooldownTurns} kör cooldown`, 'warning'),
                     classes: 'h-100',
                     body: `
                         <p class="text-secondary mb-3">${escapeHtml(ab.description || '—')}</p>
                         <div class="d-flex justify-content-between align-items-center">
-                            <small class="text-muted">${ab.usageCount || 0} hasznalat</small>
+                            <small class="text-muted">${ab.usageCount || 0} használat</small>
                             <div class="btn-group">
-                                <button type="button" class="btn btn-sm btn-outline-gold" onclick="openAbilityEditor(${ab.id})" title="Szerkesztes"><i class="bi bi-pencil"></i></button>
-                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDeleteAbility(${ab.id})" title="Torles"><i class="bi bi-trash"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-gold" onclick="openAbilityEditor(${ab.id})" title="Szerkesztés"><i class="bi bi-pencil"></i></button>
+                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="confirmDeleteAbility(${ab.id})" title="Törlés"><i class="bi bi-trash"></i></button>
                             </div>
                         </div>
                     `
@@ -1069,9 +1069,9 @@ const SECTIONS = {
             })}
             ${a.error ? `<div class="alert alert-danger">${escapeHtml(a.error)}</div>` : ''}
             ${a.loading
-                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Töltés…</div>`
                 : (a.list.length === 0 && a.loaded
-                    ? `<div class="content-card text-center py-5 text-secondary">Meg nincsenek kepessegek. Kattints az "Uj kepesseg" gombra.</div>`
+                    ? `<div class="content-card text-center py-5 text-secondary">Még nincsenek képességek. Kattints az „Új képesség” gombra.</div>`
                     : `<div class="row g-4">${cards}</div>`)
             }
         `;
@@ -1128,7 +1128,7 @@ const SECTIONS = {
 
         <div class="alerts-filter-bar">
             <input id="loginsFilterUsername" type="text" class="form-control form-control-sm"
-                   placeholder="Felhasználónév..." value="${escapeHtml(f.username || '')}"
+                   placeholder="Felhasználónév…" value="${escapeHtml(f.username || '')}"
                    onchange="onLoginsFilterChange()">
             <select id="loginsFilterStatus" class="form-select form-select-sm" onchange="onLoginsFilterChange()">
                 <option value="all"     ${f.status === 'all' ? 'selected' : ''}>Minden státusz</option>
@@ -1136,7 +1136,7 @@ const SECTIONS = {
                 <option value="failed"  ${f.status === 'failed' ? 'selected' : ''}>Sikertelen</option>
             </select>
             <select id="loginsFilterDevice" class="form-select form-select-sm" onchange="onLoginsFilterChange()"
-                    title="${devices.length === 0 ? 'Csak akkor jelennek meg eszkozok, ha mar volt bejelentkezes' : 'Csak a mar bejelentkezett rendszerek/bongeszok'}">
+                    title="${devices.length === 0 ? 'Csak akkor jelennek meg eszközök, ha már volt bejelentkezés' : 'Csak a már bejelentkezett rendszerek / böngészők'}">
                 <option value="" ${!f.device ? 'selected' : ''}>Minden eszköz / böngésző</option>
                 ${devices.map((d) => `
                     <option value="${escapeHtml(d)}" ${f.device === d ? 'selected' : ''}>${escapeHtml(d)}</option>
@@ -1211,9 +1211,9 @@ const SECTIONS = {
 
             <div class="row g-3 mb-4">
                 ${[
-                { icon: 'bi-info-circle-fill', label: 'Info', value: counts.info, color: 'primary' },
-                { icon: 'bi-exclamation-triangle-fill', label: 'Warning', value: counts.warning, color: 'warning' },
-                { icon: 'bi-exclamation-octagon-fill', label: 'Critical', value: counts.critical, color: 'danger' },
+                { icon: 'bi-info-circle-fill', label: 'Információ', value: counts.info, color: 'primary' },
+                { icon: 'bi-exclamation-triangle-fill', label: 'Figyelmeztetés', value: counts.warning, color: 'warning' },
+                { icon: 'bi-exclamation-octagon-fill', label: 'Kritikus', value: counts.critical, color: 'danger' },
                 { icon: 'bi-clock-history', label: 'Listázott', value: list.length, color: 'success' }
             ].map(item => `
                     <div class="col-6 col-md-3">
@@ -1230,12 +1230,12 @@ const SECTIONS = {
                 classes: 'audit-log-card',
                 headerExtra: `
                     <div class="filter-bar">
-                        <input type="text" class="form-control form-control-sm" placeholder="Action / target / actor keresés...">
+                        <input type="text" class="form-control form-control-sm" placeholder="Művelet / cél / végrehajtó keresés…">
                         <select class="form-select form-select-sm">
-                            <option value="">Minden severity</option>
-                            <option value="info">Info</option>
-                            <option value="warning">Warning</option>
-                            <option value="critical">Critical</option>
+                            <option value="">Minden súlyosság</option>
+                            <option value="info">Információ</option>
+                            <option value="warning">Figyelmeztetés</option>
+                            <option value="critical">Kritikus</option>
                         </select>
                     </div>
                 `,
@@ -1261,10 +1261,10 @@ const SECTIONS = {
 
             <div class="row g-3 mb-4">
                 ${[
-                { icon: 'bi-shield-fill-x', label: 'Unauthorized', value: byKind.unauthorized || 0, color: 'warning' },
+                { icon: 'bi-shield-fill-x', label: 'Jogosulatlan', value: byKind.unauthorized || 0, color: 'warning' },
                 { icon: 'bi-key-fill', label: 'Token hiba', value: byKind.token_invalid || 0, color: 'warning' },
-                { icon: 'bi-speedometer2', label: 'Rate escalated', value: byKind.rate_escalated || 0, color: 'warning' },
-                { icon: 'bi-bug-fill', label: 'Suspicious pattern', value: byKind.suspicious_pattern || 0, color: 'danger' },
+                { icon: 'bi-speedometer2', label: 'Rate limit szigorítás', value: byKind.rate_escalated || 0, color: 'warning' },
+                { icon: 'bi-bug-fill', label: 'Gyanús minta', value: byKind.suspicious_pattern || 0, color: 'danger' },
                 { icon: 'bi-slash-circle-fill', label: 'Tiltások', value: byKind.user_banned || 0, color: 'danger' },
                 { icon: 'bi-trash3-fill', label: 'Törlések', value: byKind.user_deleted || 0, color: 'danger' }
             ].map(item => `
@@ -1286,13 +1286,13 @@ const SECTIONS = {
                     `).join('')}
                 </select>
                 <select id="alertsFilterSeverity" class="form-select form-select-sm" onchange="onAlertsFilterChange()">
-                    <option value="">Minden severity</option>
-                    <option value="info"     ${f.severity === 'info' ? 'selected' : ''}>Info</option>
-                    <option value="warning"  ${f.severity === 'warning' ? 'selected' : ''}>Warning</option>
-                    <option value="critical" ${f.severity === 'critical' ? 'selected' : ''}>Critical</option>
+                    <option value="">Minden súlyosság</option>
+                    <option value="info"     ${f.severity === 'info' ? 'selected' : ''}>Információ</option>
+                    <option value="warning"  ${f.severity === 'warning' ? 'selected' : ''}>Figyelmeztetés</option>
+                    <option value="critical" ${f.severity === 'critical' ? 'selected' : ''}>Kritikus</option>
                 </select>
                 <input id="alertsFilterIp" type="text" class="form-control form-control-sm"
-                       placeholder="IP cím szűrés..." value="${escapeHtml(f.ipAddress || '')}"
+                       placeholder="IP cím szűrés…" value="${escapeHtml(f.ipAddress || '')}"
                        onchange="onAlertsFilterChange()">
                 <label class="alerts-filter-toggle">
                     <input type="checkbox" id="alertsFilterIncludeDismissed"
@@ -1330,9 +1330,9 @@ const SECTIONS = {
             `<span class="text-secondary">${fmt(a.lastActive)}</span>`,
             `<div class="d-inline-flex gap-2">
                 ${a.isSuperAdmin
-                    ? h.btn({ label: 'Super lock', icon: 'bi-lock-fill', variant: 'outline-secondary', size: 'sm', attrs: 'disabled' })
+                    ? h.btn({ label: 'Super zár', icon: 'bi-lock-fill', variant: 'outline-secondary', size: 'sm', attrs: 'disabled' })
                     : h.btn({
-                        label: 'Revoke', icon: 'bi-shield-fill-x', variant: 'outline-danger', size: 'sm',
+                        label: 'Visszavonás', icon: 'bi-shield-fill-x', variant: 'outline-danger', size: 'sm',
                         onclick: `openCriticalAction('admin.revoke', '${escapeHtml(a.username || '#' + a.id).replace(/'/g, "\\'")}', ${Number(a.id) || 'null'})`
                     })}
             </div>`
@@ -1340,9 +1340,9 @@ const SECTIONS = {
         return `
             ${h.header({
                 icon: 'bi-stars', title: 'Super admin',
-                subtitle: s.loaded ? `${s.list.length} admin felhasznalo` : 'Admin szerepkörök kiosztása és visszavonása',
+                subtitle: s.loaded ? `${s.list.length} admin felhasználó` : 'Admin szerepkörök kiosztása és visszavonása',
                 actions: [
-                    { label: 'Admin grant', icon: 'bi-plus-lg', variant: 'gold', onclick: "openAdminGrantPicker()" }
+                    { label: 'Admin kiosztás', icon: 'bi-plus-lg', variant: 'gold', onclick: "openAdminGrantPicker()" }
                 ]
             })}
             <div class="alert alert-warning bg-warning bg-opacity-10 border-warning d-flex align-items-start gap-2">
@@ -1355,9 +1355,9 @@ const SECTIONS = {
             </div>
             ${s.error ? `<div class="alert alert-danger">${escapeHtml(s.error)}</div>` : ''}
             ${s.loading
-                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Töltés…</div>`
                 : (rows.length === 0 && s.loaded
-                    ? `<div class="content-card text-center py-5 text-secondary">Nincs admin felhasznalo.</div>`
+                    ? `<div class="content-card text-center py-5 text-secondary">Nincs admin felhasználó.</div>`
                     : h.table({
                         title: 'Admin felhasználók', icon: 'bi-shield-fill',
                         headers: ['Admin', 'Szint', 'Csatlakozott', 'Utoljára aktív', 'Műveletek'],
@@ -1411,8 +1411,8 @@ const SECTIONS = {
                     ${h.card({
                         title: 'Függő barátkérelmek', icon: 'bi-person-plus-fill', noBodyPadding: true,
                         body: requestRows.length
-                            ? `<table class="table mb-0"><thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end">Allapot</th></tr></thead><tbody>${requestRows}</tbody></table>`
-                            : `<div class="text-center text-secondary py-4">${s.requestsLoaded ? 'Nincs fuggo kerelem.' : 'Toltes...'}</div>`
+                            ? `<table class="table mb-0"><thead><tr><th>Küldő</th><th>Címzett</th><th>Küldve</th><th class="text-end">Állapot</th></tr></thead><tbody>${requestRows}</tbody></table>`
+                            : `<div class="text-center text-secondary py-4">${s.requestsLoaded ? 'Nincs függő kérelem.' : 'Töltés…'}</div>`
                     })}
                 </div>
                 <div class="col-lg-5">
@@ -1420,7 +1420,7 @@ const SECTIONS = {
                         title: 'Aktív blokkolások', icon: 'bi-person-x-fill', noBodyPadding: true,
                         body: blockRows.length
                             ? `<table class="table mb-0"><thead><tr><th>Blokkoló</th><th>Blokkolt</th><th class="text-end"></th></tr></thead><tbody>${blockRows}</tbody></table>`
-                            : `<div class="text-center text-secondary py-4">${s.blocksLoaded ? 'Nincs aktiv blokk.' : 'Toltes...'}</div>`
+                            : `<div class="text-center text-secondary py-4">${s.blocksLoaded ? 'Nincs aktív blokk.' : 'Töltés…'}</div>`
                     })}
                 </div>
             </div>
@@ -1478,10 +1478,10 @@ const SECTIONS = {
             ${h.header({
                 icon: 'bi-clipboard2-check', title: 'Tesztek',
                 subtitle: latest
-                    ? `Utolso futas: ${fmt(latest.startedAt)} — ${escapeHtml(latest.status)}`
+                    ? `Utolsó futás: ${fmt(latest.startedAt)} — ${escapeHtml(latest.status)}`
                     : 'Backend Jest + Supertest tesztek',
                 actions: [
-                    { label: running ? 'Fut...' : 'Tesztek futtatasa', icon: running ? 'bi-arrow-repeat' : 'bi-play-fill', variant: 'gold', size: 'sm', onclick: 'confirmRunTests()', attrs: runDisabled }
+                    { label: running ? 'Fut…' : 'Tesztek futtatása', icon: running ? 'bi-arrow-repeat' : 'bi-play-fill', variant: 'gold', size: 'sm', onclick: 'confirmRunTests()', attrs: runDisabled }
                 ]
             })}
 
@@ -1522,12 +1522,12 @@ const SECTIONS = {
                                     <span class="test-status-label">${label}</span>
                                 </div>`;
                             }).join('')}</div>`
-                            : `<div class="text-center text-secondary py-4">${t.latestLoaded ? 'A reszletek csak a session alatt es csak a futtatas utan 1 percig lathatok. Kattints a "Tesztek futtatasa" gombra a friss eredmenyhez.' : 'Toltes...'}</div>`
+                            : `<div class="text-center text-secondary py-4">${t.latestLoaded ? 'A részletek csak a session alatt és csak a futtatás után 1 percig láthatók. Kattints a „Tesztek futtatása” gombra a friss eredményhez.' : 'Töltés…'}</div>`
                     })}
                 </div>
                 <div class="col-lg-5">
                     ${h.card({
-                        title: 'Stderr (utolso 4KB)', icon: 'bi-terminal-fill',
+                        title: 'Stderr (utolsó 4KB)', icon: 'bi-terminal-fill',
                         headerExtra: latest ? `<span class="badge bg-warning text-dark" id="testsAutoClearPillStderr" data-tests-autoclear><i class="bi bi-clock-history me-1"></i>auto-clear: <span data-tests-autoclear-seconds>—</span>s</span>` : '',
                         body: latest && latest.stderrTail
                             ? (() => {
@@ -1536,18 +1536,18 @@ const SECTIONS = {
                                 const swapped = latest.stderrTail.replace(/(\d+)\s+passed,\s+(\d+)\s+total/g, '$2 total, $1 passed');
                                 return `<pre class="json-block" style="max-height:280px;overflow:auto;white-space:pre-wrap;">${escapeHtml(swapped)}</pre>`;
                             })()
-                            : `<pre class="json-block" style="max-height:280px;overflow:auto;">${latest ? '(Nincs stderr output)' : '(Meg nincs futas)'}</pre>`
+                            : `<pre class="json-block" style="max-height:280px;overflow:auto;">${latest ? '(Nincs stderr kimenet)' : '(Még nincs futás)'}</pre>`
                     })}
                 </div>
             </div>
 
             <div class="mt-4">
                 ${h.card({
-                    title: 'Futtatasi elozmenyek', icon: 'bi-clock-history',
+                    title: 'Futtatási előzmények', icon: 'bi-clock-history',
                     noBodyPadding: true,
                     body: historyRows.length
-                        ? `<table class="table mb-0"><thead><tr><th>ID</th><th>Inditotta</th><th>Allapot</th><th>Pass/Total</th><th>Fail</th><th>Idotartam</th><th>Indult</th></tr></thead><tbody>${historyRows}</tbody></table>`
-                        : `<div class="text-center text-secondary py-4">${t.historyLoaded ? 'Meg nincs futasi elozmeny.' : 'Toltes...'}</div>`
+                        ? `<table class="table mb-0"><thead><tr><th>ID</th><th>Indította</th><th>Állapot</th><th>Pass/Total</th><th>Fail</th><th>Időtartam</th><th>Indult</th></tr></thead><tbody>${historyRows}</tbody></table>`
+                        : `<div class="text-center text-secondary py-4">${t.historyLoaded ? 'Még nincs futási előzmény.' : 'Töltés…'}</div>`
                 })}
             </div>
         `;
@@ -1569,9 +1569,9 @@ const SECTIONS = {
             })}
             ${s.error ? `<div class="alert alert-danger">${escapeHtml(s.error)}</div>` : ''}
             ${s.loading
-                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Toltes...</div>`
+                ? `<div class="content-card text-center py-5"><i class="bi bi-arrow-repeat spin"></i> Töltés…</div>`
                 : (!s.loaded
-                    ? `<div class="content-card text-center py-5 text-secondary">Meg nincsenek betoltott beallitasok.</div>`
+                    ? `<div class="content-card text-center py-5 text-secondary">Még nincsenek betöltött beállítások.</div>`
                     : h.card({
                         body: `
                             <form id="settingsForm" onsubmit="event.preventDefault(); submitSiteSettings();">
@@ -1585,34 +1585,34 @@ const SECTIONS = {
                                         <input type="email" class="form-control" id="settingsSupportEmail" maxlength="150" value="${escapeHtml(d.supportEmail || '')}" required>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label" for="settingsLanguage">Alapertelmezett nyelv</label>
+                                        <label class="form-label" for="settingsLanguage">Alapértelmezett nyelv</label>
                                         <select class="form-select" id="settingsLanguage">
                                             ${langs.map((l) => `<option value="${l.value}" ${l.selected ? 'selected' : ''}>${l.label}</option>`).join('')}
                                         </select>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label" for="settingsTimezone">Idozona</label>
+                                        <label class="form-label" for="settingsTimezone">Időzóna</label>
                                         <input type="text" class="form-control" id="settingsTimezone" maxlength="64" value="${escapeHtml(tzCurrent)}" required>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="settingsRegistration" ${d.registrationEnabled ? 'checked' : ''}>
-                                            <label class="form-check-label" for="settingsRegistration">Regisztracio engedelyezve</label>
+                                            <label class="form-check-label" for="settingsRegistration">Regisztráció engedélyezve</label>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-check form-switch">
                                             <input class="form-check-input" type="checkbox" id="settingsMaintenance" ${d.maintenanceMode ? 'checked' : ''} onchange="onMaintenanceToggleChange(this.checked)">
-                                            <label class="form-check-label text-warning" for="settingsMaintenance"><i class="bi bi-cone-striped me-1"></i>Karbantartasi mod</label>
+                                            <label class="form-check-label text-warning" for="settingsMaintenance"><i class="bi bi-cone-striped me-1"></i>Karbantartási mód</label>
                                         </div>
                                     </div>
                                 </div>
                                 <div class="alert alert-warning bg-warning bg-opacity-10 border-warning small mt-3 mb-3 ${d.maintenanceMode ? '' : 'd-none'}" id="settingsMaintenanceWarn">
                                     <i class="bi bi-exclamation-triangle-fill me-1"></i>
-                                    <strong>Figyelem:</strong> a karbantartasi mod aktivalasa minden NEM-admin usert kizar a platformrol.
+                                    <strong>Figyelem:</strong> a karbantartási mód aktiválása minden NEM-admin felhasználót kizár a platformról.
                                 </div>
                                 <div class="text-end">
-                                    <button type="submit" class="btn btn-gold"><i class="bi bi-check2 me-1"></i>Beallitasok mentese</button>
+                                    <button type="submit" class="btn btn-gold"><i class="bi bi-check2 me-1"></i>Beállítások mentése</button>
                                 </div>
                             </form>
                         `

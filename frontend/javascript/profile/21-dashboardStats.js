@@ -18,11 +18,11 @@
     // ELO -> rang szoveg + CSS osztaly. A skala 800 alaperteke koruli.
     function eloRank(elo) {
         const n = Number(elo) || 0;
-        if (n >= 2000) return { label: 'Master',     cls: 'rank-master' };
-        if (n >= 1700) return { label: 'Expert',     cls: 'rank-expert' };
-        if (n >= 1400) return { label: 'Advanced',   cls: 'rank-advanced' };
-        if (n >= 1100) return { label: 'Intermediate', cls: 'rank-intermediate' };
-        return { label: 'Beginner', cls: 'rank-beginner' };
+        if (n >= 2000) return { label: 'Mester',     cls: 'rank-master' };
+        if (n >= 1700) return { label: 'Szakértő',   cls: 'rank-expert' };
+        if (n >= 1400) return { label: 'Haladó',     cls: 'rank-advanced' };
+        if (n >= 1100) return { label: 'Középhaladó', cls: 'rank-intermediate' };
+        return { label: 'Kezdő', cls: 'rank-beginner' };
     }
 
     function applyEloCard(numId, rankId, eloValue) {

@@ -2,7 +2,7 @@ function handleProfileSettings(sessionInfo) {
     try {
         const user = sessionInfo?.user || sessionInfo?.data?.user || null;
         if (!user) {
-            throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
+            throw new Error('Nincs bejelentkezett felhasználó a statisztikák megjelenítéséhez.');
         }
         const settingsUsername = document.getElementById('settingsUsername');
         const settingsEmail = document.getElementById('settingsEmail');
@@ -65,7 +65,7 @@ function bindProfileSettingsEvents() {
 
                 const validation = validateProfileSettingsForm();
                 if (!validation.isValid) {
-                    throw new Error('Ervenytelen profile settings form.');
+                    throw new Error('Érvénytelen profil beállítások űrlap.');
                 }
 
                 profileSettingsState.pendingPayload = validation.payload;
@@ -337,7 +337,7 @@ function resetProfileSettingsConfirmState() {
 
     if (elements.confirmSaveButton) {
         elements.confirmSaveButton.disabled = true;
-        elements.confirmSaveButton.textContent = `Mentes (${PROFILE_SETTINGS_CONFIRM_SECONDS}s)`;
+        elements.confirmSaveButton.textContent = `Mentés (${PROFILE_SETTINGS_CONFIRM_SECONDS}s)`;
     }
 
     if (elements.confirmHint) {
@@ -384,10 +384,10 @@ function openProfileSettingsConfirmModal(changedFieldLabels) {
 
             if (elements.confirmSaveButton) {
                 if (profileSettingsState.countdownLeft > 0) {
-                    elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
+                    elements.confirmSaveButton.textContent = `Mentés (${profileSettingsState.countdownLeft}s)`;
                 } else {
                     profileSettingsState.countdownFinished = true;
-                    elements.confirmSaveButton.textContent = 'Mentes';
+                    elements.confirmSaveButton.textContent = 'Mentés';
                     updateModalSaveButtonState();
                 }
             }
@@ -505,7 +505,7 @@ async function submitProfileSettingsChanges() {
                 if (result?.emailVerification?.sent) {
                     setAccountStatusFeedback('warning', 'Az email címed megváltozott és most újra nem verifikált állapotban van. A megerősítő emailt elküldtük, kérjük erősítsd meg a címet.');
                 } else {
-                    setAccountStatusFeedback('danger', 'Az email címed megváltozott, de a verifikációs email küldése sikertelen volt. Kattints az újraküldés gombra az Account Status szekcióban.');
+                    setAccountStatusFeedback('danger', 'Az email címed megváltozott, de a verifikációs email küldése sikertelen volt. Kattints az újraküldés gombra a Fiók állapota szekcióban.');
                     scrollToAccountStatusAndHighlightResend();
                 }
             }
@@ -526,7 +526,7 @@ async function submitProfileSettingsChanges() {
             await refreshAuthUi('profile-settings-save-success');
         } catch (error) {
             setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
-            elements.confirmSaveButton.textContent = 'Mentes';
+            elements.confirmSaveButton.textContent = 'Mentés';
             updateModalSaveButtonState();
             throw new Error(error.message || 'Profil beállítás mentési hiba.');
         }
