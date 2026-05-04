@@ -1,0 +1,25 @@
+/* ================================================================
+ * adminPanel.css — aggregator
+ *
+ * Az eredeti egybetomoritett 3794-soros stylesheet rendeltetes szerinti
+ * kis fajlokra van bontva az adminPanel/ almappaba. Ez a fajl @import-tal
+ * tolti be oket az eredeti sorrendben — a cascade es a specificity igy
+ * pontosan ugy mukodik, mint amikor egyetlen fajl volt.
+ *
+ * Sorrend modositasa = vizualis breakage. Ne csereld ossze.
+ * ================================================================ */
+
+@import url('./adminPanel/01-tokens.css');
+@import url('./adminPanel/02-base.css');
+@import url('./adminPanel/03-sidebar.css');
+@import url('./adminPanel/04-header.css');
+@import url('./adminPanel/05-cards.css');
+@import url('./adminPanel/06-components.css');
+@import url('./adminPanel/07-userDetail.css');
+@import url('./adminPanel/08-utilities.css');
+@import url('./adminPanel/09-dashboard.css');
+@import url('./adminPanel/10-tests.css');
+@import url('./adminPanel/11-wsStatus.css');
+@import url('./adminPanel/12-contrast.css');
+@import url('./adminPanel/13-tables.css');
+@import url('./adminPanel/14-userModal.css');

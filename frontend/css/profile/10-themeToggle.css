@@ -1,0 +1,24 @@
+/* Theme Toggle */
+.theme-toggle {
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 3px;
+    display: flex;
+    width: 52px;
+    height: 28px;
+    cursor: pointer;
+    align-items: center;
+    transition: all 0.3s ease;
+}
+
+.theme-toggle-knob {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--accent-gold);
+    transition: transform 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}

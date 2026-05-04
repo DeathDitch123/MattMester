@@ -1,0 +1,170 @@
+/* ---------- 6) Kártyák ---------- */
+.stat-card,
+.content-card {
+    background: linear-gradient(135deg, rgba(30, 41, 59, 0.95) 0%, rgba(30, 41, 59, 0.7) 100%);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    transition: border-color 0.3s ease, box-shadow 0.3s ease, transform 0.3s var(--easing);
+}
+.content-card { overflow: hidden; }
+.content-card:hover {
+    border-color: rgba(212, 175, 55, 0.18);
+    box-shadow: var(--shadow-card-hover);
+}
+
+/* ---------- Stat card ---------- */
+.stat-card {
+    padding: 1.25rem 1.5rem;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent-gold), var(--accent-gold-hover), var(--accent-gold));
+    background-size: 200% 100%;
+    animation: shimmer 4s ease infinite;
+}
+
+.stat-card::after {
+    content: '';
+    position: absolute;
+    top: -40%;
+    right: -15%;
+    width: 110px;
+    height: 110px;
+    background: radial-gradient(circle, rgba(212, 175, 55, 0.05) 0%, transparent 70%);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.stat-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 16px 32px -10px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(212, 175, 55, 0.18);
+    border-color: rgba(212, 175, 55, 0.3);
+}
+
+.stat-icon {
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.3rem;
+    margin-bottom: 0.85rem;
+    transition: transform 0.3s ease;
+}
+.stat-card:hover .stat-icon { transform: scale(1.08) rotate(4deg); }
+
+.stat-icon.bg-primary-soft  { background: rgba(59, 130, 246, 0.18); color: var(--accent-blue); }
+.stat-icon.bg-success-soft  { background: rgba(16, 185, 129, 0.18); color: var(--accent-green); }
+.stat-icon.bg-warning-soft  { background: rgba(212, 175, 55, 0.18); color: var(--accent-gold); }
+.stat-icon.bg-danger-soft   { background: rgba(233, 69, 96, 0.18);  color: var(--accent-red); }
+
+.stat-value {
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin-bottom: 0.15rem;
+    font-family: 'Playfair Display', serif;
+    line-height: 1.1;
+}
+
+.stat-label {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.stat-hint {
+    display: block;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+}
+
+/* ---------- Content card ---------- */
+.card-header {
+    background: transparent;
+    border-bottom: 1px solid var(--border-soft);
+    padding: 1rem 1.25rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.card-header-extra {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.card-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+}
+
+.card-body { padding: 1.25rem; }
+
+.card-footer {
+    background: transparent !important;
+    border-top: 1px solid var(--border-soft) !important;
+    padding: 0.75rem 1.25rem !important;
+}
+
+/* ---------- Tables ---------- */
+.table {
+    color: var(--text-secondary);
+    margin: 0;
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--text-secondary);
+}
+
+.table thead th {
+    background: rgba(2, 6, 23, 0.4);
+    border-bottom: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.6px;
+    padding: 0.75rem 1rem;
+}
+
+.table tbody td {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: middle;
+}
+
+.table tbody tr:last-child td { border-bottom: none; }
+
+.table tbody tr { transition: background 0.15s; }
+.table tbody tr:hover { background: rgba(212, 175, 55, 0.04); }
+
+/* Pagination */
+.page-link {
+    background: var(--bg-dark) !important;
+    border-color: var(--border-color) !important;
+    color: var(--text-secondary) !important;
+}
+.page-item.active .page-link {
+    background: var(--accent-gold) !important;
+    border-color: var(--accent-gold) !important;
+    color: #000 !important;
+}
+.page-item.disabled .page-link { color: var(--text-muted) !important; opacity: 0.5; }
+

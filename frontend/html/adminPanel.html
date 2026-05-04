@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; connect-src 'self' https://cdn.jsdelivr.net; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline'; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="../css/adminPanel.css" />
+    <link rel="stylesheet" href="../css/shared/topNavbar.css" />
+    <link rel="stylesheet" href="../css/shared/confirmModal.css" />
+    <link rel="stylesheet" href="../css/shared/fabChat.css" />
+    <link rel="stylesheet" href="../css/shared/responsive.css" />
+</head>
+
+<body class="has-mm-top-navbar">
+    <!-- Kozos felso navbar (kerul be ide az adminPanel + profile altal megosztott
+         topNavbar.js + topNavbar.css alapjan). data-page="admin" donti el a
+         logout viselkedeset (csak admin token-clear, fooldal session marad). -->
+    <nav class="mm-top-navbar" data-page="admin" aria-label="Felső navigáció" data-i18n-attr="aria-label:profile.top_nav_aria">
+        <div class="mm-top-navbar-inner">
+            <a class="mm-top-navbar-brand" href="/">
+                <i class="bi bi-king-fill"></i>
+                <span>MATTMESTER</span>
+            </a>
+            <div class="mm-top-navbar-actions">
+                <div class="mm-i18n-switch" role="group" aria-label="Nyelv / Language">
+                    <button type="button" data-i18n-toggle="hu" aria-pressed="true">HU</button>
+                    <button type="button" data-i18n-toggle="en" aria-pressed="false">EN</button>
+                </div>
+                <span class="mm-top-navbar-greeting"><span data-i18n="nav.greeting">Szia</span>, <span id="mmTopNavbarUsername">…</span>!</span>
+                <a class="mm-top-navbar-btn" href="/html/profile.html" data-i18n="nav.profile_settings">Profil beállítás</a>
+                <button type="button" class="mm-top-navbar-btn mm-top-navbar-btn--danger" id="mmTopNavbarLogoutBtn" data-i18n="nav.logout">Kijelentkezés</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+
+    <!-- Sidebar (a felso MATTMESTER navbar mar adja a brand-et — itt csak a menu) -->
+    <nav class="sidebar" id="sidebar" aria-label="Admin navigáció">
+        <div class="sidebar-menu" id="sidebarMenu"><!-- JS render --></div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-content" id="mainContent">
+        <!-- Top Navbar -->
+        <div class="top-navbar">
+            <div class="d-flex align-items-center gap-3">
+                <button class="toggle-sidebar" onclick="toggleSidebar()" aria-label="Sidebar váltása">
+                    <i class="bi bi-list"></i>
+                </button>
+            </div>
+            <div class="d-flex align-items-center gap-2 gap-md-3">
+                <!-- Admin token visszaszámláló (15 perc sliding TTL) -->
+                <button type="button" class="admin-token-pill healthy" id="adminTokenPill" onclick="refreshAdminToken()"
+                    aria-label="Admin token frissítése" title="Admin token érvényessége — kattints a frissítéshez"
+                    data-i18n-attr="aria-label:admin.token_refresh,title:admin.token_title">
+                    <i class="bi bi-shield-fill-check token-icon"></i>
+                    <span class="token-label" data-i18n="admin.token">Token</span>
+                    <span class="token-countdown" id="tokenCountdown">15:00</span>
+                </button>
+
+                <button type="button" id="adminBellBtn" class="btn btn-outline-gold position-relative d-none d-sm-inline-flex"
+                        aria-label="Riasztások — ugras a Riasztasok oldalra"
+                        title="Riasztások — ugras a Riasztasok oldalra"
+                        data-i18n-attr="aria-label:admin.alerts_jump,title:admin.alerts_jump"
+                        onclick="showSection('alerts')">
+                    <i class="bi bi-bell-fill"></i>
+                    <span id="adminBellBadge"
+                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">0</span>
+                </button>
+                <!-- A user-profile dropdown (avatar + Profil/Beallitasok/Kijelentkezes)
+                     tovabbra is rejtett DOM-ban hagyjuk, mert a 09-auth.js a
+                     #headerUsername / #headerRole / #headerAvatar ID-kbol etti a
+                     populateHeaderFromUser-t. A felso MATTMESTER navbar a tartalmi
+                     reszt (Szia/Profil/Kijelentkezes) atveszi, igy itt csak az
+                     adatkotes el. -->
+                <div class="user-profile dropdown d-none" aria-hidden="true">
+                    <img id="headerAvatar" src="/profile_pictures/default.png" alt="Admin" class="user-avatar">
+                    <span id="headerUsername" data-i18n="common.loading">Betöltés...</span>
+                    <span id="headerRole">—</span>
+                </div>
+            </div>
+        </div>
+
+        <div id="adminSections"><!-- JS render --></div>
+    </main>
+
+    <!-- Lebego chat ikon — ugyanaz a `MattMesterChatModal` mint a profile oldalon.
+         A regi sidebar `Chat` menupont helyett, hogy egysegesebb legyen az UX. -->
+    <button class="fab-chat" id="fabOpenChatButton" type="button" data-open-chat="inbox" aria-label="Chat megnyitása"
+        data-i18n-attr="aria-label:profile.messages"
+        onclick="if(window.MattMesterChatModal&&window.MattMesterChatModal.openInbox){window.MattMesterChatModal.openInbox();}">
+        <span class="fab-tooltip" data-i18n="profile.messages">Üzenetek</span>
+        <i class="bi bi-chat-dots-fill" style="font-size:1.5rem;"></i>
+    </button>
+
+    <footer class="admin-footer">
+        <div class="admin-footer-brand"><i class="bi bi-king-fill me-1"></i> MattAdmin</div>
+        <div class="admin-footer-text">&copy; 2026 MattMester &middot; <span data-i18n="admin.title">Admin Panel</span> &middot; <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener" class="text-secondary text-decoration-none">mattmester.support@gmail.com</a> &middot;
+            <button type="button" class="house-rules-footer-link" onclick="MattMesterHouseRules.open()" title="Sakk szabályok, házirend, tudnivalók">
+                <i class="bi bi-info-circle"></i> <span data-i18n="index.rules">Szabályok</span>
+            </button>
+        </div>
+    </footer>
+
+    <!-- Admin User View Modal — megtekintés audit log-okkal -->
+    <div class="modal fade admin-user-view-modal" id="adminUserViewModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-person-vcard me-2 text-gold"></i><span data-i18n="admin.user_details_title">Felhasználó részletei</span>
+                        <span class="admin-user-view-id text-secondary small ms-2" id="adminUserViewId">#—</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="admin-user-view-grid">
+                        <aside class="admin-user-view-aside">
+                            <div class="admin-user-view-avatar-wrap">
+                                <img id="adminUserViewAvatar" src="/profile_pictures/default.png"
+                                    class="admin-user-view-avatar" alt="Profilkép" data-fallback="true">
+                            </div>
+                            <h4 class="admin-user-view-name" id="adminUserViewName">—</h4>
+                            <div class="admin-user-view-email-line">
+                                <span class="text-secondary" id="adminUserViewEmail">—</span>
+                                <span id="adminUserViewEmailVerified" class="email-verified-badge" title="Email státusz"></span>
+                            </div>
+                            <div class="admin-user-view-badges mt-2">
+                                <span id="adminUserViewRole"></span>
+                                <span id="adminUserViewStatus"></span>
+                                <span id="adminUserViewImageStatus" class="profile-image-status-badge"></span>
+                            </div>
+                            <div class="admin-user-view-elo-trio" id="adminUserViewEloTrio">
+                                <div class="admin-user-view-elo-card" data-kind="classic">
+                                    <div class="admin-user-view-elo-num" id="adminUserViewEloClassic">0</div>
+                                    <small data-i18n="admin.classical">Klasszikus</small>
+                                </div>
+                                <div class="admin-user-view-elo-card is-primary" data-kind="mm">
+                                    <div class="admin-user-view-elo-num" id="adminUserViewEloMM">0</div>
+                                    <small data-i18n="admin.mattmester">MattMester</small>
+                                </div>
+                                <div class="admin-user-view-elo-card" data-kind="bullet">
+                                    <div class="admin-user-view-elo-num" id="adminUserViewEloBullet">0</div>
+                                    <small data-i18n="admin.bullet">Bullet</small>
+                                </div>
+                            </div>
+                            <hr class="border-secondary my-3">
+                            <div class="admin-user-view-stats">
+                                <div><div class="h5 text-success mb-0" id="adminUserViewWins">0</div><small class="text-secondary" data-i18n="admin.win">Győzelem</small></div>
+                                <div><div class="h5 text-danger mb-0"  id="adminUserViewLosses">0</div><small class="text-secondary" data-i18n="admin.loss">Vereség</small></div>
+                                <div><div class="h5 text-warning mb-0" id="adminUserViewDraws">0</div><small class="text-secondary" data-i18n="admin.draw">Döntetlen</small></div>
+                                <div><div class="h5 text-gold mb-0"    id="adminUserViewWinRate">0%</div><small class="text-secondary" data-i18n="admin.win_rate">Győzelmi arány</small></div>
+                            </div>
+
+                            <!-- Presence panel -->
+                            <div class="admin-user-view-presence" id="adminUserViewPresence">
+                                <div class="admin-user-view-presence-head">
+                                    <span class="user-presence" id="adminUserViewPresenceBadge">
+                                        <span class="user-presence-dot"></span><span id="adminUserViewPresenceLabel">Offline</span>
+                                    </span>
+                                    <span class="text-secondary small" id="adminUserViewPresenceMeta">—</span>
+                                </div>
+                                <ul class="admin-user-view-presence-tabs" id="adminUserViewPresenceTabs"></ul>
+                            </div>
+
+                            <hr class="border-secondary my-3">
+                            <ul class="admin-user-view-meta-list">
+                                <li><span class="text-secondary" data-i18n="admin.last_active_label">Utolsó aktivitás</span><span class="text-white" id="adminUserViewLastActive">—</span></li>
+                                <li><span class="text-secondary" data-i18n="admin.joined">Csatlakozott</span><span class="text-white" id="adminUserViewJoined">—</span></li>
+                                <li><span class="text-secondary" data-i18n="admin.last_ip">Utolsó IP</span><span class="text-white font-monospace" id="adminUserViewLastIp">—</span></li>
+                            </ul>
+                        </aside>
+
+                        <section class="admin-user-view-main">
+                            <div class="admin-user-view-tabs" role="tablist" aria-label="Naplók szűrése">
+                                <button type="button" class="admin-user-view-tab is-active" data-tab="target"
+                                    onclick="switchAdminUserViewTab('target')" role="tab">
+                                    <i class="bi bi-person-bounding-box me-1"></i><span data-i18n="admin.what_happened">Vele történt</span>
+                                </button>
+                                <button type="button" class="admin-user-view-tab" data-tab="actor"
+                                    onclick="switchAdminUserViewTab('actor')" role="tab">
+                                    <i class="bi bi-shield-fill-exclamation me-1"></i><span data-i18n="admin.he_did">Ő végezte</span>
+                                </button>
+                                <button type="button" class="admin-user-view-tab" data-tab="security"
+                                    onclick="switchAdminUserViewTab('security')" role="tab">
+                                    <i class="bi bi-shield-lock me-1"></i><span data-i18n="admin.security_log">Biztonsági napló</span>
+                                </button>
+                                <span class="admin-user-view-tabs-hint text-secondary small ms-auto" id="adminUserViewTabsHint">
+                                    <i class="bi bi-info-circle me-1"></i><span data-i18n="admin.audit_last100">Audit napló — utolsó 100</span>
+                                </span>
+                            </div>
+                            <div class="admin-user-view-tab-pane" data-tab="target">
+                                <ul class="admin-user-view-audit-list">
+                                    <li class="admin-user-view-empty">
+                                        <i class="bi bi-arrow-repeat spin"></i>
+                                        <div data-i18n="admin.loading_logs">Naplóbejegyzések betöltése…</div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="admin-user-view-tab-pane d-none" data-tab="actor">
+                                <ul class="admin-user-view-audit-list">
+                                    <li class="admin-user-view-empty">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        <div data-i18n="admin.switch_tab">Válts a fülre a betöltéshez.</div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div class="admin-user-view-tab-pane d-none" data-tab="security">
+                                <div class="admin-user-view-security-filter" role="group" aria-label="Biztonsági napló szűrése">
+                                    <button type="button" class="admin-user-view-sec-filter is-active" data-sec-filter="all"      onclick="setAdminUserViewSecurityFilter('all')" data-i18n="admin.filter_all">Összes</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="auth"     onclick="setAdminUserViewSecurityFilter('auth')" data-i18n="admin.filter_session">Munkamenet</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="security" onclick="setAdminUserViewSecurityFilter('security')" data-i18n="admin.filter_security">Biztonság</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="profile"  onclick="setAdminUserViewSecurityFilter('profile')" data-i18n="admin.filter_profile">Profil</button>
+                                    <button type="button" class="admin-user-view-sec-filter"           data-sec-filter="social"   onclick="setAdminUserViewSecurityFilter('social')" data-i18n="admin.filter_social">Szociális</button>
+                                </div>
+                                <ul class="admin-user-view-security-list">
+                                    <li class="admin-user-view-empty">
+                                        <i class="bi bi-hourglass-split"></i>
+                                        <div data-i18n="admin.switch_tab">Válts a fülre a betöltéshez.</div>
+                                    </li>
+                                </ul>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                <div class="modal-footer admin-user-view-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.close">Bezárás</button>
+                    <button type="button" class="btn btn-outline-danger" id="adminUserViewBanBtn">
+                        <i class="bi bi-ban me-1"></i><span data-i18n="admin.ban">Tiltás</span>
+                    </button>
+                    <button type="button" class="btn btn-gold" id="adminUserViewEditBtn">
+                        <i class="bi bi-pencil me-1"></i><span data-i18n="admin.edit">Szerkesztés</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add User Modal -->
+    <div class="modal fade" id="addUserModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" data-i18n="admin.new_user">Új felhasználó</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="createUserUsername" class="form-label" data-i18n="common.username">Felhasználónév</label>
+                        <input id="createUserUsername" name="createUserUsername" type="text" class="form-control"
+                            placeholder="Add meg a felhasználónevet" data-i18n-attr="placeholder:admin.new_user_username_ph">
+                    </div>
+                    <div class="mb-3">
+                        <label for="createUserEmail" class="form-label" data-i18n="admin.new_user_email">E-mail</label>
+                        <input id="createUserEmail" name="createUserEmail" type="email" class="form-control"
+                            placeholder="Add meg az e-mail címet" data-i18n-attr="placeholder:admin.new_user_email_ph">
+                    </div>
+                    <div class="mb-3">
+                        <label for="createUserRole" class="form-label" data-i18n="admin.role_label">Szerepkör</label>
+                        <select id="createUserRole" name="createUserRole" class="form-select">
+                            <option value="player" data-i18n="admin.role_player">Játékos</option>
+                            <option value="admin" data-i18n="admin.role_admin">Adminisztrátor</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="createUserInitialElo" class="form-label" data-i18n="admin.initial_elo">Kezdeti ELO</label>
+                        <input id="createUserInitialElo" name="createUserInitialElo" type="number" class="form-control"
+                            value="1200" min="0" max="4000">
+                    </div>
+                    <div class="mb-3">
+                        <label for="createUserReason" class="form-label" data-i18n="admin.reason_audit">Indok (audit)</label>
+                        <textarea id="createUserReason" name="createUserReason" class="form-control" rows="2"
+                            placeholder="Pl.: Új csapat-tag onboarding (legalább 10 karakter)" data-i18n-attr="placeholder:admin.reason_audit_ph"></textarea>
+                        <div class="form-text text-secondary" data-i18n="admin.reason_audit_hint">Az indok az admin audit logba kerul.</div>
+                    </div>
+                    <div id="createUserFeedback" class="alert d-none" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="createUserSubmitBtn"
+                        onclick="submitCreateUser()" data-i18n="admin.create_user">Felhasználó létrehozása</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin step-up elevate modal (ADMIN_PANEL.md §2.3) -->
+    <div class="modal fade" id="adminElevateModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content elevate-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-shield-lock-fill me-2 text-gold"></i>
+                        <span data-i18n="admin.elevate_title">Admin szint aktiválása</span>
+                    </h5>
+                </div>
+                <div class="modal-body">
+                    <div class="elevate-info">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div data-i18n="admin.elevate_info">
+                            A session bejelentkezés mellett az admin műveletekhez szükséges egy
+                            <strong>15 perc érvényességű step-up token</strong>.
+                            Add meg a saját jelszavadat a token kiállításához.
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="elevatePassword" class="form-label"><span data-i18n="common.password">Jelszó</span> <span class="text-danger">*</span></label>
+                        <input id="elevatePassword" type="password" class="form-control form-control-lg"
+                            placeholder="Saját jelszavad" data-i18n-attr="placeholder:admin.your_password" autocomplete="current-password">
+                    </div>
+
+                    <div id="elevateError" class="alert alert-danger d-none mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" onclick="logout()" data-i18n="admin.exit">Kilépés</button>
+                    <button type="button" class="btn btn-gold" id="elevateSubmit" onclick="performElevate()">
+                        <i class="bi bi-shield-fill-check me-1"></i><span data-i18n="admin.activate_15min">Aktiválás (15 perc)</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kritikus művelet megerősítése (ADMIN_PANEL.md §3.2) -->
+    <div class="modal fade" id="criticalActionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-shield-fill-exclamation me-2 text-danger"></i>
+                        <span id="criticalActionTitle" data-i18n="admin.critical_title">Kritikus művelet megerősítése</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div data-i18n="admin.critical_warning">
+                            Ez a művelet <strong>naplózásra kerül</strong> és
+                            <strong>nem visszavonható</strong>. A folytatáshoz add meg az indokot
+                            <strong>min. 10 karakterben</strong> és a saját jelszavadat.
+                        </div>
+                    </div>
+
+                    <div id="criticalActionDescription" class="critical-action-meta"></div>
+
+                    <div class="mb-3">
+                        <label for="criticalReason" class="form-label">
+                            <span data-i18n="admin.reason_label">Indok</span> <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="criticalReasonCount">0</span> / 10
+                            </span>
+                        </label>
+                        <textarea id="criticalReason" class="form-control" rows="3"
+                            placeholder="Naplozasra kerulo indok (min. 10 karakter)..." data-i18n-attr="placeholder:admin.reason_ph"></textarea>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="criticalPassword" class="form-label">
+                            <span data-i18n="admin.confirm_password">Megerősítő jelszó</span> <span class="text-danger">*</span>
+                        </label>
+                        <input id="criticalPassword" type="password" class="form-control"
+                            placeholder="Saját jelszavad — bcrypt match a backend-en" data-i18n-attr="placeholder:admin.confirm_password_ph">
+                    </div>
+                    <small class="text-secondary">
+                        <i class="bi bi-arrow-clockwise me-1"></i>
+                        <span data-i18n="admin.token_rotates">Sikeres végrehajtás után az admin token automatikusan rotálódik (új 15 perc).</span>
+                    </small>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" onclick="executeCriticalAction()">
+                        <i class="bi bi-shield-fill-check me-1"></i><span data-i18n="admin.execute_action">Művelet végrehajtása</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- IP blokkolás modal (Riasztások oldal "IP tiltás" gombjáról) -->
+    <div class="modal fade" id="ipBlockModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-ban me-2 text-danger"></i>
+                        <span data-i18n="admin.ip_block">IP cím blokkolása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <div data-i18n="admin.ip_block_warning">
+                            A blokkolt IP <strong>nem fér hozzá az oldalhoz</strong> egészen a lejáratig (vagy véglegesen).
+                            A művelet <strong>naplózásra kerül</strong> (severity: <code>critical</code>).
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="admin.ip_address">IP cím</label>
+                        <div class="critical-action-meta font-monospace text-gold" id="ipBlockModalIp">—</div>
+                    </div>
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="ipBlockType" data-i18n="admin.type">Típus</label>
+                            <select id="ipBlockType" class="form-select" onchange="onIpBlockTypeChange()">
+                                <option value="Ideiglenes" data-i18n="admin.temporary">Ideiglenes</option>
+                                <option value="Végleges" data-i18n="admin.permanent">Végleges</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="ipBlockDuration" data-i18n="admin.duration_hours">Időtartam (óra)</label>
+                            <input id="ipBlockDuration" class="form-control" type="number" value="24" min="1">
+                        </div>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="ipBlockReason" class="form-label"><span data-i18n="admin.reason_label">Indok</span> <span class="text-danger">*</span> <span class="text-secondary fw-normal small" data-i18n="admin.reason_min10">(min. 10 karakter)</span></label>
+                        <textarea id="ipBlockReason" class="form-control" rows="2"
+                                  placeholder="Például: ismétlődő spam regisztráció, token brute-force..." data-i18n-attr="placeholder:admin.ip_reason_ph"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" onclick="submitIpBlock()">
+                        <i class="bi bi-ban me-1"></i><span data-i18n="admin.apply_block">Blokk alkalmazása</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Soft-delete visszaállítása modal — a Felhasználó törlése > Várólista zöld 🔄 gombjából nyílik -->
+    <div class="modal fade" id="restoreUserModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal is-positive">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-arrow-counterclockwise me-2"></i>
+                        <span data-i18n="admin.user_restore">Felhasználó visszaállítása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div data-i18n="admin.restore_warning">
+                            A felhasználó <strong>visszaáll a normál állapotba</strong>: újra be tud lépni, az összes adata
+                            (barátok, meccsek, profil) érintetlen. A művelet <strong>naplózásra kerül</strong>.
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white"><span data-i18n="admin.user">Felhasználó</span>:</strong> <span class="text-gold font-monospace" id="restoreUserModalName">—</span><br>
+                        <strong class="text-white"><span data-i18n="admin.original_deletion">Eredeti törlési határidő</span>:</strong> <span class="font-monospace" id="restoreUserModalUntil">—</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" onclick="confirmUserRestore()">
+                        <i class="bi bi-arrow-counterclockwise me-1"></i><span data-i18n="admin.restore">Visszaállítás</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tiltott szavak listájához hozzáadás modal — a Moderáció > Chat moderálás view
+         "Tiltott szavakhoz" gombjából nyílik. Az admin checkbox-okkal választja ki, hogy
+         az üzenet mely szavait adja a dinamikus blocklisthez. Reason kötelező, ≥30 char. -->
+    <div class="modal fade" id="chatBlocklistAddModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-shield-fill-exclamation me-2 text-danger"></i>
+                        <span data-i18n="admin.blocklist_add_title">Hozzáadás a tiltott szavak listájához</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div data-i18n-html="admin.blocklist_add_warning">
+                            A kiválasztott szavak <strong>azonnal</strong> bekerülnek a dinamikus blocklist-be (perzisztens, runtime-cache).
+                            Ezután minden új chat üzenet, amely ezen szavak valamelyikét tartalmazza,
+                            <strong>automatikusan maszkolva</strong> kerül mentésre. Ez naplózásra kerül (severity: critical).
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white" data-i18n="admin.blocklist_source_message">Forrás üzenet:</strong>
+                        <span class="text-gold font-monospace" id="chatBlocklistAddSourceMessageId">—</span>
+                        <div id="chatBlocklistAddSourceBody" class="mt-1 text-secondary" style="font-style:italic;">—</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label" data-i18n="admin.blocklist_words_label">Szavak az üzenetből</label>
+                        <div id="chatBlocklistAddWordsContainer" class="d-flex flex-wrap gap-2">
+                            <span class="text-secondary small" data-i18n="admin.blocklist_no_words">Nincs választható szó.</span>
+                        </div>
+                        <small class="text-secondary mt-1 d-block" data-i18n="admin.blocklist_words_hint">A 3 karakternél rövidebb szavak és a már listán lévők ki vannak hagyva. Pipáld be amelyiket trágárnak ítéled.</small>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="chatBlocklistAddReason" class="form-label">
+                            <span data-i18n="admin.reason">Indok</span> <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="chatBlocklistAddReasonCount">0</span> / 10
+                            </span>
+                        </label>
+                        <textarea id="chatBlocklistAddReason" class="form-control" rows="3"
+                            placeholder="Min. 10 karakter — pl. ismétlődő szabálysértés, sértő tartalom, közösségi normák megsértése..." data-i18n-attr="placeholder:admin.blocklist_reason_ph"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="chatBlocklistAddConfirmBtn" disabled>
+                        <i class="bi bi-shield-plus me-1"></i><span data-i18n="admin.blocklist_add_btn">Hozzáadás a blocklisthez</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chat üzenet engedélyezése (unmask) modal — a Moderáció > Chat moderálás view "Engedélyezés"
+         gombjából nyílik. Indok kötelező, min. 10 karakter (chat.view_any normal action). -->
+    <div class="modal fade" id="chatAllowModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal is-positive">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-check-circle me-2 text-success"></i>
+                        <span data-i18n="admin.chat_allow_title">Chat üzenet engedélyezése</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div data-i18n-html="admin.chat_allow_warning">
+                            Az engedélyezéssel a profanity-filter által <strong>maszkolt</strong> üzenetről leveszed a maszkot.
+                            A résztvevők ezután az eredeti szöveget látják. A művelet <strong>naplózásra kerül</strong>.
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white" data-i18n="admin.chat_sender">Feladó:</strong>
+                        <span class="text-gold font-monospace" id="chatAllowModalUser">—</span>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="chatAllowReason" class="form-label">
+                            <span data-i18n="admin.chat_allow_reason_label">Felülbírálás indoka</span> <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="chatAllowReasonCount">0</span> / 10–1000
+                            </span>
+                        </label>
+                        <textarea id="chatAllowReason" class="form-control" rows="3" maxlength="1000"
+                            placeholder="Min. 10 karakter — pl. szövegkörnyezetben rendben van, nem szabálysértő..." data-i18n-attr="placeholder:admin.chat_allow_reason_ph"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-success" id="chatAllowConfirmBtn" disabled>
+                        <i class="bi bi-check-circle me-1"></i><span data-i18n="admin.chat_allow_btn">Engedélyezés megerősítése</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profilkép elutasítása modal — a Moderáció > Profilképek view "Elutasít" gombjából nyílik.
+         Indok kötelező, min. 10 karakter (admin requireReasonOnMutate middleware). -->
+    <div class="modal fade" id="profileImageRejectModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-x-circle me-2 text-danger"></i>
+                        <span data-i18n="admin.image_reject_title">Profilkép elutasítása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="critical-warning">
+                        <i class="bi bi-info-circle-fill"></i>
+                        <div data-i18n-html="admin.image_reject_warning">
+                            Az elutasítás után a feltöltő publikus profilképe <strong>visszaáll az alapértelmezettre</strong>.
+                            Az indok <strong>naplózásra kerül</strong>.
+                        </div>
+                    </div>
+
+                    <div class="critical-action-meta">
+                        <strong class="text-white" data-i18n="admin.image_reject_user">Felhasználó:</strong>
+                        <span class="text-gold font-monospace" id="profileImageRejectModalUser">—</span>
+                    </div>
+
+                    <div class="mb-1">
+                        <label for="profileImageRejectReason" class="form-label">
+                            <span data-i18n="admin.image_reject_reason_label">Elutasítás indoka</span> <span class="text-danger">*</span>
+                            <span class="critical-reason-counter ms-2">
+                                <span id="profileImageRejectReasonCount">0</span> / 10–500
+                            </span>
+                        </label>
+                        <textarea id="profileImageRejectReason" class="form-control" rows="3" maxlength="500"
+                            placeholder="Min. 10 karakter — pl. szabálysértő tartalom, sértő ábrázolás, alacsony minőség..." data-i18n-attr="placeholder:admin.image_reject_reason_ph"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="profileImageRejectConfirmBtn" disabled>
+                        <i class="bi bi-x-circle me-1"></i><span data-i18n="admin.image_reject_btn">Elutasítás megerősítése</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin profilkép szerkesztő modal — a profil oldali editor admin párja (azonnal jóváhagyott) -->
+    <div class="modal fade" id="adminProfileImageEditorModal" tabindex="-1" aria-labelledby="adminProfileImageEditorModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="adminProfileImageEditorModalLabel">
+                        <i class="bi bi-crop"></i>
+                        <span data-i18n="admin.admin_image_crop">Profilkép kivágása — admin</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary mb-3" data-i18n="admin.admin_image_hint">A képet húzással mozgathatod, zoomolhatod és forgathatod. Az admin által feltöltött kép azonnal jóváhagyott státuszt kap.</p>
+                    <div class="profile-image-editor-grid">
+                        <div class="profile-image-editor-main">
+                            <canvas id="adminProfileImageEditorCanvas" class="profile-image-editor-canvas" width="640" height="360"></canvas>
+                        </div>
+                        <div class="profile-image-editor-side">
+                            <div>
+                                <label for="adminProfileImageZoom" class="form-label mb-1" data-i18n="profile.zoom">Nagyítás</label>
+                                <input id="adminProfileImageZoom" type="range" class="form-range" min="0.6" max="3" step="0.05" value="1">
+                            </div>
+                            <div>
+                                <label for="adminProfileImageRotate" class="form-label mb-1" data-i18n="profile.rotate">Forgatás</label>
+                                <input id="adminProfileImageRotate" type="range" class="form-range" min="-180" max="180" step="1" value="0">
+                            </div>
+                            <div>
+                                <label class="form-label mb-2" data-i18n="profile.preview">Előnézet</label>
+                                <canvas id="adminProfileImageEditorPreview" class="profile-image-editor-preview" width="160" height="160"></canvas>
+                            </div>
+                            <button id="adminResetProfileImageEditor" type="button" class="btn btn-outline-gold btn-sm" data-i18n="profile.reset">Visszaállítás</button>
+                        </div>
+                    </div>
+                    <div id="adminProfileImageEditorMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-secondary me-auto" data-i18n="admin.admin_image_save_hint">A kép azonnal jóváhagyottként kerül mentésre.</small>
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="adminSaveProfileImageButton" data-i18n="admin.admin_image_save">Mentés és jóváhagyás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Kepesseg editor modal (uj / szerkesztes; torleshez a critical action modalt hasznaljuk) -->
+    <div class="modal fade" id="abilityEditorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content gold-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-magic me-2 text-gold"></i>
+                        <span id="abilityEditorTitle">Kepesseg</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="abilityEditorName" class="form-label">Nev <span class="text-danger">*</span></label>
+                            <input type="text" id="abilityEditorName" class="form-control" maxlength="100" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="abilityEditorCooldown" class="form-label">Cooldown (kor)</label>
+                            <input type="number" id="abilityEditorCooldown" class="form-control" min="0" max="999" value="0">
+                        </div>
+                        <div class="col-12">
+                            <label for="abilityEditorDescription" class="form-label">Leiras</label>
+                            <textarea id="abilityEditorDescription" class="form-control" rows="3" maxlength="2000"></textarea>
+                        </div>
+                        <div class="col-12">
+                            <label for="abilityEditorReason" class="form-label">
+                                Indoklas <span class="text-secondary fw-normal small ms-1">(opcionalis)</span>
+                            </label>
+                            <textarea id="abilityEditorReason" class="form-control" rows="2"
+                                      placeholder="Naplozasra kerulo indoklas — uresen is hagyhato."></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-gold" onclick="abilityEditorSubmit()">
+                        <i class="bi bi-check2 me-1"></i>Mentes
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spectator modal (eloben mukodo meccs nezese) -->
+    <div class="modal fade" id="spectatorModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-eye me-2 text-gold"></i>
+                        <span id="spectatorTitle">Spectator</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                            onclick="closeSpectator()" aria-label="Bezaras"></button>
+                </div>
+                <div class="modal-body" id="spectatorBody">
+                    <div class="text-center py-4 text-secondary">Toltes...</div>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-secondary me-auto">A meccs lepesei elo realtime jonnek a /admin WebSocketrol.</small>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" onclick="closeSpectator()">Bezar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tesztek futtatasa egyszeru megerosito modal (nem kritikus muvelet) -->
+    <div class="modal fade" id="testsRunConfirmModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-play-circle-fill me-2 text-gold"></i>
+                        <span data-i18n="admin.tests_run_title">Tesztek futtatása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3" data-i18n="admin.tests_run_hint">
+                        A backend Jest + Supertest tesztkészlete fut le (~5-10 mp). Egyszerre csak egy futás
+                        lehetséges. A futás naplózva lesz az audit log-ba (info szintű bejegyzés).
+                    </p>
+                    <div class="mb-1">
+                        <label for="testsRunReason" class="form-label">
+                            <span data-i18n="admin.note_optional">Megjegyzés</span> <span class="text-secondary fw-normal small ms-1" data-i18n="admin.optional">(opcionális)</span>
+                        </label>
+                        <textarea id="testsRunReason" class="form-control" rows="2"
+                                  placeholder="Pl.: utolso PR előtti smoke-test — uresen is hagyhato." data-i18n-attr="placeholder:admin.tests_note_ph"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" onclick="submitTestsRunFromConfirm()">
+                        <i class="bi bi-play-fill me-1"></i><span data-i18n="admin.tests_run_btn">Indítás</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Issue #53 — Admin gyors-uzenet modal: admin direkt chat-uzenetet kuld a kivalasztott
+         user-nek a /api/chat/conversations/direct + /messages endpointokon keresztul. A
+         conversation a chat.html oldalon a usernek normal direkt-csev-kent jelenik meg. -->
+    <div class="modal fade" id="adminQuickChatModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-chat-dots-fill me-2 text-gold"></i>
+                        <span data-i18n="admin.quick_chat_title">Üzenet küldése —</span> <span id="adminQuickChatTargetName" class="text-gold">—</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3" data-i18n="admin.quick_chat_intro">
+                        Az üzenet egy direkt beszélgetésben (1-az-1) érkezik a felhasználónak.
+                        Ha még nem volt direkt-conv, a rendszer most létrehozza.
+                    </p>
+                    <div class="mb-3">
+                        <label for="adminQuickChatMessage" class="form-label" data-i18n="admin.message">Üzenet</label>
+                        <textarea id="adminQuickChatMessage" class="form-control" rows="4"
+                                  maxlength="1000" placeholder="Írd ide az üzenetet..." data-i18n-attr="placeholder:admin.quick_chat_ph"></textarea>
+                        <div class="form-text text-secondary">
+                            <span id="adminQuickChatCount">0</span>/1000 <span data-i18n="admin.character_count">karakter</span>
+                        </div>
+                    </div>
+                    <div id="adminQuickChatFeedback" class="alert d-none" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="adminQuickChatSendBtn" onclick="submitAdminQuickChat()">
+                        <i class="bi bi-send-fill me-1"></i><span data-i18n="admin.send">Küldés</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin grant felhasznalo-valaszto modal -->
+    <div class="modal fade" id="adminGrantPickerModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content critical-action-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-stars me-2 text-gold"></i>
+                        <span data-i18n="admin.grant_admin_title">Admin szerep adása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary small mb-3" data-i18n="admin.grant_admin_intro">
+                        Add meg a felhasználónevet, akinek admin szerepet szeretnél adni. A művelet
+                        kritikus, ezért egy további indoklást és jelszó-megerősítést is kérni fogunk.
+                    </p>
+                    <div class="mb-3">
+                        <label for="adminGrantUsername" class="form-label">
+                            <span data-i18n="admin.grant_admin_label">Felhasználónév</span> <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" id="adminGrantUsername" class="form-control" placeholder="pl.: SakkMester99" data-i18n-attr="placeholder:admin.grant_admin_ph">
+                    </div>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="adminGrantMakeSuper">
+                        <label class="form-check-label" for="adminGrantMakeSuper">
+                            <i class="bi bi-stars text-gold me-1"></i><span data-i18n="admin.grant_super_check">Super-admin jogot is adjon</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" onclick="adminGrantPickerSubmit()">
+                        <i class="bi bi-arrow-right me-1"></i><span data-i18n="admin.continue">Tovább</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast container (showToast() helper hozza létre dinamikusan, de itt egy fix slot is van) -->
+    <div id="adminToastContainer" class="admin-toast-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="../javascript/_utils.js"></script>
+    <script src="../javascript/shared/confirmModal.js"></script>
+    <script src="../javascript/profileImageUtils.js"></script>
+    <script src="../javascript/socketClient.js"></script>
+    <script src="../javascript/shared/maintenanceClient.js"></script>
+    <script src="../javascript/chessInviteGlobal.js"></script>
+    <script src="../javascript/chatModal.js"></script>
+    <script src="../javascript/requestControl.js"></script>
+    <script src="../javascript/shared/adminAuthFlow.js"></script>
+    <script src="../javascript/shared/houseRules.js"></script>
+    <script src="../javascript/adminPanel/01-helpers.js"></script>
+    <script src="../javascript/adminPanel/02-state.js"></script>
+    <script src="../javascript/adminPanel/03-userList.js"></script>
+    <script src="../javascript/adminPanel/04-navigation.js"></script>
+    <script src="../javascript/adminPanel/05-chartStatus.js"></script>
+    <script src="../javascript/adminPanel/06-sections.js"></script>
+    <script src="../javascript/adminPanel/07-feedRows.js"></script>
+    <script src="../javascript/adminPanel/08-sectionSwitch.js"></script>
+    <script src="../javascript/adminPanel/09-auth.js"></script>
+    <script src="../javascript/adminPanel/10-tokenCountdown.js"></script>
+    <script src="../javascript/adminPanel/11-socket.js"></script>
+    <script src="../javascript/adminPanel/12-liveUpdates.js"></script>
+    <script src="../javascript/adminPanel/13-criticalActions.js"></script>
+    <script src="../javascript/adminPanel/14-userTable.js"></script>
+    <script src="../javascript/adminPanel/15-alerts.js"></script>
+    <script src="../javascript/adminPanel/16-security.js"></script>
+    <script src="../javascript/adminPanel/17-userBan.js"></script>
+    <script src="../javascript/adminPanel/18-userDelete.js"></script>
+    <script src="../javascript/adminPanel/19-userDetail.js"></script>
+    <script src="../javascript/adminPanel/20-imageEditor.js"></script>
+    <script src="../javascript/adminPanel/21-logout.js"></script>
+    <script src="../javascript/adminPanel/22-activityChart.js"></script>
+    <script src="../javascript/adminPanel/23-moderationProfileImages.js"></script>
+    <script src="../javascript/adminPanel/24-moderationChat.js"></script>
+    <script src="../javascript/adminPanel/25-moderationReports.js"></script>
+    <script src="../javascript/adminPanel/26-init.js"></script>
+    <script src="../javascript/adminPanel/27-adminPages.js"></script>
+    <script src="../javascript/adminPanel/29-userCreate.js"></script>
+    <script src="../javascript/adminPanel/28-bootstrap.js"></script>
+    <script src="../javascript/shared/topNavbar.js" defer></script>
+    <script src="../javascript/shared/i18n.js" defer></script>
+    <script src="../javascript/shared/notificationToast.js" defer></script>
+</body>
+
+</html>

@@ -1,0 +1,60 @@
+/* Footer — index.html stilusu horizontalis sor (szel-szelig, justify-between) */
+.site-footer {
+    background: rgba(2, 6, 23, 0.6);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border-color);
+    padding: 20px 1.25rem 30px;
+    margin-top: 40px;
+    color: var(--text-secondary);
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
+    text-align: left;
+}
+
+@media (max-width: 767.98px) {
+    .site-footer {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+}
+
+.footer-brand {
+    color: var(--accent-gold);
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+
+.footer-links {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem 1.25rem;
+    margin-bottom: 0;
+}
+
+.footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.85rem;
+    transition: color 0.2s ease;
+}
+
+.footer-links a:hover {
+    color: var(--accent-gold);
+}
+
+.footer-copy {
+    color: rgba(148, 163, 184, 0.55);
+    font-size: 0.8rem;
+    flex-shrink: 0;
+}
+

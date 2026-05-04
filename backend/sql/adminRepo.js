@@ -1,0 +1,1053 @@
+// Admin panel SQL repo - admin_tokens, admin_audit_log, admin_alert_log, admin_rate_escalations.
+// ADMIN_PANEL.md §6 alapjan. Kotelezo szabalyok: 1 return / fn, try-catch DB muveletkor.
+
+const { getPool } = require('./database.js');
+
+// =====================================================================
+// admin_tokens
+// =====================================================================
+
+async function createAdminToken(userId, tokenHash, expiresAt, issuedIp, issuedUserAgent) {
+    let result = { insertId: null };
+    try {
+        const pool = getPool();
+        const [insertResult] = await pool.execute(
+            `INSERT INTO admin_tokens (user_id, token_hash, expires_at, issued_ip, issued_user_agent)
+             VALUES (?, ?, ?, ?, ?)`,
+            [userId, tokenHash, expiresAt, issuedIp || 'ismeretlen', issuedUserAgent || null]
+        );
+        result = { insertId: insertResult.insertId };
+    } catch (error) {
+        console.error('createAdminToken hiba:', error.message);
+        throw new Error('Admin token mentese sikertelen.');
+    }
+    return result;
+}
+
+async function findActiveAdminToken(tokenHash, userId) {
+    let result = null;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, user_id, issued_at, last_used_at, expires_at, revoked_at
+             FROM admin_tokens
+             WHERE token_hash = ?
+               AND user_id = ?
+               AND revoked_at IS NULL
+               AND expires_at > NOW()
+             LIMIT 1`,
+            [tokenHash, userId]
+        );
+        if (rows && rows.length) {
+            result = rows[0];
+        }
+    } catch (error) {
+        console.error('findActiveAdminToken hiba:', error.message);
+        throw new Error('Admin token lekerdezesi hiba.');
+    }
+    return result;
+}
+
+async function touchAdminToken(tokenId, slidingTtlMs) {
+    try {
+        const pool = getPool();
+        const ttlSeconds = Math.max(1, Math.floor(Number(slidingTtlMs) / 1000) || 900);
+        await pool.execute(
+            `UPDATE admin_tokens
+             SET last_used_at = NOW(),
+                 expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND)
+             WHERE id = ?`,
+            [ttlSeconds, tokenId]
+        );
+    } catch (error) {
+        console.error('touchAdminToken hiba:', error.message);
+        throw new Error('Admin token frissitesi hiba.');
+    }
+}
+
+async function revokeAdminToken(tokenId) {
+    try {
+        const pool = getPool();
+        await pool.execute(
+            `UPDATE admin_tokens SET revoked_at = NOW() WHERE id = ? AND revoked_at IS NULL`,
+            [tokenId]
+        );
+    } catch (error) {
+        console.error('revokeAdminToken hiba:', error.message);
+        throw new Error('Admin token visszavonasi hiba.');
+    }
+}
+
+async function revokeAllAdminTokensForUser(userId) {
+    let affected = 0;
+    try {
+        const pool = getPool();
+        const [updateResult] = await pool.execute(
+            `UPDATE admin_tokens
+             SET revoked_at = NOW()
+             WHERE user_id = ? AND revoked_at IS NULL`,
+            [userId]
+        );
+        affected = updateResult.affectedRows || 0;
+    } catch (error) {
+        console.error('revokeAllAdminTokensForUser hiba:', error.message);
+        throw new Error('Admin tokenek visszavonasi hiba.');
+    }
+    return affected;
+}
+
+async function deleteExpiredAdminTokens(graceSeconds = 86400) {
+    let affected = 0;
+    try {
+        const pool = getPool();
+        const [deleteResult] = await pool.execute(
+            `DELETE FROM admin_tokens
+             WHERE (revoked_at IS NOT NULL AND revoked_at < DATE_SUB(NOW(), INTERVAL ? SECOND))
+                OR expires_at < DATE_SUB(NOW(), INTERVAL ? SECOND)`,
+            [graceSeconds, graceSeconds]
+        );
+        affected = deleteResult.affectedRows || 0;
+    } catch (error) {
+        console.error('deleteExpiredAdminTokens hiba:', error.message);
+        throw new Error('Lejart admin tokenek torlesi hiba.');
+    }
+    return affected;
+}
+
+// =====================================================================
+// admin_audit_log
+// =====================================================================
+
+async function insertAuditEntry(entry) {
+    let result = { insertId: null };
+    try {
+        const pool = getPool();
+        const [insertResult] = await pool.execute(
+            `INSERT INTO admin_audit_log (
+                actor_user_id, actor_username, action, severity,
+                target_type, target_id, target_key, target_label,
+                reason, before_state, after_state,
+                success, error_code, ip_address, user_agent, request_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                entry.actorUserId,
+                entry.actorUsername || '',
+                entry.action,
+                entry.severity || 'info',
+                entry.targetType || null,
+                entry.targetId || null,
+                entry.targetKey || null,
+                entry.targetLabel || null,
+                String(entry.reason || ''),
+                entry.beforeState == null ? null : JSON.stringify(entry.beforeState),
+                entry.afterState == null ? null : JSON.stringify(entry.afterState),
+                Boolean(entry.success),
+                entry.errorCode || null,
+                entry.ipAddress || 'ismeretlen',
+                entry.userAgent || null,
+                entry.requestId
+            ]
+        );
+        result = { insertId: insertResult.insertId };
+    } catch (error) {
+        console.error('insertAuditEntry hiba:', error.message);
+        throw new Error('Audit bejegyzes mentesi hiba.');
+    }
+    return result;
+}
+
+async function searchAuditEntries(filters = {}) {
+    let result = [];
+    try {
+        const pool = getPool();
+        const conditions = [];
+        const params = [];
+
+        if (filters.actorUserId) {
+            conditions.push('actor_user_id = ?');
+            params.push(Number(filters.actorUserId));
+        }
+        if (filters.action) {
+            conditions.push('action = ?');
+            params.push(String(filters.action));
+        }
+        if (filters.severity) {
+            conditions.push('severity = ?');
+            params.push(String(filters.severity));
+        }
+        if (filters.targetType) {
+            conditions.push('target_type = ?');
+            params.push(String(filters.targetType));
+        }
+        if (filters.targetId) {
+            conditions.push('target_id = ?');
+            params.push(Number(filters.targetId));
+        }
+        if (filters.requestId) {
+            conditions.push('request_id = ?');
+            params.push(String(filters.requestId));
+        }
+        if (filters.fromDate) {
+            conditions.push('occurred_at >= ?');
+            params.push(filters.fromDate);
+        }
+        if (filters.toDate) {
+            conditions.push('occurred_at <= ?');
+            params.push(filters.toDate);
+        }
+        if (filters.successOnly === true) {
+            conditions.push('success = TRUE');
+        } else if (filters.failureOnly === true) {
+            conditions.push('success = FALSE');
+        }
+
+        const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const limit = Math.min(Math.max(Number(filters.limit) || 100, 1), 500);
+        const offset = Math.max(Number(filters.offset) || 0, 0);
+
+        const [rows] = await pool.query(
+            `SELECT id, actor_user_id, actor_username, action, severity,
+                    target_type, target_id, target_key, target_label,
+                    reason, before_state, after_state,
+                    success, error_code, ip_address, user_agent, request_id, occurred_at
+             FROM admin_audit_log
+             ${whereClause}
+             ORDER BY occurred_at DESC
+             LIMIT ? OFFSET ?`,
+            [...params, limit, offset]
+        );
+        result = rows || [];
+    } catch (error) {
+        console.error('searchAuditEntries hiba:', error.message);
+        throw new Error('Audit kereses hiba.');
+    }
+    return result;
+}
+
+async function getAuditEntriesSinceId(sinceEventId, maxBatch = 200) {
+    let result = [];
+    try {
+        const pool = getPool();
+        const safeBatch = Math.min(Math.max(Number(maxBatch) || 200, 1), 500);
+        const safeSince = Number(sinceEventId) || 0;
+        const [rows] = await pool.query(
+            `SELECT id, actor_user_id, actor_username, action, severity,
+                    target_type, target_id, target_key, target_label,
+                    reason, before_state, after_state,
+                    success, error_code, ip_address, user_agent, request_id, occurred_at
+             FROM admin_audit_log
+             WHERE id > ? AND occurred_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)
+             ORDER BY id ASC
+             LIMIT ?`,
+            [safeSince, safeBatch]
+        );
+        result = rows || [];
+    } catch (error) {
+        console.error('getAuditEntriesSinceId hiba:', error.message);
+        throw new Error('Audit replay lekerdezesi hiba.');
+    }
+    return result;
+}
+
+async function deleteAuditEntriesOlderThan(cutoffDate) {
+    let affected = 0;
+    try {
+        const pool = getPool();
+        const [deleteResult] = await pool.execute(
+            `DELETE FROM admin_audit_log WHERE occurred_at < ?`,
+            [cutoffDate]
+        );
+        affected = deleteResult.affectedRows || 0;
+    } catch (error) {
+        console.error('deleteAuditEntriesOlderThan hiba:', error.message);
+        throw new Error('Audit retention torlesi hiba.');
+    }
+    return affected;
+}
+
+// =====================================================================
+// admin_alert_log
+// =====================================================================
+
+async function insertAlertEntry(entry) {
+    let result = { insertId: null };
+    try {
+        const pool = getPool();
+        const [insertResult] = await pool.execute(
+            `INSERT INTO admin_alert_log (
+                kind, severity, user_id, ip_address, endpoint, user_agent, detail
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+                entry.kind,
+                entry.severity || 'warning',
+                entry.userId || null,
+                entry.ipAddress || 'ismeretlen',
+                entry.endpoint || null,
+                entry.userAgent || null,
+                entry.detail == null ? null : JSON.stringify(entry.detail)
+            ]
+        );
+        result = { insertId: insertResult.insertId };
+    } catch (error) {
+        console.error('insertAlertEntry hiba:', error.message);
+        throw new Error('Alert bejegyzes mentesi hiba.');
+    }
+    return result;
+}
+
+async function getRecentAlerts(limit = 50) {
+    let result = [];
+    try {
+        const pool = getPool();
+        const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 500);
+        const [rows] = await pool.query(
+            `SELECT id, kind, severity, user_id, ip_address, endpoint, user_agent, detail, occurred_at
+             FROM admin_alert_log
+             ORDER BY occurred_at DESC
+             LIMIT ?`,
+            [safeLimit]
+        );
+        result = rows || [];
+    } catch (error) {
+        console.error('getRecentAlerts hiba:', error.message);
+        throw new Error('Alert lekerdezesi hiba.');
+    }
+    return result;
+}
+
+async function deleteAlertsOlderThan(cutoffDate) {
+    let affected = 0;
+    try {
+        const pool = getPool();
+        const [deleteResult] = await pool.execute(
+            `DELETE FROM admin_alert_log WHERE occurred_at < ?`,
+            [cutoffDate]
+        );
+        affected = deleteResult.affectedRows || 0;
+    } catch (error) {
+        console.error('deleteAlertsOlderThan hiba:', error.message);
+        throw new Error('Alert retention torlesi hiba.');
+    }
+    return affected;
+}
+
+async function countAlertsSince(sinceDate) {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM admin_alert_log WHERE occurred_at >= ?`,
+            [sinceDate]
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countAlertsSince hiba:', error.message);
+        throw new Error('Alert szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countFailedAdminAttemptsByIp(ipAddress, windowSeconds) {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const safeWindow = Math.max(60, Number(windowSeconds) || 600);
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt
+             FROM admin_alert_log
+             WHERE ip_address = ?
+               AND kind IN ('unauthorized', 'token_invalid')
+               AND occurred_at >= DATE_SUB(NOW(), INTERVAL ? SECOND)`,
+            [ipAddress, safeWindow]
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countFailedAdminAttemptsByIp hiba:', error.message);
+        throw new Error('Failed admin attempt szamolasi hiba.');
+    }
+    return result;
+}
+
+// Flexibilis alert lekerdezes a Riasztasok admin oldalrol — szurokkel.
+// Az osszes szuro opcionalis. Default: includeDismissed=false (csak aktiv alertek).
+// Whitelisted oszlopneveket hasznal, parametereket prepared statement-tel.
+async function listAlertsForAdmin(options = {}) {
+    const {
+        limit = 100,
+        includeDismissed = false,
+        kind = null,
+        severity = null,
+        sinceDate = null,
+        untilDate = null,
+        ipAddress = null,
+        userId = null
+    } = options || {};
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const allowedSeverity = new Set(['info', 'warning', 'critical']);
+
+    const conditions = [];
+    const params = [];
+
+    if (!includeDismissed) {
+        conditions.push('dismissed_at IS NULL');
+    }
+    if (kind && typeof kind === 'string') {
+        conditions.push('kind = ?');
+        params.push(kind.slice(0, 64));
+    }
+    if (severity && allowedSeverity.has(String(severity))) {
+        conditions.push('severity = ?');
+        params.push(severity);
+    }
+    if (sinceDate) {
+        conditions.push('occurred_at >= ?');
+        params.push(sinceDate instanceof Date ? sinceDate : new Date(sinceDate));
+    }
+    if (untilDate) {
+        conditions.push('occurred_at <= ?');
+        params.push(untilDate instanceof Date ? untilDate : new Date(untilDate));
+    }
+    if (ipAddress && typeof ipAddress === 'string') {
+        conditions.push('ip_address = ?');
+        params.push(ipAddress.slice(0, 45));
+    }
+    if (userId && Number(userId) > 0) {
+        conditions.push('user_id = ?');
+        params.push(Number(userId));
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    params.push(safeLimit);
+
+    try {
+        const pool = getPool();
+        const [rows] = await pool.query(
+            `SELECT id, kind, severity, user_id, ip_address, endpoint, user_agent, detail,
+                    dismissed_at, dismissed_by_user_id, occurred_at
+             FROM admin_alert_log
+             ${whereClause}
+             ORDER BY occurred_at DESC
+             LIMIT ?`,
+            params
+        );
+        return rows || [];
+    } catch (error) {
+        console.error('listAlertsForAdmin hiba:', error.message);
+        throw new Error('Alert lekerdezesi hiba (filtered).');
+    }
+}
+
+async function getAlertById(alertId) {
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, kind, severity, user_id, ip_address, endpoint, user_agent, detail,
+                    dismissed_at, dismissed_by_user_id, occurred_at
+             FROM admin_alert_log
+             WHERE id = ?
+             LIMIT 1`,
+            [alertId]
+        );
+        return rows[0] || null;
+    } catch (error) {
+        console.error('getAlertById hiba:', error.message);
+        throw new Error('Alert lekerdezesi hiba (byId).');
+    }
+}
+
+// Idempotens: ha mar dismissed, 0 affected rows-szal ter vissza.
+async function markAlertDismissed(alertId, dismissedByUserId) {
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `UPDATE admin_alert_log
+             SET dismissed_at = NOW(), dismissed_by_user_id = ?
+             WHERE id = ? AND dismissed_at IS NULL`,
+            [dismissedByUserId || null, alertId]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('markAlertDismissed hiba:', error.message);
+        throw new Error('Alert dismiss hiba.');
+    }
+}
+
+async function markAllAlertsDismissed(dismissedByUserId) {
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `UPDATE admin_alert_log
+             SET dismissed_at = NOW(), dismissed_by_user_id = ?
+             WHERE dismissed_at IS NULL`,
+            [dismissedByUserId || null]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('markAllAlertsDismissed hiba:', error.message);
+        throw new Error('Alert mass dismiss hiba.');
+    }
+}
+
+// Bejelentkezesi naplo lekerdezese az admin Bejelentkezesek oldalhoz.
+// SQL-szintu szurok: status (success|failed|all), date range, IP, username (LIKE).
+// A 'location' szurest a hivó (admin endpoint) post-fetch vegzi a classifyIp-vel.
+async function listAdminLoginHistory(options = {}) {
+    const {
+        limit = 100,
+        sinceDate = null,
+        untilDate = null,
+        ipAddress = null,
+        username = null,
+        status = 'all'
+    } = options || {};
+
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+    const conditions = [];
+    const params = [];
+
+    if (status === 'success') {
+        conditions.push("ul.event_type = 'login'");
+    } else if (status === 'failed') {
+        conditions.push("ul.event_type = 'login_failed'");
+    } else {
+        conditions.push("ul.event_type IN ('login', 'login_failed')");
+    }
+    if (sinceDate) {
+        conditions.push('ul.occurred_at >= ?');
+        params.push(sinceDate instanceof Date ? sinceDate : new Date(sinceDate));
+    }
+    if (untilDate) {
+        conditions.push('ul.occurred_at <= ?');
+        params.push(untilDate instanceof Date ? untilDate : new Date(untilDate));
+    }
+    if (ipAddress && typeof ipAddress === 'string') {
+        conditions.push('ul.ip_address = ?');
+        params.push(ipAddress.slice(0, 45));
+    }
+    if (username && typeof username === 'string') {
+        conditions.push('u.username LIKE ?');
+        params.push(`%${username.slice(0, 50)}%`);
+    }
+    params.push(safeLimit);
+
+    try {
+        const pool = getPool();
+        const [rows] = await pool.query(
+            `SELECT ul.id, ul.user_id, u.username, ul.event_type, ul.severity, ul.success,
+                    ul.ip_address, ul.user_agent, ul.message, ul.metadata, ul.occurred_at
+             FROM user_logs ul
+             LEFT JOIN users u ON u.id = ul.user_id
+             WHERE ${conditions.join(' AND ')}
+             ORDER BY ul.occurred_at DESC
+             LIMIT ?`,
+            params
+        );
+        return rows || [];
+    } catch (error) {
+        console.error('listAdminLoginHistory hiba:', error.message);
+        throw new Error('Bejelentkezesi naplo lekerdezesi hiba.');
+    }
+}
+
+// Visszaallit egy elrejtett riasztast — dismissed_at + dismissed_by_user_id NULL-ra.
+// Idempotens: ha mar nem elrejtett, 0 affectedRows.
+async function restoreAlert(alertId) {
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `UPDATE admin_alert_log
+             SET dismissed_at = NULL, dismissed_by_user_id = NULL
+             WHERE id = ? AND dismissed_at IS NOT NULL`,
+            [alertId]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('restoreAlert hiba:', error.message);
+        throw new Error('Alert visszaallitasi hiba.');
+    }
+}
+
+// =====================================================================
+// ip_blocks (hard IP block, az ipBlockGuard middleware nezi)
+// =====================================================================
+
+async function upsertIpBlock(ipAddress, blockedUntil, reason, blockedByUserId, blockedByUsername) {
+    if (!ipAddress) throw new Error('Ervenytelen IP cim.');
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `INSERT INTO ip_blocks (ip_address, blocked_until, reason, blocked_by_user_id, blocked_by_username)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                 blocked_until = VALUES(blocked_until),
+                 reason = VALUES(reason),
+                 blocked_by_user_id = VALUES(blocked_by_user_id),
+                 blocked_by_username = VALUES(blocked_by_username),
+                 created_at = CURRENT_TIMESTAMP`,
+            [
+                String(ipAddress).slice(0, 45),
+                blockedUntil || null,
+                reason ? String(reason).slice(0, 500) : null,
+                blockedByUserId || null,
+                blockedByUsername ? String(blockedByUsername).slice(0, 50) : null
+            ]
+        );
+        return { affectedRows: result.affectedRows || 0, insertId: result.insertId || null };
+    } catch (error) {
+        console.error('upsertIpBlock hiba:', error.message);
+        throw new Error('IP blokk mentesi hiba.');
+    }
+}
+
+// Aktiv blokkot ad vissza (vegleges vagy meg le nem jart). Lejart blokk null.
+async function getActiveIpBlock(ipAddress) {
+    if (!ipAddress) return null;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, ip_address, blocked_until, reason, blocked_by_user_id, blocked_by_username, created_at
+             FROM ip_blocks
+             WHERE ip_address = ?
+               AND (blocked_until IS NULL OR blocked_until > NOW())
+             LIMIT 1`,
+            [String(ipAddress).slice(0, 45)]
+        );
+        return rows[0] || null;
+    } catch (error) {
+        console.error('getActiveIpBlock hiba:', error.message);
+        return null; // fail-open: a middleware ne csukja le az oldalt
+    }
+}
+
+async function removeIpBlock(ipAddress) {
+    if (!ipAddress) throw new Error('Ervenytelen IP cim.');
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `DELETE FROM ip_blocks WHERE ip_address = ?`,
+            [String(ipAddress).slice(0, 45)]
+        );
+        return result.affectedRows || 0;
+    } catch (error) {
+        console.error('removeIpBlock hiba:', error.message);
+        throw new Error('IP blokk torlesi hiba.');
+    }
+}
+
+async function listActiveIpBlocks(limit = 200) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 200, 1), 1000);
+    try {
+        const pool = getPool();
+        const [rows] = await pool.query(
+            `SELECT id, ip_address, blocked_until, reason, blocked_by_user_id, blocked_by_username, created_at
+             FROM ip_blocks
+             WHERE blocked_until IS NULL OR blocked_until > NOW()
+             ORDER BY created_at DESC
+             LIMIT ?`,
+            [safeLimit]
+        );
+        return rows || [];
+    } catch (error) {
+        console.error('listActiveIpBlocks hiba:', error.message);
+        throw new Error('IP blokk lista hiba.');
+    }
+}
+
+// =====================================================================
+// admin_rate_escalations
+// =====================================================================
+
+async function upsertRateEscalation(scope, scopeValue, multiplier, ttlSeconds, reason) {
+    try {
+        const pool = getPool();
+        const safeMultiplier = Math.max(1.0, Number(multiplier) || 5.0);
+        const safeTtl = Math.max(60, Number(ttlSeconds) || 900);
+        await pool.execute(
+            `INSERT INTO admin_rate_escalations (scope, scope_value, multiplier, expires_at, reason)
+             VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND), ?)
+             ON DUPLICATE KEY UPDATE
+                multiplier = GREATEST(multiplier, VALUES(multiplier)),
+                expires_at = GREATEST(expires_at, VALUES(expires_at)),
+                reason = VALUES(reason)`,
+            [scope, String(scopeValue), safeMultiplier, safeTtl, reason || null]
+        );
+    } catch (error) {
+        console.error('upsertRateEscalation hiba:', error.message);
+        throw new Error('Rate escalation mentesi hiba.');
+    }
+}
+
+async function getActiveRateEscalation(scope, scopeValue) {
+    let result = null;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, scope, scope_value, multiplier, started_at, expires_at, reason
+             FROM admin_rate_escalations
+             WHERE scope = ? AND scope_value = ? AND expires_at > NOW()
+             LIMIT 1`,
+            [scope, String(scopeValue)]
+        );
+        if (rows && rows.length) {
+            result = rows[0];
+        }
+    } catch (error) {
+        console.error('getActiveRateEscalation hiba:', error.message);
+        throw new Error('Rate escalation lekerdezesi hiba.');
+    }
+    return result;
+}
+
+async function deleteRateEscalationsForScope(scope, scopeValue) {
+    let affected = 0;
+    try {
+        const pool = getPool();
+        const [result] = await pool.execute(
+            `DELETE FROM admin_rate_escalations WHERE scope = ? AND scope_value = ?`,
+            [scope, String(scopeValue)]
+        );
+        affected = result.affectedRows || 0;
+    } catch (error) {
+        console.error('deleteRateEscalationsForScope hiba:', error.message);
+    }
+    return affected;
+}
+
+async function deleteExpiredRateEscalations() {
+    let affected = 0;
+    try {
+        const pool = getPool();
+        const [deleteResult] = await pool.execute(
+            `DELETE FROM admin_rate_escalations WHERE expires_at < NOW()`
+        );
+        affected = deleteResult.affectedRows || 0;
+    } catch (error) {
+        console.error('deleteExpiredRateEscalations hiba:', error.message);
+        throw new Error('Lejart escalations torlesi hiba.');
+    }
+    return affected;
+}
+
+async function countActiveRateEscalations() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM admin_rate_escalations WHERE expires_at > NOW()`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countActiveRateEscalations hiba:', error.message);
+        throw new Error('Active escalations szamolasi hiba.');
+    }
+    return result;
+}
+
+// =====================================================================
+// users (admin-specifikus segedfunkciok)
+// =====================================================================
+
+async function getUserForAdminAuth(userId) {
+    let result = null;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, username, password_hash, role, is_super_admin, is_banned, banned_until
+             FROM users
+             WHERE id = ?
+             LIMIT 1`,
+            [userId]
+        );
+        if (rows && rows.length) {
+            result = rows[0];
+        }
+    } catch (error) {
+        console.error('getUserForAdminAuth hiba:', error.message);
+        throw new Error('Admin user lekerdezesi hiba.');
+    }
+    return result;
+}
+
+async function countSuperAdmins() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM users WHERE is_super_admin = TRUE`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countSuperAdmins hiba:', error.message);
+        throw new Error('Super admin szamolasi hiba.');
+    }
+    return result;
+}
+
+async function getAdminUserList() {
+    let result = [];
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT id, username, email, role, is_super_admin, last_active, created_at
+             FROM users
+             WHERE role = 'admin'
+             ORDER BY is_super_admin DESC, username ASC`
+        );
+        result = rows || [];
+    } catch (error) {
+        console.error('getAdminUserList hiba:', error.message);
+        throw new Error('Admin lista lekerdezesi hiba.');
+    }
+    return result;
+}
+
+async function setUserAdminRole(userId, makeAdmin, makeSuperAdmin) {
+    let beforeState = null;
+    let afterState = null;
+    try {
+        const pool = getPool();
+        const [beforeRows] = await pool.execute(
+            `SELECT id, username, role, is_super_admin FROM users WHERE id = ? LIMIT 1`,
+            [userId]
+        );
+        if (!beforeRows.length) {
+            throw new Error('A felhasznalo nem talalhato.');
+        }
+        beforeState = beforeRows[0];
+
+        const newRole = makeAdmin ? 'admin' : 'player';
+        const newSuper = makeAdmin && makeSuperAdmin ? 1 : 0;
+        await pool.execute(
+            `UPDATE users SET role = ?, is_super_admin = ? WHERE id = ?`,
+            [newRole, newSuper, userId]
+        );
+
+        const [afterRows] = await pool.execute(
+            `SELECT id, username, role, is_super_admin FROM users WHERE id = ? LIMIT 1`,
+            [userId]
+        );
+        afterState = afterRows[0] || null;
+    } catch (error) {
+        console.error('setUserAdminRole hiba:', error.message);
+        throw error;
+    }
+    return { beforeState, afterState };
+}
+
+// =====================================================================
+// dashboard statisztikak (admin:stats:tick)
+// Egy fenti hely: minden szamlalo egyetlen forrasbol jon, hogy a UI es
+// a /stats/snapshot endpoint koherens legyen.
+// =====================================================================
+
+async function countPendingProfileImages() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM profile_image_uploads WHERE status = 'pending'`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countPendingProfileImages hiba:', error.message);
+        throw new Error('Pending profile image szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countPendingFriendRequests() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM friends WHERE status = 'pending'`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countPendingFriendRequests hiba:', error.message);
+        throw new Error('Pending friend request szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countOngoingGames() {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM games WHERE status = 'ongoing'`
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countOngoingGames hiba:', error.message);
+        throw new Error('Aktiv jatszma szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countLoginsSince(sinceDate) {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM user_logs
+             WHERE event_type = 'login' AND occurred_at >= ?`,
+            [sinceDate]
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countLoginsSince hiba:', error.message);
+        throw new Error('Login szamolasi hiba.');
+    }
+    return result;
+}
+
+async function countRegistrationsSince(sinceDate) {
+    let result = 0;
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(
+            `SELECT COUNT(*) AS cnt FROM users WHERE created_at >= ?`,
+            [sinceDate]
+        );
+        result = (rows && rows[0] && Number(rows[0].cnt)) || 0;
+    } catch (error) {
+        console.error('countRegistrationsSince hiba:', error.message);
+        throw new Error('Registration szamolasi hiba.');
+    }
+    return result;
+}
+
+// =====================================================================
+// 24h ovrenkenti idosor (dashboard activity chart)
+// Egyetlen forras-igazsag: minden datasetet ugyanazzal a binekkel adunk vissza
+// (DATE_FORMAT(t, '%Y-%m-%d %H:00:00')). A frontend a /stats/activity endpoint
+// JSON-jat kapja meg, a Chart.js innen tolti az X tengelyt es a sorokat.
+// =====================================================================
+
+async function _hourlyBucketCount(label, query, params) {
+    let result = [];
+    try {
+        const pool = getPool();
+        const [rows] = await pool.execute(query, params);
+        result = (rows || []).map((row) => ({
+            hour: String(row.hour),
+            count: Number(row.cnt) || 0
+        }));
+    } catch (error) {
+        console.error(`${label} hiba:`, error.message);
+        throw new Error(`${label} lekerdezesi hiba.`);
+    }
+    return result;
+}
+
+async function getLoginsHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getLoginsHourly',
+        `SELECT DATE_FORMAT(occurred_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM user_logs
+         WHERE event_type = 'login' AND occurred_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getRegistrationsHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getRegistrationsHourly',
+        `SELECT DATE_FORMAT(created_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM users
+         WHERE created_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getGamesStartedHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getGamesStartedHourly',
+        `SELECT DATE_FORMAT(start_time, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM games
+         WHERE start_time >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getAuditHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getAuditHourly',
+        `SELECT DATE_FORMAT(occurred_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM admin_audit_log
+         WHERE occurred_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+async function getAlertsHourly(sinceDate) {
+    return _hourlyBucketCount(
+        'getAlertsHourly',
+        `SELECT DATE_FORMAT(occurred_at, '%Y-%m-%d %H:00:00') AS hour, COUNT(*) AS cnt
+         FROM admin_alert_log
+         WHERE occurred_at >= ?
+         GROUP BY hour ORDER BY hour ASC`,
+        [sinceDate]
+    );
+}
+
+module.exports = {
+    // tokens
+    createAdminToken,
+    findActiveAdminToken,
+    touchAdminToken,
+    revokeAdminToken,
+    revokeAllAdminTokensForUser,
+    deleteExpiredAdminTokens,
+    // audit
+    insertAuditEntry,
+    searchAuditEntries,
+    getAuditEntriesSinceId,
+    deleteAuditEntriesOlderThan,
+    // alerts
+    insertAlertEntry,
+    getRecentAlerts,
+    deleteAlertsOlderThan,
+    countAlertsSince,
+    countFailedAdminAttemptsByIp,
+    listAlertsForAdmin,
+    getAlertById,
+    markAlertDismissed,
+    markAllAlertsDismissed,
+    restoreAlert,
+    listAdminLoginHistory,
+    // ip blocks
+    upsertIpBlock,
+    getActiveIpBlock,
+    removeIpBlock,
+    listActiveIpBlocks,
+    // escalations
+    upsertRateEscalation,
+    getActiveRateEscalation,
+    deleteExpiredRateEscalations,
+    deleteRateEscalationsForScope,
+    countActiveRateEscalations,
+    // users (admin)
+    getUserForAdminAuth,
+    countSuperAdmins,
+    getAdminUserList,
+    setUserAdminRole,
+    // dashboard counters
+    countPendingProfileImages,
+    countPendingFriendRequests,
+    countOngoingGames,
+    countLoginsSince,
+    countRegistrationsSince,
+    // 24h hourly time-series (activity chart)
+    getLoginsHourly,
+    getRegistrationsHourly,
+    getGamesStartedHourly,
+    getAuditHourly,
+    getAlertsHourly
+};

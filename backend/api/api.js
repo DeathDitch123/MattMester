@@ -1,44 +1,34 @@
 const express = require('express');
 const router = express.Router();
-const database = require('../sql/database.js');
-const fs = require('fs/promises');
 
-//!Multer
-const multer = require('multer'); //?npm install multer
-const path = require('path');
+const authRoutes = require('./routes/auth.js');
+const profileRoutes = require('./routes/profile.js');
+const securityRoutes = require('./routes/security.js');
+const playersRoutes = require('./routes/players.js');
+const friendsRoutes = require('./routes/friends.js');
+const chatRoutes = require('./routes/chat.js');
+const adminRoutes = require('./routes/admin');
+const notificationsRoutes = require('./routes/notifications.js');
+const publicRoutes = require('./routes/public.js');
+const reportsRoutes = require('./routes/reports.js');
+const { maintenanceGuard } = require('./middleware/maintenanceGuard.js');
 
-const storage = multer.diskStorage({
-    destination: (request, file, callback) => {
-        callback(null, path.join(__dirname, '../uploads'));
-    },
-    filename: (request, file, callback) => {
-        callback(null, Date.now() + '-' + file.originalname); //?egyedi név: dátum - file eredeti neve
-    }
-});
+// Maintenance guard: ha a site_settings.maintenance_mode TRUE, a nem-admin
+// kereseket 503-mal lojuk vissza. Az admin-utvonalak (parseAdminToken alaja)
+// es az admin Bearer-tokenes kereseket atengedi, hogy a "kiur" is meg tudjon
+// lepni. Az /api/admin/* routerre is rakerul, de az ott eleve admin-only.
+router.use(maintenanceGuard());
 
-const upload = multer({ storage });
-
-//!Endpoints:
-//?GET /api/test
-router.get('/test', (request, response) => {
-    response.status(200).json({
-        message: 'Ez a végpont működik.'
-    });
-});
-
-//?GET /api/testsql
-router.get('/testsql', async (request, response) => {
-    try {
-        const selectall = await database.selectall();
-        response.status(200).json({
-            message: 'Ez a végpont működik.',
-            results: selectall
-        });
-    } catch (error) {
-        response.status(500).json({
-            message: 'Ez a végpont nem működik.'
-        });
-    }
-});
+router.use('/admin', adminRoutes);
+router.use(publicRoutes);
+router.use(authRoutes);
+router.use(profileRoutes);
+router.use(securityRoutes);
+router.use(playersRoutes);
+router.use(friendsRoutes);
+router.use(chatRoutes);
+router.use(notificationsRoutes);
+router.use(reportsRoutes);
 
 module.exports = router;
+module.exports.initChatRateLimiterCleanup = chatRoutes.initChatRateLimiterCleanup;

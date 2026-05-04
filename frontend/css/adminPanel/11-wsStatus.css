@@ -1,0 +1,407 @@
+/* ==========================================================================
+   Vezerlopult — interaktiv allapotok, WS pill, value-flash, empty states,
+   demo/live elkulonites, akt. jatszma chess emblema.
+   Egy forras-igazsag a JS oldalon: WS_STATUS map.
+   ========================================================================== */
+
+/* ---- WS status pill (fejlec) ---- */
+.ws-status-pill {
+    display: inline-flex !important;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 16rem;
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    font-weight: 600;
+    transition: background-color 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+.ws-status-pill .ws-pill-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    line-height: 1;
+}
+.ws-status-pill .ws-pill-label {
+    font-size: 0.85rem;
+}
+.ws-status-pill .ws-pill-time {
+    font-size: 0.72rem;
+    opacity: 0.75;
+    margin-left: 0.4rem;
+    padding-left: 0.5rem;
+    border-left: 1px solid rgba(148, 163, 184, 0.35);
+}
+.ws-status-pill[disabled] {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+.ws-status-pill:not([disabled]):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+}
+.ws-status-pill.ws-status-spin i.bi {
+    animation: ws-spin 1s linear infinite;
+}
+.ws-status-pill.ws-status-connected {
+    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35), 0 0 18px rgba(34, 197, 94, 0.12);
+}
+.ws-status-pill.ws-status-disconnected {
+    box-shadow: 0 0 0 1px rgba(233, 69, 96, 0.45), 0 0 18px rgba(233, 69, 96, 0.18);
+}
+.ws-status-pill.ws-status-connecting {
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.45), 0 0 18px rgba(245, 158, 11, 0.18);
+}
+.ws-status-pill.ws-status-no_token {
+    box-shadow: none;
+}
+
+/* ---- WS dot (osszekapcsolt allapot pulse) ---- */
+.ws-pill-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    display: inline-block;
+    background: #94a3b8;
+    flex-shrink: 0;
+}
+.ws-pill-dot.ws-dot-live {
+    background: #22c55e;
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.6);
+    animation: ws-pulse 1.6s ease-out infinite;
+}
+.ws-pill-dot.ws-dot-down {
+    background: #ef4444;
+    box-shadow: inset 0 0 0 2px rgba(239, 68, 68, 0.55);
+}
+.ws-pill-dot.ws-dot-connecting {
+    background: #f59e0b;
+    animation: ws-pulse-slow 1.4s ease-out infinite;
+}
+.ws-pill-dot.ws-dot-idle {
+    background: #6b7280;
+}
+
+@keyframes ws-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+    70%  { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+}
+@keyframes ws-pulse-slow {
+    0%   { transform: scale(0.85); opacity: 0.7; }
+    50%  { transform: scale(1.15); opacity: 1; }
+    100% { transform: scale(0.85); opacity: 0.7; }
+}
+@keyframes ws-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+
+/* ---- WS feed badge (live-feed kartya jobb felso) ---- */
+.ws-feed-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border: 1px solid transparent;
+    transition: background-color 200ms ease, border-color 200ms ease;
+}
+.ws-feed-badge.ws-feed-connected {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.08);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.ws-feed-badge.ws-feed-connecting {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.08);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+.ws-feed-badge.ws-feed-disconnected {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+.ws-feed-badge.ws-feed-no_token {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* ---- Tick band — flash uj ticknel + stale state ---- */
+.tick-band {
+    transition: border-color 250ms ease, box-shadow 250ms ease;
+}
+.tick-band[data-ws-status="disconnected"],
+.tick-band[data-ws-status="no_token"] {
+    opacity: 0.85;
+    filter: grayscale(0.25);
+}
+.tick-band-flash {
+    box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.35), 0 0 24px rgba(34, 197, 94, 0.18);
+}
+.tick-band-stale {
+    border-color: rgba(245, 158, 11, 0.55) !important;
+    box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.35);
+}
+.tick-band-stale .tick-band-time::before {
+    content: '⚠ ';
+    color: #f59e0b;
+}
+
+/* ---- Tick chip — flash + szurkebb ha 0 ---- */
+.tick-chip-value.value-flash-up   { animation: flash-up 850ms ease-out; }
+.tick-chip-value.value-flash-down { animation: flash-down 850ms ease-out; }
+.tick-chip-value.value-flash-eq   { animation: flash-eq 850ms ease-out; }
+.stat-value.value-flash-up   { animation: flash-up 850ms ease-out; }
+.stat-value.value-flash-down { animation: flash-down 850ms ease-out; }
+.stat-value.value-flash-eq   { animation: flash-eq 850ms ease-out; }
+.mini-stat-value.value-flash-up   { animation: flash-up 850ms ease-out; }
+.mini-stat-value.value-flash-down { animation: flash-down 850ms ease-out; }
+.mini-stat-value.value-flash-eq   { animation: flash-eq 850ms ease-out; }
+
+@keyframes flash-up {
+    0%   { background: rgba(34, 197, 94, 0); }
+    25%  { background: rgba(34, 197, 94, 0.30); color: #22c55e; }
+    100% { background: rgba(34, 197, 94, 0); }
+}
+@keyframes flash-down {
+    0%   { background: rgba(245, 158, 11, 0); }
+    25%  { background: rgba(245, 158, 11, 0.30); color: #f59e0b; }
+    100% { background: rgba(245, 158, 11, 0); }
+}
+@keyframes flash-eq {
+    0%   { background: rgba(212, 175, 55, 0); }
+    25%  { background: rgba(212, 175, 55, 0.20); }
+    100% { background: rgba(212, 175, 55, 0); }
+}
+
+/* ---- Stat card — kattinthato variant + ures + chess emblema ---- */
+button.stat-card {
+    border: inherit;
+    background: inherit;
+    text-align: left;
+    width: 100%;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+}
+.stat-card-clickable {
+    cursor: pointer;
+}
+.stat-card-clickable:hover {
+    border-color: rgba(212, 175, 55, 0.55) !important;
+    box-shadow: 0 8px 26px rgba(212, 175, 55, 0.18) !important;
+}
+.stat-card-clickable:active {
+    transform: translateY(0);
+    filter: brightness(0.95);
+}
+.stat-card-empty {
+    opacity: 0.7;
+    filter: grayscale(0.4);
+}
+.stat-card-empty .stat-value {
+    color: var(--text-secondary, #94a3b8);
+}
+
+/* Sakk emblema hatter az aktiv jatszma kartyahoz */
+.stat-card-chess { position: relative; overflow: hidden; }
+.stat-card-chess .stat-card-chess-bg {
+    position: absolute;
+    right: -12px;
+    bottom: -12px;
+    width: 96px;
+    height: 96px;
+    pointer-events: none;
+    opacity: 0.18;
+    background-image:
+        linear-gradient(45deg, rgba(212, 175, 55, 0.55) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(212, 175, 55, 0.55) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(212, 175, 55, 0.55) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(212, 175, 55, 0.55) 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    border-radius: 12px;
+    transition: opacity 250ms ease, transform 400ms ease;
+}
+.stat-card-chess:not(.stat-card-empty) .stat-card-chess-bg {
+    opacity: 0.32;
+}
+.stat-card-chess:not(.stat-card-empty):hover .stat-card-chess-bg {
+    transform: rotate(8deg) scale(1.06);
+    opacity: 0.4;
+}
+.stat-card-chess:not(.stat-card-empty) .stat-icon {
+    box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.3), 0 0 18px rgba(212, 175, 55, 0.25);
+}
+
+/* ---- Mini-stat — kattinthato gomb variant ---- */
+button.mini-stat,
+.mini-stat-clickable {
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    background: rgba(15, 23, 42, 0.45);
+    text-align: center;
+    width: 100%;
+    cursor: pointer;
+    font: inherit;
+    color: inherit;
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+}
+.mini-stat-clickable:hover {
+    border-color: rgba(212, 175, 55, 0.45);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(212, 175, 55, 0.12);
+}
+.mini-stat-clickable:active { transform: translateY(0); }
+.mini-stat-clickable:focus-visible {
+    outline: 2px solid rgba(212, 175, 55, 0.6);
+    outline-offset: 2px;
+}
+
+/* ---- Live-feed: meta sav + ures allapot + demo elkulonites ---- */
+.live-feed-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.45rem 0.85rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.35);
+    font-size: 0.75rem;
+}
+.live-feed-meta-count { color: var(--text-secondary, #94a3b8); }
+
+.data-source-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.7rem;
+    border: 1px solid transparent;
+}
+.data-source-badge.data-source-live {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.1);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.data-source-badge.data-source-demo {
+    color: #d4af37;
+    background: rgba(212, 175, 55, 0.08);
+    border-color: rgba(212, 175, 55, 0.35);
+}
+
+.live-feed-list.live-feed-demo .live-feed-row {
+    border-left-style: dashed !important;
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(212, 175, 55, 0.04) 0,
+        rgba(212, 175, 55, 0.04) 8px,
+        transparent 8px,
+        transparent 16px
+    );
+}
+
+.live-feed-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    padding: 2.2rem 1rem;
+    color: var(--text-secondary, #94a3b8);
+    text-align: center;
+    list-style: none;
+}
+.live-feed-empty i.bi {
+    font-size: 1.8rem;
+    opacity: 0.55;
+}
+.live-feed-empty-title {
+    font-weight: 600;
+    color: var(--text-light, #e2e8f0);
+}
+.live-feed-empty-sub { font-size: 0.78rem; }
+
+/* ---- Card subtitle (chart vs feed magyarazo) ---- */
+.card-subtle-hint {
+    font-size: 0.72rem;
+    color: var(--text-secondary, #94a3b8);
+    font-weight: 400;
+    margin-left: 0.5rem;
+}
+.card-title .card-subtle-hint {
+    margin-left: 0;
+    margin-top: 0.15rem;
+    font-weight: 400;
+}
+
+/* ---- Hamarosan elerheto gomb (disabled vizualis) ---- */
+.btn-soon {
+    opacity: 0.55;
+    cursor: not-allowed !important;
+    text-decoration: line-through dotted;
+}
+
+/* ---- Kezi frissites loading allapot ---- */
+.btn-loading {
+    pointer-events: none;
+    opacity: 0.7;
+}
+.btn-loading i.bi.spin,
+i.bi.spin {
+    animation: ws-spin 0.9s linear infinite;
+    display: inline-block;
+}
+
+/* ---- Egyenlo kartyak a dashboard chart vs feed sorban ---- */
+.dashboard-equal-card {
+    min-height: 380px;
+}
+
+/* ---- Kis kepernyon a WS pill rovid alakra valt ---- */
+@media (max-width: 575.98px) {
+    .ws-status-pill { min-width: auto; }
+    .ws-status-pill .ws-pill-time { display: none; }
+    .ws-status-pill .ws-pill-label { font-size: 0.78rem; }
+}
+
+/* ---- Tick chip kattinthato variant (button) ---- */
+button.tick-chip,
+.tick-chip-clickable {
+    border: 1px solid rgba(148, 163, 184, 0.22);
+    background: rgba(36, 48, 68, 0.95);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    text-align: left;
+    position: relative;
+    transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.tick-chip-clickable:hover {
+    border-color: rgba(212, 175, 55, 0.6);
+    background: rgba(54, 70, 100, 0.95);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(212, 175, 55, 0.16);
+}
+.tick-chip-clickable:active { transform: translateY(0); }
+.tick-chip-clickable:focus-visible {
+    outline: 2px solid rgba(212, 175, 55, 0.65);
+    outline-offset: 2px;
+}
+.tick-chip-arrow {
+    font-size: 1.1rem;
+    color: rgba(212, 175, 55, 0.55);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 160ms ease, transform 160ms ease, color 160ms ease;
+}
+.tick-chip-clickable:hover .tick-chip-arrow {
+    opacity: 1;
+    transform: translateX(0);
+    color: #d4af37;
+}
+

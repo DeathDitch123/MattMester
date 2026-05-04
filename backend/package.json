@@ -4,19 +4,34 @@
     "description": "Template project",
     "main": "server.js",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
+        "test": "jest --detectOpenHandles --forceExit",
+        "test:watch": "jest --watch",
+        "test:coverage": "jest --coverage",
         "start": "node server.js",
-        "dev": "nodemon"
+        "dev": "kill-port 3000 && nodemon",
+        "dev:raw": "nodemon"
     },
-    "author": "Kardos Krisztián",
+    "author": "Bartha Bálint István, Berta Botond, Tárczy Máté",
     "license": "ISC",
     "devDependencies": {
-        "nodemon": "^3.1.10"
+        "jest": "^29.7.0",
+        "kill-port": "^2.0.1",
+        "nodemon": "^3.1.14",
+        "supertest": "^6.3.4"
     },
     "dependencies": {
-        "express": "^5.1.0",
-        "express-session": "^1.18.2",
-        "multer": "^2.0.2",
-        "mysql2": "^3.15.2"
+        "bcrypt": "^6.0.0",
+        "cors": "^2.8.6",
+        "dotenv": "^17.4.2",
+        "express": "^5.2.1",
+        "express-rate-limit": "^8.4.1",
+        "express-session": "^1.19.0",
+        "geoip-lite": "^2.0.1",
+        "helmet": "^8.1.0",
+        "multer": "^2.1.1",
+        "mysql2": "^3.22.3",
+        "nodemailer": "^8.0.7",
+        "socket.io": "^4.8.3",
+        "vary": "^1.1.2"
     }
 }

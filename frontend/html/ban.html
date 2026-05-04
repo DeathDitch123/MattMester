@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fiók tiltva — MattMester</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --gold: #c9a84c;
+            --bg-dark: #0d1117;
+            --bg-card: #161b22;
+            --border: #30363d;
+            --text-muted: #8b949e;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: var(--bg-dark);
+            color: #e6edf3;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+        .ban-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 3rem 2.5rem;
+            max-width: 520px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        }
+        .ban-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(220, 53, 69, 0.15);
+            border: 2px solid rgba(220, 53, 69, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            font-size: 2.5rem;
+            color: #dc3545;
+        }
+        .ban-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: #e6edf3;
+            margin-bottom: 0.75rem;
+        }
+        .ban-subtitle {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+        }
+        .ban-divider {
+            border-color: var(--border);
+            margin: 1.5rem 0;
+        }
+        .ban-info {
+            background: rgba(201, 168, 76, 0.08);
+            border: 1px solid rgba(201, 168, 76, 0.25);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            font-size: 0.875rem;
+            color: #c9a84c;
+            text-align: left;
+        }
+        .ban-reason-box {
+            background: rgba(220, 53, 69, 0.08);
+            border: 1px solid rgba(220, 53, 69, 0.35);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+            text-align: left;
+        }
+        .ban-reason-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #ff8b95;
+            margin-bottom: 0.35rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .ban-reason-text {
+            color: #f0d5d8;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            word-break: break-word;
+        }
+        .ban-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+        .ban-meta-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1rem;
+            text-align: left;
+        }
+        .ban-meta-label {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+        .ban-meta-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #e6edf3;
+        }
+        .ban-meta-value.perma { color: #ff6b75; }
+        .ban-meta-value.temp { color: var(--gold); }
+        @media (max-width: 480px) {
+            .ban-meta { grid-template-columns: 1fr; }
+        }
+        .btn-contact {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: #dc3545;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: background 0.2s;
+            cursor: pointer;
+        }
+        .btn-contact:hover { background: #bb2d3b; color: #fff; }
+        .btn-home {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: transparent;
+            color: var(--text-muted);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem 1.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            text-decoration: none;
+            transition: border-color 0.2s, color 0.2s;
+            margin-left: 0.75rem;
+        }
+        .btn-home:hover { border-color: #8b949e; color: #e6edf3; }
+        .ban-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.75rem; }
+        footer {
+            background: var(--bg-card);
+            border-top: 1px solid var(--border);
+            padding: 1rem 2rem;
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+        footer a { color: var(--gold); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        .brand { font-weight: 700; color: var(--gold); letter-spacing: 0.05em; }
+    </style>
+</head>
+
+<body>
+    <main>
+        <div class="ban-card">
+            <div class="ban-icon">
+                <i class="bi bi-slash-circle-fill"></i>
+            </div>
+            <h1 class="ban-title">Fiókod tiltva lett</h1>
+            <p class="ban-subtitle" id="banSubtitle">
+                A MattMester adminisztrátorai korlátozták a fiókodhoz való hozzáférést.
+                Amíg a tiltás érvényben van, nem tudsz bejelentkezni az oldalra.
+            </p>
+
+            <!-- A tiltas okat es lejaratat dinamikusan tolti a ban.html script
+                 a /api/banInfo endpointbol. Ha nincs adat (pl. a session-t mar
+                 megsemmisitettuk + nincs userId query string), generikus szoveg
+                 marad lathato. -->
+            <div class="ban-reason-box" id="banReasonBox" style="display:none;">
+                <div class="ban-reason-label">
+                    <i class="bi bi-shield-exclamation"></i>
+                    A tiltás indoka
+                </div>
+                <div class="ban-reason-text" id="banReasonText">—</div>
+            </div>
+
+            <div class="ban-meta" id="banMeta" style="display:none;">
+                <div class="ban-meta-item">
+                    <div class="ban-meta-label">Időtartam</div>
+                    <div class="ban-meta-value" id="banDurationValue">—</div>
+                </div>
+                <div class="ban-meta-item">
+                    <div class="ban-meta-label" id="banExpiryLabel">Lejár</div>
+                    <div class="ban-meta-value" id="banExpiryValue">—</div>
+                </div>
+            </div>
+
+            <div class="ban-info">
+                <i class="bi bi-info-circle me-2"></i>
+                Ha úgy gondolod, hogy a tiltás téves, fellebbezési kérelmet nyújthatsz be
+                az oldal ügyfélszolgálatán keresztül. A fellebbezést az alábbi gombra kattintva
+                küldheted el közvetlenül a támogatási csapatnak — kérjük, hivatkozz a fenti
+                tiltási okra a levélben.
+            </div>
+
+            <div class="ban-actions">
+                <a class="btn-contact" id="banContactLink"
+                   target="_blank" rel="noopener"
+                   href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20fellebbez%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AFelhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%20a%20felhaszn%C3%A1l%C3%B3nevedet%5D%0A%0AKifog%C3%A1solom%20a%20r%C3%A1m%20kiszabott%20tilt%C3%A1st%2C%20mert%3A%0A%5Bide%20%C3%ADrd%20az%20indokot%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C">
+                    <i class="bi bi-envelope-fill"></i>
+                    Kapcsolatfelvétel a supporttal
+                </a>
+                <a class="btn-home" href="/">
+                    <i class="bi bi-house"></i>
+                    Főoldal
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Ban info betoltes a /api/banInfo endpoint-rol. A szerver vagy a session-bol
+        // (ha a force-logout meg nem destroy-olta) vagy a userId query stringbol
+        // (ha direkt navigalt ide a kliens) deriualja a target user-t. Ha nincs adat,
+        // a generikus blokk marad lathato — semmi nem szakad meg.
+        (async function loadBanInfo() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const userIdParam = params.get('userId');
+                const url = userIdParam
+                    ? `/api/banInfo?userId=${encodeURIComponent(userIdParam)}`
+                    : '/api/banInfo';
+                const response = await fetch(url, { credentials: 'same-origin' });
+                if (!response.ok) return;
+                const data = await response.json().catch(() => ({}));
+                if (!data?.success || !data?.banned) return;
+
+                const reason = String(data.reason || '').trim();
+                if (reason) {
+                    document.getElementById('banReasonText').textContent = reason;
+                    document.getElementById('banReasonBox').style.display = '';
+                }
+
+                const isPerma = Boolean(data.isPerma);
+                const bannedUntil = data.bannedUntil ? new Date(data.bannedUntil) : null;
+
+                if (isPerma || bannedUntil) {
+                    document.getElementById('banMeta').style.display = '';
+
+                    const durationEl = document.getElementById('banDurationValue');
+                    const expiryEl = document.getElementById('banExpiryValue');
+                    const expiryLabel = document.getElementById('banExpiryLabel');
+
+                    if (isPerma) {
+                        durationEl.textContent = 'Végleges';
+                        durationEl.classList.add('perma');
+                        expiryLabel.textContent = 'Lejár';
+                        expiryEl.textContent = 'Soha';
+                        expiryEl.classList.add('perma');
+                    } else if (bannedUntil) {
+                        const now = Date.now();
+                        const remainingMs = bannedUntil.getTime() - now;
+                        const remainingHours = Math.max(0, Math.round(remainingMs / (1000 * 60 * 60)));
+                        const remainingDays = Math.max(0, Math.ceil(remainingMs / (1000 * 60 * 60 * 24)));
+
+                        if (remainingHours < 24) {
+                            durationEl.textContent = `${remainingHours} óra`;
+                        } else {
+                            durationEl.textContent = `${remainingDays} nap`;
+                        }
+                        durationEl.classList.add('temp');
+
+                        const formatted = bannedUntil.toLocaleString('hu-HU', {
+                            year: 'numeric', month: 'long', day: 'numeric',
+                            hour: '2-digit', minute: '2-digit'
+                        });
+                        expiryEl.textContent = formatted;
+                        expiryEl.classList.add('temp');
+                    }
+                }
+
+                if (data.username) {
+                    const subtitle = document.getElementById('banSubtitle');
+                    subtitle.textContent = `Üdv, ${data.username}! A MattMester adminisztrátorai korlátozták a fiókodhoz való hozzáférést. Az alábbiakban láthatod a tiltás részleteit.`;
+                }
+            } catch (error) {
+                console.warn('ban-info load hiba:', error);
+            }
+        })();
+    </script>
+
+    <footer>
+        <span class="brand">MATTMESTER</span> &middot; Modern sakkélmény &middot;
+        <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>
+        &middot; <small>&copy; 2026 MattMester</small>
+    </footer>
+</body>
+
+</html>

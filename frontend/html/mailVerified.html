@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta http-equiv="Content-Security-Policy" content="default-src 'self';
+			connect-src 'self' http://127.0.0.1:3000 https://cdn.jsdelivr.net;
+			script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
+			style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
+			font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com;
+			img-src 'self' data: blob:;">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Email megerősítés | MattMester</title>
+
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+	<link
+		href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+		rel="stylesheet">
+
+	<link rel="stylesheet" href="../css/mailVerified.css" />
+
+	<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
+	<script src="../javascript/_utils.js"></script>
+	<script src="../javascript/shared/i18n.js" defer></script>
+	<script src="../javascript/mailVerified.js" defer></script>
+</head>
+
+<body>
+	<main class="page-wrap">
+		<section class="verification-card" aria-live="polite">
+			<a href="/" class="brand-line">
+				<i class="bi bi-king-fill" aria-hidden="true"></i>
+				<span>MATTMESTER</span>
+			</a>
+
+			<div id="verificationStatusPill" class="status-pill info">
+				<i class="bi bi-info-circle-fill" aria-hidden="true"></i>
+				<span>Folyamatban</span>
+			</div>
+
+			<h1 id="verificationTitle" class="title">Email megerősítés ellenőrzése</h1>
+			<p id="verificationSubtitle" class="subtitle">A rendszer feldolgozza a verifikációs linkedet.</p>
+
+			<div id="verificationMessageBox" class="alert-box">Kérjük, várj egy pillanatot.</div>
+
+			<ul class="note-list">
+				<li>Ha lejárt vagy érvénytelen a linked, kérj új verifikációs emailt a Profile oldali Account Status szekcióban.</li>
+				<li>Ha nem találod a levelet, ellenőrizd a Spam és Promóciók mappát is.</li>
+			</ul>
+
+			<div class="action-row">
+				<a class="btn-gold" href="/">
+					<i class="bi bi-house-door-fill" aria-hidden="true"></i>
+					Vissza a főoldalra
+				</a>
+				<a id="openProfileButton" class="btn-outline-gold d-none" href="/html/profile.html#accountStatus">
+					<i class="bi bi-person-circle" aria-hidden="true"></i>
+					Account Status megnyitása
+				</a>
+			</div>
+
+			<p class="helper-line">Tipp: bejelentkezett állapotban a Profile oldalon azonnal újraküldheted a verifikációs emailt.</p>
+		</section>
+	</main>
+</body>
+
+</html>

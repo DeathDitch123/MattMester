@@ -1,0 +1,390 @@
+MATTMESTER SOCKET MUKODES - RESZLETES JEGYZET
+=================================================
+
+Dokumentum celja
+----------------
+Ez a leiras osszefoglalja a projekt jelenlegi socket mukodeset:
+- hogyan epul fel a kliens es a szerver oldali socket reteg,
+- hogyan hivhatjuk meg a funkcioit frontendrol,
+- milyen esemenyek mennek oda-vissza,
+- hol es hogyan erdemes modositasokat vegezni.
+
+Fo fajlok
+---------
+Frontend:
+- frontend/javascript/socketClient.js
+- frontend/javascript/profile.js (minta hasznalat)
+
+Backend:
+- backend/sockets.js
+- backend/services.js (statisztikak pusholasa)
+
+
+1) ARCHITEKTURA ROVIDEN
+=======================
+
+1.1 Kliens oldal (socketClient.js)
+----------------------------------
+A socketClient.js egy IIFE modul (azonnal fut), amely:
+- letrehozza a Socket.IO klienst,
+- fenntart egy kozponti kliens allapotot (socketState),
+- kezeli a bejovo socket esemenyeket,
+- frissiti a UI panelt,
+- publikus API-kent kiteszi a window.MattMesterSocket objektumot.
+
+1.2 Szerver oldal (backend/sockets.js)
+--------------------------------------
+A createSocketHub(io) hozza letre az egesz socket hubot:
+- socket context nyilvantartas (user/session/client/tab adatok),
+- presence nyilvantartas (online users/tabs/sockets),
+- room state sync,
+- chat roomok,
+- notification csatornak,
+- kezdeti allapot kuldes uj connectkor.
+
+
+2) AZONOSITOK ES KONTEXTUS
+==========================
+
+2.1 clientId es tabId (frontend)
+--------------------------------
+A kliens ket kulcsazonositot tart fenn:
+- clientId: localStorage (stabil bongeszo-szintu ID)
+- tabId: sessionStorage (tab-szintu ID)
+
+Miért jo:
+- A szerver tudja, hogy ugyanaz a user tobb tabon van-e.
+- Presence pontosabb (online user vs online tab vs online socket).
+
+2.2 Socket context (backend)
+----------------------------
+A szerver minden sockethez context objektumot tart:
+- socketId, clientId, tabId, page,
+- sessionId, userId, username, role,
+- connectedAt, lastSeenAt.
+
+Ez adja a sessionBound allapot alapjat is a kliens oldalon.
+
+
+3) FOLYAMAT CONNECTTOL NORMAL UZEMIG
+====================================
+
+Lepesek:
+1. Frontend letrehozza a socket kapcsolatot auth metadata-val (clientId, tabId, page).
+2. Backend registerSocket lefut:
+   - context mentese,
+   - room joinok (general, notifications, es role/user specifikus roomok),
+   - kezdeti stats kuldes.
+3. Kliens connect eventnel emitClientReady fut:
+   - socket:sync
+   - presence:subscribe
+   - notification:subscribe
+4. Backend kezeli ezeket, majd kuldi:
+   - socket:capabilities
+   - socket:state
+   - presence:state
+   - notification:state
+5. Kliens socketState-et frissit, UI panelt renderel, es sajat CustomEventeket dispatch-el.
+
+
+4) FONTOS ESEMENYEK (EVENT CONTRACT)
+====================================
+
+4.1 Kliens -> Szerver
+---------------------
+- socket:sync
+  Celozott context frissites a session alapjan.
+
+- presence:subscribe
+  Presence allapot kerese.
+
+- notification:subscribe
+  Notification csatorna feliratkozas.
+
+- chat:join { roomId }
+  Chat roomhoz csatlakozas.
+
+- chat:message { roomId, message }
+  Uzenet kuldes adott chat roomba.
+
+- room:subscribe { roomId }
+  Room state csatorna feliratkozas.
+
+- room:state:update { roomId, state }
+  Room state allapot frissites.
+
+4.2 Szerver -> Kliens
+---------------------
+- connected
+  Kezdeti csatlakozasi visszajelzes.
+
+- socket:capabilities
+  Aktiv feature lista.
+
+- socket:state
+  Socket/session allapot + presence + roomState snapshot.
+
+- socket:sync:done
+  Sync eredmeny (success/failure + context info).
+
+- presence:state
+  Online jelenlet snapshot.
+
+- profile_image és profile_image_status a socket state-ben
+  Ha a profilkép több helyen kell, akkor a publikus socket state-be érdemes felvenni:
+  - profile_image: a profilkép publikus elérési útja
+  - profile_image_status: megjelenítési státusz, például approved, pending, rejected, default
+
+  Fontos:
+  - ne a tényleges képfájlt küldd socketen,
+  - csak az URL-t vagy relatív útvonalat add át,
+  - a status csak UI logikához kell.
+
+- notification:state
+  Notification feliratkozas allapota.
+
+- notification:push
+  Konkret ertesites payload.
+
+- room:state
+  Room allapot frissites.
+
+- chat:message, chat:error
+  Chat uzenet, illetve hiba.
+
+- stats:public, stats:admin
+  Statisztikai frissitesek.
+
+
+5) WINDOW.MATTMESTERSOCKET PUBLIKUS API
+========================================
+
+Elérhető API-k frontendrol:
+- window.MattMesterSocket.socket
+  Az alap socket peldany.
+
+- window.MattMesterSocket.info
+  Referencia a belso allapotra (state object).
+
+- window.MattMesterSocket.refresh()
+  UI panel ujrarajzolasa az aktualis state alapjan.
+
+- window.MattMesterSocket.ensureSocketConnected(timeoutMs?)
+  Garantalt kapcsolodas timeouttal.
+
+- window.MattMesterSocket.emitSocketSyncAndWait(reason?, timeoutMs?)
+  Sync kuldes + success/failure valasz megvarasa.
+
+- window.MattMesterSocket.syncSocketContextOrReconnect(reason?, options?)
+  High-level helper: ha sima sync nem megy, fallback reconnectet is csinal.
+
+- window.MattMesterSocket.subscribeSessionContextChanges(handler, { throttleMs })
+  Sajat user context valtozasokra feliratkozas.
+  Visszateresi ertek: unsubscribe fuggveny.
+
+- window.MattMesterSocket.getSnapshot()
+  Vedezett masolat az allapotrol.
+
+
+6) HOGYAN HIVJUK A GYAKORLATBAN
+================================
+
+6.1 Indulaskor sync (ajanlott)
+------------------------------
+- Indulasi ponton hivd meg a syncSocketContextOrReconnect-et.
+- Ezt csinalja mar a profile oldal is startupkor.
+
+Pelda:
+await window.MattMesterSocket.syncSocketContextOrReconnect('profile-initial-load');
+
+6.2 Session mutacio utan sync (LOGIN/LOGOUT/PROFILE SAVE)
+----------------------------------------------------------
+Minden olyan akcio utan, ami sessiont/user contextet erint:
+- profile mentes,
+- profilkep mentes/torles,
+- login/logout,
+mindig hivj syncet.
+
+Pelda:
+await window.MattMesterSocket.syncSocketContextOrReconnect('profile-settings-save');
+
+6.3 Cross-tab UI frissites
+--------------------------
+- subscribeSessionContextChanges hasznalata,
+- throttle-lal vedeni a tul gyakori ujratoltest.
+
+Pelda minta (profile.js-ben mar van):
+const unsubscribe = window.MattMesterSocket.subscribeSessionContextChanges(async () => {
+  await refreshAuthUi();
+}, { throttleMs: 1200 });
+
+
+7) HOL ERDEMES MODOSITANI HA VALTOZTATNI KELL
+==============================================
+
+7.1 Frontend oldali valtozasok
+------------------------------
+A) Kapcsolodasi/szinkron strategia
+- Hely: frontend/javascript/socketClient.js
+- Fuggvenyek:
+  - ensureSocketConnected
+  - emitSocketSyncAndWait
+  - syncSocketContextOrReconnect
+
+B) Sajat context observer viselkedes
+- Hely: frontend/javascript/socketClient.js
+- Fuggvenyek:
+  - normalizeOwnContext
+  - hasOwnContextChanged
+  - subscribeSessionContextChanges
+  - scheduleObserverExecution
+
+C) UI panel megjelenites
+- Hely: frontend/javascript/socketClient.js
+- Fuggveny: updateSocketInfoPanel
+
+D) Oldalszintu felhasznalas
+- Hely: frontend/javascript/profile.js (es mas oldalak scriptjei)
+- Itt erdemes bekotni a syncet egy-egy uzleti muvelet utan.
+
+7.2 Backend oldali valtozasok
+-----------------------------
+A) Event contract (uj event, payload mezo, room logika)
+- Hely: backend/sockets.js
+- Erintett reszek:
+  - registerSocket event handlerek
+  - syncSocketState payload
+  - pushNotification / updateRoomState helper
+
+B) Presence es context model
+- Hely: backend/sockets.js
+- Erintett reszek:
+  - createContextFromSocket
+  - refreshSocketContextFromSession
+  - getPresenceSnapshot
+
+C) Statisztika kuldes
+- Hely: backend/services.js
+- Erintett resz: refreshStats (stats:public, stats:admin emit)
+
+D) Profilkép támogatás a socketben
+
+Ha a profilkép több helyen kell, például a top barban, chatben, presence listában vagy több oldalon, akkor a socket state-be érdemes felvenni egy publikus mezőt:
+- profile_image: a profilkép publikus elérési útja
+- profile_image_status: opcionális státusz, például approved, pending, rejected, default
+
+Fontos:
+- ne a tényleges képfájlt küldd socketen
+- csak az URL-t vagy relatív elérési utat add át
+- a státusz csak megjelenítési logikához kell
+
+Backend oldalon a socket context és a socket:state payload részeibe kell beemelni.
+Frontend oldalon a socketClient.js-ben ezt eltárolni kell a socketState-ben, és a UI komponensek felé továbbítani.
+Ha a profilkép csak egy oldalon kell, akkor maradhat külön session/profile lekérés.
+
+
+8) VALTOZTATASI SZABALYOK (NAGYON FONTOS)
+==========================================
+
+1. Event nevet ne valtoztass csendben.
+- Ha event nevet/payloadot valtoztatsz, frontend + backend egyutt frissuljon.
+
+2. Payload szerzodes maradjon kompatibilis.
+- Uj mezot lehet hozzaadni.
+- Meglevo mezot atnevezni/torolni csak teljes migracioval erdemes.
+
+3. Sync utvonal legyen stabil.
+- socket:sync + socket:sync:done par legyen megbizhato.
+- Timeout es hibak visszajelzese maradjon egyertelmu.
+
+4. Observer callbackeket ne arasszuk el.
+- Hasznalj throttle-t (mar van beallitva alapbol).
+
+5. Reconnect fallbacket tartsd meg.
+- Ez ad rezilienciat tab/network ingadozasnal.
+
+
+9) GYAKORI HIBAK ES ELLENORZESI LISTA
+=====================================
+
+Tunet: nem frissul a user role/username cross-tab.
+Ellenorizd:
+- meghivod-e syncSocketContextOrReconnect-et session mutacio utan,
+- jon-e socket:sync:done success true,
+- jon-e socket:state / presence:state,
+- fel van-e kotve subscribeSessionContextChanges.
+
+Tunet: chat uzenet nem jelenik meg.
+Ellenorizd:
+- tortent-e chat:join az adott roomra,
+- chat:message payloadban van-e roomId + nem ures message,
+- szerver oldalon chat:error jon-e vissza.
+
+Tunet: room state nem frissul mindenhol.
+Ellenorizd:
+- room:subscribe megtortent-e,
+- room:state:update roomId egyezik-e,
+- room-state:<roomId> csatornara megy-e emit.
+
+Tunet: ertesitesek nem jonnek.
+Ellenorizd:
+- notification:subscribe fut-e,
+- user-esetben joinol-e notification-user:<userId> roomra,
+- szerver pushNotification targetUserId helyes-e.
+
+
+10) FEJLESZTESI MINTAK (AJANLOTT)
+=================================
+
+A) Uj feature bevezetese
+1. Definiald az uj eventeket backend/sockets.js-ben.
+2. Adj stabil payload formatumot.
+3. Kezeld a frontend/socketClient.js-ben (state + UI + custom event).
+4. Tegyel bele timeout/hibaagakat.
+5. Integrald az oldalszintu scriptbe (pl. profile.js).
+
+B) Modulos hasznalat frontend oldalon
+- Oldalscriptben csak a MattMesterSocket publikus API-kat hasznald.
+- Kozvetlen socket.emit csak indokolt esetben (specialis custom event).
+
+C) Biztonsagos hibakezeles
+- Kliens oldalon try/catch + konzol hiba.
+- Szerver oldalon socket.emit('...:error', { message }) forma.
+
+
+11) ROVID API PUSKA
+===================
+
+Kapcsolat biztositasa:
+await window.MattMesterSocket.ensureSocketConnected();
+
+Context sync:
+await window.MattMesterSocket.emitSocketSyncAndWait('manual-sync');
+
+Reziliens context sync (ajanlott):
+await window.MattMesterSocket.syncSocketContextOrReconnect('profile-update');
+
+Cross-tab observer:
+const unsub = window.MattMesterSocket.subscribeSessionContextChanges(async (ev) => {
+  // sajat UI refresh
+});
+
+Allapot snapshot:
+const snap = window.MattMesterSocket.getSnapshot();
+
+
+12) OSSZEFOGLALAS
+=================
+
+A jelenlegi socket reteg erossege:
+- stabil multi-tab azonositas,
+- session alapu context sync,
+- presence + roomState + chat + notification egy helyen,
+- publikus frontend API (MattMesterSocket),
+- fallback reconnect strategia.
+
+Ha valtoztatsz rajta:
+- tartsd egyben a frontend/backend event szerzodest,
+- session mutacio utan mindig syncelj,
+- observer throttlingot tartsd meg,
+- reconnect fallbacket ne vedd ki.

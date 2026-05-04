@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset="UTF-8" />
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+            connect-src 'self' https://cdn.jsdelivr.net;
+            script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; 
+            style-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com 'unsafe-inline';
+            font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Profil</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+        rel="stylesheet">
+
+    <link rel="stylesheet" href="../css/profile.css" />
+    <link rel="stylesheet" href="../css/shared/confirmModal.css" />
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
+    <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/_utils.js" defer></script>
+    <script src="../javascript/shared/confirmModal.js" defer></script>
+    <script src="../javascript/profileImageUtils.js" defer></script>
+    <script src="../javascript/socketClient.js" defer></script>
+    <script src="../javascript/shared/maintenanceClient.js" defer></script>
+    <script src="../javascript/chessInviteGlobal.js" defer></script>
+    <script src="../javascript/chatModal.js" defer></script>
+    <script src="../javascript/profile/01-helpers.js" defer></script>
+    <script src="../javascript/profile/02-utils.js" defer></script>
+    <script src="../javascript/profile/03-notificationCenter.js" defer></script>
+    <script src="../javascript/profile/04-notificationEvents.js" defer></script>
+    <script src="../javascript/profile/05-accountStatus.js" defer></script>
+    <script src="../javascript/profile/06-playerSearch.js" defer></script>
+    <script src="../javascript/profile/07-playerProfile.js" defer></script>
+    <script src="../javascript/profile/08-searchResults.js" defer></script>
+    <script src="../javascript/profile/09-friendsList.js" defer></script>
+    <script src="../javascript/profile/10-logout.js" defer></script>
+    <script src="../javascript/profile/11-securityActivity.js" defer></script>
+    <script src="../javascript/profile/12-searchValidation.js" defer></script>
+    <script src="../javascript/profile/13-profileImageStatus.js" defer></script>
+    <script src="../javascript/profile/14-profileSettings.js" defer></script>
+    <script src="../javascript/profile/15-profileDelete.js" defer></script>
+    <script src="../javascript/profile/16-imageEditor.js" defer></script>
+    <script src="../javascript/profile/17-removeAvatar.js" defer></script>
+    <script src="../javascript/profile/18-sidebar.js" defer></script>
+    <script src="../javascript/profile/19-navigation.js" defer></script>
+    <script src="../javascript/profile/20-bootstrap.js" defer></script>
+    <script src="../javascript/profile/21-dashboardStats.js" defer></script>
+    <script src="../javascript/playerActions.js" defer></script>
+    <script src="../javascript/shared/houseRules.js" defer></script>
+    <script src="../javascript/chessModeChooser.js" defer></script>
+    <link rel="stylesheet" href="../css/shared/chessModeChooser.css">
+    <link rel="stylesheet" href="../css/shared/topNavbar.css">
+    <link rel="stylesheet" href="../css/shared/responsive.css">
+    <script src="../javascript/shared/topNavbar.js" defer></script>
+    <script src="../javascript/shared/i18n.js" defer></script>
+    <script src="../javascript/shared/notificationToast.js" defer></script>
+</head>
+
+<body class="has-mm-top-navbar">
+    <!-- Kozos felso navbar (adminPanel + profile altal megosztott topNavbar
+         markup). data-page="profile" -> a logout gomb a meglevo #logoutModal
+         Bootstrap modalt nyitja, amit a confirmLogoutButton (handleLogout
+         /api/logout) zar le -> full session logout, redirect "/". -->
+    <nav class="mm-top-navbar" data-page="profile" aria-label="Felső navigáció" data-i18n-attr="aria-label:profile.top_nav_aria">
+        <div class="mm-top-navbar-inner">
+            <a class="mm-top-navbar-brand" href="/">
+                <i class="bi bi-king-fill"></i>
+                <span>MATTMESTER</span>
+            </a>
+            <div class="mm-top-navbar-actions">
+                <div class="mm-i18n-switch" role="group" aria-label="Nyelv / Language">
+                    <button type="button" data-i18n-toggle="hu" aria-pressed="true">HU</button>
+                    <button type="button" data-i18n-toggle="en" aria-pressed="false">EN</button>
+                </div>
+                <span class="mm-top-navbar-greeting"><span data-i18n="nav.greeting">Szia</span>, <span id="mmTopNavbarUsername">…</span>!</span>
+                <!-- Admin felulet gomb — alapbol rejtett, a topNavbar.js fedi fel
+                     ha a /api/sessionInfo szerint a user role === 'admin'. -->
+                <a class="mm-top-navbar-btn" href="/html/adminPanel.html" id="mmTopNavbarAdminBtn" hidden data-i18n="nav.admin_panel">Admin felület</a>
+                <button type="button" class="mm-top-navbar-btn mm-top-navbar-btn--danger" id="mmTopNavbarLogoutBtn" data-i18n="nav.logout">Kijelentkezés</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+    <!-- Sidebar (a felso MATTMESTER navbar mar adja a brand-et — itt csak nav menu) -->
+    <nav class="sidebar" id="sidebar">
+        <div class="nav flex-column">
+            <a href="#dashboard" class="nav-link active">
+                <i data-lucide="layout-dashboard"></i>
+                <span data-i18n="profile.dashboard">Áttekintés</span>
+            </a>
+            <a href="#profile" class="nav-link">
+                <i data-lucide="user"></i>
+                <span data-i18n="profile.title">Profil</span>
+            </a>
+            <a href="#statistics" class="nav-link">
+                <i data-lucide="bar-chart-3"></i>
+                <span data-i18n="profile.stats">Statisztikák</span>
+            </a>
+            <a href="#friends" class="nav-link">
+                <i data-lucide="users"></i>
+                <span data-i18n="profile.friends">Barátok</span>
+            </a>
+            <a href="#abilities" class="nav-link">
+                <i data-lucide="zap"></i>
+                <span data-i18n="admin.abilities">Képességek</span>
+            </a>
+            <a href="#security" class="nav-link">
+                <i data-lucide="shield"></i>
+                <span data-i18n="profile.security">Biztonság</span>
+            </a>
+            <a href="#settings" class="nav-link">
+                <i data-lucide="settings"></i>
+                <span data-i18n="profile.settings">Beállítások</span>
+            </a>
+        </div>
+        <!-- A korabbi sidebar-alji "Logout" gomb torolve — a felso MATTMESTER
+             navbar Kijelentkezes gombja nyitja a #logoutModal-t. -->
+    </nav>
+
+    <main class="main-content">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <div class="top-bar-left">
+                <button
+                    class="btn btn-outline-gold sidebar-toggle-btn py-1 px-2 d-flex align-items-center justify-content-center"
+                    onclick="toggleSidebar()" type="button" aria-label="Oldalsáv ki/be"
+                    data-i18n-attr="aria-label:profile.sidebar_toggle_aria"
+                    aria-controls="sidebar" aria-expanded="true"
+                    style="height: 40px; width: 40px; border-radius: 12px;">
+                    <i data-lucide="menu" style="width: 20px; height: 20px;"></i>
+                </button>
+                <button class="top-bar-btn d-lg-none" type="button" data-tooltip="Keresés" data-bs-toggle="modal"
+                    data-bs-target="#searchResultsModal" aria-label="Keresés játékosokra"
+                    data-i18n-attr="data-tooltip:common.search,aria-label:profile.search_players">
+                    <i data-lucide="search" style="width: 18px; height: 18px;"></i>
+                </button>
+                <div class="top-bar-search d-none d-lg-block">
+                    <div class="top-bar-search-field">
+                        <input id="playerSearchInput" type="text" placeholder="Keresés játékosokra..."
+                            data-i18n-attr="placeholder:profile.search_players_ph">
+                        <button id="playerSearchButton" type="button" class="top-bar-search-btn" aria-label="Keresés játékosokra"
+                            data-i18n-attr="aria-label:profile.search_players">
+                            <i data-lucide="search" style="width: 16px; height: 16px;"></i>
+                        </button>
+                    </div>
+                    <div id="playerSearchFeedback" class="top-bar-search-feedback" aria-live="polite"></div>
+                </div>
+            </div>
+
+            <a href="/" class="top-bar-center d-lg-none">
+                <i data-lucide="crown" style="color: var(--accent-gold); width: 22px; height: 22px;"></i>
+                <span
+                    style="font-family: 'Playfair Display', serif; font-weight: 700; color: var(--text-primary); font-size: 1.1rem; letter-spacing: 0.5px;">MattMester</span>
+            </a>
+
+            <div class="top-bar-right">
+                <button class="top-bar-btn top-bar-btn-with-badge" id="openMessagesModal" type="button"
+                    data-tooltip="Üzenetek" data-open-chat="inbox" aria-label="Üzenetek megnyitása"
+                    data-i18n-attr="data-tooltip:profile.messages,aria-label:profile.messages">
+                    <i data-lucide="message-circle" style="width: 18px; height: 18px;"></i>
+                    <span class="top-bar-badge top-bar-badge--chat" data-badge-target="chat" hidden>0</span>
+                </button>
+
+                <button class="top-bar-btn top-bar-btn-with-badge" id="openNotificationsModal" type="button"
+                    data-tooltip="Értesítések" data-bs-toggle="modal" data-bs-target="#notificationsModal"
+                    aria-label="Értesítések megnyitása"
+                    data-i18n-attr="data-tooltip:profile.notifications,aria-label:profile.notifications">
+                    <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
+                    <span class="top-bar-badge top-bar-badge--notification" data-badge-target="notifications" hidden>0</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content dashboard -->
+        <div class="main-content-inner" id="dashboard">
+            <!-- Dashboard row 1 -->
+            <div class="profile-header animate-in animate-in-1 section-block" id="profile">
+                <div class="row align-items-center gy-4">
+                    <div class="col-12 col-md-7">
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-4">
+                            <div class="position-relative">
+                                <img id="profileAvatarDashboard" class="profile-avatar"
+                                    src="/profile_pictures/default.png"
+                                    alt="Profil">
+                                <span class="position-absolute bottom-0 end-0 p-1">
+                                    <span class="status-dot shadow-glow"></span>
+                                </span>
+                            </div>
+
+                            <div class="text-center text-md-start">
+                                <div
+                                    class="d-flex align-items-center justify-content-center justify-content-md-start gap-3 mb-2">
+                                    <h1 class="h3 mb-0 text-white fw-bold" id="profileDashboardName">…</h1>
+                                    <span class="role-badge d-none" id="profileDashboardRole" data-i18n="profile.player_role">Játékos</span>
+                                </div>
+                                <p class="text-secondary mb-2 opacity-75" id="profileDashboardEmail">…</p>
+                                <div
+                                    class="profile-status d-flex align-items-center justify-content-center justify-content-md-start gap-2">
+                                    <span class="status-dot"></span>
+                                    <span class="text-uppercase small fw-bold tracking-wider" data-i18n="profile.online">Online</span>
+                                </div>
+                                <small id="profileImageHeaderStatus" class="text-secondary mt-2 d-inline-block"><span data-i18n="profile.profile_image_status">Profilkép státusz</span>: …</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12 col-md-5">
+                        <div class="d-flex justify-content-center justify-content-md-end flex-wrap gap-3">
+                            <div class="elo-display text-center">
+                                <div class="elo-number" id="profileEloClassic">…</div>
+                                <div class="elo-label" data-i18n="index.classical">Klasszikus</div>
+                                <div class="elo-rank" id="profileEloClassicRank"></div>
+                            </div>
+                            <div class="elo-display text-center highlighted">
+                                <div class="elo-number" id="profileEloMM">…</div>
+                                <div class="elo-label" data-i18n="index.mattmester">MattMester</div>
+                                <div class="elo-rank" id="profileEloMMRank"></div>
+                            </div>
+                            <div class="elo-display text-center">
+                                <div class="elo-number" id="profileEloBullet">…</div>
+                                <div class="elo-label" data-i18n="index.bullet">Bullet</div>
+                                <div class="elo-rank" id="profileEloBulletRank"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 2 -->
+            <div class="row g-4 mb-4 animate-in animate-in-2 section-block" id="statistics">
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i data-lucide="trophy"></i>
+                        </div>
+                        <div class="stat-value text-success" id="profileStatWins">…</div>
+                        <div class="stat-label" data-i18n="profile.wins">Győzelmek</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i data-lucide="x-circle"></i>
+                        </div>
+                        <div class="stat-value text-danger" id="profileStatLosses">…</div>
+                        <div class="stat-label" data-i18n="profile.losses">Vereségek</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i data-lucide="minus-circle"></i>
+                        </div>
+                        <div class="stat-value" style="color: var(--accent-blue)" id="profileStatDraws">…</div>
+                        <div class="stat-label" style="color: var(--accent-blue)" data-i18n="profile.draws">Döntetlenek</div>
+                    </div>
+                </div>
+                <div class="col-6 col-lg-3">
+                    <div class="stat-card">
+                        <div class="stat-icon gold">
+                            <i data-lucide="percent"></i>
+                        </div>
+                        <div class="stat-value" style="color: var(--accent-gold)" id="profileStatWinRate">…</div>
+                        <div class="stat-label" style="color: var(--accent-gold)" data-i18n="index.winrate">Nyerési arány</div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 3 -->
+            <div class="row">
+
+                <div class="col-lg-8">
+
+                    <!-- <div class="card mb-4 section-block">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="activity" class="me-2"></i>Rating History</span>
+                            <label for="ratingHistorySelect" class="visually-hidden">Rating History típus</label>
+                            <select id="ratingHistorySelect" name="ratingHistorySelect"
+                                class="form-select form-select-sm w-auto bg-transparent border-secondary text-light"
+                                style="width: 120px !important;">
+                                <option>Klasszikus</option>
+                                <option>MattMester</option>
+                                <option>Bullet</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-placeholder">
+                                <span class="d-flex align-items-center gap-2">
+                                    <i data-lucide="chart-line"></i>
+                                    Rating Chart Placeholder
+                                </span>
+                            </div>
+                        </div>
+                    </div> -->
+
+                    <!-- Issue #52: a "Recent Games" szekciot torolve — halott placeholder-szekcio
+                         volt (nincs JS-loader, ures tbody, "View All" gomb nem-letezo allGamesModal-ra
+                         mutatott). A #recentOpponents szekcio (lent) ugyanezt a celt szolgalja
+                         valos adatokkal a /api/recentOpponents endpoint-bol. -->
+
+                    <!-- Legutobbi ellenfelek (Rocket League stilus) -->
+                    <div class="card mb-4 section-block" id="recentOpponents">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span><i data-lucide="swords" class="me-2"></i><span data-i18n="profile.recent_opponents">Legutóbbi ellenfelek</span></span>
+                            <small class="text-secondary" data-i18n="profile.recent_opponents_hint">Max 25 · kattints rájuk</small>
+                        </div>
+                        <div class="card-body">
+                            <div id="recentOpponentsList" role="list">
+                                <div class="text-secondary text-center py-3" data-i18n="common.loading">Betöltés...</div>
+                            </div>
+                            <div id="recentOpponentsEmpty" class="text-secondary text-center py-3 d-none" data-i18n="profile.no_opponents">
+                                Még nem játszottál senkivel — indíts egy meccset!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Képességek -->
+                    <div class="card mb-4 section-block" id="abilities">
+                        <div class="card-header">
+                            <i data-lucide="zap" class="me-2"></i><span data-i18n="profile.ability_usage">Képesség használat</span>
+                        </div>
+                        <div class="card-body">
+                            <div id="abilities-usage-grid" class="row g-3">
+                                <div class="col-12 text-secondary text-center py-3" id="abilities-usage-loading" data-i18n="common.loading">
+                                    Betöltés...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="col-lg-4">
+                    <div class="card mb-4 section-block" id="friends">
+                        <div class="card-header friends-header">
+                            <div class="friends-header-main">
+                                <span class="d-flex align-items-center"><i data-lucide="users" class="me-2"></i><span data-i18n="profile.friends">Barátok</span></span>
+                            </div>
+
+                            <div class="friends-header-controls" role="group" aria-label="Barátok lista szűrése" data-i18n-attr="aria-label:profile.friends_filter_aria">
+                                <button class="btn btn-sm btn-outline-gold is-active" type="button" data-friends-filter="all" data-i18n="profile.friend_all">Összes</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="pending" data-i18n="profile.friend_pending">Függő</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="friend" data-i18n="profile.friend_friend">Már barát</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-friends-filter="blocked" data-i18n="profile.friend_blocked">Blokkolt</button>
+                            </div>
+
+                            <div class="friends-header-actions">
+                                <button class="btn btn-sm btn-outline-gold" type="button" id="refreshFriendsButton" aria-label="Barát lista frissítése" title="Barát lista frissítése" data-i18n-attr="aria-label:profile.friends_refresh_aria,title:profile.friends_refresh_aria">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
+                                    data-bs-target="#searchResultsModal" aria-label="Játékos keresése és barát hozzáadása" data-i18n-attr="aria-label:profile.friends_add_aria">
+                                    <i data-lucide="user-plus" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="friendsFeedback" class="friends-feedback d-none" aria-live="polite"></div>
+                        <div class="card-body p-0">
+                            <div class="friend-list" id="friendsList" role="list" aria-live="polite">
+                                <div class="friend-list-empty" data-i18n="profile.friends_loading">Barátok betöltése...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mb-4 section-block" id="accountStatus">
+                        <div class="card-header">
+                            <i data-lucide="user-check" class="me-2"></i><span data-i18n="profile.account_status">Fiók állapota</span>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary" data-i18n="profile.email_verification">Email ellenőrzés</span>
+                                <span id="accountStatusEmailBadge" class="badge bg-secondary" data-i18n="profile.email_checking">Ellenőrzés alatt</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary" data-i18n="profile.account_type">Fiók típus</span>
+                                <span id="accountStatusRoleBadge" class="badge badge-player" data-i18n="profile.player_role">Játékos</span>
+                            </div>
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <span class="text-secondary" data-i18n="profile.status">Állapot</span>
+                                <span id="accountStatusActiveBadge" class="badge bg-success" data-i18n="profile.active">Aktív</span>
+                            </div>
+                            <hr style="border-color: var(--border-color);">
+                            <div class="d-flex align-items-center gap-3 mb-3">
+                                <div class="ability-icon"
+                                    id="accountStatusEmailIconWrap"
+                                    style="color: var(--accent-red); background-color: rgba(233, 69, 96, 0.12);">
+                                    <i id="accountStatusEmailIcon" data-lucide="mail-warning"></i>
+                                </div>
+                                <div>
+                                    <h6 id="accountStatusEmailTitle" class="mb-0 text-white" data-i18n="profile.email_required">Email megerősítés szükséges</h6>
+                                    <small id="accountStatusEmailHint" class="text-secondary" data-i18n="profile.email_required_hint">Kattints az újraküldésre, ha nem kaptad meg a levelet.</small>
+                                </div>
+                            </div>
+                            <div class="account-status-actions mb-3">
+                                <button id="resendVerificationButton" type="button" class="btn btn-outline-gold w-100">
+                                    <i data-lucide="send" style="width: 16px; height: 16px;"></i>
+                                    <span data-i18n="profile.resend_verification">Verifikációs email újraküldése</span>
+                                </button>
+                                <small id="resendVerificationHint" class="text-secondary d-block mt-2" data-i18n="profile.resend_hint">Ha nem érkezik email, ellenőrizd a spam/promóciók mappát is.</small>
+                            </div>
+                            <div id="accountStatusFeedback" class="alert d-none mb-3" role="status" aria-live="polite"></div>
+                            <div class="d-flex align-items-center gap-3">
+                                <div class="ability-icon"
+                                    style="color: var(--text-secondary); background-color: rgba(148, 163, 184, 0.1);">
+                                    <i data-lucide="calendar"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 text-white" data-i18n="profile.member_since">Tag ezóta</h6>
+                                    <small id="accountStatusMemberSince" class="text-secondary">-</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 4 -->
+            <div class="row mb-4" id="security">
+                <div class="col-12">
+                    <div class="card security-card">
+                        <div class="card-header security-header">
+                            <div class="security-header-main">
+                                <span class="d-flex align-items-center"><i data-lucide="shield" class="me-2"></i><span data-i18n="profile.security_activity">Biztonság és aktivitás</span></span>
+                            </div>
+                            <div class="security-header-controls" role="group" aria-label="Biztonsági napló szűrése" data-i18n-attr="aria-label:profile.security_filter_aria">
+                                <button class="btn btn-sm btn-outline-gold is-active" type="button" data-security-filter="all" data-i18n="profile.friend_all">Összes</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="auth" data-i18n="profile.filter_session">Munkamenet</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="security" data-i18n="profile.filter_security">Biztonság</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="profile" data-i18n="profile.filter_profile">Profil</button>
+                                <button class="btn btn-sm btn-outline-gold" type="button" data-security-filter="social" data-i18n="profile.filter_social">Szociális</button>
+                            </div>
+                            <div class="security-header-actions">
+                                <button class="btn btn-sm btn-outline-gold" type="button" id="refreshSecurityActivityButton"
+                                    aria-label="Biztonsági napló frissítése" title="Frissítés"
+                                    data-i18n-attr="title:profile.refresh,aria-label:profile.refresh">
+                                    <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" type="button" data-bs-toggle="modal"
+                                    data-bs-target="#logoutAllDevicesModal" data-i18n="profile.logout_all">Minden eszközről kijelentkezés</button>
+                            </div>
+                        </div>
+                        <div id="securityActivityFeedback" class="security-feedback d-none" aria-live="polite"></div>
+                        <div class="card-body p-0">
+                            <div class="security-table-scroll">
+                                <table class="table security-table">
+                                    <thead>
+                                        <tr>
+                                            <th data-i18n="profile.time">Időpont</th>
+                                            <th data-i18n="profile.event">Esemény</th>
+                                            <th data-i18n="profile.ip">IP cím</th>
+                                            <th data-i18n="profile.device">Eszköz / Böngésző</th>
+                                            <th data-i18n="profile.status">Státusz</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="securityHistoryTableBody" aria-live="polite">
+                                        <tr class="security-empty-row">
+                                            <td colspan="5" class="text-center text-secondary py-4" data-i18n="profile.security_loading">Biztonsági napló betöltése...</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Dashboard row 5 - Settings -->
+            <div class="row mb-4" id="settings">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <i data-lucide="settings" class="me-2"></i><span data-i18n="profile.profile_settings">Profil beállításai</span>
+                        </div>
+                        <div class="card-body">
+                            <form id="profileSettingsForm">
+                                <div class="row g-4">
+                                    <div class="col-md-12 d-flex align-items-center gap-4 border-bottom pb-4"
+                                        style="border-color: var(--border-color) !important;">
+                                        <img src="/profile_pictures/default.png"
+                                            alt="Profil" id="profileAvatarSettings" class="profile-avatar"
+                                            style="width: 80px; height: 80px; object-fit: cover;">
+                                        <div>
+                                            <h6 class="text-white mb-2" data-i18n="profile.profile_image">Profilkép</h6>
+                                            <div class="d-flex gap-2">
+                                                <input type="file" class="d-none" id="avatarUpload">
+                                                <label for="avatarUpload" class="btn btn-gold btn-sm m-0" data-i18n="profile.upload_new">Új feltöltése</label>
+                                                <button type="button" id="removeAvatarButton" class="btn btn-outline-danger btn-sm"
+                                                    data-bs-toggle="modal"
+                                                    data-bs-target="#removeAvatarModal" data-i18n="profile.remove">Eltávolítás</button>
+                                            </div>
+                                            <small id="profileImageSettingsStatus" class="text-secondary mt-2 d-inline-block" data-i18n="profile.image_approved">
+                                                Profilkép státusz: Jóváhagyott
+                                            </small>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="common.username">Felhasználónév</label>
+                                        <input id="settingsUsername" type="text" class="form-control" value="" placeholder="Felhasználónév" data-i18n-attr="placeholder:common.username">
+                                        <div id="settingsUsernameFeedback" class="form-text text-secondary mt-1"></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="profile.email_address">Email cím</label>
+                                        <input id="settingsEmail" type="email" class="form-control" value="" placeholder="email@példa.hu" data-i18n-attr="placeholder:profile.email_ph">
+                                        <div id="settingsEmailFeedback" class="form-text text-secondary mt-1"></div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="profile.new_password">Új jelszó</label>
+                                        <input id="settingsNewPassword" type="password" class="form-control"
+                                            placeholder="Hagyd üresen, ha nem változtatsz" data-i18n-attr="placeholder:profile.new_password_ph">
+                                        <div id="settingsNewPasswordFeedback" class="form-text text-secondary mt-1"></div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label" data-i18n="profile.confirm_password">Új jelszó megerősítése</label>
+                                        <input id="settingsConfirmPassword" type="password" class="form-control" placeholder="Új jelszó megerősítése" data-i18n-attr="placeholder:profile.confirm_password_ph">
+                                        <div id="settingsConfirmPasswordFeedback" class="form-text text-secondary mt-1"></div>
+                                    </div>
+
+                                    <div class="col-12 mt-2">
+                                        <div id="profileSettingsMessage" class="alert d-none mb-0" role="alert"></div>
+                                    </div>
+
+                                    <div class="col-12 text-end mt-4">
+                                        <button id="profileSettingsSaveButton" type="submit" class="btn btn-gold px-5" disabled data-i18n="profile.save_changes">Változások mentése</button>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <div class="danger-zone">
+                                <div class="d-flex flex-wrap justify-content-between align-items-start gap-3">
+                                    <div>
+                                        <h6 class="danger-zone-title">
+                                            <i data-lucide="triangle-alert" style="width: 16px; height: 16px;"
+                                                class="me-1"></i>
+                                            <span data-i18n="profile.danger_zone_title">Veszélyes zóna</span>
+                                        </h6>
+                                        <p class="danger-zone-text mb-0" data-i18n="profile.delete_warning">A profil törlése végleges és nem vonható vissza.</p>
+                                    </div>
+                                    <button type="button" class="btn btn-outline-danger" id="openDeleteProfileModal"
+                                        data-bs-toggle="modal" data-bs-target="#deleteProfileModal" data-i18n="profile.delete_profile">
+                                        Profil törlése
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="site-footer">
+        <div class="footer-brand">
+            <i data-lucide="crown" style="width: 18px; height: 18px; display: inline;"></i>
+            MattMester
+        </div>
+        <div class="footer-links">
+            <a href="/" data-i18n="chess.home">Főoldal</a>
+            <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>
+            <button type="button" class="house-rules-footer-link" onclick="MattMesterHouseRules.open()" title="Sakk szabályok, házirend, tudnivalók">
+                <i data-lucide="info" style="width: 14px; height: 14px;"></i> <span data-i18n="index.rules">Szabályok</span>
+            </button>
+        </div>
+        <div class="footer-copy">2026 MattMester</div>
+    </footer>
+
+    <button class="fab-chat" id="fabOpenChatButton" type="button" data-open-chat="inbox" aria-label="Chat megnyitása" data-i18n-attr="aria-label:profile.messages">
+        <span class="fab-tooltip" data-i18n="profile.messages">Üzenetek</span>
+        <i data-lucide="message-circle" style="width: 26px; height: 26px;"></i>
+    </button>
+
+    <div class="modal fade" id="notificationsModal" tabindex="-1" aria-labelledby="notificationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
+            <div class="modal-content modal-surface notifications-modal-content notifications-modal-content--transparent">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="notificationsModalLabel">
+                        <i data-lucide="bell" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.notif_title">Értesítések</span>
+                        <span id="notificationsUnreadCounter" class="badge bg-danger ms-2" hidden>0</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="notificationsList" class="notifications-list" role="list"></div>
+                    <div id="notificationsEmpty" class="notifications-empty text-secondary d-none" data-i18n="profile.no_notif">
+                        Nincs új értesítés.
+                    </div>
+                </div>
+                <div class="modal-footer d-flex justify-content-between gap-2">
+                    <button type="button" class="btn btn-outline-gold btn-sm" id="markAllNotificationsReadBtn">
+                        <i data-lucide="check-check" style="width: 14px; height: 14px;"></i>
+                        <span data-i18n="profile.mark_all_read">Mind olvasott</span>
+                    </button>
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.close">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <button class="fab-quick-play" type="button" onclick="window.MattMesterChessModeChooser?.open()">
+        <span class="fab-tooltip" data-i18n="profile.quick_play">Gyors játék</span>
+        <i data-lucide="swords" style="width: 26px; height: 26px;"></i>
+    </button>
+
+    <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="logoutModalLabel">
+                        <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.logout_title">Kijelentkezés megerősítése</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0" data-i18n="profile.logout_q">Biztosan ki szeretnél jelentkezni?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmLogoutButton" data-i18n="nav.logout">Kijelentkezés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="logoutAllDevicesModal" tabindex="-1" aria-labelledby="logoutAllDevicesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="logoutAllDevicesModalLabel">
+                        <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.logout_all_title">Kijelentkezés minden eszközről</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2" data-i18n="profile.logout_all_q">Biztosan ki szeretnél jelentkezni minden eszközről?</p>
+                    <p class="text-secondary small mb-0" data-i18n="profile.logout_all_hint">Az összes aktív munkameneted megszűnik, és ezen az eszközön is újra be kell jelentkezned.</p>
+                    <div id="logoutAllDevicesMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmLogoutAllDevicesButton" data-i18n="profile.logout_all_btn">Kijelentkezés minden eszközről</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addFriendModal" tabindex="-1" aria-labelledby="addFriendModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="addFriendModalLabel">
+                        <i data-lucide="user-plus" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.add_friend_title">Barát hozzáadása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <label for="friendNameInput" class="form-label" data-i18n="common.username">Felhasználónév</label>
+                    <input type="text" id="friendNameInput" class="form-control" placeholder="Pl.: ChessWizard88" data-i18n-attr="placeholder:profile.friend_username_ph">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="sendFriendRequestBtn" data-i18n="profile.send_request">Kérés küldése</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="searchResultsModal" tabindex="-1" aria-labelledby="searchResultsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <div class="search-results-header-content w-100">
+                        <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                            <h5 class="modal-title d-flex align-items-center gap-2 mb-0" id="searchResultsModalLabel">
+                                <i data-lucide="search" style="width: 18px; height: 18px;"></i>
+                                <span id="searchResultsModalTitleText" data-i18n="profile.search_results">Keresési találatok</span>
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                        </div>
+                        <div class="top-bar-search search-results-header-search">
+                            <div class="top-bar-search-field">
+                                <input id="modalPlayerSearchInput" type="text" placeholder="Keresés játékosokra..." data-i18n-attr="placeholder:profile.search_players_ph">
+                                <button id="modalPlayerSearchButton" type="button" class="top-bar-search-btn" aria-label="Keresés a találatok között" data-i18n-attr="aria-label:profile.search_players">
+                                    <i data-lucide="search" style="width: 16px; height: 16px;"></i>
+                                </button>
+                            </div>
+                            <div id="modalPlayerSearchFeedback" class="top-bar-search-feedback" aria-live="polite"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <p id="searchResultsSummary" class="text-secondary mb-3" data-i18n="profile.results_loading">Találatok betöltése...</p>
+                    <div id="searchResultsList" class="search-results-list" role="list"></div>
+                    <div id="searchResultsEmpty" class="search-results-empty d-none">
+                        <i data-lucide="user-x" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.no_search_results">Nincs találat a megadott keresésre.</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.close">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="playerProfileModal" tabindex="-1" aria-labelledby="playerProfileModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-xl modal-fullscreen-md-down">
+            <div class="modal-content modal-surface player-profile-modal">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2 mb-0" id="playerProfileModalLabel">
+                        <i data-lucide="user-round" style="width: 18px; height: 18px;"></i>
+                        <span id="playerProfileModalTitleText" data-i18n="profile.player_profile">Játékos profil</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="playerProfileModalFeedback" class="friends-feedback d-none mb-3" aria-live="polite"></div>
+
+                    <section class="player-profile-section" data-section="identity">
+                        <div class="d-flex flex-column flex-md-row align-items-center gap-3">
+                            <img id="playerProfileAvatar" class="profile-avatar player-profile-avatar" src="/profile_pictures/default.png" alt="Játékos profilkép" data-i18n-attr="alt:profile.player_alt">
+                            <div class="text-center text-md-start min-width-0">
+                                <h4 id="playerProfileUsername" class="mb-1 text-white text-truncate">-</h4>
+                                <span id="playerProfileRole" class="role-badge">Player</span>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="meta">
+                        <div class="row g-2">
+                            <div class="col-12 col-md-6">
+                                <div class="player-meta-box">
+                                    <small class="text-secondary d-block" data-i18n="profile.joined">Csatlakozott</small>
+                                    <strong id="playerProfileJoinedAt" class="text-white">-</strong>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-6">
+                                <div class="player-meta-box">
+                                    <small class="text-secondary d-block" data-i18n="profile.last_active">Utoljára aktív</small>
+                                    <strong id="playerProfileLastActiveAt" class="text-white">-</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="ratings">
+                        <div class="row g-3" id="playerProfileEloGrid">
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center player-profile-elo-card">
+                                    <div id="playerProfileEloClassic" class="elo-number">0</div>
+                                    <div class="elo-label" data-i18n="index.classical">Klasszikus</div>
+                                    <div id="playerProfileEloClassicRank" class="elo-rank rank-beginner" data-i18n="profile.beginner">Kezdő</div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center highlighted player-profile-elo-card">
+                                    <div id="playerProfileEloMM" class="elo-number">0</div>
+                                    <div class="elo-label" data-i18n="index.mattmester">MattMester</div>
+                                    <div id="playerProfileEloMMRank" class="elo-rank rank-beginner" data-i18n="profile.beginner">Kezdő</div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <div class="elo-display text-center player-profile-elo-card">
+                                    <div id="playerProfileEloBullet" class="elo-number">0</div>
+                                    <div class="elo-label" data-i18n="index.bullet">Bullet</div>
+                                    <div id="playerProfileEloBulletRank" class="elo-rank rank-beginner" data-i18n="profile.beginner">Kezdő</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="player-profile-section" data-section="stats">
+                        <div class="row g-3" id="playerProfileStatsGrid">
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value text-success" id="playerProfileWins">0</div>
+                                    <div class="stat-label badge-custom badge-win" data-i18n="profile.wins">Győzelmek</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value text-danger" id="playerProfileLosses">0</div>
+                                    <div class="stat-label badge-custom badge-loss" data-i18n="profile.losses">Vereségek</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value" style="color: var(--accent-blue)" id="playerProfileDraws">0</div>
+                                    <div class="stat-label badge-custom badge-draw" data-i18n="profile.draws">Döntetlenek</div>
+                                </div>
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <div class="stat-card">
+                                    <div class="stat-value" style="color: var(--accent-gold)" id="playerProfileWinRate">0%</div>
+                                    <div class="stat-label badge-custom badge-ongoing" data-i18n="index.winrate">Nyerési arány</div>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.close">Bezárás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="deleteProfileModal" tabindex="-1" aria-labelledby="deleteProfileModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-delete">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="deleteProfileModalLabel">
+                        <i data-lucide="trash-2" style="width: 18px; height: 18px; color: var(--accent-red);"></i>
+                        <span data-i18n="profile.delete_profile">Profil törlése</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"
+                        aria-label="Close" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-3 text-secondary" data-i18n="profile.delete_perm">Ez a művelet véglegesen eltávolítja a profiladataidat ebből a munkamenetből.</p>
+
+                    <label for="deleteProfileConfirmInput" class="mb-2" data-i18n="profile.delete_password_label">A megerősítéshez add meg a jelszavad:</label>
+                    <input type="password" class="form-control mb-3" id="deleteProfileConfirmInput"
+                        placeholder="Jelszó megadása" data-i18n-attr="placeholder:profile.password_input_ph">
+                    <div id="deleteProfileConfirmFeedback" class="form-text text-secondary mt-1 mb-3"></div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="deleteProfileAcknowledge">
+                        <label class="form-check-label text-secondary" for="deleteProfileAcknowledge" data-i18n="profile.delete_ack">
+                            Megértettem, hogy ez a folyamat nem vonható vissza.
+                        </label>
+                    </div>
+
+                    <div id="deleteProfileMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteProfileBtn" disabled>
+                        <span data-i18n="profile.delete_btn">Törlés</span> (<span id="deleteTimer">5</span>s)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="removeAvatarModal" tabindex="-1" aria-labelledby="removeAvatarModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="removeAvatarModalLabel">
+                        <i data-lucide="image-minus" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.remove_avatar_title">Profilkép eltávolítása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2 text-secondary" data-i18n="profile.remove_avatar_q">Biztosan visszaállítod a profilképet az alapértelmezett képre?</p>
+                    <div id="removeAvatarMessage" class="alert d-none mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-danger" id="confirmRemoveAvatarButton" data-i18n="profile.remove_avatar_btn">Eltávolítás</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="profileImageEditorModal" tabindex="-1" aria-labelledby="profileImageEditorModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="profileImageEditorModalLabel">
+                        <i data-lucide="image-up" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.image_crop">Profilkép kivágása</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-secondary mb-3" data-i18n="profile.image_crop_hint">A képet húzással mozgathatod, zoomolhatod és forgathatod.</p>
+                    <div class="profile-image-editor-grid">
+                        <div class="profile-image-editor-main">
+                            <canvas id="profileImageEditorCanvas" class="profile-image-editor-canvas" width="640" height="360"></canvas>
+                        </div>
+                        <div class="profile-image-editor-side">
+                            <div>
+                                <label for="profileImageZoom" class="form-label mb-1" data-i18n="profile.zoom">Nagyítás</label>
+                                <input id="profileImageZoom" type="range" class="form-range" min="0.6" max="3" step="0.05" value="1">
+                            </div>
+                            <div>
+                                <label for="profileImageRotate" class="form-label mb-1" data-i18n="profile.rotate">Forgatás</label>
+                                <input id="profileImageRotate" type="range" class="form-range" min="-180" max="180" step="1" value="0">
+                            </div>
+                            <div>
+                                <label class="form-label mb-2" data-i18n="profile.preview">Előnézet</label>
+                                <canvas id="profileImageEditorPreview" class="profile-image-editor-preview" width="160" height="160"></canvas>
+                            </div>
+                            <button id="resetProfileImageEditor" type="button" class="btn btn-outline-gold btn-sm" data-i18n="profile.reset">Visszaállítás</button>
+                        </div>
+                    </div>
+                    <div id="profileImageEditorMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
+                </div>
+                <div class="modal-footer">
+                    <p class="text-secondary mb-3" data-i18n="profile.image_norm">A kép feleljen meg a társadalmi normáknak. (tilos: NSFW, Tiltott szimbólumok) a szabályzat abuzálása tilos és kitiltást vonhat maga után...</p>
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="saveProfileImageButton" data-i18n="common.save">Mentés</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="confirmProfileSettingsModal" tabindex="-1" aria-labelledby="confirmProfileSettingsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content modal-surface">
+                <div class="modal-header">
+                    <h5 class="modal-title d-flex align-items-center gap-2" id="confirmProfileSettingsModalLabel">
+                        <i data-lucide="circle-help" style="width: 18px; height: 18px;"></i>
+                        <span data-i18n="profile.confirm_change">Módosítás megerősítése</span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-2 text-secondary" data-i18n="profile.confirm_change_q">Biztosan menteni szeretnéd az alábbi változásokat?</p>
+                    <div id="profileSettingsModalMessage" class="alert d-none mb-3" role="alert"></div>
+                    <ul id="profileSettingsChangesList" class="mb-0 ps-3"></ul>
+                    <div id="profileSettingsModalPasswordBlock" class="mt-3 d-none">
+                        <label class="form-label" data-i18n="profile.current_password">Jelenlegi jelszó</label>
+                        <input id="modalCurrentPassword" type="password" class="form-control" placeholder="A mentéshez add meg a jelenlegi jelszavad" data-i18n-attr="placeholder:profile.current_password_ph">
+                        <div id="modalCurrentPasswordFeedback" class="form-text text-secondary mt-1"></div>
+                    </div>
+                    <div class="mt-3">
+                        <small id="profileSettingsConfirmHint" class="text-secondary" data-i18n="profile.confirm_hint">A mentés gomb 10 másodperc múlva lesz aktív.</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="profileSettingsConfirmSaveButton" disabled><span data-i18n="common.save">Mentés</span> (10s)</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>

@@ -1,0 +1,21 @@
+/* ================================================================
+ * profile.css — aggregator
+ *
+ * Az eredeti egybetomoritett 2515-soros stylesheet rendeltetes szerinti
+ * kis fajlokra van bontva a profile/ almappaba. Ez a fajl @import-tal
+ * tolti be oket az eredeti sorrendben — a cascade es a specificity igy
+ * pontosan ugy mukodik, mint amikor egyetlen fajl volt.
+ *
+ * Sorrend modositasa = vizualis breakage. Ne csereld ossze.
+ * ================================================================ */
+
+@import url('./profile/01-tokens.css');
+@import url('./profile/02-animations.css');
+@import url('./profile/03-sidebar.css');
+@import url('./profile/04-topbar.css');
+@import url('./profile/05-content.css');
+@import url('./profile/06-friends.css');
+@import url('./profile/07-misc.css');
+@import url('./profile/08-securityActivity.css');
+@import url('./profile/09-footer.css');
+@import url('./profile/10-themeToggle.css');
