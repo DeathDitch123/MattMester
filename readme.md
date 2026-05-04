@@ -4,8 +4,121 @@
 
 ---
 
+## A szoftver célja és funkciói
+
+**MattMester** egy online közösségi sakk-platform: a felhasználók regisztráció után élőben sakkozhatnak egymással (PvP) vagy bot ellen, követhetik az ELO-jukat 3 időkontroll-módban (Klasszikus, MattMester, Bullet), barátokat kereshetnek, üzenetváltáskor chatelhetnek, és egy admin felületen át a moderálás/audit/analytics is megoldott.
+
+**Életszerű probléma, amit megold:**
+
+| Probléma | Megoldás |
+|---|---|
+| Általában a sakk-platformok (Lichess, Chess.com) nem támogatnak **lokalizált, magyar nyelvű iskolai/közösségi környezetet** + saját ELO-rendszert. | HU/EN i18n switch + lokális MySQL-be tárolt ELO + klasszikus + MattMester (egyedi képesség-rendszer) + Bullet módok. |
+| A felhasználói tartalom (chat, profilkép) **moderálatlanul** elszabadulhat. | Admin chat-moderáció + dinamikus blocklist + profilkép-jóváhagyás (pending/approved/rejected) + audit log + step-up admin token (15 perc érvényességű kritikus akciókhoz). |
+| Hagyományos web-alkalmazásokban a **valós idejű frissítés** (online-státusz, élő játszma, üzenet) nem trivális. | Socket.IO room-modell: `presence`, `chat:*`, `chess:*`, `admin:*` namespace-ek; reconnect-grace (60s sakkmeccsre, 30s queue-ra, 10s presence-re). |
+| A back-office műveletek (ban, soft-delete, képesség-szerkesztés, tesztfuttatás) általában külön admin tooling-gal kerülnek megoldásra. | Beépített admin panel: lista/szerkesztés + tiltások + soft-delete + képesség-szerkesztő + Jest tesztfuttatás közvetlenül a UI-ról. |
+
+**Fő funkciók:**
+
+- 🎯 **PvP sakk-játszma** valós időben (Socket.IO + autoritatív szerver-oldali tábla-állapot)
+- 🤖 **Bot ellenfél** 3 nehézségi szinttel (random / minimax / alpha-beta)
+- 🏆 **Ranglista** és ELO-frissítés (csak időkorlátos módoknál)
+- 👥 **Barátok** (kérés / elfogad / blokk) + presence-figyelés
+- 💬 **Chat** közvetlen üzenetekkel (admin moderáció, blocklist, rate-limit)
+- 🔔 **Notification system** (csengő + toast — frontend bárhol elérhető)
+- 🛡️ **Admin felület** (lista / részletek / ban / törlés / chat-moderáció / képmoderáció / audit / alerts / IP-block)
+- 🌐 **Kétnyelvű UI** (HU/EN, dinamikus tartalmakon is váltható)
+- 📧 **Email verifikáció** (SMTP, jelszó-visszaállítás)
+- 🔐 **Step-up admin token** (15 perc, kritikus műveletekhez bcrypt jelszó-megerősítéssel)
+
+---
+
+## Architektúra
+
+### REST API (kliens ↔ szerver kommunikáció)
+
+A backend `Express 5`-ön egy **RESTful API-t** publikál `/api/*` prefix alatt. Minden végpont JSON-payload-ot vár / ad vissza, megfelelő HTTP-státuszkódokkal (200, 201, 400, 401, 403, 404, 409, 422, 429, 500). A főbb resource-csoportok:
+
+| Resource | Példa végpontok | Auth |
+|---|---|---|
+| `auth` | `POST /api/login`, `POST /api/register`, `POST /api/logout`, `GET /api/sessionInfo`, `POST /api/auth/forgot-password`, `POST /api/auth/reset-password` | session-cookie |
+| `profile` | `GET /api/profile/:id`, `PATCH /api/profile/me`, `POST /api/profile/avatar` | `apiGuard` |
+| `friends` | `GET /api/friends`, `POST /api/friends/request`, `POST /api/friends/:id/accept`, `DELETE /api/friends/:id` | `apiGuard` |
+| `chat` | `GET /api/chat/conversations`, `POST /api/chat/conversations/direct`, `POST /api/chat/conversations/:id/messages`, `POST /api/chat/messages/:id/report` | `apiGuard` |
+| `notifications` | `GET /api/notifications`, `POST /api/notifications/:id/read` | `apiGuard` |
+| `players` | `GET /api/players/search?q=...`, `GET /api/leaderboard` | public/optional |
+| `chess` | `POST /api/chess/active`, `POST /api/chess/queue/join` | `apiGuard` |
+| `admin/*` | `GET /api/admin/users`, `POST /api/admin/users/:id/ban`, `POST /api/admin/chat/blocklist/add`, `POST /api/admin/auth/elevate` | `adminGuard` + step-up token |
+
+Védelmi rétegek (mindegyik /api/* requestre): **CSRF-guard** (Origin/Referer match), **rate limiter** (per-endpoint limitek — login: 10/IP, register: 5/IP, chat: 30/perc/user), **session-bound auth** (express-session), **maintenance-mode** guard.
+
+A **valós idejű** csatorna párhuzamos: Socket.IO a `/socket.io` és `/admin` namespace-eken (chat, presence, leaderboard, sakk, admin telemetry).
+
+### Kliens-oldal
+
+- **HTML5 + Bootstrap 5** struktúra
+- **Vanilla ES2020+ JavaScript** (nincs build-step, közvetlen `<script>` tagek a fejlesztési egyszerűségért)
+- Modulok (`frontend/javascript/`-en belül):
+  - **Globális helperek** (`_utils.js`, `requestControl.js`, `socketClient.js`, `chatModal.js`)
+  - **Profil oldal** (`profile/01-21-*.js` — összesen 21 modul: dashboard, friends, security log, settings, image editor, …)
+  - **Admin panel** (`adminPanel/01-29-*.js` — sections, user table, audit, moderation, …)
+  - **Sakk-játékfelület** (`chess_barold/javascript/` — ES modulok: bot, pvp, abilities, UI)
+  - **Shared i18n + UI** (`shared/i18n.js`, `topNavbar.js`, `confirmModal.js`, `notificationToast.js`, …)
+
+A REST hívásokat egy egységes `requestController` koordinálja (debounce + AbortController + cancel-ben-flight).
+
+---
+
+## Adatkezelés és perzisztencia
+
+A backend **MySQL 8** adatbázist használ (`mysql2` promise driver-rel). Az `init-on-boot` séma létrehozás (`backend/sql/database.js → ensureSchemaColumns()`) automatikusan kreálja a hiányzó táblákat és oszlopokat, így új környezetbe deploy-oláshoz csak az **üres MySQL-szerver** kell.
+
+**Fő táblák** (~20 db):
+
+| Tábla | Funkció |
+|---|---|
+| `users` | profil, ELO (3 mód), role, status, soft-delete, ban, email verify |
+| `notifications` + `notification_state` | univerzális értesítés-rendszer (audience: user/multi/global/role/system) |
+| `chat_conversations` + `chat_participants` + `chat_messages` | privát/csoport chat + olvasott-státusz |
+| `chat_message_reports` | felhasználói report-flow |
+| `dynamic_blocklist_words` | admin által bővíthető tiltott szólista |
+| `friend_relations` | barátság-státusz (pending/accepted/blocked) |
+| `chess_games` + `chess_moves` | befejezett játszmák + lépés-történet (PGN-szerű forma) |
+| `abilities` + `ability_usage` | képesség-rendszer (admin-szerkesztett, per-user statisztikákkal) |
+| `security_activity_log` | login/logout/profil-változás/ban-esemény napló (per-user) |
+| `admin_audit_log` | admin action audit (action, target, severity, before/after state, reason) |
+| `admin_alerts` | admin-szintű riasztások (pl. failed-login burst, soft-delete) |
+| `ip_blocks` | IP-szintű tiltás (temp + permanent) |
+| `session_sessions` (express-session) | session perzisztencia |
+
+A **soft-delete**-tel törölt felhasználói adatok 30 napig vissza-restore-álhatók admin által; utána egy időzített cron a fizikai törlést elvégzi.
+
+---
+
+## Tiszta kód elvei
+
+- **Single source of truth**: minden helper egy helyen (pl. `frontend/javascript/_utils.js` → `runSafely`, `escapeHtml`, `tx`, `fetchSessionInfo`); a duplikációk az iterációk során folyamatosan eltávolításra kerültek.
+- **Egységes auth**: `pageGuard` / `apiGuard` / `adminGuard` / `pageAdminGuard` egy `_authenticate()` belső függvényt hív, csak a válasz-stratégia tér el (redirect vs JSON).
+- **Egységes notification-szervíz**: `notificationService.send()` minden audience-stratégiát kezel (DB perzisztencia + socket push + badge frissítés).
+- **Konfiguráció egy helyen**: chat rate-limit, admin permissions, abilities — `chatUtils.js`, `services.js`, dedikált modulokban.
+- **Hibakezelés**: minden API-handler `try/catch`-csel zárt, fail-open ahol biztonságos (pl. notification side-effect ne törje meg a fő-flow-t).
+- **Nincs `var`** a kódbázisban (`const`/`let`); strict mode IIFE-knél, classic scriptek non-strict-en (kompatibilitás miatt).
+- **Tesztek**: 105 Jest test suite (1771+ teszt) — backend route-okra, SQL helper-ekre, frontend logikákra (i18n, validáció, sakk-tábla render, admin moderáció).
+- **Auditálhatóság**: minden admin action végén `auditFlush` middleware írja a `admin_audit_log`-ba; minden user-action végén `security_activity_log`.
+
+---
+
+## Dokumentáció (ez a readme)
+
+A használat lépéseit alább részletesen leírjuk. A fájl-szerkezet, env-vars, parancsok, hibakeresési útmutató és nyelvválasztás (i18n) a megfelelő szekciókban található. **Ezzel a fájllal együtt a csomag teljes**: forráskód + readme + tesztek + admin paneles diagnosztika.
+
+---
+
 ## Tartalomjegyzék
 
+- [A szoftver célja és funkciói](#a-szoftver-célja-és-funkciói)
+- [Architektúra](#architektúra)
+- [Adatkezelés és perzisztencia](#adatkezelés-és-perzisztencia)
+- [Tiszta kód elvei](#tiszta-kód-elvei)
 - [Előfeltételek](#előfeltételek)
 - [Beüzemelés (gyors)](#beüzemelés-gyors)
 - [Függőségek (npm)](#függőségek-npm)
