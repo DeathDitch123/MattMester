@@ -28,6 +28,9 @@ const MAIN_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js');
 const REJOIN_OVERLAY_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'pvp', 'rejoinOverlay.js');
 // Refactor: a `pvpJatekKezdet` mostantol a `pvp/pvpJatek.js` modulban van.
 const PVP_JATEK_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'pvp', 'pvpJatek.js');
+// Refactor: a pvpSocketInit + a `chess:rejoin:none` / `chess:game:start`
+// listener-ek mostantol a `pvp/pvpSocket.js` modulban vannak.
+const PVP_SOCKET_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'pvp', 'pvpSocket.js');
 
 function readFile(p) {
     return fs.readFileSync(p, 'utf8');
@@ -164,9 +167,11 @@ describe('main.js (chess.html) — chooser nyitas csak a rejoin valasz utan', ()
 
     test('pvpSocketInit listeneli a chess:rejoin:none-t es chess:game:start-ot', () => {
         // A rejoin route-olas a pvpSocketInit-ben elhelyezett tartos listener-ek
-        // dolga, NEM az init body-jaban .once-olunk.
-        expect(src).toMatch(/socket\.on\(['"]chess:rejoin:none['"]/);
-        expect(src).toMatch(/socket\.on\(['"]chess:game:start['"]/);
+        // dolga, NEM az init body-jaban .once-olunk. Refactor: a pvpSocketInit
+        // a `pvp/pvpSocket.js` modulban van.
+        const pvpSocketSrc = readFile(PVP_SOCKET_JS);
+        expect(pvpSocketSrc).toMatch(/socket\.on\(['"]chess:rejoin:none['"]/);
+        expect(pvpSocketSrc).toMatch(/socket\.on\(['"]chess:game:start['"]/);
     });
 
     test('`pvpJatekKezdet` defenziv-zarja a mode chooser-t (F5 race-fix)', () => {
@@ -284,21 +289,22 @@ describe('chess.html + main.js + chess.css — rejoin overlay (visible feedback)
     });
 
     test('chess:rejoin:none handler hivja rejoinOverlayElrejt-et (no-match)', () => {
-        // A pvpSocketInit-ben levo handler-ben.
-        const idx = js.indexOf("socket.on('chess:rejoin:none'");
+        // Refactor: a pvpSocketInit + handlerei a `pvp/pvpSocket.js` modulban vannak.
+        const pvpSocketSrc = readFile(PVP_SOCKET_JS);
+        const idx = pvpSocketSrc.indexOf("socket.on('chess:rejoin:none'");
         expect(idx).toBeGreaterThan(-1);
         // Olvassuk a handler torzset
-        const arrowStart = js.indexOf('=>', idx);
-        const openBrace = js.indexOf('{', arrowStart);
+        const arrowStart = pvpSocketSrc.indexOf('=>', idx);
+        const openBrace = pvpSocketSrc.indexOf('{', arrowStart);
         let depth = 1;
         let i = openBrace + 1;
-        while (i < js.length && depth > 0) {
-            const ch = js[i];
+        while (i < pvpSocketSrc.length && depth > 0) {
+            const ch = pvpSocketSrc[i];
             if (ch === '{') depth++;
             else if (ch === '}') depth--;
             i++;
         }
-        const torzs = js.substring(openBrace + 1, i - 1);
+        const torzs = pvpSocketSrc.substring(openBrace + 1, i - 1);
         expect(torzs).toMatch(/rejoinOverlayElrejt\s*\(/);
     });
 });

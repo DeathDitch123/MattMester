@@ -30,6 +30,12 @@ const PVP_JATEK_JS = fs.readFileSync(
     path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'pvp', 'pvpJatek.js'),
     'utf8'
 );
+// Refactor: a chess:opponent:disconnected/reconnected handler-ek mostantol a
+// `pvp/pvpSocket.js` modulban vannak (pvpSocketInit-en belul).
+const PVP_SOCKET_JS = fs.readFileSync(
+    path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'pvp', 'pvpSocket.js'),
+    'utf8'
+);
 
 describe('chess.html — opponent-disconnected banner DOM', () => {
     test('a banner kezdoleg `hidden` class-szal van (csak disconnect alatt latszodjon)', () => {
@@ -117,32 +123,32 @@ describe('chess.css — opponent-disconnected banner fixed-position styling', ()
     });
 });
 
-describe('main.js — chess:opponent:disconnected handler', () => {
+describe('pvp/pvpSocket.js — chess:opponent:disconnected handler', () => {
     test('countdown m:ss formatumban van (1:00, 0:45, 0:09)', () => {
         // A javitas-elotti keszet: csak `masodperc.toString()` (pl. "60", "45", "9").
         // Most: `formatDc(mp)` ami m:ss-szel formaz.
-        const idx = MAIN_JS.indexOf("chess:opponent:disconnected");
+        const idx = PVP_SOCKET_JS.indexOf("socket.on('chess:opponent:disconnected'");
         expect(idx).toBeGreaterThan(-1);
         // A handler-en belul keresunk olyan formatot, ami m:ss-szerintu kimenetet
         // ad. A `padStart(2, '0')` jelenlete + Math.floor(mp/60) + mp%60 kombinacio
         // jellemzo erre.
-        const handlerRange = MAIN_JS.substring(idx, idx + 1500);
+        const handlerRange = PVP_SOCKET_JS.substring(idx, idx + 1500);
         expect(handlerRange).toMatch(/padStart\s*\(\s*2\s*,\s*['"]0['"]\s*\)/);
         expect(handlerRange).toMatch(/mp\s*\/\s*60|masodperc\s*\/\s*60/);
         expect(handlerRange).toMatch(/mp\s*%\s*60|masodperc\s*%\s*60/);
     });
 
     test('countdown 0-ra ert nem megy negativba (Math.max guard)', () => {
-        const idx = MAIN_JS.indexOf("chess:opponent:disconnected");
-        const handlerRange = MAIN_JS.substring(idx, idx + 1500);
+        const idx = PVP_SOCKET_JS.indexOf("socket.on('chess:opponent:disconnected'");
+        const handlerRange = PVP_SOCKET_JS.substring(idx, idx + 1500);
         // Az `0` alatt is helyesen "0:00"-t mutat (negativ ertekek elkerulese).
         expect(handlerRange).toMatch(/Math\.max\s*\(\s*0\s*,\s*masodperc\s*\)/);
     });
 
     test('chess:opponent:reconnected handler elrejti a banner-t es leallitja az interval-t', () => {
-        const idx = MAIN_JS.indexOf("chess:opponent:reconnected");
+        const idx = PVP_SOCKET_JS.indexOf("socket.on('chess:opponent:reconnected'");
         expect(idx).toBeGreaterThan(-1);
-        const handlerRange = MAIN_JS.substring(idx, idx + 500);
+        const handlerRange = PVP_SOCKET_JS.substring(idx, idx + 500);
         expect(handlerRange).toMatch(/classList\.add\(['"]hidden['"]\)/);
         expect(handlerRange).toMatch(/clearInterval\s*\(\s*window\._dcInterval/);
     });

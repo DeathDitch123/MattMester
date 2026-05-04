@@ -24,6 +24,9 @@ const pvpSrc = fs.readFileSync(PVP_PATH, 'utf8');
 
 const MAIN_JS_PATH = path.resolve(__dirname, '..', '..', 'frontend', 'chess_barold', 'javascript', 'main.js');
 const mainJs = fs.readFileSync(MAIN_JS_PATH, 'utf8');
+// Refactor: a chess:game:end + post-grace rejoin handler a pvpSocket.js modulba kerult.
+const PVP_SOCKET_JS_PATH = path.resolve(__dirname, '..', '..', 'frontend', 'chess_barold', 'javascript', 'pvp', 'pvpSocket.js');
+const pvpSocketJs = fs.readFileSync(PVP_SOCKET_JS_PATH, 'utf8');
 
 function extractFunctionBody(source, signaturePrefix) {
     const startIdx = source.indexOf(signaturePrefix);
@@ -164,10 +167,10 @@ describe('backend pvp.js — POST-GRACE rejoin (60s lejart) chess:game:end-et ku
     });
 });
 
-describe('frontend main.js — post-grace rejoin -> game-end modal megnyitas', () => {
+describe('frontend pvp/pvpSocket.js — post-grace rejoin -> game-end modal megnyitas', () => {
     test('chess:game:end handler kezeli a postGraceRejoin esetet (pvpAktiv=false)', () => {
         // A handler regex-keresese: a `postGraceRejoin` flag-et olvasni kell.
-        expect(mainJs).toMatch(/postGraceRejoin/);
+        expect(pvpSocketJs).toMatch(/postGraceRejoin/);
     });
 
     test('post-grace rejoin: pvpAktiv = true beallitas, sajatSzin = data.sajatSzin', () => {
@@ -176,16 +179,16 @@ describe('frontend main.js — post-grace rejoin -> game-end modal megnyitas', (
         // hogy a pvpJatekVege megfelelo ELO-t mutasson. Refactor (state.js):
         // a globalis let-ek state.X-re mentek, ezert a regex `state.` prefixet
         // is elfogadja.
-        const idx = mainJs.indexOf('postGraceRejoin');
+        const idx = pvpSocketJs.indexOf('postGraceRejoin');
         expect(idx).toBeGreaterThan(-1);
-        const tartomany = mainJs.substring(idx, Math.min(idx + 1200, mainJs.length));
+        const tartomany = pvpSocketJs.substring(idx, Math.min(idx + 1200, pvpSocketJs.length));
         expect(tartomany).toMatch(/(?:state\.)?pvpAktiv\s*=\s*true/);
         expect(tartomany).toMatch(/(?:state\.)?sajatSzin\s*=\s*data\.sajatSzin/);
     });
 
     test('post-grace rejoin: rejoinOverlayElrejt() es chooser zarasa', () => {
-        const idx = mainJs.indexOf('postGraceRejoin');
-        const tartomany = mainJs.substring(idx, Math.min(idx + 1200, mainJs.length));
+        const idx = pvpSocketJs.indexOf('postGraceRejoin');
+        const tartomany = pvpSocketJs.substring(idx, Math.min(idx + 1200, pvpSocketJs.length));
         expect(tartomany).toMatch(/rejoinOverlayElrejt\s*\(/);
         // Chooser close defensive
         expect(tartomany).toMatch(/MattMesterChessModeChooser[\s\S]*?\.close/);

@@ -540,7 +540,8 @@ describe('Chess lifecycle invariánsok', () => {
         });
 
         test('chess:rejoin:none socket handler NEM nyulhat a regi mode-modal-hoz', () => {
-            const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
+            // Refactor: a pvpSocketInit + handler-ek a `pvp/pvpSocket.js` modulban vannak.
+            const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'pvp', 'pvpSocket.js'));
             const m = content.match(/socket\.on\(['"]chess:rejoin:none['"][\s\S]*?\}\s*\)\s*;/);
             expect(m).toBeTruthy();
             expect(m[0]).not.toMatch(/mode-modal/);
@@ -705,13 +706,19 @@ describe('Chess lifecycle invariánsok', () => {
             const inv = readFile(path.join(FRONTEND, 'javascript', 'chessInviteGlobal.js'));
             expect(inv).toMatch(/mmConfirm/);
             expect(inv).not.toMatch(/^\s*const elfogadta = globalScope\.confirm\(/m);
-            // chess main.js: ket alert helyett mmAlert
+            // chess main.js: ket alert helyett mmAlert. Refactor: a chess:error +
+            // chess:invite:declined handlerek (es velük az mmAlert hivasok) a
+            // `pvp/pvpSocket.js` modulba kerultek.
             const main = readFile(CHESS_MAIN_JS);
-            expect(main).toMatch(/mmAlert/);
-            // Az `alert(` mar nem hivva (a kommenteket strippoljuk a count elott)
-            const mainStripped = main.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
-            const alertCalls = mainStripped.match(/(?<![a-zA-Z0-9_$.])alert\s*\(/g) || [];
-            expect(alertCalls.length).toBe(0);
+            const pvpSocket = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'pvp', 'pvpSocket.js'));
+            expect(pvpSocket).toMatch(/mmAlert/);
+            // Az `alert(` mar nem hivva sem main.js-ben sem pvpSocket.js-ben
+            // (a kommenteket strippoljuk a count elott).
+            for (const src of [main, pvpSocket]) {
+                const stripped = src.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+                const alertCalls = stripped.match(/(?<![a-zA-Z0-9_$.])alert\s*\(/g) || [];
+                expect(alertCalls.length).toBe(0);
+            }
             // adminPanel modulok
             const sec = readFile(path.join(FRONTEND, 'javascript', 'adminPanel', '16-security.js'));
             expect(sec).toMatch(/mmConfirm/);
