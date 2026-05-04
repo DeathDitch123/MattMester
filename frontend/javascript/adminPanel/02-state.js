@@ -89,8 +89,7 @@ const state = {
     loginsFilter: {               // Bejelentkezesek oldal szuro state
         username: '',
         status: 'all',            // 'all' | 'success' | 'failed'
-        ipAddress: '',
-        country: '',              // '' = mind; ISO orszagkod (pl. 'HU', 'US') — geoip-lite altal felismert orszagok
+        device: '',               // '' = mind; "Chrome / Windows" formatum (csak a mar betoltott sorokbol)
         sinceDate: '',
         untilDate: ''
     },

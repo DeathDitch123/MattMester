@@ -52,12 +52,15 @@ function enrichLoginRow(row) {
     };
 }
 
-// Orszag-szuro: csak a megadott ISO orszagkodu sorok. A lokalis (loopback/private/docker)
-// IP-ket egyutt szuri ki — ha az admin orszag-filter aktiv, csak public+country>matching matradnak.
-function applyCountryFilter(rows, country) {
-    if (!country) return rows;
-    const upper = String(country).toUpperCase();
-    return rows.filter((r) => String(r.location?.country || '').toUpperCase() === upper);
+// Eszkoz-szuro: a kliens a "Chrome / Windows" formatumu display string-et kuldi
+// (a frontend dropdown is csak a mar betoltott sorokbol epul). Az osszehasonlitas
+// case-insensitive, hogy a kis eltereseket (pl. eltero whitespace) toleralja.
+// Az enriched.device.display-t hasonlitjuk a query parameterrel.
+function applyDeviceFilter(rows, device) {
+    if (!device) return rows;
+    const needle = String(device).trim().toLowerCase();
+    if (!needle) return rows;
+    return rows.filter((r) => String(r.device?.display || '').toLowerCase() === needle);
 }
 
 // GET /admin/security/logins — szurheto bejelentkezesi feed.
@@ -82,7 +85,7 @@ router.get(
             };
             const rows = await adminRepo.listAdminLoginHistory(options);
             const enriched = rows.map(enrichLoginRow);
-            const filtered = applyCountryFilter(enriched, q.country || null);
+            const filtered = applyDeviceFilter(enriched, q.device || null);
             payload = { success: true, data: filtered };
             response.locals.adminAudit.skip = true;
         } catch (error) {
@@ -114,7 +117,7 @@ router.get(
             };
             const rows = await adminRepo.listAdminLoginHistory(options);
             const enriched = rows.map(enrichLoginRow);
-            const filtered = applyCountryFilter(enriched, q.country || null);
+            const filtered = applyDeviceFilter(enriched, q.device || null);
 
             const headers = ['id', 'occurred_at', 'username', 'event_type', 'success', 'ip', 'location', 'browser', 'os', 'risk', 'user_agent', 'message'];
             const lines = [headers.map(escapeCsvValue).join(',')];

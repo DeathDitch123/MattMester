@@ -1081,22 +1081,39 @@ const SECTIONS = {
         const subtitle = state.loginsLoaded
             ? `${list.length} bejelentkezési bejegyzés`
             : 'Sikeres és sikertelen bejelentkezési kísérletek';
-        // Dinamikus orszag-lista a mar betoltott sorokbol — egyedi, abc-rendezve.
-        // Csak az ISO kod kerul a value-ba, a label is a kod (geoip-lite csak ezt adja).
-        const countriesSet = new Set();
+        // Dinamikus eszkoz/rendszer-lista a mar betoltott sorokbol — csak azok jelennek
+        // meg, amelyek tenylegesen szerepelnek a feed-ben. A backend UA-parser ennel
+        // tobb rendszert ismer fel, de a dropdown csak a "letezo" valasztasokat kinalja.
+        const devicesSet = new Set();
         for (const l of list) {
-            const c = l.location?.country;
-            if (c) countriesSet.add(c);
+            const d = l.device?.display;
+            if (d && d !== '—') devicesSet.add(d);
         }
-        const countries = [...countriesSet].sort();
+        const devices = [...devicesSet].sort();
+        const statusBadge = (l) => {
+            // login_failed esemenyhez (vagy explicit success === false) Sikertelen,
+            // egyebkent Sikeres. A success mezo backend-rol jon (user_logs.success).
+            if (l.eventType === 'login_failed' || l.success === false) {
+                return `<span class="badge bg-danger">Sikertelen</span>`;
+            }
+            return `<span class="badge bg-success">Sikeres</span>`;
+        };
         const tableRows = list.map(l => [
             `<span class="fw-semibold text-white">${escapeHtml(l.username || '—')}</span>`,
             `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${escapeHtml(l.ip || '—')}</span>`,
             `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.location?.label || '—')}</span>`,
             `<span class="text-secondary"><i class="bi ${l.device?.icon || 'bi-question-circle'} me-1"></i>${escapeHtml(l.device?.display || '—')}</span>`,
             `<span class="text-secondary" title="${escapeHtml(l.occurredAt || '')}">${escapeHtml(formatRelative(l.occurredAt))}</span>`,
+            statusBadge(l),
             riskPill(l.risk || 'low')
         ]);
+        // Datum-koherencia: a "—ig" mezo nem mehet a "—tol" ele, es forditva.
+        // Az input min/max attributumok biztositjak, hogy a jobb-oldali datepicker
+        // a baloldali kivalasztasa elotti napokat letiltja (es viszont).
+        const sinceMin = '';
+        const sinceMax = f.untilDate ? escapeHtml(f.untilDate) : '';
+        const untilMin = f.sinceDate ? escapeHtml(f.sinceDate) : '';
+        const untilMax = '';
         return `
         ${h.header({
             icon: 'bi-shield-check', title: 'Bejelentkezési előzmények',
@@ -1115,21 +1132,20 @@ const SECTIONS = {
                 <option value="success" ${f.status === 'success' ? 'selected' : ''}>Sikeres</option>
                 <option value="failed"  ${f.status === 'failed' ? 'selected' : ''}>Sikertelen</option>
             </select>
-            <input id="loginsFilterIp" type="text" class="form-control form-control-sm"
-                   placeholder="IP cím..." value="${escapeHtml(f.ipAddress || '')}"
-                   onchange="onLoginsFilterChange()">
-            <select id="loginsFilterCountry" class="form-select form-select-sm" onchange="onLoginsFilterChange()"
-                    title="${countries.length === 0 ? 'Csak akkor jelennek meg orszagok, ha mar voltak publikus IP-rol bejelentkezesek' : ''}">
-                <option value="" ${!f.country ? 'selected' : ''}>Minden ország (lokálisak is)</option>
-                ${countries.map((c) => `
-                    <option value="${escapeHtml(c)}" ${f.country === c ? 'selected' : ''}>${escapeHtml(c)}</option>
+            <select id="loginsFilterDevice" class="form-select form-select-sm" onchange="onLoginsFilterChange()"
+                    title="${devices.length === 0 ? 'Csak akkor jelennek meg eszkozok, ha mar volt bejelentkezes' : 'Csak a mar bejelentkezett rendszerek/bongeszok'}">
+                <option value="" ${!f.device ? 'selected' : ''}>Minden eszköz / böngésző</option>
+                ${devices.map((d) => `
+                    <option value="${escapeHtml(d)}" ${f.device === d ? 'selected' : ''}>${escapeHtml(d)}</option>
                 `).join('')}
-                ${countries.length === 0 ? '<option disabled>— még nincs publikus IP-s bejelentkezés —</option>' : ''}
+                ${devices.length === 0 ? '<option disabled>— még nincs bejelentkezés —</option>' : ''}
             </select>
             <input id="loginsFilterSince" type="datetime-local" class="form-control form-control-sm"
-                   value="${escapeHtml(f.sinceDate || '')}" onchange="onLoginsFilterChange()" title="Dátum-tól">
+                   value="${escapeHtml(f.sinceDate || '')}" ${sinceMin ? `min="${sinceMin}"` : ''} ${sinceMax ? `max="${sinceMax}"` : ''}
+                   onchange="onLoginsFilterChange()" title="Dátum-tól">
             <input id="loginsFilterUntil" type="datetime-local" class="form-control form-control-sm"
-                   value="${escapeHtml(f.untilDate || '')}" onchange="onLoginsFilterChange()" title="Dátum-ig">
+                   value="${escapeHtml(f.untilDate || '')}" ${untilMin ? `min="${untilMin}"` : ''} ${untilMax ? `max="${untilMax}"` : ''}
+                   onchange="onLoginsFilterChange()" title="Dátum-ig">
             <button type="button" class="btn btn-outline-light btn-sm" onclick="resetLoginsFilter()">
                 <i class="bi bi-x"></i> Szűrők törlése
             </button>
@@ -1141,7 +1157,7 @@ const SECTIONS = {
                   <div class="text-secondary">Nincs bejelentkezési bejegyzés a megadott szűrőkre.</div>
                </div>`
             : h.table({
-                headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Kockázat'],
+                headers: ['Felhasználó', 'IP cím', 'Helyszín', 'Eszköz / böngésző', 'Idő', 'Státusz', 'Kockázat'],
                 rows: tableRows
             })
         }

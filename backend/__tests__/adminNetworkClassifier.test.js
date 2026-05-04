@@ -120,6 +120,76 @@ describe('parseUserAgent', () => {
         const r = parseUserAgent('foo bar');
         expect(typeof r.icon).toBe('string');
     });
+
+    // Bovitett detektor: a chromium-szarmaztatott bongeszok mind tartalmazzak
+    // a "Chrome/" UA-string-et, ezert a sorrend kritikus — a specifikus jelolot
+    // (Vivaldi/, Brave/, SamsungBrowser/ stb.) ELOBB kell ellenoriznunk.
+    test('Vivaldi (Chromium-szarmazek, NEM Chrome)', () => {
+        const r = parseUserAgent('Mozilla/5.0 (Windows NT 10.0) Chrome/120.0 Safari/537.36 Vivaldi/6.5.3206.50');
+        expect(r.browser).toBe('Vivaldi');
+    });
+
+    test('Brave (Chromium-szarmazek, NEM Chrome)', () => {
+        const r = parseUserAgent('Mozilla/5.0 (X11; Linux x86_64) Chrome/120.0 Safari/537.36 Brave/1.62.156');
+        expect(r.browser).toBe('Brave');
+    });
+
+    test('Samsung Internet (Chromium-szarmazek, NEM Chrome)', () => {
+        const r = parseUserAgent('Mozilla/5.0 (Linux; Android 13) SamsungBrowser/23.0 Chrome/115.0 Mobile Safari/537.36');
+        expect(r.browser).toBe('Samsung Internet');
+        expect(r.os).toBe('Android');
+    });
+
+    test('Yandex Browser', () => {
+        const r = parseUserAgent('Mozilla/5.0 (Windows NT 10.0) YaBrowser/24.1.0 Chrome/120.0');
+        expect(r.browser).toBe('Yandex');
+    });
+
+    test('UC Browser', () => {
+        const r = parseUserAgent('Mozilla/5.0 (Linux; Android 13) UCBrowser/13.4.0 Chrome/120.0');
+        expect(r.browser).toBe('UC Browser');
+    });
+
+    test('Chromium (NEM Chrome)', () => {
+        const r = parseUserAgent('Mozilla/5.0 (X11; Linux) Chromium/120.0 Chrome/120.0 Safari/537.36');
+        expect(r.browser).toBe('Chromium');
+    });
+
+    test('curl CLI', () => {
+        const r = parseUserAgent('curl/8.4.0');
+        expect(r.browser).toBe('curl');
+    });
+
+    test('Postman runtime', () => {
+        const r = parseUserAgent('PostmanRuntime/7.36.1');
+        expect(r.browser).toBe('Postman');
+    });
+
+    test('ChromeOS detekcio', () => {
+        const r = parseUserAgent('Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) Chrome/120.0 Safari/537.36');
+        expect(r.os).toBe('ChromeOS');
+        expect(r.browser).toBe('Chrome');
+    });
+
+    test('FreeBSD detekcio', () => {
+        const r = parseUserAgent('Mozilla/5.0 (X11; FreeBSD amd64) Firefox/120.0');
+        expect(r.os).toBe('FreeBSD');
+    });
+
+    test('OpenBSD detekcio', () => {
+        const r = parseUserAgent('Mozilla/5.0 (X11; OpenBSD amd64) Firefox/120.0');
+        expect(r.os).toBe('OpenBSD');
+    });
+
+    test('Ubuntu specifikus (NEM csak Linux)', () => {
+        const r = parseUserAgent('Mozilla/5.0 (X11; Ubuntu; Linux x86_64) Firefox/120.0');
+        expect(r.os).toBe('Ubuntu');
+    });
+
+    test('iPad / iPod is iOS', () => {
+        expect(parseUserAgent('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) Safari').os).toBe('iOS');
+        expect(parseUserAgent('Mozilla/5.0 (iPod touch; CPU iPhone OS 17_0 like Mac OS X) Safari').os).toBe('iOS');
+    });
 });
 
 describe('classifyRisk', () => {

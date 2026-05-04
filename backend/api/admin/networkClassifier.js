@@ -60,23 +60,51 @@ function classifyIp(ip) {
     return { ...base, category: 'public', label: 'Ismeretlen geoIP' };
 }
 
+// Bovitett bongeszo + OS detektor. A frontend dropdown csak a tenylegesen
+// elofordulo (browser/OS) kombinaciokat kinalja, de a parser ennel tobb rendszert
+// ismer fel — igy ha holnap egy SamsungBrowser kliens jelentkezik be, az is
+// helyes neven jelenik meg, nem az "Egyéb" gyujto-cimkeben.
 function parseUserAgent(ua) {
     if (!ua) return { browser: '—', os: '—', display: '—', icon: 'bi-question-circle' };
     const u = String(ua);
+
+    // Browser sorrend kritikus: a specifikus chromium-szarmaztatasok (Edg, OPR,
+    // Brave, Vivaldi, Samsung) ELOBB legyenek mint a Chrome/, mert mindegyik
+    // tartalmazza a "Chrome/" string-et a sajat UA-jaban.
     let browser = 'Egyéb';
     let icon = 'bi-globe';
     if (/Edg\//i.test(u)) { browser = 'Edge'; icon = 'bi-browser-edge'; }
     else if (/OPR\/|Opera/i.test(u)) { browser = 'Opera'; icon = 'bi-globe'; }
+    else if (/Vivaldi\//i.test(u)) { browser = 'Vivaldi'; icon = 'bi-globe'; }
+    else if (/Brave\//i.test(u)) { browser = 'Brave'; icon = 'bi-globe'; }
+    else if (/SamsungBrowser\//i.test(u)) { browser = 'Samsung Internet'; icon = 'bi-globe'; }
+    else if (/YaBrowser\//i.test(u)) { browser = 'Yandex'; icon = 'bi-globe'; }
+    else if (/UCBrowser\//i.test(u)) { browser = 'UC Browser'; icon = 'bi-globe'; }
+    else if (/Chromium\//i.test(u)) { browser = 'Chromium'; icon = 'bi-browser-chrome'; }
     else if (/Chrome\//i.test(u)) { browser = 'Chrome'; icon = 'bi-browser-chrome'; }
     else if (/Firefox\//i.test(u)) { browser = 'Firefox'; icon = 'bi-browser-firefox'; }
     else if (/Safari\//i.test(u) && !/Chrome|Edg|OPR/i.test(u)) { browser = 'Safari'; icon = 'bi-browser-safari'; }
+    else if (/curl\//i.test(u)) { browser = 'curl'; icon = 'bi-terminal'; }
+    else if (/Wget\//i.test(u)) { browser = 'Wget'; icon = 'bi-terminal'; }
+    else if (/PostmanRuntime\//i.test(u)) { browser = 'Postman'; icon = 'bi-terminal'; }
+    else if (/node-fetch|axios|undici/i.test(u)) { browser = 'HTTP kliens'; icon = 'bi-terminal'; }
 
+    // OS detektor — sorrend ugyanigy szamit (pl. Android elobb mint Linux,
+    // mert az Android UA-k is tartalmazzak a "Linux" szot).
     let os = 'Egyéb';
-    if (/Windows NT/i.test(u)) os = 'Windows';
+    if (/Windows NT 10/i.test(u)) os = 'Windows';
+    else if (/Windows NT/i.test(u)) os = 'Windows';
     else if (/Android/i.test(u)) os = 'Android';
-    else if (/iPhone|iPad|iOS/i.test(u)) os = 'iOS';
-    else if (/Mac OS X/i.test(u)) os = 'macOS';
-    else if (/Linux/i.test(u)) os = 'Linux';
+    else if (/iPhone|iPad|iPod|iOS/i.test(u)) os = 'iOS';
+    else if (/CrOS/i.test(u)) os = 'ChromeOS';
+    else if (/Mac OS X|Macintosh/i.test(u)) os = 'macOS';
+    else if (/Ubuntu/i.test(u)) os = 'Ubuntu';
+    else if (/Fedora/i.test(u)) os = 'Fedora';
+    else if (/Debian/i.test(u)) os = 'Debian';
+    else if (/FreeBSD/i.test(u)) os = 'FreeBSD';
+    else if (/OpenBSD/i.test(u)) os = 'OpenBSD';
+    else if (/NetBSD/i.test(u)) os = 'NetBSD';
+    else if (/X11|Linux/i.test(u)) os = 'Linux';
 
     return { browser, os, display: `${browser} / ${os}`, icon };
 }

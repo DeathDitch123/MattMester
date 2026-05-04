@@ -35,15 +35,27 @@ function parseUserAgentClient(ua) {
     let browser = 'Egyéb', icon = 'bi-globe';
     if (/Edg\//i.test(u)) { browser = 'Edge'; icon = 'bi-browser-edge'; }
     else if (/OPR\/|Opera/i.test(u)) { browser = 'Opera'; icon = 'bi-globe'; }
+    else if (/Vivaldi\//i.test(u)) { browser = 'Vivaldi'; icon = 'bi-globe'; }
+    else if (/Brave\//i.test(u)) { browser = 'Brave'; icon = 'bi-globe'; }
+    else if (/SamsungBrowser\//i.test(u)) { browser = 'Samsung Internet'; icon = 'bi-globe'; }
+    else if (/YaBrowser\//i.test(u)) { browser = 'Yandex'; icon = 'bi-globe'; }
+    else if (/UCBrowser\//i.test(u)) { browser = 'UC Browser'; icon = 'bi-globe'; }
+    else if (/Chromium\//i.test(u)) { browser = 'Chromium'; icon = 'bi-browser-chrome'; }
     else if (/Chrome\//i.test(u)) { browser = 'Chrome'; icon = 'bi-browser-chrome'; }
     else if (/Firefox\//i.test(u)) { browser = 'Firefox'; icon = 'bi-browser-firefox'; }
     else if (/Safari\//i.test(u) && !/Chrome|Edg|OPR/i.test(u)) { browser = 'Safari'; icon = 'bi-browser-safari'; }
     let os = 'Egyéb';
     if (/Windows NT/i.test(u)) os = 'Windows';
     else if (/Android/i.test(u)) os = 'Android';
-    else if (/iPhone|iPad|iOS/i.test(u)) os = 'iOS';
-    else if (/Mac OS X/i.test(u)) os = 'macOS';
-    else if (/Linux/i.test(u)) os = 'Linux';
+    else if (/iPhone|iPad|iPod|iOS/i.test(u)) os = 'iOS';
+    else if (/CrOS/i.test(u)) os = 'ChromeOS';
+    else if (/Mac OS X|Macintosh/i.test(u)) os = 'macOS';
+    else if (/Ubuntu/i.test(u)) os = 'Ubuntu';
+    else if (/Fedora/i.test(u)) os = 'Fedora';
+    else if (/Debian/i.test(u)) os = 'Debian';
+    else if (/FreeBSD/i.test(u)) os = 'FreeBSD';
+    else if (/OpenBSD/i.test(u)) os = 'OpenBSD';
+    else if (/X11|Linux/i.test(u)) os = 'Linux';
     return { browser, os, display: `${browser} / ${os}`, icon };
 }
 
@@ -55,8 +67,7 @@ async function loadLogins() {
         params.set('limit', '200');
         if (f.username) params.set('username', f.username);
         if (f.status && f.status !== 'all') params.set('status', f.status);
-        if (f.ipAddress) params.set('ip', f.ipAddress);
-        if (f.country) params.set('country', f.country);
+        if (f.device) params.set('device', f.device);
         if (f.sinceDate) params.set('since', new Date(f.sinceDate).toISOString());
         if (f.untilDate) params.set('until', new Date(f.untilDate).toISOString());
         try {
@@ -87,8 +98,7 @@ function onLoginsFilterChange() {
     state.loginsFilter = {
         username: (document.getElementById('loginsFilterUsername')?.value || '').trim(),
         status: document.getElementById('loginsFilterStatus')?.value || 'all',
-        ipAddress: (document.getElementById('loginsFilterIp')?.value || '').trim(),
-        country: document.getElementById('loginsFilterCountry')?.value || '',
+        device: document.getElementById('loginsFilterDevice')?.value || '',
         sinceDate: document.getElementById('loginsFilterSince')?.value || '',
         untilDate: document.getElementById('loginsFilterUntil')?.value || ''
     };
@@ -96,7 +106,7 @@ function onLoginsFilterChange() {
 }
 
 function resetLoginsFilter() {
-    state.loginsFilter = { username: '', status: 'all', ipAddress: '', country: '', sinceDate: '', untilDate: '' };
+    state.loginsFilter = { username: '', status: 'all', device: '', sinceDate: '', untilDate: '' };
     loadLogins();
 }
 
@@ -106,8 +116,7 @@ function exportLoginsCsv() {
     params.set('limit', '500');
     if (f.username) params.set('username', f.username);
     if (f.status && f.status !== 'all') params.set('status', f.status);
-    if (f.ipAddress) params.set('ip', f.ipAddress);
-    if (f.location) params.set('location', f.location);
+    if (f.device) params.set('device', f.device);
     if (f.sinceDate) params.set('since', new Date(f.sinceDate).toISOString());
     if (f.untilDate) params.set('until', new Date(f.untilDate).toISOString());
 
