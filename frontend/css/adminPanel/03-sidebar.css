@@ -133,7 +133,11 @@
     margin-left: var(--sidebar-width);
     transition: margin-left 0.3s var(--easing);
     min-height: 100vh;
-    padding: var(--content-pad);
+    /* Felso padding kicsi (0.5rem) — a `.top-navbar` kartya teteje a fix
+     * MATTMESTER navbar TETEJEVEL kerul egy vonalba (lasd a sticky offset-et
+     * shared/topNavbar.css-ben), de nem nyul be a navbar moge teljesen. Az
+     * oldal- es also padding marad --content-pad. */
+    padding: 0.5rem var(--content-pad) var(--content-pad);
     position: relative;
     z-index: 1;
 }

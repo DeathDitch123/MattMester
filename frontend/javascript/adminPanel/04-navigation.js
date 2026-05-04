@@ -42,6 +42,10 @@ const NAV_TREE = [
 
     { id: 'superAdmin', label: 'Super admin', icon: 'bi-stars', leaf: true },
     { id: 'friends', label: 'Közösségi kapcsolatok', icon: 'bi-people', leaf: true },
+    /* Chat menupont — NEM section, hanem a globalis MattMesterChatModal-t
+     * nyitja meg. Ugyanaz a chat-rendszer mint a profil oldalon (socket-tel
+     * frissul), igy admin-kent sem kell atlepni a profile.html-re. */
+    { id: 'chat', label: 'Chat', icon: 'bi-chat-dots-fill', leaf: true, customClick: 'openAdminChatInbox(event)' },
     { id: 'tests', label: 'Tesztek', icon: 'bi-clipboard2-check', leaf: true },
     { id: 'settings', label: 'Beállítások', icon: 'bi-gear-fill', leaf: true }
 ];
@@ -55,14 +59,25 @@ function renderSidebar() {
     const target = document.getElementById('sidebarMenu');
     if (!target) return;
 
-    const renderLeaf = (item, isTopLevel = false) => `
-        <a href="#" class="nav-link${isTopLevel ? ' nav-link-top' : ''}" data-section="${item.id}"
-            onclick="showSection('${item.id}', event); return false;">
+    const renderLeaf = (item, isTopLevel = false) => {
+        // Egyedi click handler (pl. modal nyitas) felulirja a default
+        // showSection navigaciot. Ezzel olyan menupontok is ide kerulhetnek,
+        // amelyek nem rendelnek `SECTIONS[id]` rendererrel (pl. a globalis
+        // chat modal). A `data-section` attributumot ilyenkor nem allitjuk,
+        // hogy a kijelolt-allapot logika ne tegye aktivva.
+        const onclickAttr = item.customClick
+            ? `${item.customClick}; return false;`
+            : `showSection('${item.id}', event); return false;`;
+        const dataSection = item.customClick ? '' : ` data-section="${item.id}"`;
+        return `
+        <a href="#" class="nav-link${isTopLevel ? ' nav-link-top' : ''}"${dataSection}
+            onclick="${onclickAttr}">
             <i class="bi ${item.icon}"></i>
             <span>${item.label}</span>
             ${item.badge ? `<span class="badge bg-${item.badge.variant}${item.badge.variant === 'warning' ? ' text-dark' : ''} menu-badge">${item.badge.text}</span>` : ''}
         </a>
     `;
+    };
 
     const renderGroup = (group) => `
         <div class="menu-group">
@@ -87,5 +102,30 @@ function renderSidebar() {
             <i class="bi bi-box-arrow-right"></i>
             <span>Kijelentkezés</span>
         </a>`;
+}
+
+// Globalis chat modal megnyitas admin-kent. Ugyanaz a `MattMesterChatModal`,
+// amit a profil oldal is hasznal — socket bind, conversation list, message
+// fetch mind ugyanigy mukodik (lasd chatModal.js init/openInbox). A chatModal.js
+// auto-init-el indul a DOMContentLoaded-on, igy mire ide jutunk, a globalis
+// objektum kesz. Az `openInbox` belul gondoskodik a socket binding-rol es
+// az inbox listanak betoltesserol.
+function openAdminChatInbox(event) {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    const api = window.MattMesterChatModal;
+    if (!api?.openInbox) {
+        if (typeof showToast === 'function') {
+            showToast('A chat modal nem erheto el (chatModal.js nincs betoltve).', 'danger');
+        } else {
+            console.error('MattMesterChatModal API hianyzik.');
+        }
+        return;
+    }
+    Promise.resolve(api.openInbox()).catch((err) => {
+        console.error('Admin chat inbox nyitasi hiba:', err);
+        if (typeof showToast === 'function') {
+            showToast(err?.message || 'Nem sikerult megnyitni a chat-et.', 'danger');
+        }
+    });
 }
 

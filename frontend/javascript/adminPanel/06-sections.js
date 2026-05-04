@@ -36,14 +36,17 @@ const SECTIONS = {
             },
             {
                 icon: 'bi-trophy-fill', value: inGameValue, valueId: 'mainInGame',
-                label: 'Aktív játszma', color: inGameEmpty ? 'secondary' : 'success',
+                /* Konstans 'success' szin + nincs `empty` flag — a kartya
+                 * vizualisan koherens a tobbi stat-card-dal akkor is, ha
+                 * eppen 0 a jatszma. Csak a hint szovege valtozik. */
+                label: 'Aktív játszma', color: 'success',
                 hint: inGameEmpty
-                    ? '<span class="text-muted"><i class="bi bi-pause-circle me-1"></i>Nincs élő játszma — kattints a játszmák listájához</span>'
+                    ? '<span class="text-secondary"><i class="bi bi-pause-circle me-1"></i>Nincs élő játszma — kattints a játszmák listájához</span>'
                     : '<span class="live-indicator text-success"><span class="live-dot"></span>Élőben most</span>',
-                hintClass: inGameEmpty ? 'text-muted' : 'text-success',
+                hintClass: inGameEmpty ? 'text-secondary' : 'text-success',
                 interactive: 'games',
                 cardId: 'mainInGameCard',
-                emblem: 'chess', empty: inGameEmpty
+                emblem: 'chess'
             },
             {
                 icon: 'bi-journal-check', value: last24.auditEntries ?? 0, valueId: 'mainAuditCount',

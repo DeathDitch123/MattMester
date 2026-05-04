@@ -52,11 +52,40 @@
         </div>
     </div>
 
+    <!-- INGAME CHAT panel (bal oldalt, csak PvP meccsen latszik). Kapcsolata
+         a `chess:chat:send` / `chess:chat:message` socket event-ekkel,
+         meccs vegevel az input letiltodik. -->
+    <aside id="ingame-chat-panel" class="ingame-chat-panel hidden" aria-label="Ingame chat">
+        <div class="ingame-chat-header">
+            <i class="ingame-chat-icon" aria-hidden="true">💬</i>
+            <span>Beszélgetés</span>
+        </div>
+        <div class="ingame-chat-messages" id="ingame-chat-messages" role="log" aria-live="polite">
+            <div class="ingame-chat-empty">Még nincs üzenet — szólj az ellenfélnek!</div>
+        </div>
+        <form class="ingame-chat-input-wrap" id="ingame-chat-form">
+            <input type="text" id="ingame-chat-input" placeholder="Üzenet…" maxlength="240" autocomplete="off" disabled />
+            <button type="submit" id="ingame-chat-send" disabled>Küld</button>
+        </form>
+    </aside>
+
     <div class="app">
+        <!-- Fixed-pozicios sarok elemek (kivulrol a kozepre fixalt tabla
+             feletti / melletti viewport-sarokba kerulnek a CSS altal) -->
+        <div id="game-corner-status" class="game-corner-status">
+            <div class="status-row">
+                Aktív: <strong id="turn-name">fehér</strong>
+            </div>
+            <div id="status" class="status">játékon</div>
+        </div>
+        <button id="feladBtn" class="felad-btn felad-btn-fixed">Feladás</button>
+
         <header class="topbar">
             <div class="player player-black">
                 <div class="captured-pieces" id="captured-by-black"></div>
+                <span id="material-black" class="material-adv hidden">+0</span>
                 <div class="name" id="name-black">Ellenfél</div>
+                <div class="player-abilities" id="player-abilities-black"></div>
                 <div class="clock" id="clock-black">10:00</div>
             </div>
         </header>
@@ -80,10 +109,9 @@
                         <div class="promotion-piece" data-type="knight"></div>
                     </div>
                 </div>
-                <div class="status-row">
-                    Aktív: <strong id="turn-name">fehér</strong>
-                </div>
-                <div id="status" class="status">játékon</div>
+                <!-- A status-row + #status mostantol a `.app` tetejen, fixed-
+                     positioning-gal a viewport bal-felso sarkahoz tapadva
+                     (lasd #game-corner-status). -->
             </div>
 
             <aside class="sidebar">
@@ -121,7 +149,11 @@
                     </div>
                 </div>
 
-                <button id="feladBtn" class="felad-btn">Feladás</button>
+                <!-- A #feladBtn kikerult a `.app` szintre fixed-pozicioval
+                     (lasd .felad-btn-fixed). A #rematchBtn / #newGameBtn
+                     itt maradtak a sidebar-ban, de a sidebar `display: none`,
+                     igy nem latszanak — a 2026-05-04 layoutban a uj `#game-end-modal`
+                     vette at a szerepuket (Fololdal + Uj jatek). -->
                 <button id="rematchBtn" class="rematch-btn hidden">Revans</button>
                 <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
 
@@ -136,25 +168,42 @@
                         <li class="move-list-empty">Még nincs lépés</li>
                     </ol>
                 </div>
-                <div class="legend">
-                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
-                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
-                    <div><span class="legend-sq check"></span> Király sakkban</div>
-                    <div><span class="legend-sq enpassant"></span> En passant</div>
-                    <div><span class="legend-sq castle"></span> Sáncolás</div>
-                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
-                </div>
             </aside>
         </main>
 
         <footer class="bottombar">
             <div class="player player-white">
                 <div class="captured-pieces" id="captured-by-white"></div>
+                <span id="material-white" class="material-adv hidden">+0</span>
                 <div class="name" id="name-white">Te</div>
+                <div class="player-abilities" id="player-abilities-white"></div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
         </footer>
     </div>
+
+    <!-- LEUTOTT BABUK PANEL (jobb oldalon) — ket szegmens egymas alatt:
+         FENT az ellenfel altal leutott babuk + ellenfel username,
+         LENT a sajat altalam leutott babuk + sajat username.
+         A "saját mindig alul" szabaly mindket jatekos perspektivajaban
+         igy lesz: a render `sajatSzin` alapjan donti el, ki a felso/also. -->
+    <aside id="captured-panel" class="captured-panel" aria-label="Leütött bábuk">
+        <div class="captured-section captured-section-opp">
+            <div class="captured-section-head">
+                <span class="captured-section-label">Leütött bábuk</span>
+                <span class="captured-section-name" id="captured-name-opp">Ellenfél</span>
+            </div>
+            <div class="captured-section-pieces" id="captured-pieces-opp"></div>
+        </div>
+        <div class="captured-section captured-section-mine">
+            <div class="captured-section-head">
+                <span class="captured-section-label">Leütött bábuk</span>
+                <span class="captured-section-name" id="captured-name-mine">Te</span>
+            </div>
+            <div class="captured-section-pieces" id="captured-pieces-mine"></div>
+        </div>
+    </aside>
+
     <!-- REVANS BEJOVO AJANLAT MODAL -->
     <div id="rematch-offer-modal" class="rematch-modal hidden">
         <div class="rematch-modal-content">
@@ -205,6 +254,48 @@
             </div>
             <div class="chess-settings-row chess-settings-actions">
                 <button id="chessSettingsClose" class="chess-settings-close">Kész</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME-END MODAL — meccs vegen automatikusan felugrik (matt / patt /
+         feladas / kifutott ido). Hatter szurkul, ket akcio gomb: Fololdal
+         (sima frontpage-re) es Uj jatek (chessModeChooser nyitas). -->
+    <div id="game-end-modal" class="game-end-modal hidden" role="dialog" aria-modal="true"
+         aria-labelledby="gameEndTitle">
+        <div class="game-end-modal-overlay"></div>
+        <div class="game-end-modal-content">
+            <h3 id="gameEndTitle" class="game-end-modal-title">Játék vége</h3>
+            <p id="gameEndMessage" class="game-end-modal-message">—</p>
+            <p id="gameEndElo" class="game-end-modal-elo"></p>
+            <div class="game-end-modal-actions">
+                <button type="button" id="gameEndHomeBtn" class="game-end-modal-btn">Főoldal</button>
+                <button type="button" id="gameEndNewGameBtn" class="game-end-modal-btn primary">Új játék</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- SEGITSEG (legend) MODAL — bal-also lebego gomb nyitja meg -->
+    <button type="button" id="helpFloatingBtn" class="help-floating-btn"
+            aria-label="Segítség / jelmagyarázat" title="Segítség / jelmagyarázat">?</button>
+    <div id="help-modal" class="help-modal hidden" role="dialog" aria-modal="true"
+         aria-labelledby="helpModalTitle">
+        <div class="help-modal-overlay"></div>
+        <div class="help-modal-content">
+            <div class="help-modal-head">
+                <h3 id="helpModalTitle" class="help-modal-title">Jelmagyarázat</h3>
+                <button type="button" id="helpModalClose" class="help-modal-close"
+                        aria-label="Bezárás">×</button>
+            </div>
+            <div class="help-modal-body">
+                <div class="legend">
+                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
+                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
+                    <div><span class="legend-sq check"></span> Király sakkban</div>
+                    <div><span class="legend-sq enpassant"></span> En passant</div>
+                    <div><span class="legend-sq castle"></span> Sáncolás</div>
+                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
+                </div>
             </div>
         </div>
     </div>

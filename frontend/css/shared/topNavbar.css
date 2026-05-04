@@ -121,6 +121,9 @@ body.has-mm-top-navbar .sidebar {
    navbar moge. A z-index alacsonyabb mint a fix navbar (1100), igy a
    MATTMESTER takarja, ha valami collapse-effekt forditva irna ezt felul. */
 body.has-mm-top-navbar .top-navbar {
+    /* Sticky offset = navbar magassag + 0.5rem, hogy a kartya teteje
+     * gorgetes kozben is ugyanazon a vonalon legyen, mint scroll=0
+     * allapotban (a `.main-content` 0.5rem felso paddingjebol jon). */
     top: calc(var(--mm-tnb-h) + 0.5rem);
     z-index: 1090;
 }

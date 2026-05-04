@@ -60,10 +60,13 @@
                     <span class="token-countdown" id="tokenCountdown">15:00</span>
                 </button>
 
-                <button class="btn btn-outline-gold position-relative d-none d-sm-inline-flex" aria-label="Értesítések">
+                <button type="button" id="adminBellBtn" class="btn btn-outline-gold position-relative d-none d-sm-inline-flex"
+                        aria-label="Riasztások — ugras a Riasztasok oldalra"
+                        title="Riasztások — ugras a Riasztasok oldalra"
+                        onclick="showSection('alerts')">
                     <i class="bi bi-bell-fill"></i>
-                    <span
-                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger">3</span>
+                    <span id="adminBellBadge"
+                        class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger d-none">0</span>
                 </button>
                 <!-- A user-profile dropdown (avatar + Profil/Beallitasok/Kijelentkezes)
                      tovabbra is rejtett DOM-ban hagyjuk, mert a 09-auth.js a
@@ -658,7 +661,7 @@
     <!-- Kepesseg editor modal (uj / szerkesztes; torleshez a critical action modalt hasznaljuk) -->
     <div class="modal fade" id="abilityEditorModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-lg modal-dialog-centered">
-            <div class="modal-content critical-action-modal">
+            <div class="modal-content gold-action-modal">
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-magic me-2 text-gold"></i>

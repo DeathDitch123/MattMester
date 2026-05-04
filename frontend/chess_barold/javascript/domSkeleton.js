@@ -12,10 +12,20 @@
 
 // Hardcoded HTML template — a chess.html .app belseje, board tartalma nélkül
 const OLDAL_VAZ = `
+        <div id="game-corner-status" class="game-corner-status">
+            <div class="status-row">
+                Aktív: <strong id="turn-name">fehér</strong>
+            </div>
+            <div id="status" class="status">játékon</div>
+        </div>
+        <button id="feladBtn" class="felad-btn felad-btn-fixed">Feladás</button>
+
         <header class="topbar">
             <div class="player player-black">
                 <div class="captured-pieces" id="captured-by-black"></div>
+                <span id="material-black" class="material-adv hidden">+0</span>
                 <div class="name" id="name-black">Ellenfél</div>
+                <div class="player-abilities" id="player-abilities-black"></div>
                 <div class="clock" id="clock-black">10:00</div>
             </div>
         </header>
@@ -42,12 +52,7 @@ const OLDAL_VAZ = `
             </div>
 
             <aside class="sidebar">
-                <div class="status-row">
-                    Aktív: <strong id="turn-name">fehér</strong>
-                </div>
-                <div id="status" class="status">játékon</div>
-
-                <!-- KÉPESSÉG BAR -->
+                <!-- KÉPESSÉG BAR (legacy — most rejtve, helyette player-badge ability sorok) -->
                 <div id="ability-bar" class="ability-bar hidden">
                     <div class="ability-points">
                         <span class="ap-label">Pontok</span>
@@ -72,23 +77,17 @@ const OLDAL_VAZ = `
                         <button id="draw-decline" class="pvp-invite-btn decline">Elutasít</button>
                     </div>
                 </div>
-                <button id="feladBtn" class="felad-btn">Feladás</button>
+                <button id="rematchBtn" class="rematch-btn hidden">Revans</button>
                 <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
-                <div class="legend">
-                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
-                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
-                    <div><span class="legend-sq check"></span> Király sakkban</div>
-                    <div><span class="legend-sq enpassant"></span> En passant</div>
-                    <div><span class="legend-sq castle"></span> Sáncolás</div>
-                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
-                </div>
             </aside>
         </main>
 
         <footer class="bottombar">
             <div class="player player-white">
                 <div class="captured-pieces" id="captured-by-white"></div>
+                <span id="material-white" class="material-adv hidden">+0</span>
                 <div class="name" id="name-white">Te</div>
+                <div class="player-abilities" id="player-abilities-white"></div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
         </footer>`;
@@ -113,12 +112,11 @@ export function oldalSerult(allapot) {
         '.promotion-piece[data-type="bishop"]',
         '.promotion-piece[data-type="knight"]',
         "aside.sidebar",
-        ".sidebar .status-row",
+        "#game-corner-status .status-row",
         "#turn-name",
         "#status",
         "#bot-thinking",
         "#feladBtn",
-        ".sidebar .legend",
         "footer.bottombar",
         ".player-white",
         ".player-white .name",
@@ -140,8 +138,7 @@ export function oldalSerult(allapot) {
         { sel: "#status", min: 1 },
         { sel: ".player-white .name", min: 1 },
         { sel: "#clock-white", min: 1 },
-        { sel: ".sidebar .legend", min: 5 },
-        { sel: ".sidebar .status-row", min: 3 },
+        { sel: "#game-corner-status .status-row", min: 3 },
     ];
     for (let i = 0; i < szovegEllenorzesek.length; i++) {
         const e = szovegEllenorzesek[i];
@@ -152,8 +149,9 @@ export function oldalSerult(allapot) {
         }
     }
 
-    // Legend div-ek száma
-    const legendDivek = document.querySelectorAll(".sidebar .legend > div");
+    // Help modal jelmagyarazat sorai — uj helyukon (#help-modal .legend > div)
+    // ugyanugy 6 db kell, hogy mind a 6 vizualis kategoria megjelenjen.
+    const legendDivek = document.querySelectorAll("#help-modal .legend > div");
     if (legendDivek.length < 6) {
         console.log("[INTEGRITÁS] Legend sorok:", legendDivek.length, "/ 6");
         return true;

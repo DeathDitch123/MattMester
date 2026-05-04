@@ -16,7 +16,15 @@ const HANG_FAJLOK = {
     ellenfelLep: '../sounds/Ellenfel_lep.mp3',
     sakk: '../sounds/sakk.mp3',
     matt: '../sounds/matt.mp3',
-    sanc: '../sounds/sanc.mp3'
+    sanc: '../sounds/sanc.mp3',
+    // Uj kulcsok — placeholder path-ok. Ha az MP3 nincs (404), automatikusan
+    // a Web Audio fallback `pittyen` hangzik el helyettuk (lasd hangLejatszas
+    // catch agat). Ez a `lépéshangok / ütés / képesség-aktiválás` polish-hez
+    // kell: nem akadalyozza meg a hang lejatszast a fajlhianyosság.
+    // Megj.: `Utes.mp3` nagybetuvel — case-sensitive fs-en (pl. Linux szerver)
+    // a kis 'u' eseten 404-et adna, ezert a tenyleges filename-t kovetjuk.
+    utes: '../sounds/Utes.mp3',
+    kepesseg: '../sounds/kepesseg.mp3'
 };
 const hangCache = {};
 
@@ -108,7 +116,23 @@ export function lepesHangLejatszas(allapot) {
         return;
     }
 
+    // Ütés (capture) eseten karakterisztikus hang — magasabb fallback freq
+    // (920 Hz) hogy a sima lepestol megkulonboztetheto legyen meg akkor is,
+    // ha nincs `utes.mp3` letoltheto.
+    if (l.capture) {
+        hangLejatszas('utes', 920, 110, 0.04);
+        return;
+    }
+
     const lepoSzin = allapot.koronLevo === 'white' ? 'black' : 'white';
     const botLepett = !!(allapot.botAktiv && allapot.botSzin === lepoSzin);
     hangLejatszas(botLepett ? 'ellenfelLep' : 'jatekosLep', 620, 90, 0.03);
+}
+
+// Kepesseg (sakk-specialis akcio) aktivalasakor jatszott hang. Magas, rovid,
+// nagyobb gain — vizualis flash-sel egyutt erezteti hogy "valami tortent".
+// A `bot.js` socket-pushok es a sajat ability-katt mind ezt hivjak.
+export function kepessegHangLejatszas() {
+    if (typeof document !== 'undefined' && document.body && document.body.dataset.sound === 'off') return;
+    hangLejatszas('kepesseg', 1180, 140, 0.05);
 }

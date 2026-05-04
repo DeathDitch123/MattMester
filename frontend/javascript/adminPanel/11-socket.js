@@ -162,6 +162,7 @@ function connectAdminSocket() {
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
                 }
+                refreshAdminBellBadge();
             });
 
             sock.on('admin:alert:dismissed-all', () => {
@@ -175,6 +176,7 @@ function connectAdminSocket() {
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
                 }
+                refreshAdminBellBadge();
             });
 
             sock.on('admin:alert:restored', (payload = {}) => {
@@ -186,6 +188,7 @@ function connectAdminSocket() {
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
                 }
+                refreshAdminBellBadge();
             });
 
             // Profilkep moderacio broadcast: a tobbi admin tab fuggo lista azonnal frissuljon.

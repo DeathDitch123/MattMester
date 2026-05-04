@@ -81,6 +81,13 @@ function kiemelFrissit(allapot) {
             // a fenti loopban, igy reflow-zal automatikusan ujra ratesszuk a kovetkezo
             // lepesnel.
             toEl.classList.add("just-moved");
+            // Capture flash — csak akkor pulzal a piros glow, ha az utolso lepes
+            // ütés volt. Az osztaly self-removing (animation 420ms), igy nem
+            // halmozodik a kovetkezo render-szrobol felelogyhatatlanul.
+            if (allapot.utolsoLepes.capture) {
+                toEl.classList.add('capture-flash');
+                setTimeout(() => toEl.classList.remove('capture-flash'), 450);
+            }
         }
     }
 

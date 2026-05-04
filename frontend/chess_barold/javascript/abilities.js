@@ -10,6 +10,7 @@
 // ============================================================
 
 import { mezoElemKeres } from './UI-megjelenites.js';
+import { kepessegHangLejatszas } from './audio.js';
 
 let cfg = null;                    // szerver-tól lekért ABILITY_CONFIG
 let ctxKeret = null;               // { getGameId, getSzin, isPvp, getSocket }
@@ -58,15 +59,19 @@ export function abilitiesAllapotFrissit(allapot) {
         bartElrejt();
         return;
     }
+    const elozoAllapot = lastAllapot;
     lastAllapot = allapot;
     bartMegjelenit();
     // Ha az oldalVazVisszaallit() (main.js) közben kiürítette a gomb-konténert,
     // újrarendereljük. Ez idempotens: csak akkor render-el ha a DOM tényleg üres.
-    bemutatBartFrissit();
+    bemutatBartFrissit(allapot);
     pontokFrissit(allapot);
     gombokFrissit(allapot);
     effektekFrissit(allapot);
     boardHideOverlayFrissit(allapot);
+    // Diff-alapu opponent (es sajat) ability-aktivalas detektor — flash glow +
+    // hang ha az ellenfel uj kepesseget hasznalt ket allapot kozott.
+    detektalUjabbAbilityHasznalat(elozoAllapot, allapot);
 }
 
 export function abilitiesReset() {
@@ -91,40 +96,81 @@ export function isAbilityArmed() {
 // ──────────────────────────────────────────────────────────
 
 function bartMegjelenit() {
+    // Az eredeti `#ability-bar` (sidebar) MAR REJTETT — a player-badge UI
+    // vette at a szerepet (lasd `playerBadgeAbilitiesRender`). Ezt itt csak
+    // azert tartjuk, mert a domSkeleton.js OLDAL_VAZ template raformaztat
+    // az integritas-ellenorzove altal kovetelt elemekre, es a `bartMegjelenit`
+    // hivasa nem dob hibat ha az elem mar hidden.
     const bar = document.getElementById('ability-bar');
-    if (bar) bar.classList.remove('hidden');
+    if (bar) bar.classList.add('hidden'); // mindig rejtve marad
 }
 
 function bartElrejt() {
     const bar = document.getElementById('ability-bar');
     if (bar) bar.classList.add('hidden');
+    // Player-badge ability sorokat is elrejtjuk, ha az ability-mod kikapcsol.
+    document.querySelectorAll('.player-abilities').forEach((el) => {
+        el.innerHTML = '';
+        el.classList.remove('has-buttons');
+    });
 }
 
-function bemutatBartFrissit() {
-    const cont = document.getElementById('ability-buttons');
-    if (!cont || !cfg) return;
-    // Idempotens: ha már van bent ugyanannyi gomb, nem rendereljük újra
-    // (a frissítést a `gombokFrissit` végzi state-update-eknél).
+// Player-badge (top + bottom) ability gomb-sorok renderelese.
+// `mySzin` = a sajat szinem ('white' / 'black'). A masik oldal automatikusan
+// az opp. A `.is-mine` osztaly clickable + cost/uses/cooldown szamlalo,
+// a `.is-opp` decorativ (no click, cooldown rejtve, csak glow animaciora).
+function playerBadgeAbilitiesRender(mySzin) {
+    if (!cfg) return;
+    const oppSzin = mySzin === 'white' ? 'black' : 'white';
+    const mineCont = document.getElementById(`player-abilities-${mySzin}`);
+    const oppCont  = document.getElementById(`player-abilities-${oppSzin}`);
     const cfgKeyCount = Object.keys(cfg).length;
-    if (cont.children.length === cfgKeyCount) return;
-    cont.innerHTML = '';
-    for (const key in cfg) {
-        const c = cfg[key];
-        const f = FELIRATOK[key] || { nev: key, rovid: '?' };
-        const btn = document.createElement('button');
-        btn.className = 'ability-btn';
-        btn.dataset.key = key;
-        btn.innerHTML = `
-            <span class="ab-name">${f.nev}</span>
-            <span class="ab-meta">
-                <span class="ab-cost">${c.ar}p</span>
-                <span class="ab-uses">0/${c.maxPerGame}</span>
-            </span>
-            <span class="ab-cooldown-overlay hidden"></span>
-        `;
-        btn.addEventListener('click', () => onAbilityKattintas(key));
-        cont.appendChild(btn);
+
+    function renderInto(cont, isMine) {
+        if (!cont) return;
+        // Idempotens: ne renderejunk ujra ha mar ugyanannyi gomb van + jo classzal.
+        const want = isMine ? 'is-mine' : 'is-opp';
+        if (cont.children.length === cfgKeyCount && cont.classList.contains(want)) return;
+        cont.classList.remove('is-mine', 'is-opp');
+        cont.classList.add(want, 'has-buttons');
+        cont.innerHTML = '';
+        for (const key of Object.keys(cfg)) {
+            const c = cfg[key];
+            const f = FELIRATOK[key] || { nev: key, rovid: '?' };
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ability-btn ability-mini-btn';
+            btn.dataset.key = key;
+            btn.title = `${f.nev} — ${c.ar}p`;
+            btn.innerHTML = `
+                <span class="ab-mini-icon">${f.rovid}</span>
+                <span class="ab-mini-cost">${c.ar}p</span>
+                <span class="ab-mini-uses">0/${c.maxPerGame}</span>
+                <span class="ab-cooldown-overlay hidden"></span>
+                <span class="ab-mini-flash" aria-hidden="true"></span>
+            `;
+            if (isMine) {
+                btn.addEventListener('click', () => onAbilityKattintas(key));
+            } else {
+                // Opp gomb — nem klikkelheto, focus is letiltva.
+                btn.disabled = true;
+                btn.tabIndex = -1;
+                btn.setAttribute('aria-hidden', 'true');
+            }
+            cont.appendChild(btn);
+        }
     }
+
+    renderInto(mineCont, true);
+    renderInto(oppCont, false);
+}
+
+function bemutatBartFrissit(allapot) {
+    // A regi `#ability-bar` rejtett — itt a player-badge UI rendererjet
+    // hivjuk. Szukseg van `mySzin`-re ami az allapotbol/keret-bol jon.
+    const szin = ctxKeret?.getSzin?.() || (allapot && allapot.botAktiv ? 'white' : null);
+    if (!szin) return;
+    playerBadgeAbilitiesRender(szin);
 }
 
 function pontokFrissit(allapot) {
@@ -140,48 +186,106 @@ function pontokFrissit(allapot) {
 function gombokFrissit(allapot) {
     const szin = ctxKeret?.getSzin?.() || (allapot.botAktiv ? 'white' : null);
     if (!szin || !cfg) return;
-    const myPoints = allapot.abilities.points[szin];
-    const myCd     = allapot.abilities.cooldowns[szin] || {};
-    const myUsed   = allapot.abilities.used[szin] || {};
+    const oppSzin = szin === 'white' ? 'black' : 'white';
 
-    const gombok = document.querySelectorAll('.ability-btn');
+    // Sajat oldal — clickable, full info (cost / cooldown / used).
+    frissitOldalt(document.getElementById(`player-abilities-${szin}`), allapot, szin, true);
+    // Ellenfel oldal — decorativ, cooldown REJTVE (opacity 0 / textcontent '').
+    frissitOldalt(document.getElementById(`player-abilities-${oppSzin}`), allapot, oppSzin, false);
+}
+
+// Egy ability gomb-sor (mine/opp) frissitese a megadott allapotbol.
+// `isMine === true` -> minden info latszik, click engedelyezve.
+// `isMine === false` -> uses + cost is mutatva (informaciot ad), de cooldown
+// szam REJTVE (a felhasznalo ne lassa pontosan, mikor lehet ujra hasznalva),
+// es a gomb minden esetben disabled-el (nem nyomhato meg).
+function frissitOldalt(cont, allapot, oldalSzin, isMine) {
+    if (!cont || !cfg) return;
+    const points = allapot.abilities.points[oldalSzin] || 0;
+    const cd     = allapot.abilities.cooldowns[oldalSzin] || {};
+    const used   = allapot.abilities.used[oldalSzin] || {};
+
+    const gombok = cont.querySelectorAll('.ability-btn');
     for (const btn of gombok) {
         const key = btn.dataset.key;
         const c = cfg[key];
         if (!c) continue;
 
-        const cd = myCd[key] || 0;
-        const used = myUsed[key] || 0;
-        const enoughPts = myPoints >= c.ar;
-        const onCd = cd > 0;
-        const maxedOut = used >= c.maxPerGame;
-        const wrongTiming = c.mikor === 'sajatKor' && allapot.koronLevo !== szin;
+        const onCd = (cd[key] || 0) > 0;
+        const usedDb = used[key] || 0;
+        const enoughPts = points >= c.ar;
+        const maxedOut = usedDb >= c.maxPerGame;
+        const wrongTiming = c.mikor === 'sajatKor' && allapot.koronLevo !== oldalSzin;
 
-        // Cooldown overlay
+        // Cooldown overlay — `isMine`-nal lathato szammal, opp-nal csak vizualis
+        // dim (ne lassa az ellenfel pontos cooldownjat). Ezert a textContent
+        // ures az opp oldalon, csak az osztaly van rajta.
         const overlay = btn.querySelector('.ab-cooldown-overlay');
         if (overlay) {
             if (onCd) {
-                overlay.textContent = cd;
+                overlay.textContent = isMine ? String(cd[key]) : '';
                 overlay.classList.remove('hidden');
+                overlay.classList.toggle('is-opp-cooldown', !isMine);
             } else {
                 overlay.classList.add('hidden');
+                overlay.classList.remove('is-opp-cooldown');
             }
         }
 
-        // Cost színezés (jelzi ha drága)
-        const costEl = btn.querySelector('.ab-cost');
+        // Cost feliratot mindketto mutatja, de a `unaffordable` highlight csak
+        // a sajat oldalra hat (ne zavarjon, ha az ellen nem tudja megengedni).
+        const costEl = btn.querySelector('.ab-mini-cost');
         if (costEl) {
             costEl.textContent = `${c.ar}p`;
-            costEl.classList.toggle('unaffordable', !enoughPts);
+            costEl.classList.toggle('unaffordable', isMine && !enoughPts);
         }
+        const usesEl = btn.querySelector('.ab-mini-uses');
+        if (usesEl) usesEl.textContent = `${usedDb}/${c.maxPerGame}`;
 
-        // Used / max
-        const usesEl = btn.querySelector('.ab-uses');
-        if (usesEl) usesEl.textContent = `${used}/${c.maxPerGame}`;
-
-        // Disabled
-        btn.disabled = !enoughPts || onCd || maxedOut || wrongTiming || allapot.vege;
+        if (isMine) {
+            btn.disabled = !enoughPts || onCd || maxedOut || wrongTiming || allapot.vege;
+        } else {
+            btn.disabled = true; // opp NEM klikkelheto soha
+        }
     }
+}
+
+// Diff: ket allapot kozott novekedett-e barmelyik kepesseg `used` szamlaloja
+// — ha igen, az adott szin imenti aktivalt kepessegere flash glow + sound.
+// A `.ability-mini-btn.flash` osztaly a CSS-ben 600ms-ig animal, utana
+// a setTimeout leveszi.
+function detektalUjabbAbilityHasznalat(elozo, uj) {
+    if (!elozo || !uj || !uj.abilities) return;
+    if (!cfg) return;
+
+    const oldalak = ['white', 'black'];
+    for (const oldal of oldalak) {
+        const elozoUsed = (elozo.abilities && elozo.abilities.used && elozo.abilities.used[oldal]) || {};
+        const ujUsed    = uj.abilities.used[oldal] || {};
+        for (const key of Object.keys(cfg)) {
+            const beforeN = elozoUsed[key] || 0;
+            const afterN  = ujUsed[key] || 0;
+            if (afterN > beforeN) {
+                flashAbilityBtn(oldal, key);
+                // Az opp kepessegehez hangot is jatszunk — sajatra mar a
+                // `kuldRequest` is jatszott egyet, de itt is biztositek.
+                try { kepessegHangLejatszas(); } catch (_) {}
+            }
+        }
+    }
+}
+
+function flashAbilityBtn(oldal, key) {
+    const cont = document.getElementById(`player-abilities-${oldal}`);
+    if (!cont) return;
+    const btn = cont.querySelector(`.ability-btn[data-key="${key}"]`);
+    if (!btn) return;
+    btn.classList.remove('flash');
+    // void offsetWidth: reflow trigger — kulonben ha gyorsan egymas utan ket
+    // azonos kepesseg flash-elne, az osztaly removal-add nem jatszana ujra.
+    void btn.offsetWidth;
+    btn.classList.add('flash');
+    setTimeout(() => btn.classList.remove('flash'), 650);
 }
 
 function effektekFrissit(allapot) {
@@ -398,6 +502,11 @@ function kuldRequest(key, params) {
         const socket = ctxKeret.getSocket?.();
         if (!socket) return;
         socket.emit('chess:ability', { gameId, key, params: params || undefined });
+        // Optimistic feedback: hangot azonnal lejatsszuk, igy a sajat
+        // aktivalas mindig hallhato. A szerver visszajelzes utan, ha mas
+        // jatekos hasznal kepesseget, az `abilitiesAllapotFrissit` kerul
+        // hivasra (ott egy diff-alapu sound trigger hangzik el).
+        try { kepessegHangLejatszas(); } catch (_) {}
         return;
     }
 
@@ -413,6 +522,9 @@ function kuldRequest(key, params) {
                 hintMutat(data.error || 'Sikertelen aktiválás.');
                 return;
             }
+            // Sikeres aktivalas — sajat hang. (A szerver-allapotbol nem latszik,
+            // ki nyomta — ezert a sajat oldal feedback-jet itt jatszuk.)
+            try { kepessegHangLejatszas(); } catch (_) {}
             // A REST a teljes új allapot-ot küldi vissza — átadjuk a main.js-nek
             // hogy a tábla, óra, ability bar mind frissüljön egy ponton.
             if (data.allapot && typeof ctxKeret.onAllapotValtozas === 'function') {

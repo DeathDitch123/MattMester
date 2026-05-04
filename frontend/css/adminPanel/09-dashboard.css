@@ -512,6 +512,20 @@
 }
 .critical-action-modal .modal-title { color: var(--accent-red); font-weight: 700; }
 
+/* ---------- Gold action modal (nem kritikus szerkeszto modalok, pl. abilities editor) ----------
+ * Ugyanaz az alaprajz mint a critical-action-modal, csak az `--accent-gold`
+ * paletta szerint — igy a gold "Uj kepesseg" gomb -> gold modal aljat
+ * vizualisan koherens marad, es a piros warning szinezeset csak a tenyleges
+ * destruktiv (torles, ban, revoke) action-okre tartjuk fenn. */
+.gold-action-modal {
+    border: 1px solid rgba(212, 175, 55, 0.4) !important;
+    box-shadow: 0 20px 60px -10px rgba(212, 175, 55, 0.22), 0 0 0 1px rgba(212, 175, 55, 0.1) !important;
+}
+.gold-action-modal .modal-header {
+    border-bottom: 1px solid rgba(212, 175, 55, 0.3);
+}
+.gold-action-modal .modal-title { color: var(--accent-gold); font-weight: 700; }
+
 .critical-warning {
     display: flex;
     gap: 0.85rem;

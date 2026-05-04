@@ -25,6 +25,7 @@ async function loadAlerts() {
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
                 }
+                refreshAdminBellBadge();
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
                 showToast(data.message || 'Hiba az alertek betöltésekor.', 'danger');

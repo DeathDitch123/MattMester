@@ -26,6 +26,24 @@ function onLiveAlertUpdate(alert) {
     } else if (state.currentSectionId === 'alerts') {
         showSection('alerts', null, { silent: true });
     }
+    refreshAdminBellBadge();
+}
+
+// Felso harang ikon piros badge frissitese — el nem rejtett (active) riasztas
+// szam alapjan. Ha nincs aktiv, a badge `d-none`-os, kulonben mutatja a
+// szamot (max 99+). A WS push, dismiss, dismiss-all es initial fetch utan
+// is hivodik.
+function refreshAdminBellBadge() {
+    const badge = document.getElementById('adminBellBadge');
+    if (!badge) return;
+    const active = (state.liveAlerts || []).filter((a) => !a.dismissedAt).length;
+    if (active <= 0) {
+        badge.classList.add('d-none');
+        badge.textContent = '0';
+    } else {
+        badge.classList.remove('d-none');
+        badge.textContent = active > 99 ? '99+' : String(active);
+    }
 }
 
 function applyDashboardLiveStats() {
@@ -57,11 +75,10 @@ function applyDashboardLiveStats() {
         const bansHint = document.getElementById('mainNewBansHint');
         if (bansHint) bansHint.textContent = `${last24.newBans ?? 0} új tiltás`;
 
-        // Aktiv jatszma kartya allapot frissites (ures vs eles)
-        const inGameCard = document.getElementById('mainInGameCard');
-        if (inGameCard) {
-            inGameCard.classList.toggle('stat-card-empty', inGameValue <= 0);
-        }
+        // Az 'Aktív játszma' kartya konstans 'success' szinezesu — nem
+        // valt 'empty' allapotba ha nincs eppen meccs (lasd 06-sections.js
+        // dashboard renderet). Csak a hint szovege valtozik a tobbi kartyahoz
+        // hasonloan, nem a teljes vizualis paletta.
 
         setTextWithFlash('mini24Logins', last24.logins ?? 0);
         setTextWithFlash('mini24Registrations', last24.registrations ?? 0);

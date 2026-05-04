@@ -222,6 +222,11 @@ async function applyAdminRevokeFromCritical(reason) {
 // ────────────── KEPESSEGEK ──────────────
 
 async function loadAdminAbilities() {
+    // Guard: ha meg nincs admin step-up token, ne lojuk ki a /api/admin/abilities/
+    // hivast — a parseAdminToken middleware 401 TOKEN_MISSING-et adna vissza es
+    // feleslegesen az alerting / audit pipeline-on is atfutna. Az auth flow majd
+    // ujrapropalkozik a token elevate utan.
+    if (!state.adminToken) return;
     state.abilities.loading = true;
     state.abilities.error = null;
     if (state.currentSectionId === 'abilities') showSection('abilities', null, { silent: true });
@@ -246,13 +251,23 @@ function openAbilityEditor(id) {
         showToast('A kepesseg-editor meg nem kesz.', 'info');
         return;
     }
-    const titleEl = document.getElementById('abilityEditorTitle');
-    if (titleEl) titleEl.textContent = editing ? `Kepesseg szerkesztese: ${editing.name}` : 'Uj kepesseg';
-    document.getElementById('abilityEditorName').value = state.abilities.editing.name || '';
-    document.getElementById('abilityEditorDescription').value = state.abilities.editing.description || '';
-    document.getElementById('abilityEditorCooldown').value = state.abilities.editing.cooldownTurns ?? 0;
-    document.getElementById('abilityEditorReason').value = '';
-    document.getElementById('abilityEditorReasonCount').textContent = '0';
+    // Null-safe field hozzaferes — a HTML-ben opcionalis elemek (pl.
+    // abilityEditorReasonCount karakterszamlalo) nem mindig vannak jelen,
+    // ezert nem dobhatunk el a teljes editort egy hianyzo span miatt.
+    const setVal = (elId, value) => {
+        const el = document.getElementById(elId);
+        if (el) el.value = value;
+    };
+    const setText = (elId, value) => {
+        const el = document.getElementById(elId);
+        if (el) el.textContent = value;
+    };
+    setText('abilityEditorTitle', editing ? `Kepesseg szerkesztese: ${editing.name}` : 'Uj kepesseg');
+    setVal('abilityEditorName', state.abilities.editing.name || '');
+    setVal('abilityEditorDescription', state.abilities.editing.description || '');
+    setVal('abilityEditorCooldown', state.abilities.editing.cooldownTurns ?? 0);
+    setVal('abilityEditorReason', '');
+    setText('abilityEditorReasonCount', '0');
     new window.bootstrap.Modal(modalEl).show();
 }
 
