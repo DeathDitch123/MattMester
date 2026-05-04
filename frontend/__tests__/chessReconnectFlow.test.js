@@ -25,6 +25,9 @@ const FRONTEND = path.resolve(__dirname, '..', '..', 'frontend');
 const CHESS_INVITE_GLOBAL = path.join(FRONTEND, 'javascript', 'chessInviteGlobal.js');
 const CHESS_MODE_CHOOSER = path.join(FRONTEND, 'javascript', 'chessModeChooser.js');
 const MAIN_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js');
+const REJOIN_OVERLAY_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'pvp', 'rejoinOverlay.js');
+// Refactor: a `pvpJatekKezdet` mostantol a `pvp/pvpJatek.js` modulban van.
+const PVP_JATEK_JS = path.join(FRONTEND, 'chess_barold', 'javascript', 'pvp', 'pvpJatek.js');
 
 function readFile(p) {
     return fs.readFileSync(p, 'utf8');
@@ -139,8 +142,11 @@ describe('main.js (chess.html) — chooser nyitas csak a rejoin valasz utan', ()
         }
         const initBody = src.substring(openBrace + 1, i - 1);
         const hivasok = (initBody.match(/ujMeccsChooserNyitas\s*\(/g) || []).length;
-        // Max 2 explicit error-fallback hivas (safety timeout + botRejoin invalid gameId).
-        expect(hivasok).toBeLessThanOrEqual(2);
+        // Max 3 elofordulas, mindegyik feltetelhez/callback-hez kotott:
+        //   1. safety setTimeout fallback (ha 5s alatt nincs valasz)
+        //   2. ?type=botRejoin URL eseten ha a gameId hibas
+        //   3. bindGameEndModal({ onNewGame: () => ujMeccsChooserNyitas() }) callback
+        expect(hivasok).toBeLessThanOrEqual(3);
     });
 
     test('safety timeout: ha nem jon rejoin valasz, a chooser kinyilik (5000ms)', () => {
@@ -164,18 +170,20 @@ describe('main.js (chess.html) — chooser nyitas csak a rejoin valasz utan', ()
     });
 
     test('`pvpJatekKezdet` defenziv-zarja a mode chooser-t (F5 race-fix)', () => {
-        const startIdx = src.indexOf('function pvpJatekKezdet(');
+        // Refactor: pvpJatekKezdet a pvp/pvpJatek.js modulban (export function)
+        const pvpJatekSrc = readFile(PVP_JATEK_JS);
+        const startIdx = pvpJatekSrc.search(/(?:export\s+)?function\s+pvpJatekKezdet\s*\(/);
         expect(startIdx).toBeGreaterThan(-1);
-        const openBrace = src.indexOf('{', startIdx);
+        const openBrace = pvpJatekSrc.indexOf('{', startIdx);
         let depth = 1;
         let i = openBrace + 1;
-        while (i < src.length && depth > 0) {
-            const ch = src[i];
+        while (i < pvpJatekSrc.length && depth > 0) {
+            const ch = pvpJatekSrc[i];
             if (ch === '{') depth++;
             else if (ch === '}') depth--;
             i++;
         }
-        const torzs = src.substring(openBrace + 1, i - 1);
+        const torzs = pvpJatekSrc.substring(openBrace + 1, i - 1);
         expect(torzs).toMatch(/MattMesterChessModeChooser[\s\S]*?\.close\s*\(/);
     });
 
@@ -228,9 +236,14 @@ describe('chess.html + main.js + chess.css — rejoin overlay (visible feedback)
         expect(zIndex).toBeGreaterThan(1080);
     });
 
-    test('main.js definialja `rejoinOverlayMutat` es `rejoinOverlayElrejt` fuggvenyt', () => {
-        expect(js).toMatch(/function\s+rejoinOverlayMutat\s*\(/);
-        expect(js).toMatch(/function\s+rejoinOverlayElrejt\s*\(/);
+    test('pvp/rejoinOverlay.js definialja `rejoinOverlayMutat` es `rejoinOverlayElrejt` fuggvenyt', () => {
+        // Refactor: a ket fuggveny mostantol a `pvp/rejoinOverlay.js` modulban van,
+        // a main.js importalja onnan. `export function` szintaxis.
+        const overlaySrc = readFile(REJOIN_OVERLAY_JS);
+        expect(overlaySrc).toMatch(/export\s+function\s+rejoinOverlayMutat\s*\(/);
+        expect(overlaySrc).toMatch(/export\s+function\s+rejoinOverlayElrejt\s*\(/);
+        // A main.js-ben az import is megvan
+        expect(js).toMatch(/from\s+['"]\.\/pvp\/rejoinOverlay\.js['"]/);
     });
 
     test('init() AZONNAL hivja rejoinOverlayMutat-t (mielott barmi rendelodne)', () => {
@@ -253,18 +266,20 @@ describe('chess.html + main.js + chess.css — rejoin overlay (visible feedback)
     });
 
     test('pvpJatekKezdet hivja rejoinOverlayElrejt-et (sikeres rejoin)', () => {
-        const startIdx = js.indexOf('function pvpJatekKezdet(');
+        // Refactor: pvpJatekKezdet a pvp/pvpJatek.js modulban
+        const pvpJatekSrc = readFile(PVP_JATEK_JS);
+        const startIdx = pvpJatekSrc.search(/(?:export\s+)?function\s+pvpJatekKezdet\s*\(/);
         expect(startIdx).toBeGreaterThan(-1);
-        const openBrace = js.indexOf('{', startIdx);
+        const openBrace = pvpJatekSrc.indexOf('{', startIdx);
         let depth = 1;
         let i = openBrace + 1;
-        while (i < js.length && depth > 0) {
-            const ch = js[i];
+        while (i < pvpJatekSrc.length && depth > 0) {
+            const ch = pvpJatekSrc[i];
             if (ch === '{') depth++;
             else if (ch === '}') depth--;
             i++;
         }
-        const torzs = js.substring(openBrace + 1, i - 1);
+        const torzs = pvpJatekSrc.substring(openBrace + 1, i - 1);
         expect(torzs).toMatch(/rejoinOverlayElrejt\s*\(/);
     });
 

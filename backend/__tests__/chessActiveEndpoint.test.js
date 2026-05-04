@@ -333,9 +333,16 @@ describe('chessModeChooser.js — kod-szintu first-tab-priority guard (frontpage
     });
 });
 
-describe('chess.html main.js — bot rejoin a 60s grace window-ban', () => {
+describe('chess.html main.js + bot/botJatek.js — bot rejoin a 60s grace window-ban', () => {
+    // Refactor: a botRejoin flow szet van bontva
+    //   - main.js init(): URL-paraméter detekcio (?type=botRejoin)
+    //   - bot/botJatek.js: initBotRejoinFromQueryParams (a tenyleges flow)
     const MAIN_JS_SRC = fs.readFileSync(
         path.join(__dirname, '..', '..', 'frontend', 'chess_barold', 'javascript', 'main.js'),
+        'utf8'
+    );
+    const BOT_JATEK_SRC = fs.readFileSync(
+        path.join(__dirname, '..', '..', 'frontend', 'chess_barold', 'javascript', 'bot', 'botJatek.js'),
         'utf8'
     );
 
@@ -344,12 +351,12 @@ describe('chess.html main.js — bot rejoin a 60s grace window-ban', () => {
     });
 
     test('initBotRejoinFromQueryParams fuggveny letezik es nem hiv /new-bot-ot (nem indit uj meccset)', () => {
-        const re = /async\s+function\s+initBotRejoinFromQueryParams\s*\(/;
-        expect(MAIN_JS_SRC).toMatch(re);
+        const re = /(?:export\s+)?async\s+function\s+initBotRejoinFromQueryParams\s*\(/;
+        expect(BOT_JATEK_SRC).toMatch(re);
         // A funkcio blokkjat kivagjuk
-        const startIdx = MAIN_JS_SRC.search(re);
+        const startIdx = BOT_JATEK_SRC.search(re);
         expect(startIdx).toBeGreaterThan(-1);
-        const fnSrc = MAIN_JS_SRC.substring(startIdx, startIdx + 2500);
+        const fnSrc = BOT_JATEK_SRC.substring(startIdx, startIdx + 2500);
         // NEM hiv /new-bot-ot (nem indit uj meccset)
         expect(fnSrc).not.toMatch(/\/api\/chess\/new-bot/);
         expect(fnSrc).not.toMatch(/apiUjBotJatek\s*\(/);

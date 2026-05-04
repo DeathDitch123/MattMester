@@ -173,17 +173,19 @@ describe('frontend main.js — post-grace rejoin -> game-end modal megnyitas', (
     test('post-grace rejoin: pvpAktiv = true beallitas, sajatSzin = data.sajatSzin', () => {
         // A bug-fix kulcsa: ha a felhasznalo nem fogadta meg game:start-ot
         // (post-grace), de game:end jott, akkor minimal state-et kell beallitani
-        // hogy a pvpJatekVege megfelelo ELO-t mutasson.
+        // hogy a pvpJatekVege megfelelo ELO-t mutasson. Refactor (state.js):
+        // a globalis let-ek state.X-re mentek, ezert a regex `state.` prefixet
+        // is elfogadja.
         const idx = mainJs.indexOf('postGraceRejoin');
         expect(idx).toBeGreaterThan(-1);
-        const tartomany = mainJs.substring(idx, Math.min(idx + 800, mainJs.length));
-        expect(tartomany).toMatch(/pvpAktiv\s*=\s*true/);
-        expect(tartomany).toMatch(/sajatSzin\s*=\s*data\.sajatSzin/);
+        const tartomany = mainJs.substring(idx, Math.min(idx + 1200, mainJs.length));
+        expect(tartomany).toMatch(/(?:state\.)?pvpAktiv\s*=\s*true/);
+        expect(tartomany).toMatch(/(?:state\.)?sajatSzin\s*=\s*data\.sajatSzin/);
     });
 
     test('post-grace rejoin: rejoinOverlayElrejt() es chooser zarasa', () => {
         const idx = mainJs.indexOf('postGraceRejoin');
-        const tartomany = mainJs.substring(idx, Math.min(idx + 800, mainJs.length));
+        const tartomany = mainJs.substring(idx, Math.min(idx + 1200, mainJs.length));
         expect(tartomany).toMatch(/rejoinOverlayElrejt\s*\(/);
         // Chooser close defensive
         expect(tartomany).toMatch(/MattMesterChessModeChooser[\s\S]*?\.close/);

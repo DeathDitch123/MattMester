@@ -25,6 +25,11 @@ const MAIN_JS = fs.readFileSync(
     path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'main.js'),
     'utf8'
 );
+// Refactor: a `pvpJatekVege` mostantol a `pvp/pvpJatek.js` modulban van.
+const PVP_JATEK_JS = fs.readFileSync(
+    path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'pvp', 'pvpJatek.js'),
+    'utf8'
+);
 
 describe('chess.html — opponent-disconnected banner DOM', () => {
     test('a banner kezdoleg `hidden` class-szal van (csak disconnect alatt latszodjon)', () => {
@@ -143,18 +148,19 @@ describe('main.js — chess:opponent:disconnected handler', () => {
     });
 
     test('pvpJatekVege elrejti a disconnect-banner-t (post-forfeit cleanup)', () => {
-        const startIdx = MAIN_JS.indexOf('function pvpJatekVege(');
+        // Refactor: pvpJatekVege a pvp/pvpJatek.js modulban (export function-rel)
+        const startIdx = PVP_JATEK_JS.search(/(?:export\s+)?function\s+pvpJatekVege\s*\(/);
         expect(startIdx).toBeGreaterThan(-1);
-        const openBrace = MAIN_JS.indexOf('{', startIdx);
+        const openBrace = PVP_JATEK_JS.indexOf('{', startIdx);
         let depth = 1;
         let i = openBrace + 1;
-        while (i < MAIN_JS.length && depth > 0) {
-            const ch = MAIN_JS[i];
+        while (i < PVP_JATEK_JS.length && depth > 0) {
+            const ch = PVP_JATEK_JS[i];
             if (ch === '{') depth++;
             else if (ch === '}') depth--;
             i++;
         }
-        const torzs = MAIN_JS.substring(openBrace + 1, i - 1);
+        const torzs = PVP_JATEK_JS.substring(openBrace + 1, i - 1);
         // A pvpJatekVege a disconnectes banner-t is le kell rejtse — kulonben
         // a forfeit utan is pulzalna a piros banner (visual noise).
         expect(torzs).toMatch(/opponent-disconnected[\s\S]*?classList\.add\s*\(\s*['"]hidden['"]/);

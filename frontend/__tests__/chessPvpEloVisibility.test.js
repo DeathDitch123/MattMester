@@ -80,24 +80,25 @@ describe('PvP game-end ELO adatfolyam (backend -> kliens -> modal)', () => {
     });
 });
 
-describe('main.js#pvpJatekVege regresszio-vedelem (gameEndModalMegnyit hivasa)', () => {
+describe('pvp/pvpJatek.js#pvpJatekVege regresszio-vedelem (gameEndModalMegnyit hivasa)', () => {
     // A bug forrasa az volt, hogy a `pvpJatekVege` NEM hivta a
     // `gameEndModalMegnyit`-et — a modal csak bot-meccs vegen nyilt meg
     // (`jatekVegeUI`). A javitasban a hivasnak ott kell lennie.
+    // Refactor: a `pvpJatekVege` mostantol a `pvp/pvpJatek.js` modulban van.
     const fs = require('fs');
     const path = require('path');
-    const MAIN_JS_PATH = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'main.js');
-    const mainJs = fs.readFileSync(MAIN_JS_PATH, 'utf8');
+    const PVP_JATEK_PATH = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'pvp', 'pvpJatek.js');
+    const mainJs = fs.readFileSync(PVP_JATEK_PATH, 'utf8');
 
     test('a fajl tartalmazza a `function pvpJatekVege(` definiciot', () => {
-        expect(mainJs).toMatch(/function\s+pvpJatekVege\s*\(/);
+        expect(mainJs).toMatch(/(?:export\s+)?function\s+pvpJatekVege\s*\(/);
     });
 
     test('a `pvpJatekVege` torzse meghivja a `gameEndModalMegnyit`-et', () => {
         // Tartomany-extrakcio: a `function pvpJatekVege(` -tol a kovetkezo
         // top-szintu `}\n` zarasig. (Egyszeru regex eleg, mert a fuggveny
         // viszonylag rovid es nincs benne nested function.)
-        const startIdx = mainJs.indexOf('function pvpJatekVege(');
+        const startIdx = mainJs.search(/(?:export\s+)?function\s+pvpJatekVege\s*\(/);
         expect(startIdx).toBeGreaterThan(-1);
         // Olvassuk a torzset brace-szamlalassal
         const openBrace = mainJs.indexOf('{', startIdx);

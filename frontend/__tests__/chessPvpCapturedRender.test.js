@@ -10,11 +10,18 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAIN_JS_PATH = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'main.js');
-const mainJs = fs.readFileSync(MAIN_JS_PATH, 'utf8');
+const MAIN_JS_PATH    = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'main.js');
+const ALLAPOT_JS_PATH = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'allapot.js');
+const PVP_JATEK_PATH  = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'pvp', 'pvpJatek.js');
+const mainJs    = fs.readFileSync(MAIN_JS_PATH, 'utf8');
+const allapotJs = fs.readFileSync(ALLAPOT_JS_PATH, 'utf8');
+const pvpJatekJs = fs.readFileSync(PVP_JATEK_PATH, 'utf8');
 
 function extractFunctionBody(source, name) {
-    const startIdx = source.indexOf(`function ${name}(`);
+    // Refactor: az `allapotFrissit` mostantol az `allapot.js` modulban van,
+    // `export function` szintaxissal. Mindket variast keressuk.
+    let startIdx = source.indexOf(`export function ${name}(`);
+    if (startIdx === -1) startIdx = source.indexOf(`function ${name}(`);
     if (startIdx === -1) return null;
     const openBrace = source.indexOf('{', startIdx);
     if (openBrace === -1) return null;
@@ -29,8 +36,9 @@ function extractFunctionBody(source, name) {
     return source.substring(openBrace + 1, i - 1);
 }
 
-describe('main.js#pvpAllapotFrissit -- captured-panel render hivasa', () => {
-    const torzs = extractFunctionBody(mainJs, 'pvpAllapotFrissit');
+describe('pvp/pvpJatek.js#pvpAllapotFrissit -- captured-panel render hivasa', () => {
+    // Refactor: a `pvpAllapotFrissit` mostantol a `pvp/pvpJatek.js` modulban van.
+    const torzs = extractFunctionBody(pvpJatekJs, 'pvpAllapotFrissit');
 
     test('a `pvpAllapotFrissit` fuggveny letezik a forrasban', () => {
         expect(torzs).not.toBeNull();
@@ -52,10 +60,11 @@ describe('main.js#pvpAllapotFrissit -- captured-panel render hivasa', () => {
     });
 });
 
-describe('main.js#allapotFrissit (bot-ag) -- regresszio-vedelem', () => {
-    const torzs = extractFunctionBody(mainJs, 'allapotFrissit');
+describe('allapot.js#allapotFrissit (kozos render-orchestrator) -- regresszio-vedelem', () => {
+    // Refactor: az `allapotFrissit` az `allapot.js` modulba mozdult.
+    const torzs = extractFunctionBody(allapotJs, 'allapotFrissit');
 
-    test('a bot-ag mar korabban is hivta az utottpiecekFrissit-et — ne torjon el', () => {
+    test('a fuggveny meghivja az utottpiecekFrissit-et — ne torjon el', () => {
         expect(torzs).not.toBeNull();
         expect(torzs).toMatch(/utottpiecekFrissit\s*\(/);
     });

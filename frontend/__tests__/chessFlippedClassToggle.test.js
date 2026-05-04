@@ -11,11 +11,14 @@
 const fs = require('fs');
 const path = require('path');
 
-const MAIN_JS_PATH = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'main.js');
-const mainJs = fs.readFileSync(MAIN_JS_PATH, 'utf8');
+const NEVEK_JS_PATH = path.resolve(__dirname, '..', 'chess_barold', 'javascript', 'ui', 'nevek.js');
+const mainJs = fs.readFileSync(NEVEK_JS_PATH, 'utf8');
 
 function extractFunctionBody(source, name) {
-    const startIdx = source.indexOf(`function ${name}(`);
+    // Refactor: a fuggveny `export function` szintaxissal van deklaralva a
+    // ui/nevek.js modulban. Mindket variast keressuk (export prefix nelkul is).
+    let startIdx = source.indexOf(`export function ${name}(`);
+    if (startIdx === -1) startIdx = source.indexOf(`function ${name}(`);
     if (startIdx === -1) return null;
     const openBrace = source.indexOf('{', startIdx);
     if (openBrace === -1) return null;

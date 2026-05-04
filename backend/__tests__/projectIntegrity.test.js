@@ -364,11 +364,12 @@ describe('Frontend: chess_barold ES module split', () => {
         expect(content).not.toMatch(/^function oldalSerult\(/m);
     });
 
-    test('mind a 6 chess_barold/javascript/*.js parse-olhato', () => {
+    test('mind a chess_barold/javascript/*.js (top-level) parse-olhato', () => {
         const files = listJsFiles(CHESS_DIR);
-        // varando: UI-megjelenites.js, abilities.js, audio.js, domSkeleton.js, main.js,
-        // settings.js (N10 — kliens-oldali sakk preferenciak modul).
-        expect(files.length).toBe(6);
+        // Minimum a 6 alap modul: UI-megjelenites.js, abilities.js, audio.js,
+        // domSkeleton.js, main.js, settings.js. Plusz a refactor soran kivagott
+        // modulok (state.js, stb.) — barmelyik szam elfogadhato amig minden parse-olhato.
+        expect(files.length).toBeGreaterThanOrEqual(6);
         for (const filePath of files) {
             const check = nodeParseCheck(filePath);
             if (!check.ok) {
@@ -524,12 +525,17 @@ describe('Chess lifecycle invariánsok', () => {
             expect(callsOnly.length).toBe(0);
         });
 
-        test('main.js az uj ujMeccsChooserNyitas helper-t hasznalja', () => {
-            const content = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
-            expect(content).toMatch(/function\s+ujMeccsChooserNyitas\s*\(/);
-            expect(content).toMatch(/MattMesterChessModeChooser/);
-            // Legalabb 2 hivasi hely (rejoin-none + new-game gomb + fallback)
-            const calls = content.match(/ujMeccsChooserNyitas\s*\(\s*\)/g) || [];
+        test('chooser.js definialja az ujMeccsChooserNyitas helper-t es a main.js hivja', () => {
+            // Refactor: az `ujMeccsChooserNyitas` mostantol a `chooser.js` modulban van.
+            const chooserSrc = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'chooser.js'));
+            expect(chooserSrc).toMatch(/export\s+function\s+ujMeccsChooserNyitas\s*\(/);
+            expect(chooserSrc).toMatch(/MattMesterChessModeChooser/);
+
+            // A main.js (es egyeb modulok) importaljak es legalabb 2 helyrol hivjak
+            // (rejoin-none socket handler + game-end modal Uj jatek callback + fallbackek).
+            const mainSrc = readFile(path.join(FRONTEND, 'chess_barold', 'javascript', 'main.js'));
+            expect(mainSrc).toMatch(/from\s+['"]\.\/chooser\.js['"]/);
+            const calls = mainSrc.match(/ujMeccsChooserNyitas\s*\(\s*\)/g) || [];
             expect(calls.length).toBeGreaterThanOrEqual(2);
         });
 
