@@ -42,14 +42,14 @@ function renderUserStatusCell(user) {
         const isPending = pendingDeletion && pendingDeletion > new Date();
 
         const onlineHtml = online
-            ? `<span class="user-presence user-presence-online" title="Online · ${tabCount} aktív tab">
-                  <span class="user-presence-dot"></span>Online${tabCount > 1 ? ` <span class="user-presence-tabs">${tabCount}</span>` : ''}
+            ? `<span class="user-presence user-presence-online" title="${tx('Online', 'Online')} · ${tabCount} ${tx('aktív tab', 'active tab(s)')}">
+                  <span class="user-presence-dot"></span>${tx('Online', 'Online')}${tabCount > 1 ? ` <span class="user-presence-tabs">${tabCount}</span>` : ''}
                </span>`
-            : `<span class="user-presence user-presence-offline" title="Offline"><span class="user-presence-dot"></span>Offline</span>`;
-        const bannedHtml = banned ? `<span class="badge badge-status-banned ms-1">Tiltott</span>` : '';
+            : `<span class="user-presence user-presence-offline" title="${tx('Offline', 'Offline')}"><span class="user-presence-dot"></span>${tx('Offline', 'Offline')}</span>`;
+        const bannedHtml = banned ? `<span class="badge badge-status-banned ms-1">${tx('Tiltott', 'Banned')}</span>` : '';
         const pendingHtml = isPending ? `
-            <span class="badge bg-danger ms-1" title="Hard-delete: ${escapeHtml(pendingDeletion.toLocaleString('hu-HU'))}">
-                <i class="bi bi-hourglass-split me-1"></i>Törlésre várólista
+            <span class="badge bg-danger ms-1" title="Hard-delete: ${escapeHtml(window.MattMesterI18n?.formatDateTime ? window.MattMesterI18n.formatDateTime(pendingDeletion) : pendingDeletion.toLocaleString('hu-HU'))}">
+                <i class="bi bi-hourglass-split me-1"></i>${tx('Törlésre várólista', 'Pending deletion')}
             </span>` : '';
         html = `<div class="user-status-cell">${onlineHtml}${bannedHtml}${pendingHtml}</div>`;
     } catch (err) {
@@ -67,16 +67,16 @@ function renderEmailVerifiedBadge(user) {
         const verifiedAt = user?.emailVerifiedAt ? new Date(user.emailVerifiedAt) : null;
         const tooltip = verified
             ? (verifiedAt && !Number.isNaN(verifiedAt.getTime())
-                ? `Email megerősítve: ${verifiedAt.toLocaleString('hu-HU')}`
-                : 'Email megerősítve')
-            : 'Az email cím nincs megerősítve.';
+                ? `${tx('Email megerősítve', 'Email verified')}: ${window.MattMesterI18n?.formatDateTime ? window.MattMesterI18n.formatDateTime(verifiedAt) : verifiedAt.toLocaleString('hu-HU')}`
+                : tx('Email megerősítve', 'Email verified'))
+            : tx('Az email cím nincs megerősítve.', 'The email address is not verified.');
         if (verified) {
             html = `<span id="adminUserViewEmailVerified" class="email-verified-badge is-verified" title="${escapeHtml(tooltip)}">
-                        <i class="bi bi-patch-check-fill"></i>Megerősítve
+                        <i class="bi bi-patch-check-fill"></i>${tx('Megerősítve', 'Verified')}
                     </span>`;
         } else {
             html = `<span id="adminUserViewEmailVerified" class="email-verified-badge is-unverified" title="${escapeHtml(tooltip)}">
-                        <i class="bi bi-exclamation-circle-fill"></i>Nem megerősítve
+                        <i class="bi bi-exclamation-circle-fill"></i>${tx('Nem megerősítve', 'Not verified')}
                     </span>`;
         }
     } catch (err) {
@@ -92,16 +92,16 @@ function renderProfileImageStatusBadge(user) {
     try {
         const status = String(user?.profileImageStatus || '').toLowerCase();
         const labels = {
-            approved: { icon: 'bi-image-fill', label: 'Profilkép: jóváhagyott', cls: 'is-approved' },
-            pending: { icon: 'bi-hourglass-split', label: 'Profilkép: jóváhagyásra vár', cls: 'is-pending' },
-            rejected: { icon: 'bi-image-alt', label: 'Profilkép: elutasítva', cls: 'is-rejected' },
-            default: { icon: 'bi-person-circle', label: 'Profilkép: alapértelmezett', cls: 'is-default' }
+            approved: { icon: 'bi-image-fill', label: tx('Profilkép: jóváhagyott', 'Profile image: approved'), shortLabel: tx('jóváhagyott', 'approved'), cls: 'is-approved' },
+            pending: { icon: 'bi-hourglass-split', label: tx('Profilkép: jóváhagyásra vár', 'Profile image: pending'), shortLabel: tx('jóváhagyásra vár', 'pending'), cls: 'is-pending' },
+            rejected: { icon: 'bi-image-alt', label: tx('Profilkép: elutasítva', 'Profile image: rejected'), shortLabel: tx('elutasítva', 'rejected'), cls: 'is-rejected' },
+            default: { icon: 'bi-person-circle', label: tx('Profilkép: alapértelmezett', 'Profile image: default'), shortLabel: tx('alapértelmezett', 'default'), cls: 'is-default' }
         };
         const meta = labels[status] || labels.default;
         const noUpload = !status;
         const finalMeta = noUpload ? labels.default : meta;
         html = `<span id="adminUserViewImageStatus" class="profile-image-status-badge ${finalMeta.cls}" title="${escapeHtml(finalMeta.label)}">
-                    <i class="bi ${finalMeta.icon}"></i>${escapeHtml(finalMeta.label.replace('Profilkép: ', ''))}
+                    <i class="bi ${finalMeta.icon}"></i>${escapeHtml(finalMeta.shortLabel)}
                 </span>`;
     } catch (err) {
         console.warn('renderProfileImageStatusBadge hiba:', err);
@@ -118,8 +118,8 @@ function renderEloTrio(user) {
         const eloMM = Number(user?.eloMM || 0);
         const eloBullet = Number(user?.eloBullet || 0);
         html = `
-            <div class="elo-trio" title="Klasszikus / MattMester / Bullet">
-                <span class="elo-trio-item" data-kind="classic"   title="Klasszikus">${elo}</span>
+            <div class="elo-trio" title="${tx('Klasszikus', 'Classic')} / MattMester / Bullet">
+                <span class="elo-trio-item" data-kind="classic"   title="${tx('Klasszikus', 'Classic')}">${elo}</span>
                 <span class="elo-trio-sep">/</span>
                 <span class="elo-trio-item is-primary" data-kind="mm" title="MattMester">${eloMM}</span>
                 <span class="elo-trio-sep">/</span>
@@ -140,21 +140,21 @@ function renderEmailVerifiedBadgeInline(user) {
         const verifiedAt = user?.emailVerifiedAt ? new Date(user.emailVerifiedAt) : null;
         const tooltip = verified
             ? (verifiedAt && !Number.isNaN(verifiedAt.getTime())
-                ? `Email megerősítve: ${verifiedAt.toLocaleString('hu-HU')}`
-                : 'Email megerősítve')
-            : 'Az email cím nincs megerősítve.';
+                ? `${tx('Email megerősítve', 'Email verified')}: ${window.MattMesterI18n?.formatDateTime ? window.MattMesterI18n.formatDateTime(verifiedAt) : verifiedAt.toLocaleString('hu-HU')}`
+                : tx('Email megerősítve', 'Email verified'))
+            : tx('Az email cím nincs megerősítve.', 'The email address is not verified.');
         if (verified) {
             html = `<span class="email-verified-badge is-verified" title="${escapeHtml(tooltip)}">
-                        <i class="bi bi-patch-check-fill"></i>Megerősítve
+                        <i class="bi bi-patch-check-fill"></i>${tx('Megerősítve', 'Verified')}
                     </span>`;
         } else {
             html = `<span class="email-verified-badge is-unverified" title="${escapeHtml(tooltip)}">
-                        <i class="bi bi-exclamation-circle-fill"></i>Nem megerősítve
+                        <i class="bi bi-exclamation-circle-fill"></i>${tx('Nem megerősítve', 'Not verified')}
                     </span>`;
         }
     } catch (err) {
         console.warn('renderEmailVerifiedBadgeInline hiba:', err);
-        html = '<span class="email-verified-badge is-unverified"><i class="bi bi-exclamation-circle-fill"></i>Nem megerősítve</span>';
+        html = `<span class="email-verified-badge is-unverified"><i class="bi bi-exclamation-circle-fill"></i>${tx('Nem megerősítve', 'Not verified')}</span>`;
     }
     return html;
 }
@@ -164,10 +164,10 @@ function renderProfileImageStatusBadgeInline(user) {
     try {
         const status = String(user?.profileImageStatus || '').toLowerCase();
         const labels = {
-            approved: { icon: 'bi-image-fill', label: 'Jóváhagyott', cls: 'is-approved', tip: 'Profilkép: jóváhagyott' },
-            pending: { icon: 'bi-hourglass-split', label: 'Függő', cls: 'is-pending', tip: 'Profilkép: jóváhagyásra vár' },
-            rejected: { icon: 'bi-image-alt', label: 'Elutasított', cls: 'is-rejected', tip: 'Profilkép: elutasítva' },
-            default: { icon: 'bi-person-circle', label: 'Alapértelmezett', cls: 'is-default', tip: 'Profilkép: alapértelmezett' }
+            approved: { icon: 'bi-image-fill', label: tx('Jóváhagyott', 'Approved'), cls: 'is-approved', tip: tx('Profilkép: jóváhagyott', 'Profile image: approved') },
+            pending: { icon: 'bi-hourglass-split', label: tx('Függő', 'Pending'), cls: 'is-pending', tip: tx('Profilkép: jóváhagyásra vár', 'Profile image: pending') },
+            rejected: { icon: 'bi-image-alt', label: tx('Elutasított', 'Rejected'), cls: 'is-rejected', tip: tx('Profilkép: elutasítva', 'Profile image: rejected') },
+            default: { icon: 'bi-person-circle', label: tx('Alapértelmezett', 'Default'), cls: 'is-default', tip: tx('Profilkép: alapértelmezett', 'Profile image: default') }
         };
         const meta = labels[status] || labels.default;
         html = `<span class="profile-image-status-badge ${meta.cls}" title="${escapeHtml(meta.tip)}">
@@ -175,7 +175,7 @@ function renderProfileImageStatusBadgeInline(user) {
                 </span>`;
     } catch (err) {
         console.warn('renderProfileImageStatusBadgeInline hiba:', err);
-        html = '<span class="profile-image-status-badge is-default"><i class="bi bi-person-circle"></i>Alapértelmezett</span>';
+        html = `<span class="profile-image-status-badge is-default"><i class="bi bi-person-circle"></i>${tx('Alapértelmezett', 'Default')}</span>`;
     }
     return html;
 }
@@ -183,8 +183,8 @@ function renderProfileImageStatusBadgeInline(user) {
 function renderPresenceStatusBadgeInline(user) {
     const isOnline = Boolean(user?.online);
     return isOnline
-        ? '<span class="badge badge-status-active"><i class="bi bi-circle-fill me-1"></i>Online</span>'
-        : '<span class="badge badge-status-pending"><i class="bi bi-circle me-1"></i>Offline</span>';
+        ? `<span class="badge badge-status-active"><i class="bi bi-circle-fill me-1"></i>${tx('Online', 'Online')}</span>`
+        : `<span class="badge badge-status-pending"><i class="bi bi-circle me-1"></i>${tx('Offline', 'Offline')}</span>`;
 }
 
 function getAdminRoleOptions(user) {
@@ -194,7 +194,7 @@ function getAdminRoleOptions(user) {
     const roles = Array.from(knownRoles);
     return roles.map((role) => ({
         value: role,
-        label: role === 'admin' ? 'Adminisztrátor' : (role === 'player' ? 'Játékos' : role.charAt(0).toUpperCase() + role.slice(1)),
+        label: role === 'admin' ? tx('Adminisztrátor', 'Administrator') : (role === 'player' ? tx('Játékos', 'Player') : role.charAt(0).toUpperCase() + role.slice(1)),
         selected: String(userRole || 'player') === role
     }));
 }
@@ -253,7 +253,7 @@ async function loadAdminUsersList(options = {}) {
     let success = false;
     try {
         if (!state.adminToken) {
-            state.users.error = 'Nincs admin token — a felhasználói lista nem tölthető be.';
+            state.users.error = tx('Nincs admin token — a felhasználói lista nem tölthető be.', 'No admin token — the user list cannot be loaded.');
             state.users.loading = false;
             renderAdminUsersTable({ reason: 'no_token' });
         } else {
@@ -283,7 +283,7 @@ async function loadAdminUsersList(options = {}) {
             } else {
                 const json = await response.json();
                 if (!json?.success || !Array.isArray(json.data)) {
-                    state.users.error = json?.message || 'Ismeretlen válasz a szervertől.';
+                    state.users.error = json?.message || tx('Ismeretlen válasz a szervertől.', 'Unknown response from server.');
                     state.users.loading = false;
                     renderAdminUsersTable({ reason: 'error' });
                 } else {
@@ -304,7 +304,7 @@ async function loadAdminUsersList(options = {}) {
         }
     } catch (err) {
         console.error('loadAdminUsersList hiba:', err);
-        state.users.error = err?.message || 'Hálózati hiba.';
+        state.users.error = err?.message || tx('Hálózati hiba.', 'Network error.');
         state.users.loading = false;
         renderAdminUsersTable({ reason: 'error' });
     }

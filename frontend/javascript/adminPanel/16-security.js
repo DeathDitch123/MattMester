@@ -9,22 +9,22 @@ function classifyIpClient(ip) {
     const lower = String(ip).toLowerCase().trim();
     if (lower === '127.0.0.1' || lower === '::1' || lower === '::ffff:127.0.0.1' ||
         lower.startsWith('127.') || lower === 'localhost') {
-        return { category: 'loopback', label: 'Szervergép' };
+        return { category: 'loopback', label: tx('Szervergép', 'Server host') };
     }
-    if (/^169\.254\./.test(lower)) return { category: 'link-local', label: 'Link-local (APIPA)' };
-    if (/^10\./.test(lower)) return { category: 'private', label: 'Belső hálózat (10.x)' };
-    if (/^192\.168\./.test(lower)) return { category: 'private', label: 'Belső hálózat (LAN)' };
+    if (/^169\.254\./.test(lower)) return { category: 'link-local', label: tx('Link-local (APIPA)', 'Link-local (APIPA)') };
+    if (/^10\./.test(lower)) return { category: 'private', label: tx('Belső hálózat (10.x)', 'Internal network (10.x)') };
+    if (/^192\.168\./.test(lower)) return { category: 'private', label: tx('Belső hálózat (LAN)', 'Internal network (LAN)') };
     if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(lower)) {
-        if (/^172\.17\./.test(lower)) return { category: 'docker', label: 'Docker hálózat' };
-        return { category: 'private', label: 'Belső hálózat (172.x)' };
+        if (/^172\.17\./.test(lower)) return { category: 'docker', label: tx('Docker hálózat', 'Docker network') };
+        return { category: 'private', label: tx('Belső hálózat (172.x)', 'Internal network (172.x)') };
     }
     if (/^100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\./.test(lower)) {
-        return { category: 'cgnat', label: 'Mobilhálózat (CGNAT)' };
+        return { category: 'cgnat', label: tx('Mobilhálózat (CGNAT)', 'Mobile network (CGNAT)') };
     }
-    if (/^fe[89ab][0-9a-f]:/i.test(lower)) return { category: 'link-local', label: 'IPv6 link-local' };
-    if (/^f[cd][0-9a-f]{2}:/i.test(lower)) return { category: 'private', label: 'Belső IPv6' };
+    if (/^fe[89ab][0-9a-f]:/i.test(lower)) return { category: 'link-local', label: tx('IPv6 link-local', 'IPv6 link-local') };
+    if (/^f[cd][0-9a-f]{2}:/i.test(lower)) return { category: 'private', label: tx('Belső IPv6', 'Internal IPv6') };
     if (lower.includes(':') || /^\d+\.\d+\.\d+\.\d+$/.test(lower)) {
-        return { category: 'public', label: 'Külső IP' };
+        return { category: 'public', label: tx('Külső IP', 'Public IP') };
     }
     return { category: 'unknown', label: '—' };
 }
@@ -32,7 +32,7 @@ function classifyIpClient(ip) {
 function parseUserAgentClient(ua) {
     if (!ua) return { browser: '—', os: '—', display: '—', icon: 'bi-question-circle' };
     const u = String(ua);
-    let browser = 'Egyéb', icon = 'bi-globe';
+    let browser = tx('Egyéb', 'Other'), icon = 'bi-globe';
     if (/Edg\//i.test(u)) { browser = 'Edge'; icon = 'bi-browser-edge'; }
     else if (/OPR\/|Opera/i.test(u)) { browser = 'Opera'; icon = 'bi-globe'; }
     else if (/Vivaldi\//i.test(u)) { browser = 'Vivaldi'; icon = 'bi-globe'; }
@@ -44,7 +44,7 @@ function parseUserAgentClient(ua) {
     else if (/Chrome\//i.test(u)) { browser = 'Chrome'; icon = 'bi-browser-chrome'; }
     else if (/Firefox\//i.test(u)) { browser = 'Firefox'; icon = 'bi-browser-firefox'; }
     else if (/Safari\//i.test(u) && !/Chrome|Edg|OPR/i.test(u)) { browser = 'Safari'; icon = 'bi-browser-safari'; }
-    let os = 'Egyéb';
+    let os = tx('Egyéb', 'Other');
     if (/Windows NT/i.test(u)) os = 'Windows';
     else if (/Android/i.test(u)) os = 'Android';
     else if (/iPhone|iPad|iPod|iOS/i.test(u)) os = 'iOS';
@@ -85,11 +85,11 @@ async function loadLogins() {
                 }
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba a bejelentkezések betöltésekor.', 'danger');
+                showToast(data.message || tx('Hiba a bejelentkezések betöltésekor.', 'Error loading logins.'), 'danger');
             }
         } catch (err) {
             console.error('loadLogins hiba:', err);
-            showToast('Hálózati hiba a bejelentkezések betöltésekor.', 'danger');
+            showToast(tx('Hálózati hiba a bejelentkezések betöltésekor.', 'Network error loading logins.'), 'danger');
         }
     });
 }
@@ -131,22 +131,22 @@ function exportLoginsCsv() {
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || `CSV export hiba (HTTP ${res.status}).`, 'danger');
+                showToast(data.message || tx(`CSV export hiba (HTTP ${res.status}).`, `CSV export error (HTTP ${res.status}).`), 'danger');
                 return;
             }
             const blob = await res.blob();
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `bejelentkezesek-${new Date().toISOString().slice(0, 10)}.csv`;
+            a.download = `${tx('bejelentkezesek', 'logins')}-${new Date().toISOString().slice(0, 10)}.csv`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
-            showToast('CSV export elkészült.', 'success', 'bi-download');
+            showToast(tx('CSV export elkészült.', 'CSV export ready.'), 'success', 'bi-download');
         } catch (err) {
             console.error('exportLoginsCsv hiba:', err);
-            showToast('Hálózati hiba a CSV exportnál.', 'danger');
+            showToast(tx('Hálózati hiba a CSV exportnál.', 'Network error during CSV export.'), 'danger');
         }
     });
 }
@@ -154,17 +154,20 @@ function exportLoginsCsv() {
 async function dismissAllAlerts() {
     const undismissedCount = (state.liveAlerts || []).filter((a) => !a.dismissedAt).length;
     if (undismissedCount === 0) {
-        showToast('Nincs elrejtendő riasztás.', 'info', 'bi-info-circle');
+        showToast(tx('Nincs elrejtendő riasztás.', 'No alerts to hide.'), 'info', 'bi-info-circle');
         return;
     }
     const ok = await (typeof window.mmConfirm === 'function'
         ? window.mmConfirm({
-            title: 'Összes aktív riasztás elrejtése',
-            message: `Biztosan elrejti az összes (${undismissedCount}) aktív riasztást?\n\nAz adatok megmaradnak — az "Elrejtettek mutatása" szűrővel bármikor visszanézheted.`,
-            confirmLabel: 'Elrejtés',
+            title: tx('Összes aktív riasztás elrejtése', 'Hide all active alerts'),
+            message: tx(
+                `Biztosan elrejti az összes (${undismissedCount}) aktív riasztást?\n\nAz adatok megmaradnak — az "Elrejtettek mutatása" szűrővel bármikor visszanézheted.`,
+                `Are you sure you want to hide all (${undismissedCount}) active alerts?\n\nThe data is preserved — use the "Show hidden" filter to view them again.`
+            ),
+            confirmLabel: tx('Elrejtés', 'Hide'),
             danger: true
         })
-        : Promise.resolve(window.confirm(`Biztosan elrejti az összes (${undismissedCount}) aktív riasztást?`)));
+        : Promise.resolve(window.confirm(tx(`Biztosan elrejti az összes (${undismissedCount}) aktív riasztást?`, `Are you sure you want to hide all (${undismissedCount}) active alerts?`))));
     if (!ok) return;
     return runSafelyAsync('dismissAllAlerts', async () => {
         try {
@@ -185,14 +188,14 @@ async function dismissAllAlerts() {
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
                 }
-                showToast(`${data.affected || 0} riasztás elrejtve.`, 'success', 'bi-eye-slash-fill');
+                showToast(tx(`${data.affected || 0} riasztás elrejtve.`, `${data.affected || 0} alerts hidden.`), 'success', 'bi-eye-slash-fill');
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba az elrejtéskor.', 'danger');
+                showToast(data.message || tx('Hiba az elrejtéskor.', 'Error hiding alerts.'), 'danger');
             }
         } catch (err) {
             console.error('dismissAllAlerts hiba:', err);
-            showToast('Hálózati hiba az elrejtéskor.', 'danger');
+            showToast(tx('Hálózati hiba az elrejtéskor.', 'Network error while hiding alerts.'), 'danger');
         }
     });
 }
@@ -222,12 +225,12 @@ function clearAuditFilterIntent() {
 
 function openIpBlockModal(ipAddress, alertId) {
     if (!ipAddress) {
-        showToast('Nincs IP cím a blokkoláshoz.', 'warning');
+        showToast(tx('Nincs IP cím a blokkoláshoz.', 'No IP address to block.'), 'warning');
         return;
     }
     const modalEl = document.getElementById('ipBlockModal');
     if (!modalEl || !window.bootstrap?.Modal) {
-        showToast('IP blokk modal nem elérhető.', 'warning');
+        showToast(tx('IP blokk modal nem elérhető.', 'IP block modal unavailable.'), 'warning');
         return;
     }
     setText('ipBlockModalIp', ipAddress);
@@ -248,7 +251,7 @@ function onIpBlockTypeChange() {
     if (type === 'Végleges') {
         duration.disabled = true;
         duration.value = '';
-        duration.placeholder = 'Nincs lejárat';
+        duration.placeholder = tx('Nincs lejárat', 'No expiration');
     } else {
         duration.disabled = false;
         duration.placeholder = '';
@@ -259,7 +262,7 @@ function onIpBlockTypeChange() {
 async function submitIpBlock() {
     return runSafelyAsync('submitIpBlock', async () => {
         const { ipAddress } = state.ipBlockData || {};
-        if (!ipAddress) { showToast('Nincs IP cím.', 'danger'); return; }
+        if (!ipAddress) { showToast(tx('Nincs IP cím.', 'No IP address.'), 'danger'); return; }
 
         const type = document.getElementById('ipBlockType')?.value || 'Ideiglenes';
         const durationHours = Number(document.getElementById('ipBlockDuration')?.value) || 24;
@@ -283,14 +286,14 @@ async function submitIpBlock() {
             if (res.ok && data?.success) {
                 const modalEl = document.getElementById('ipBlockModal');
                 if (modalEl) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
-                showToast(data.message || `IP ${ipAddress} blokkolva.`, 'success', 'bi-shield-fill-check');
+                showToast(data.message || tx(`IP ${ipAddress} blokkolva.`, `IP ${ipAddress} blocked.`), 'success', 'bi-shield-fill-check');
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba az IP blokkolásánál.', 'danger');
+                showToast(data.message || tx('Hiba az IP blokkolásánál.', 'Error blocking IP.'), 'danger');
             }
         } catch (err) {
             console.error('submitIpBlock hiba:', err);
-            showToast('Hálózati hiba az IP blokkolásánál.', 'danger');
+            showToast(tx('Hálózati hiba az IP blokkolásánál.', 'Network error while blocking IP.'), 'danger');
         }
     });
 }

@@ -3,7 +3,7 @@ function getProfileImageStatusMeta(statusInput) {
     let meta = {
         normalizedStatus: 'approved',
         textClass: 'text-success',
-        label: 'Jóváhagyott',
+        label: tx('Jóváhagyott', 'Approved'),
         helpText: ''
     };
 
@@ -11,21 +11,21 @@ function getProfileImageStatusMeta(statusInput) {
         meta = {
             normalizedStatus,
             textClass: 'text-warning',
-            label: 'Függő (elbírálásra vár)',
-            helpText: 'Csak te látod ezt a képet. Mások az alapértelmezett képet látják jóváhagyásig.'
+            label: tx('Függő (elbírálásra vár)', 'Pending (awaiting review)'),
+            helpText: tx('Csak te látod ezt a képet. Mások az alapértelmezett képet látják jóváhagyásig.', 'Only you can see this image. Others see the default image until approval.')
         };
     } else if (normalizedStatus === 'rejected') {
         meta = {
             normalizedStatus,
             textClass: 'text-danger',
-            label: 'Elutasított',
-            helpText: 'A kép elutasításra került, a publikus profilkép visszaállt az alapértelmezettre.'
+            label: tx('Elutasított', 'Rejected'),
+            helpText: tx('A kép elutasításra került, a publikus profilkép visszaállt az alapértelmezettre.', 'The image was rejected, the public profile picture has reverted to the default.')
         };
     } else if (normalizedStatus === 'default') {
         meta = {
             normalizedStatus,
             textClass: 'text-info',
-            label: 'Alapértelmezett',
+            label: tx('Alapértelmezett', 'Default'),
             helpText: ''
         };
     }
@@ -34,7 +34,7 @@ function getProfileImageStatusMeta(statusInput) {
 }
 
 function applyProfileImagePresentation(user) {
-    const username = user?.username || 'Felhasznalo';
+    const username = user?.username || tx('Felhasznalo', 'User');
     const statusMeta = getProfileImageStatusMeta(user?.profile_image_status);
 
     const avatars = [
@@ -46,7 +46,7 @@ function applyProfileImagePresentation(user) {
     avatars.forEach((avatarElement) => {
         const applied = window.MattMesterProfileImage.applyProfileImagePresentation(avatarElement, {
             source: user,
-            alt: `${username} profilkepe`
+            alt: `${username} ${tx('profilkepe', 'profile picture')}`
         });
         if (applied) {
             viewModel = applied;
@@ -65,7 +65,7 @@ function applyProfileImagePresentation(user) {
     statusElements.forEach((statusElement) => {
         statusElement.classList.remove('text-secondary', 'text-success', 'text-warning', 'text-danger', 'text-info');
         statusElement.classList.add(statusMeta.textClass);
-        const baseText = `Profilkép státusz: ${statusMeta.label}`;
+        const baseText = `${tx('Profilkép státusz:', 'Profile picture status:')} ${statusMeta.label}`;
         statusElement.textContent = statusMeta.helpText
             ? `${baseText} — ${statusMeta.helpText}`
             : baseText;
@@ -74,7 +74,7 @@ function applyProfileImagePresentation(user) {
     const removeButton = document.getElementById('removeAvatarButton');
     if (removeButton) {
         removeButton.disabled = viewModel.isDefault;
-        removeButton.title = viewModel.isDefault ? 'Nem lehet eltávolítani az alapértelmezett képet' : 'Profilkép eltávolítása';
+        removeButton.title = viewModel.isDefault ? tx('Nem lehet eltávolítani az alapértelmezett képet', 'Cannot remove the default image') : tx('Profilkép eltávolítása', 'Remove profile picture');
     }
 }
 
@@ -82,7 +82,7 @@ function showStats(sessionInfo) {
     try {
         const user = sessionInfo?.user || sessionInfo?.data?.user || null;
         if (!user) {
-            throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
+            throw new Error(tx('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.', 'No logged-in user to display stats for.'));
         }
 
         const stats = user.stats || sessionInfo?.stats || {
@@ -90,7 +90,7 @@ function showStats(sessionInfo) {
             losses: user.losses,
             draws: user.draws
         };
-        const username = user.username || 'Ismeretlen jatekos';
+        const username = user.username || tx('Ismeretlen jatekos', 'Unknown player');
         const email = user.email || '';
         const role = user.role || 'player';
         const roleText = role.charAt(0).toUpperCase() + role.slice(1);

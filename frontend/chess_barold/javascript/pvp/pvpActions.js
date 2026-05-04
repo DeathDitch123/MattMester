@@ -109,7 +109,7 @@ export function pvpDontetlenAjanlat() {
     const drawBtn = document.getElementById('drawOfferBtn');
     if (drawBtn) {
         drawBtn.disabled = true;
-        drawBtn.textContent = 'Ajánlat elküldve';
+        drawBtn.textContent = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Ajánlat elküldve', 'Offer sent') : 'Ajánlat elküldve';
     }
 }
 
@@ -127,7 +127,7 @@ export function pvpAllapotReset() {
     const drawBtn = document.getElementById('drawOfferBtn');
     if (drawBtn) {
         drawBtn.disabled = false;
-        drawBtn.textContent = 'Döntetlen ajánlat';
+        drawBtn.textContent = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Döntetlen ajánlat', 'Offer draw') : 'Döntetlen ajánlat';
         drawBtn.classList.add('hidden');
     }
     state.varakozoLepesPromisek.length = 0;

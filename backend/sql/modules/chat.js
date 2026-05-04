@@ -311,6 +311,36 @@ function containsBlockedWord(message) {
     });
 }
 
+// Issue #6 — In-game (PvP) chat: a tiltott szavakat NEM ban-eli, csak
+// kicsillagozza ugyanannyi `*` karakterre, mint a szo hossza. A teljes
+// uzenet csere (`***`) tul agressziv lenne a meccs kozbeni gyors uzenetekhez.
+// A tobbi (DM/inbox) chat tovabbra is a `containsBlockedWord` + policy-flow-t
+// hasznalja (lasd `buildChatModerationPolicyResult`).
+function maskBlockedWords(message) {
+    const raw = String(message || '');
+    if (!raw) return { text: raw, masked: false };
+    const allTerms = [...CHAT_BLOCKED_WORDS, ...DYNAMIC_BLOCKED_WORDS];
+    let result = raw;
+    let masked = false;
+    for (const term of allTerms) {
+        const trimmed = String(term || '').trim();
+        if (!trimmed) continue;
+        // Diakritikus-mentes regex: a `[\\W_]*` engedmenyek a karakterek kozott
+        // megakadalyozzak az `f.u.c.k`-szeru kerullessel torteno bypass-t.
+        // A `\b` szohatar biztositja, hogy a "class" stb. ne legyen "ass"-kent
+        // talalva.
+        const escaped = escapeRegex(trimmed);
+        const wordBoundary = trimmed.includes(' ')
+            ? new RegExp(escaped, 'gi')
+            : new RegExp(`\\b${escaped}\\b`, 'gi');
+        result = result.replace(wordBoundary, (match) => {
+            masked = true;
+            return '*'.repeat(match.length);
+        });
+    }
+    return { text: result, masked };
+}
+
 function resolvePreviewFromBody(body, maxLength = 120) {
     const normalized = String(body || '').replace(/\s+/g, ' ').trim();
     if (!normalized) {
@@ -1803,6 +1833,7 @@ module.exports = {
     escapeRegex,
     normalizeTextForModeration,
     containsBlockedWord,
+    maskBlockedWords,
     resolvePreviewFromBody,
     ensureChatTables,
     canUsersChat,

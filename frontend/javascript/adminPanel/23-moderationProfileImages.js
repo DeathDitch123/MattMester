@@ -41,7 +41,7 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
         const tbody = document.getElementById('profileImageReviewTableBody');
         if (!tbody) return;
         if (!rows || !rows.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-secondary py-4">Nincs függő profilkép.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-secondary py-4">${tx('Nincs függő profilkép.', 'No pending profile pictures.')}</td></tr>`;
             return;
         }
         tbody.innerHTML = rows.map((row) => {
@@ -59,16 +59,16 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                     </td>
                     <td>
                         <a href="${safeFilename}" target="_blank" rel="noopener noreferrer">
-                            <img src="${safeFilename}" alt="Pending profilkép" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);">
+                            <img src="${safeFilename}" alt="${tx('Pending profilkép', 'Pending profile picture')}" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:1px solid rgba(255,255,255,0.1);">
                         </a>
                     </td>
                     <td><span class="text-secondary small">${safeUploadTime}</span></td>
                     <td class="text-end">
                         <button type="button" class="btn btn-success btn-sm me-2" data-action="approve" data-upload-id="${safeUploadId}">
-                            <i class="bi bi-check-circle me-1"></i>Jóváhagy
+                            <i class="bi bi-check-circle me-1"></i>${tx('Jóváhagy', 'Approve')}
                         </button>
                         <button type="button" class="btn btn-outline-danger btn-sm" data-action="reject" data-upload-id="${safeUploadId}" data-username="${safeUsername}">
-                            <i class="bi bi-x-circle me-1"></i>Elutasít
+                            <i class="bi bi-x-circle me-1"></i>${tx('Elutasít', 'Reject')}
                         </button>
                     </td>
                 </tr>
@@ -92,7 +92,7 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                 if (authHandled) {
                     renderRows([]);
                 } else if (!response.ok || !result?.success) {
-                    throw new Error(result?.message || 'Hiba a függő profilképek lekérdezése során.');
+                    throw new Error(result?.message || tx('Hiba a függő profilképek lekérdezése során.', 'Error fetching pending profile pictures.'));
                 } else {
                     renderRows(result.data || []);
                     refreshed = true;
@@ -100,7 +100,7 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
             }
         } catch (error) {
             console.error('admin profile-images pending fetch hiba:', error);
-            setMessage('danger', error.message || 'Hiba a lekérdezés során.');
+            setMessage('danger', error.message || tx('Hiba a lekérdezés során.', 'Error during fetch.'));
             renderRows([]);
         } finally {
             STATE.loading = false;
@@ -126,17 +126,17 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                 return false;
             }
             if (!response.ok || !result?.success) {
-                throw new Error(result?.message || 'A jóváhagyás sikertelen.');
+                throw new Error(result?.message || tx('A jóváhagyás sikertelen.', 'Approval failed.'));
             }
             approved = true;
-            setMessage('success', result.message || 'A profilkép jóváhagyva.');
+            setMessage('success', result.message || tx('A profilkép jóváhagyva.', 'Profile picture approved.'));
             if (typeof showToast === 'function') {
-                showToast('Profilkép jóváhagyva.', 'success', 'bi-check-circle-fill');
+                showToast(tx('Profilkép jóváhagyva.', 'Profile picture approved.'), 'success', 'bi-check-circle-fill');
             }
             await refresh();
         } catch (error) {
             console.error('admin profile-image approve hiba:', error);
-            setMessage('danger', error.message || 'A jóváhagyás sikertelen.');
+            setMessage('danger', error.message || tx('A jóváhagyás sikertelen.', 'Approval failed.'));
         }
 
         return approved;
@@ -158,7 +158,7 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
 
         const modal = getRejectModalInstance();
         if (!modal) {
-            setMessage('danger', 'A modal nem érhető el. Frissítsd az oldalt.');
+            setMessage('danger', tx('A modal nem érhető el. Frissítsd az oldalt.', 'Modal unavailable. Refresh the page.'));
             return false;
         }
         modal.show();
@@ -185,17 +185,17 @@ window.MattMesterAdminProfileImages = (function initAdminProfileImages() {
                 return false;
             }
             if (!response.ok || !result?.success) {
-                throw new Error(result?.message || 'Az elutasítás sikertelen.');
+                throw new Error(result?.message || tx('Az elutasítás sikertelen.', 'Rejection failed.'));
             }
             rejected = true;
-            setMessage('success', result.message || 'A profilkép elutasítva.');
+            setMessage('success', result.message || tx('A profilkép elutasítva.', 'Profile picture rejected.'));
             if (typeof showToast === 'function') {
-                showToast('Profilkép elutasítva.', 'success', 'bi-x-circle-fill');
+                showToast(tx('Profilkép elutasítva.', 'Profile picture rejected.'), 'success', 'bi-x-circle-fill');
             }
             await refresh();
         } catch (error) {
             console.error('admin profile-image reject hiba:', error);
-            setMessage('danger', error.message || 'Az elutasítás sikertelen.');
+            setMessage('danger', error.message || tx('Az elutasítás sikertelen.', 'Rejection failed.'));
         }
 
         return rejected;

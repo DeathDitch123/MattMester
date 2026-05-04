@@ -4,18 +4,33 @@
  * Auto-injektálódik minden oldalra ahol be van linkelve. Görgethető Bootstrap modal-t
  * regisztrál a body alá, és exponálja a window.MattMesterHouseRules.open() API-t.
  *
- * Használat (HTML):
- *   <button onclick="MattMesterHouseRules.open()">Szabályok</button>
- *  vagy
- *   <button data-bs-toggle="modal" data-bs-target="#houseRulesModal">Szabályok</button>
+ * Issue #7 — bilingvis (HU/EN). A markup a `buildModalMarkup(lang)` lang
+ * paramétere alapján generálódik. Lang-váltáskor (mm:lang-changed event)
+ * a modal újra-injektálódik, így ha a user EN-re vált és kinyitja a Szabályokat,
+ * teljesen angol tartalmat lát.
  */
 (function initHouseRules(globalScope) {
     'use strict';
 
     const MODAL_ID = 'houseRulesModal';
     let injected = false;
+    let injectedLang = null;
 
-    function buildModalMarkup() {
+    function getCurrentLang() {
+        try {
+            if (globalScope.MattMesterI18n && typeof globalScope.MattMesterI18n.get === 'function') {
+                return globalScope.MattMesterI18n.get();
+            }
+        } catch (_) { /* ignore */ }
+        return 'hu';
+    }
+
+    function buildModalMarkup(lang) {
+        if (lang === 'en') return buildModalMarkupEn();
+        return buildModalMarkupHu();
+    }
+
+    function buildModalMarkupHu() {
         return `
         <div class="modal fade" id="${MODAL_ID}" tabindex="-1" aria-labelledby="${MODAL_ID}Label" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
@@ -85,7 +100,7 @@
                             <h6 class="house-rules-h6">2. Házirend</h6>
                             <p class="text-secondary small mb-3">
                                 A MattMester közösségében minden játékos elvárhatja a tiszteletteljes hangnemet és a fair play-t.
-                                A szabályok <strong>mindenkire</strong> vonatkoznak — a sima felhasználókra és az adminisztrátorokra is. Az adminok nem élhetnek vissza a jogkörükkel.
+                                A szabályok <strong>mindenkire</strong> vonatkoznak — a sima felhasználókra és az adminisztrátorokra is.
                             </p>
 
                             <div class="house-rules-callout house-rules-callout--danger">
@@ -96,58 +111,43 @@
                                     <li><strong>3. csapás</strong>: <span class="text-danger">automatikus végleges (perma) tiltás</span></li>
                                 </ul>
                                 <small class="d-block mt-2 text-secondary">
-                                    Egy &quot;csapás&quot; akkor keletkezik, ha (a) a profanity-filter automatikusan maszkolja az üzenetedet — a tiltott szó a hardcoded vagy a dinamikusan bővített blocklist-ben szerepel, vagy (b) az admin a panelről töröl egy bejelentett üzenetedet. A csapásokat a rendszer felhasználónként számolja, és a megfelelő tiltást automatikusan alkalmazza.
-                                </small>
-                                <small class="d-block mt-2 text-secondary">
-                                    <strong>Az adminokra is vonatkozik!</strong> Az automatikus rendszer nem ismer szerepkört — mindenki ugyanazokat a csapásokat kapja, az adminok sem élhetnek vissza a jogkörükkel.
+                                    Egy &quot;csapás&quot; akkor keletkezik, ha (a) a profanity-filter automatikusan maszkolja az üzenetedet, vagy (b) az admin a panelről töröl egy bejelentett üzenetedet. Az adminok nem élhetnek vissza a jogkörükkel.
                                 </small>
                             </div>
 
                             <div class="house-rules-callout house-rules-callout--danger mt-3">
                                 <strong>IP-ban (multi-account védelem) &mdash; automatikus eskaláció:</strong>
                                 <ul class="house-rules-list mb-0 mt-2">
-                                    <li>Minden account-tiltás (auto vagy admin által) az adott felhasználó utolsó ismert IP-jével együtt naplózódik.</li>
-                                    <li>Ha <strong>ugyanarról az IP címről</strong> egy <strong>másik felhasználó</strong> is olyan szabálysértést követ el, ami account-tiltást vált ki, akkor az IP-cím is automatikusan blokkolásra kerül:
-                                        <ul class="mt-1">
-                                            <li><strong>Első IP-ban</strong>: <span class="text-warning">1 napos IP-tiltás</span> &mdash; soha nem perma elsőre.</li>
-                                            <li><strong>Visszaeső IP</strong> (ha az IP-nek már volt korábbi IP-blokk-története): <span class="text-danger">végleges (perma) IP-tiltás</span>.</li>
-                                        </ul>
-                                    </li>
+                                    <li>Az első IP-blokk 1 napos. Visszaeső IP esetén perma IP-ban.</li>
+                                    <li>Loopback (127.x, ::1) ki van hagyva — fejlesztői védelem.</li>
                                 </ul>
-                                <small class="d-block mt-2 text-secondary">
-                                    Tipikus eset: az &quot;A&quot; fiókot trágárságért bannolják, a felhasználó új fiókot (&quot;B&quot;) készít ugyanarról az IP-ről, és azzal is súlyos szabálysértést követ el → a rendszer automatikusan IP-tiltást is kioszt. Ha ez ismétlődik (= ugyanaz az IP újra trigger-elne), perma IP-ban.
-                                </small>
-                                <small class="d-block mt-2 text-secondary">
-                                    Az IP-ban a kapcsolódó hardver/hálózat <strong>minden</strong> jövőbeni fiók-létrehozást és belépést blokkol az adott IP-ről, függetlenül attól, hogy korábban ott milyen fiók működött.
-                                </small>
                             </div>
 
-                            <strong class="house-rules-h7 mt-3">Csalás és visszaélés &mdash; admin által kézzel kiszabott szankciók</strong>
+                            <strong class="house-rules-h7 mt-3">Csalás és visszaélés</strong>
                             <ul class="house-rules-list">
-                                <li><strong>Engine / külső segítség használata</strong> a játszmák során &mdash; perma ban.</li>
+                                <li><strong>Engine / külső segítség használata</strong> &mdash; perma ban.</li>
                                 <li><strong>Sandbagging</strong> — szándékos vesztés ELO manipuláláshoz.</li>
-                                <li><strong>Multi-account</strong> — több saját fiók egymással való &quot;játszása&quot;. Az admin panel IP egyezés-vizsgálattal segíti a felderítést.</li>
-                                <li><strong>Adminisztrátori jogkör abuzálása</strong> — indokolatlan ban, magánbeszélgetésbe avatkozás stb.: super-admin felülvizsgálat, jogkör visszavonása.</li>
+                                <li><strong>Multi-account</strong> — több saját fiók egymással való &quot;játszása&quot;.</li>
+                                <li><strong>Adminisztrátori jogkör abuzálása</strong> — super-admin felülvizsgálat.</li>
                             </ul>
-                            <small class="d-block text-secondary">Ezek nem automatikusak — admin kézzel bírál és tilt, az indok minden esetben naplózásra kerül (audit log, severity: critical).</small>
 
                             <strong class="house-rules-h7">Üzenetek bejelentése</strong>
                             <ul class="house-rules-list">
-                                <li>A chat-ben minden idegen üzenetbuborékon kis &quot;<span style="color:#ef4444;">&#9873;</span> Bejelentés&quot; gomb található (hover-on jelenik meg).</li>
-                                <li>Csak a beszélgetés résztvevője jelenthet, és a saját üzenetét nem.</li>
-                                <li>Ha a bejelentés nem releváns (admin elutasítja), <strong>5 óráig</strong> nem küldhetsz újabbat. Ismétlődő rosszhiszemű bejelentésnél hosszabb tiltás következhet.</li>
+                                <li>A chat-ben minden idegen üzenetbuborékon &quot;<span style="color:#ef4444;">&#9873;</span> Bejelentés&quot; gomb található.</li>
+                                <li>Csak a beszélgetés résztvevője jelenthet, a saját üzenetét nem.</li>
+                                <li>Ha a bejelentés irreleváns, 5 óráig nem küldhetsz újabbat.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Spam védelem</strong>
                             <ul class="house-rules-list">
                                 <li>Maximum <strong>5 chat üzenet / 10 másodperc</strong>.</li>
-                                <li>Túllépés esetén az üzenet eldobódik, ismétlődés esetén ban.</li>
+                                <li>Túllépés esetén az üzenet eldobódik.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Ban &amp; fellebbezés</strong>
                             <ul class="house-rules-list">
                                 <li>A tiltás során a fiók nem tud belépni, de a meccsadatok megmaradnak.</li>
-                                <li>Hibásnak vélt tiltás esetén ír a támogatásra: <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a></li>
+                                <li>Hibás tiltás esetén ír: <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a></li>
                             </ul>
                         </section>
 
@@ -156,116 +156,77 @@
                         <section id="hr-maintenance" class="house-rules-section">
                             <h6 class="house-rules-h6">3. Karbantartási mód</h6>
                             <p class="text-secondary small mb-3">
-                                A platform időnként karbantartási módba kerül — ilyenkor a szerver-oldali frissítések, biztonsági javítások vagy adatbázis-migrációk futnak. A karbantartást egy super-admin kapcsolja be a Beállítások oldalról.
+                                A platform időnként karbantartási módba kerül — szerver-frissítések, biztonsági javítások vagy adatbázis-migrációk futnak. Super-admin kapcsolja be a Beállítások oldalról.
                             </p>
 
                             <div class="house-rules-callout" style="background: rgba(255, 140, 26, 0.08); border-left-color: #ff8c1a;">
                                 <strong style="color:#ffd9b3;">Mi történik karbantartás bekapcsolásakor?</strong>
                                 <ul class="house-rules-list mb-0 mt-2">
-                                    <li><strong>30 perces ablak</strong> — élesben minden online felhasználó kap egy <em>"Karbantartás közeledik"</em> figyelmeztetést a jobb alsó sarokban (5 mp-ig látszik).</li>
-                                    <li>Visszaszámláló-értesítések: <strong>30 perc múlva</strong> → 15 perc múlva → 5 perc múlva → 1 perc múlva. Mindegyik 5 mp-ig látszik a jobb alsó sarokban, automatikusan eltűnik.</li>
-                                    <li>Az ablak alatt minden funkció megszokottan elérhető — érdemes a folyamatban lévő meccset befejezni / rajzolni / abbahagyni.</li>
-                                    <li>A 30 perc letelte után a szerver automatikusan a <strong>karbantartási oldalra</strong> irányít minden non-admin felhasználót (narancs színű <em>"Karbantartás folyamatban"</em> oldal).</li>
-                                    <li><strong>Adatvesztés nincs</strong>: a meccsek állása a feloldás után visszaállítható (a befejezetlen játszmák megmaradnak).</li>
+                                    <li><strong>30 perces ablak</strong> — figyelmeztető toast jelenik meg minden online usernek.</li>
+                                    <li>Visszaszámláló: 30 perc → 15 perc → 5 perc → 1 perc múlva.</li>
+                                    <li>Az ablak alatt minden funkció elérhető — érdemes a meccset befejezni.</li>
+                                    <li>30 perc letelte után minden non-admin user a karbantartási oldalra kerül.</li>
+                                    <li><strong>Adatvesztés nincs</strong>: a meccsek állása visszaállítható.</li>
                                 </ul>
                             </div>
 
                             <strong class="house-rules-h7">A karbantartási oldal</strong>
                             <ul class="house-rules-list">
-                                <li>Két gomb áll rendelkezésre: <em>Oldal elhagyása</em> (about:blank-ra navigál) és <em>Újrapróbálkozás</em> (azonnali ping a szervernek, hogy lejárt-e a karbantartás).</li>
-                                <li>A háttérben automatikusan 30 mp-enként pingel — amint a karbantartás kikapcsol, automatikusan visszairányít a főoldalra.</li>
-                                <li>A support email (<a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>) sürgős kérdés esetén elérhető — a karbantartási oldalon link jelenik meg rá.</li>
-                            </ul>
-
-                            <strong class="house-rules-h7">Karbantartás visszavonása</strong>
-                            <ul class="house-rules-list">
-                                <li>Ha a super-admin kikapcsolja a karbantartást a 30 perces ablak alatt, minden online user kap egy zöld <em>"Karbantartás visszavonva"</em> toast-ot, és tovább használhatja az oldalt megszakítás nélkül.</li>
-                                <li>A már elnavigált felhasználók a karbantartási oldal automatikus pingelése révén visszakerülnek 30 mp-en belül.</li>
+                                <li>Két gomb: <em>Oldal elhagyása</em> és <em>Újrapróbálkozás</em>.</li>
+                                <li>30 mp-enként pingel — kikapcsoláskor visszairányít.</li>
+                                <li>Support email: <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a></li>
                             </ul>
 
                             <strong class="house-rules-h7">Adminok és karbantartás</strong>
                             <ul class="house-rules-list">
-                                <li>A karbantartási mód <strong>nem érinti az admin felhasználókat</strong> — a Bearer-token alapú admin API kéréseik tovább működnek, így a kikapcsolás bármikor lehetséges.</li>
-                                <li>A regisztráció szintén külön kapcsolható: a Beállítások oldalon a <em>"Regisztráció engedélyezve"</em> kapcsoló a karbantartástól függetlenül blokkolja az új fiókokat.</li>
+                                <li>A karbantartási mód <strong>nem érinti az adminokat</strong>.</li>
+                                <li>Regisztráció külön kapcsolható a Beállítások oldalon.</li>
                             </ul>
                         </section>
 
                         <hr class="house-rules-divider">
 
                         <section id="hr-tips" class="house-rules-section">
-                            <h6 class="house-rules-h6">4. Hasznos tudnivalók (rejtett tippek)</h6>
+                            <h6 class="house-rules-h6">4. Hasznos tudnivalók</h6>
 
                             <strong class="house-rules-h7">ELO rendszer</strong>
                             <ul class="house-rules-list">
-                                <li>4 különálló rating: <em>Klasszikus, MattMester, Blitz, Bullet</em>. Az új mode-okon is 800-tól vagy a meglévő ELO-dról indulsz, így nem veszíted el a régi haladásod.</li>
+                                <li>4 különálló rating: <em>Klasszikus, MattMester, Blitz, Bullet</em>. Új mode-on 800-tól vagy a meglévő ELO-dról indulsz.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Profilkép moderálás</strong>
                             <ul class="house-rules-list">
-                                <li>Új feltöltés előbb &quot;<strong>függő</strong>&quot; státuszba kerül — csak te látod, mások az alapértelmezettet.</li>
-                                <li>Az admin <em>Jóváhagyás</em> gombra ráüt → globálisan látható, vagy <em>Elutasítás</em> → automatikusan vissza az alapértelmezettre.</li>
-                                <li>A státuszváltozás real-time frissül a profil oldalon.</li>
+                                <li>Új feltöltés &quot;<strong>függő</strong>&quot; státuszba kerül — csak te látod.</li>
+                                <li>Admin <em>Jóváhagyja</em> vagy <em>Elutasítja</em> — real-time frissül.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Email verifikáció</strong>
                             <ul class="house-rules-list">
-                                <li>Bizonyos funkciók (pl. privát beszélgetés indítása, ELO ranglista) megerősített email-t igényelnek. A beállítások oldalról küldhetsz újra megerősítő linket.</li>
+                                <li>Bizonyos funkciók (pl. privát chat) megerősített email-t igényelnek.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Barát rendszer és chat</strong>
                             <ul class="house-rules-list">
-                                <li>Privát chat <strong>csak elfogadott barátokkal</strong> nyitható.</li>
-                                <li>Tiltás után a beszélgetés automatikusan törlődik (mindkét fél).</li>
-                                <li>A nem barát csak a publikus profilodat látja.</li>
+                                <li>Privát chat csak elfogadott barátokkal.</li>
+                                <li>Tiltáskor a beszélgetés törlődik.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Profil törlés &mdash; 24 órás grace</strong>
                             <ul class="house-rules-list">
-                                <li>Admin által indított törlés <strong>24 órán belül</strong> visszavonható (soft-delete). Utána a fiók véglegesen törlődik.</li>
-                                <li>A meccsadatok megmaradnak az ellenfeleidnél, de a felhasználóneved <em>&quot;Törölt felhasználó&quot;</em>-ra cserélődik.</li>
+                                <li>Admin törlés 24 órán belül visszavonható (soft-delete).</li>
+                                <li>A meccsadatok megmaradnak ellenfeleknél.</li>
                             </ul>
 
-                            <strong class="house-rules-h7">Chat tartalmi szűrő (soft-mask)</strong>
+                            <strong class="house-rules-h7">Chat tartalmi szűrő</strong>
                             <ul class="house-rules-list">
-                                <li>Tiltott szót tartalmazó üzenet eljut a szerverre, de <strong>maszkolva</strong> (***) jelenik meg a többi résztvevőnél. Te látod a saját üzeneted.</li>
-                                <li>A admin moderálási panelen ezek &quot;Auto-flagged&quot; sorként jelennek meg, így a szabálysértők bannolhatók.</li>
-                                <li>A tiltott szavak listája <strong>dinamikus</strong>: az adminok új szavakat adhatnak hozzá az &quot;Tiltott szavakhoz&quot; gombbal a moderálási panelen.</li>
+                                <li>Tiltott szót tartalmazó üzenet maszkolva (***) jelenik meg.</li>
+                                <li>Az adminok új tiltott szavakat vehetnek fel a moderálási panelen.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Értesítések</strong>
                             <ul class="house-rules-list">
-                                <li>A felső sávban a &quot;harang&quot; ikon mutatja a kéretlen értesítéseket: barátkérés, üzenet, admin közlemény stb.</li>
-                                <li>Admin által végrehajtott profilmódosítás real-time frissíti a profil oldaladat.</li>
-                                <li>Karbantartási visszaszámláló <em>nem perzisztens toast</em> — a jobb alsó sarokban jelenik meg 5 mp-ig, majd automatikusan eltűnik (nem rögzítjük az értesítések közé).</li>
-                            </ul>
-
-                            <strong class="house-rules-h7">Meccs admin-megszakítás (force-end)</strong>
-                            <ul class="house-rules-list">
-                                <li>Súlyos szabálysértés (cheat-gyanú, rendszer-bug) esetén az admin egy folyamatban lévő meccset kívülről befejezhet — a meccs <em>"abandoned"</em> státuszra vált.</li>
-                                <li>Ilyenkor egyik fél sem nyer / veszít ELO-t; a meccs a History-ban marad megtekinthető marad.</li>
-                                <li>A művelet naplózva (audit log, severity: critical), és az érintett spectator-admin élőben látja a befejezést.</li>
-                            </ul>
-
-                            <strong class="house-rules-h7">Blokk-feloldás admin által</strong>
-                            <ul class="house-rules-list">
-                                <li>Ha valaki tévedésből blokkolt téged (pl. fellebbezés alapján), egy admin kívülről feloldhatja a blokkot.</li>
-                                <li>A művelet naplózva — a felhasználók normál módon látni fogják egymás üzeneteit / barátkéréseit ezután.</li>
-                            </ul>
-
-                            <strong class="house-rules-h7">IP-tiltás működése</strong>
-                            <ul class="house-rules-list">
-                                <li>Az IP-tiltás <strong>nem azonnali</strong> egyetlen szabálysértésnél &mdash; legalább két <strong>különböző fiók</strong> kell, hogy legyen ugyanarról az IP-ről banolva.</li>
-                                <li>Az első IP-tiltás mindig <strong>csak 1 nap</strong>; ezzel a rendszer védi a megosztott IP-ket (pl. családi háztartás, kollégium, kávézó) a túl szigorú elsőre-perma-banolástól.</li>
-                                <li>Visszaeső IP-nél (= már volt korábban IP-blokk-rekord rajta) az új trigger automatikusan <strong>perma IP-ban</strong>.</li>
-                                <li>A loopback címek (127.x, ::1) ki vannak hagyva &mdash; fejlesztői és lokális környezet védelme.</li>
-                                <li>Az admin a Riasztások panelről kézzel is feloldhat / újra-blokkolhat IP címet.</li>
-                            </ul>
-
-                            <strong class="house-rules-h7">Adatvédelem</strong>
-                            <ul class="house-rules-list">
-                                <li>A jelszavak bcrypt-tel, a session-tokenek SHA-256-tal hashelve tárolódnak — sem a jelszó, sem a teljes token nem kerül naplóba (audit log redaction allowlist).</li>
-                                <li>IP címek a biztonsági audit log-ban szerepelnek (a retention 18 hónap, kizárólag visszaélés-vizsgálati céllal hozzáférhető admin szerepkörrel).</li>
-                                <li>Az admin step-up token TTL: 15 perc sliding (utolsó használattól számolva), a session-cookie ettől független.</li>
+                                <li>Felső sávban a harang ikon: barátkérés, üzenet, admin közlemény.</li>
+                                <li>Real-time profilmódosítás-frissítés.</li>
                             </ul>
 
                             <strong class="house-rules-h7">Súgó / kapcsolat</strong>
@@ -278,6 +239,222 @@
                     <div class="modal-footer">
                         <small class="text-secondary me-auto">Verzió: 2026 &middot; A szabályzat módosításának jogát fenntartjuk.</small>
                         <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Bezárás</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        `;
+    }
+
+    function buildModalMarkupEn() {
+        return `
+        <div class="modal fade" id="${MODAL_ID}" tabindex="-1" aria-labelledby="${MODAL_ID}Label" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
+                <div class="modal-content house-rules-modal">
+                    <div class="modal-header">
+                        <h5 class="modal-title d-flex align-items-center gap-2" id="${MODAL_ID}Label">
+                            <span class="house-rules-modal-icon" aria-hidden="true">&#9812;</span>
+                            Rules and information
+                        </h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body house-rules-modal-body">
+                        <nav class="house-rules-toc" aria-label="Table of contents">
+                            <a href="#hr-chess">1. Chess rules</a>
+                            <a href="#hr-conduct">2. Code of conduct</a>
+                            <a href="#hr-maintenance">3. Maintenance</a>
+                            <a href="#hr-tips">4. Useful info</a>
+                        </nav>
+
+                        <section id="hr-chess" class="house-rules-section">
+                            <h6 class="house-rules-h6">1. Chess rules</h6>
+                            <p class="text-secondary small mb-3">
+                                The goal: checkmate the opponent's king. Two players take turns on an 8&times;8 board.
+                                A player who cannot make a legal move that keeps their king out of check, or whose king is checkmated, loses.
+                            </p>
+
+                            <strong class="house-rules-h7">Pieces and their movement</strong>
+                            <ul class="house-rules-list">
+                                <li><strong>King</strong> — one square in any direction (cannot move into check).</li>
+                                <li><strong>Queen</strong> — any distance horizontally, vertically or diagonally.</li>
+                                <li><strong>Rook</strong> — any distance horizontally or vertically.</li>
+                                <li><strong>Bishop</strong> — any distance diagonally.</li>
+                                <li><strong>Knight</strong> — &quot;L&quot; shape (2+1), can jump over other pieces.</li>
+                                <li><strong>Pawn</strong> — one square forward (or two on first move), captures diagonally; promotes on the last rank.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Special rules</strong>
+                            <ul class="house-rules-list">
+                                <li><strong>Castling</strong> — king + rook in one move if neither has moved, the king is not in check, and does not pass through an attacked square.</li>
+                                <li><strong>En passant</strong> — capture a pawn that just made a 2-square move as if it had only moved one.</li>
+                                <li><strong>Promotion</strong> — a pawn reaching the 8th rank promotes to queen, rook, bishop or knight (player's choice).</li>
+                                <li><strong>Check</strong> — when the king is under attack; must be blocked or moved.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">End of the game</strong>
+                            <ul class="house-rules-list">
+                                <li><strong>Checkmate</strong> — king in check with no escape → loss.</li>
+                                <li><strong>Stalemate</strong> — no legal move but king not in check → draw.</li>
+                                <li><strong>50-move rule</strong> — 50 moves with no capture or pawn move → either side may claim a draw.</li>
+                                <li><strong>Threefold repetition</strong> — same position appears 3 times on the same side to move → draw.</li>
+                                <li><strong>Time</strong> — running out of time loses, unless the opponent has no mating material (then draw).</li>
+                                <li><strong>Resignation</strong> — either player may resign; the opponent wins.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Time controls (separate ELO each)</strong>
+                            <ul class="house-rules-list">
+                                <li><strong>Classical</strong> — long time (15+ minutes).</li>
+                                <li><strong>MattMester</strong> — own, medium pace.</li>
+                                <li><strong>Blitz</strong> — fast (3–10 minutes).</li>
+                                <li><strong>Bullet</strong> — lightning chess (≤2 minutes).</li>
+                            </ul>
+                        </section>
+
+                        <hr class="house-rules-divider">
+
+                        <section id="hr-conduct" class="house-rules-section">
+                            <h6 class="house-rules-h6">2. Code of conduct</h6>
+                            <p class="text-secondary small mb-3">
+                                In the MattMester community every player can expect respectful tone and fair play.
+                                The rules apply to <strong>everyone</strong> — regular users and administrators alike.
+                            </p>
+
+                            <div class="house-rules-callout house-rules-callout--danger">
+                                <strong>Profanity, offensive language &mdash; 3 strike system (automatic):</strong>
+                                <ul class="house-rules-list mb-0 mt-2">
+                                    <li><strong>1st strike</strong>: <span class="text-warning">automatic 1-day ban</span></li>
+                                    <li><strong>2nd strike</strong>: <span class="text-warning">automatic 10-day ban</span></li>
+                                    <li><strong>3rd strike</strong>: <span class="text-danger">automatic permanent ban</span></li>
+                                </ul>
+                                <small class="d-block mt-2 text-secondary">
+                                    A &quot;strike&quot; is recorded if (a) the profanity filter automatically masks your message, or (b) an admin deletes a reported message of yours. Admins cannot abuse their privileges.
+                                </small>
+                            </div>
+
+                            <div class="house-rules-callout house-rules-callout--danger mt-3">
+                                <strong>IP ban (multi-account protection) &mdash; automatic escalation:</strong>
+                                <ul class="house-rules-list mb-0 mt-2">
+                                    <li>First IP block is 1 day. Repeat offender IP gets a permanent IP ban.</li>
+                                    <li>Loopback (127.x, ::1) is excluded — developer protection.</li>
+                                </ul>
+                            </div>
+
+                            <strong class="house-rules-h7 mt-3">Cheating and abuse</strong>
+                            <ul class="house-rules-list">
+                                <li><strong>Engine / external help</strong> &mdash; permanent ban.</li>
+                                <li><strong>Sandbagging</strong> — intentional losing to manipulate ELO.</li>
+                                <li><strong>Multi-accounting</strong> — playing your own accounts against each other.</li>
+                                <li><strong>Admin power abuse</strong> — super-admin review.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Reporting messages</strong>
+                            <ul class="house-rules-list">
+                                <li>In chat each foreign message has a &quot;<span style="color:#ef4444;">&#9873;</span> Report&quot; button.</li>
+                                <li>Only conversation participants may report; you cannot report your own message.</li>
+                                <li>If a report is irrelevant, you cannot send another for 5 hours.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Spam protection</strong>
+                            <ul class="house-rules-list">
+                                <li>Maximum <strong>5 chat messages / 10 seconds</strong>.</li>
+                                <li>Excess messages are dropped.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Ban &amp; appeal</strong>
+                            <ul class="house-rules-list">
+                                <li>A banned account cannot sign in, but match data is preserved.</li>
+                                <li>For wrongful bans, contact: <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a></li>
+                            </ul>
+                        </section>
+
+                        <hr class="house-rules-divider">
+
+                        <section id="hr-maintenance" class="house-rules-section">
+                            <h6 class="house-rules-h6">3. Maintenance mode</h6>
+                            <p class="text-secondary small mb-3">
+                                The platform occasionally enters maintenance mode for server updates, security fixes or database migrations. A super-admin enables it from the Settings page.
+                            </p>
+
+                            <div class="house-rules-callout" style="background: rgba(255, 140, 26, 0.08); border-left-color: #ff8c1a;">
+                                <strong style="color:#ffd9b3;">What happens when maintenance starts?</strong>
+                                <ul class="house-rules-list mb-0 mt-2">
+                                    <li><strong>30-minute window</strong> — a warning toast appears for every online user.</li>
+                                    <li>Countdown: 30 min → 15 min → 5 min → 1 min remaining.</li>
+                                    <li>All features remain available during the window — finish your match.</li>
+                                    <li>After 30 minutes every non-admin user is redirected to the maintenance page.</li>
+                                    <li><strong>No data loss</strong>: match state is restored after maintenance.</li>
+                                </ul>
+                            </div>
+
+                            <strong class="house-rules-h7">The maintenance page</strong>
+                            <ul class="house-rules-list">
+                                <li>Two buttons: <em>Leave site</em> and <em>Retry</em>.</li>
+                                <li>Pings every 30s — auto-redirects when maintenance ends.</li>
+                                <li>Support email: <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a></li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Admins and maintenance</strong>
+                            <ul class="house-rules-list">
+                                <li>Maintenance mode <strong>does not affect admins</strong>.</li>
+                                <li>Registration can be toggled separately on the Settings page.</li>
+                            </ul>
+                        </section>
+
+                        <hr class="house-rules-divider">
+
+                        <section id="hr-tips" class="house-rules-section">
+                            <h6 class="house-rules-h6">4. Useful info</h6>
+
+                            <strong class="house-rules-h7">ELO system</strong>
+                            <ul class="house-rules-list">
+                                <li>4 separate ratings: <em>Classical, MattMester, Blitz, Bullet</em>. New modes start at 800 or your existing ELO.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Profile picture moderation</strong>
+                            <ul class="house-rules-list">
+                                <li>New uploads are <strong>pending</strong> — only you see them.</li>
+                                <li>Admin <em>Approves</em> or <em>Rejects</em> — updates in real time.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Email verification</strong>
+                            <ul class="house-rules-list">
+                                <li>Some features (e.g. private chat) require a verified email.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Friend system and chat</strong>
+                            <ul class="house-rules-list">
+                                <li>Private chat only with accepted friends.</li>
+                                <li>On block, the conversation is deleted.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Profile deletion &mdash; 24-hour grace</strong>
+                            <ul class="house-rules-list">
+                                <li>Admin-initiated deletion is reversible within 24 hours (soft-delete).</li>
+                                <li>Match data is preserved for opponents.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Chat content filter</strong>
+                            <ul class="house-rules-list">
+                                <li>Messages with blocked words appear masked (***).</li>
+                                <li>Admins can add new blocked words from the moderation panel.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Notifications</strong>
+                            <ul class="house-rules-list">
+                                <li>Bell icon in the top bar: friend requests, messages, admin notices.</li>
+                                <li>Real-time profile-edit refresh.</li>
+                            </ul>
+
+                            <strong class="house-rules-h7">Help / contact</strong>
+                            <p class="mb-0">
+                                Any questions, complaints, bug reports:
+                                <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>
+                            </p>
+                        </section>
+                    </div>
+                    <div class="modal-footer">
+                        <small class="text-secondary me-auto">Version: 2026 &middot; We reserve the right to amend the rules.</small>
+                        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
                     </div>
                 </div>
             </div>
@@ -376,7 +553,6 @@
             #${MODAL_ID} a {
                 color: #d4af37;
             }
-            /* Footer button — opcionalis stilizalas, hogy a meglevo footer-rel jol nezzen ki. */
             .house-rules-footer-link {
                 background: transparent;
                 border: 1px solid rgba(212, 175, 55, 0.45);
@@ -400,11 +576,23 @@
     }
 
     function inject() {
-        if (injected) return;
         if (typeof document === 'undefined' || !document.body) return;
-        if (document.getElementById(MODAL_ID)) {
+        const lang = getCurrentLang();
+
+        // Ha mar injektaltunk de mas nyelven, le kell csereljuk a markup-ot.
+        const existing = document.getElementById(MODAL_ID);
+        if (existing && injectedLang === lang) {
             injected = true;
             return;
+        }
+        if (existing) {
+            // Lecsereljuk a wrappert
+            const oldWrap = document.getElementById(`${MODAL_ID}Wrapper`);
+            if (oldWrap && oldWrap.parentNode) {
+                oldWrap.parentNode.removeChild(oldWrap);
+            } else if (existing.parentNode) {
+                existing.parentNode.removeChild(existing);
+            }
         }
 
         const styleHost = document.createElement('div');
@@ -416,10 +604,11 @@
 
         const wrapper = document.createElement('div');
         wrapper.id = `${MODAL_ID}Wrapper`;
-        wrapper.innerHTML = buildModalMarkup();
+        wrapper.innerHTML = buildModalMarkup(lang);
         document.body.appendChild(wrapper);
 
         injected = true;
+        injectedLang = lang;
     }
 
     function open() {
@@ -441,5 +630,20 @@
         inject();
     }
 
+    // Lang-valtaskor ujra-injektaljuk a modalt (ha mar nyitva volt).
+    try {
+        globalScope.addEventListener('mm:lang-changed', () => {
+            const wasOpen = !!document.querySelector(`#${MODAL_ID}.show`);
+            inject();
+            if (wasOpen && globalScope.bootstrap?.Modal) {
+                const el = document.getElementById(MODAL_ID);
+                if (el) {
+                    const m = globalScope.bootstrap.Modal.getOrCreateInstance(el);
+                    m.show();
+                }
+            }
+        });
+    } catch (_) { /* ignore */ }
+
     globalScope.MattMesterHouseRules = { open, inject };
-})(typeof window !== 'undefined' ? window : this);
+})(window);

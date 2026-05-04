@@ -86,8 +86,8 @@ function connectAdminSocket() {
                     setWsStatus('no_token');
                     if (typeof showToast === 'function') {
                         const msg = reason === 'admin_role_revoked'
-                            ? 'Az admin jogosultságod visszavonásra került.'
-                            : 'Az admin munkamenet lezárult.';
+                            ? tx('Az admin jogosultságod visszavonásra került.', 'Your admin privileges have been revoked.')
+                            : tx('Az admin munkamenet lezárult.', 'The admin session has ended.');
                         showToast(msg, 'danger', 'bi-shield-fill-x');
                     }
                     setTimeout(() => { window.location.href = '/'; }, 800);
@@ -214,7 +214,7 @@ function connectAdminSocket() {
             });
             sock.on('admin:chat:blocklist-updated', (payload = {}) => {
                 if (typeof showToast === 'function' && payload?.added) {
-                    showToast(`Chat blocklist: +${payload.added} szó.`, 'info', 'bi-shield-check');
+                    showToast(tx(`Chat blocklist: +${payload.added} szó.`, `Chat blocklist: +${payload.added} word(s).`), 'info', 'bi-shield-check');
                 }
             });
             // Player-vs-player bejelentes erkezett vagy admin frissitette: ha a
@@ -223,7 +223,7 @@ function connectAdminSocket() {
                 if (state.currentSectionId === 'moderationReports') {
                     window.MattMesterAdminReports?.refresh?.();
                 } else if (typeof showToast === 'function') {
-                    showToast('Új player-bejelentés érkezett.', 'info', 'bi-flag');
+                    showToast(tx('Új player-bejelentés érkezett.', 'New player report received.'), 'info', 'bi-flag');
                 }
             });
             sock.on('admin:reports:updated', () => {
@@ -235,15 +235,15 @@ function connectAdminSocket() {
             sock.on('admin:chat:auto-ban', (payload = {}) => {
                 if (typeof showToast === 'function') {
                     const tier = payload?.banType === 'perma'
-                        ? 'végleges (perma)'
+                        ? tx('végleges (perma)', 'permanent (perma)')
                         : payload?.banType === 'temp_10d'
-                            ? '10 napos'
+                            ? tx('10 napos', '10-day')
                             : payload?.banType === 'temp_1d'
-                                ? '1 napos'
-                                : 'auto';
+                                ? tx('1 napos', '1-day')
+                                : tx('auto', 'auto');
                     const username = payload?.username || `#${payload?.userId || '?'}`;
                     showToast(
-                        `Auto-ban: ${escapeHtml(username)} — ${payload?.strikeCount}. csapás (${tier} tiltás).`,
+                        tx(`Auto-ban: ${escapeHtml(username)} — ${payload?.strikeCount}. csapás (${tier} tiltás).`, `Auto-ban: ${escapeHtml(username)} — strike #${payload?.strikeCount} (${tier} ban).`),
                         'warning',
                         'bi-shield-fill-exclamation'
                     );

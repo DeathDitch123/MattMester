@@ -11,14 +11,19 @@
 
     if (window.MattMesterPlayerActions) return; // egyszer init
 
-    const REPORT_CATEGORIES = [
-        { value: 'cheating',    label: 'Csalás (engine / külső segítség)' },
-        { value: 'toxicity',    label: 'Toxikusság / sértegetés' },
-        { value: 'harassment',  label: 'Zaklatás' },
-        { value: 'spam',        label: 'Spam / reklám' },
-        { value: 'unfair_play', label: 'Fair play megsértése (pl. szándékos vesztés)' },
-        { value: 'other',       label: 'Egyéb' }
-    ];
+    const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
+    function getReportCategories() {
+        return [
+            { value: 'cheating',    label: tx('Csalás (engine / külső segítség)', 'Cheating (engine / outside help)') },
+            { value: 'toxicity',    label: tx('Toxikusság / sértegetés', 'Toxicity / insults') },
+            { value: 'harassment',  label: tx('Zaklatás', 'Harassment') },
+            { value: 'spam',        label: tx('Spam / reklám', 'Spam / advertising') },
+            { value: 'unfair_play', label: tx('Fair play megsértése (pl. szándékos vesztés)', 'Fair play violation (e.g. intentional losing)') },
+            { value: 'other',       label: tx('Egyéb', 'Other') }
+        ];
+    }
+    const REPORT_CATEGORIES = getReportCategories();
 
     let actionModalEl = null;
     let reportModalEl = null;
@@ -80,7 +85,7 @@
                     <div class="modal-header" style="border-bottom:1px solid #30363d;">
                         <h5 class="modal-title d-flex align-items-center gap-2">
                             <i class="bi bi-person-circle"></i>
-                            <span id="playerActionModalTitle">Játékos műveletek</span>
+                            <span id="playerActionModalTitle">${tx('Játékos műveletek', 'Player actions')}</span>
                         </h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
@@ -95,13 +100,13 @@
                         </div>
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-outline-light" id="playerActionViewProfileBtn">
-                                <i class="bi bi-eye me-2"></i>Profil megtekintése
+                                <i class="bi bi-eye me-2"></i>${tx('Profil megtekintése', 'View profile')}
                             </button>
                             <button type="button" class="btn btn-outline-success" id="playerActionFriendBtn">
-                                <i class="bi bi-person-plus me-2"></i>Barátnak jelölés
+                                <i class="bi bi-person-plus me-2"></i>${tx('Barátnak jelölés', 'Add as friend')}
                             </button>
                             <button type="button" class="btn btn-outline-danger" id="playerActionReportBtn">
-                                <i class="bi bi-flag me-2"></i>Jelentés
+                                <i class="bi bi-flag me-2"></i>${tx('Jelentés', 'Report')}
                             </button>
                         </div>
                     </div>
@@ -124,22 +129,22 @@
         modal.id = 'playerReportModal';
         modal.tabIndex = -1;
         modal.setAttribute('aria-hidden', 'true');
-        const optionsHtml = REPORT_CATEGORIES.map((c) => `<option value="${c.value}">${c.label}</option>`).join('');
+        const optionsHtml = getReportCategories().map((c) => `<option value="${c.value}">${c.label}</option>`).join('');
         modal.innerHTML = `
             <div class="modal-dialog modal-dialog-centered">
                 <div class="modal-content" style="background:#161b22;border:1px solid #30363d;color:#e6edf3;">
                     <div class="modal-header" style="border-bottom:1px solid #30363d;">
                         <h5 class="modal-title d-flex align-items-center gap-2">
                             <i class="bi bi-flag-fill text-danger"></i>
-                            <span>Játékos jelentése</span>
+                            <span>${tx('Játékos jelentése', 'Report player')}</span>
                         </h5>
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body">
                         <div class="alert" style="background:rgba(220,53,69,.08);border:1px solid rgba(220,53,69,.3);color:#f0d5d8;">
-                            Bejelentett játékos: <strong id="playerReportTargetName">—</strong>
+                            ${tx('Bejelentett játékos:', 'Reported player:')} <strong id="playerReportTargetName">—</strong>
                         </div>
-                        <label class="form-label" style="color:#e6edf3;">Kategória</label>
+                        <label class="form-label" style="color:#e6edf3;">${tx('Kategória', 'Category')}</label>
                         <select id="playerReportCategory" class="form-select"
                             style="background:#0d1117;color:#e6edf3;border:1px solid #30363d;">
                             ${optionsHtml}
@@ -154,31 +159,29 @@
                             <div class="form-check">
                                 <input class="form-check-input" type="checkbox" id="playerReportAttachGame">
                                 <label class="form-check-label" for="playerReportAttachGame">
-                                    <strong>Bizonyíték:</strong> a legutóbbi közös meccs csatolása
+                                    <strong>${tx('Bizonyíték:', 'Evidence:')}</strong> ${tx('a legutóbbi közös meccs csatolása', 'attach your latest match together')}
                                     <span class="text-secondary small d-block">
-                                        Az admin a PGN-t és a lépéseket átnézheti. Cheating /
-                                        unfair play kategóriánál erősen ajánlott.
+                                        ${tx('Az admin a PGN-t és a lépéseket átnézheti. Cheating / unfair play kategóriánál erősen ajánlott.', 'Admins can review the PGN and moves. Strongly recommended for cheating / unfair-play categories.')}
                                     </span>
                                 </label>
                             </div>
                             <div class="text-info small mt-1" id="playerReportGameInfo" style="display:none;"></div>
                         </div>
 
-                        <label class="form-label mt-3" style="color:#e6edf3;">Részletek (opcionális, max 1000 karakter)</label>
+                        <label class="form-label mt-3" style="color:#e6edf3;">${tx('Részletek (opcionális, max 1000 karakter)', 'Details (optional, max 1000 characters)')}</label>
                         <textarea id="playerReportMessage" rows="4" class="form-control"
                             maxlength="1000"
-                            placeholder="Mi történt? (opcionális, de segít az adminoknak)"
+                            placeholder="${tx('Mi történt? (opcionális, de segít az adminoknak)', 'What happened? (optional, but helps admins)')}"
                             style="background:#0d1117;color:#e6edf3;border:1px solid #30363d;resize:vertical;"></textarea>
                         <div class="form-text" style="color:#8b949e;">
-                            Az adminisztrátorok átnézik a bejelentésedet. Hamis bejelentésért NEM
-                            kapsz büntetést — bátran használd ha valami zavar.
+                            ${tx('Az adminisztrátorok átnézik a bejelentésedet. Hamis bejelentésért NEM kapsz büntetést — bátran használd ha valami zavar.', 'Administrators will review your report. You will NOT be punished for a false report — feel free to use it whenever something bothers you.')}
                         </div>
                         <div id="playerReportFeedback" class="alert mt-3 d-none" role="alert"></div>
                     </div>
                     <div class="modal-footer" style="border-top:1px solid #30363d;">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Mégse</button>
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">${tx('Mégse', 'Cancel')}</button>
                         <button type="button" class="btn btn-danger" id="playerReportSubmitBtn">
-                            <i class="bi bi-send me-2"></i>Bejelentés elküldése
+                            <i class="bi bi-send me-2"></i>${tx('Bejelentés elküldése', 'Send report')}
                         </button>
                     </div>
                 </div>
@@ -232,7 +235,7 @@
             const avatarEl = document.getElementById('playerActionAvatar');
             const friendBtn = document.getElementById('playerActionFriendBtn');
 
-            if (titleEl) titleEl.textContent = currentTarget.username || 'Játékos';
+            if (titleEl) titleEl.textContent = currentTarget.username || tx('Játékos', 'Player');
             if (usernameEl) usernameEl.textContent = currentTarget.username || '—';
             if (avatarEl) avatarEl.src = currentTarget.profileImage;
 
@@ -241,19 +244,19 @@
             if (friendBtn) {
                 if (currentTarget.friendStatus === 'friend') {
                     friendBtn.disabled = true;
-                    friendBtn.innerHTML = '<i class="bi bi-check-circle me-2"></i>Már barátok vagytok';
+                    friendBtn.innerHTML = `<i class="bi bi-check-circle me-2"></i>${tx('Már barátok vagytok', 'Already friends')}`;
                 } else if (currentTarget.friendStatus === 'pending_outgoing') {
                     friendBtn.disabled = true;
-                    friendBtn.innerHTML = '<i class="bi bi-hourglass me-2"></i>Függő barátkérés';
+                    friendBtn.innerHTML = `<i class="bi bi-hourglass me-2"></i>${tx('Függő barátkérés', 'Pending friend request')}`;
                 } else if (currentTarget.friendStatus === 'pending_incoming') {
                     friendBtn.disabled = false;
-                    friendBtn.innerHTML = '<i class="bi bi-check2 me-2"></i>Függő kérés elfogadása';
+                    friendBtn.innerHTML = `<i class="bi bi-check2 me-2"></i>${tx('Függő kérés elfogadása', 'Accept pending request')}`;
                 } else if (currentTarget.friendStatus === 'blocked' || currentTarget.friendStatus === 'blocked_by_them') {
                     friendBtn.disabled = true;
-                    friendBtn.innerHTML = '<i class="bi bi-slash-circle me-2"></i>Nem elérhető';
+                    friendBtn.innerHTML = `<i class="bi bi-slash-circle me-2"></i>${tx('Nem elérhető', 'Not available')}`;
                 } else {
                     friendBtn.disabled = false;
-                    friendBtn.innerHTML = '<i class="bi bi-person-plus me-2"></i>Barátnak jelölés';
+                    friendBtn.innerHTML = `<i class="bi bi-person-plus me-2"></i>${tx('Barátnak jelölés', 'Add as friend')}`;
                 }
             }
 
@@ -266,12 +269,12 @@
 
     function friendStatusLabel(status) {
         switch (status) {
-            case 'friend': return 'Barát';
-            case 'pending_outgoing': return 'Barátkérés elküldve';
-            case 'pending_incoming': return 'Barátkérést küldött neked';
-            case 'blocked': return 'Blokkolva';
-            case 'blocked_by_them': return 'Blokkolt téged';
-            default: return 'Nincs kapcsolat';
+            case 'friend': return tx('Barát', 'Friend');
+            case 'pending_outgoing': return tx('Barátkérés elküldve', 'Friend request sent');
+            case 'pending_incoming': return tx('Barátkérést küldött neked', 'Sent you a friend request');
+            case 'blocked': return tx('Blokkolva', 'Blocked');
+            case 'blocked_by_them': return tx('Blokkolt téged', 'Blocked you');
+            default: return tx('Nincs kapcsolat', 'No connection');
         }
     }
 
@@ -305,17 +308,17 @@
             });
             const data = await response.json().catch(() => ({}));
             if (response.ok && data?.success) {
-                showToast('Barátkérés elküldve.', 'success');
+                showToast(tx('Barátkérés elküldve.', 'Friend request sent.'), 'success');
                 if (friendBtn) {
-                    friendBtn.innerHTML = '<i class="bi bi-hourglass me-2"></i>Függő barátkérés';
+                    friendBtn.innerHTML = `<i class="bi bi-hourglass me-2"></i>${tx('Függő barátkérés', 'Pending friend request')}`;
                 }
                 getActionModalInstance()?.hide();
             } else {
-                showToast(data?.message || 'Nem sikerült elküldeni a barátkérést.', 'danger');
+                showToast(data?.message || tx('Nem sikerült elküldeni a barátkérést.', 'Could not send the friend request.'), 'danger');
                 if (friendBtn) friendBtn.disabled = false;
             }
         } catch (error) {
-            showToast('Hálózati hiba a barátkérés küldésekor.', 'danger');
+            showToast(tx('Hálózati hiba a barátkérés küldésekor.', 'Network error while sending the friend request.'), 'danger');
             if (friendBtn) friendBtn.disabled = false;
         }
     }
@@ -352,7 +355,7 @@
                 if (attachCheckbox) attachCheckbox.checked = true; // cheating default
                 if (gameInfoEl) {
                     gameInfoEl.style.display = '';
-                    gameInfoEl.innerHTML = `<i class="bi bi-controller me-1"></i>Csatolt meccs: <strong>#${currentTarget.lastGameId}</strong>`;
+                    gameInfoEl.innerHTML = `<i class="bi bi-controller me-1"></i>${tx('Csatolt meccs:', 'Attached match:')} <strong>#${currentTarget.lastGameId}</strong>`;
                 }
             } else {
                 attachWrap.classList.add('d-none');
@@ -407,19 +410,19 @@
             const data = await response.json().catch(() => ({}));
 
             if (response.ok && data?.success) {
-                showToast('Bejelentés rögzítve. Köszönjük.', 'success');
+                showToast(tx('Bejelentés rögzítve. Köszönjük.', 'Report submitted. Thank you.'), 'success');
                 getReportModalInstance()?.hide();
             } else {
                 if (feedbackEl) {
                     feedbackEl.className = 'alert alert-danger mt-3';
-                    feedbackEl.textContent = data?.message || 'Nem sikerült elküldeni a bejelentést.';
+                    feedbackEl.textContent = data?.message || tx('Nem sikerült elküldeni a bejelentést.', 'Could not send the report.');
                     feedbackEl.classList.remove('d-none');
                 }
             }
         } catch (error) {
             if (feedbackEl) {
                 feedbackEl.className = 'alert alert-danger mt-3';
-                feedbackEl.textContent = 'Hálózati hiba a bejelentés küldésekor.';
+                feedbackEl.textContent = tx('Hálózati hiba a bejelentés küldésekor.', 'Network error while sending the report.');
                 feedbackEl.classList.remove('d-none');
             }
         } finally {
@@ -433,14 +436,14 @@
         const empty = document.getElementById('recentOpponentsEmpty');
         if (!list) return;
 
-        list.innerHTML = '<div class="text-secondary text-center py-3">Betöltés...</div>';
+        list.innerHTML = `<div class="text-secondary text-center py-3">${tx('Betöltés...', 'Loading...')}</div>`;
         try {
             const response = await fetch('/api/recentOpponents?limit=25', {
                 credentials: 'same-origin'
             });
             const data = await response.json().catch(() => ({}));
             if (!response.ok || !data?.success) {
-                list.innerHTML = `<div class="text-danger text-center py-3">${escapeHtml(data?.message || 'Hiba a lista betöltésekor.')}</div>`;
+                list.innerHTML = `<div class="text-danger text-center py-3">${escapeHtml(data?.message || tx('Hiba a lista betöltésekor.', 'Error loading the list.'))}</div>`;
                 return;
             }
 
@@ -465,7 +468,7 @@
                 });
             });
         } catch (error) {
-            list.innerHTML = '<div class="text-danger text-center py-3">Hálózati hiba.</div>';
+            list.innerHTML = `<div class="text-danger text-center py-3">${tx('Hálózati hiba.', 'Network error.')}</div>`;
         }
     }
 
@@ -475,7 +478,7 @@
         const elo = Number(o.elo || 0);
         const matches = Number(o.matchCount || 1);
         const lastPlayed = o.lastPlayedAt ? formatRelative(o.lastPlayedAt) : '—';
-        const matchesLabel = matches > 1 ? `${matches} meccs` : '1 meccs';
+        const matchesLabel = matches > 1 ? tx(`${matches} meccs`, `${matches} matches`) : tx('1 meccs', '1 match');
         const lastGameId = Number(o.lastGameId || 0);
         return `
             <button type="button"
@@ -506,13 +509,13 @@
         if (Number.isNaN(d.getTime())) return '—';
         const diff = Date.now() - d.getTime();
         const min = Math.floor(diff / 60000);
-        if (min < 1) return 'most';
-        if (min < 60) return `${min} perce`;
+        if (min < 1) return tx('most', 'now');
+        if (min < 60) return tx(`${min} perce`, `${min} min ago`);
         const h = Math.floor(min / 60);
-        if (h < 24) return `${h} órája`;
+        if (h < 24) return tx(`${h} órája`, `${h} h ago`);
         const day = Math.floor(h / 24);
-        if (day < 30) return `${day} napja`;
-        return d.toLocaleDateString('hu-HU');
+        if (day < 30) return tx(`${day} napja`, `${day} d ago`);
+        return window.MattMesterI18n?.formatDate ? window.MattMesterI18n.formatDate(d) : d.toLocaleDateString('hu-HU');
     }
 
     function escapeHtml(value) {

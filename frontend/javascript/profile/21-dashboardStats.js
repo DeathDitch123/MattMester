@@ -17,16 +17,17 @@
 
     // ELO -> rang szoveg + CSS osztaly. A skala 800 alaperteke koruli.
     function eloRank(elo) {
+        const txLocal = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
         const n = Number(elo) || 0;
-        if (n >= 2000) return { label: 'Master',     cls: 'rank-master' };
-        if (n >= 1700) return { label: 'Expert',     cls: 'rank-expert' };
-        if (n >= 1400) return { label: 'Advanced',   cls: 'rank-advanced' };
-        if (n >= 1100) return { label: 'Intermediate', cls: 'rank-intermediate' };
-        return { label: 'Beginner', cls: 'rank-beginner' };
+        if (n >= 2000) return { label: txLocal('Master', 'Master'),     cls: 'rank-master' };
+        if (n >= 1700) return { label: txLocal('Expert', 'Expert'),     cls: 'rank-expert' };
+        if (n >= 1400) return { label: txLocal('Advanced', 'Advanced'),   cls: 'rank-advanced' };
+        if (n >= 1100) return { label: txLocal('Intermediate', 'Intermediate'), cls: 'rank-intermediate' };
+        return { label: txLocal('Beginner', 'Beginner'), cls: 'rank-beginner' };
     }
 
     function applyEloCard(numId, rankId, eloValue) {
-        setText(numId, Number(eloValue || 0).toLocaleString('hu-HU'));
+        setText(numId, Number(eloValue || 0).toLocaleString(window.MattMesterI18n?.get?.() === 'en' ? 'en-US' : 'hu-HU'));
         const rankEl = document.getElementById(rankId);
         if (rankEl) {
             const r = eloRank(eloValue);
@@ -36,11 +37,12 @@
     }
 
     function applyRoleBadge(role) {
+        const txLocal = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
         const badge = document.getElementById('profileDashboardRole');
         if (!badge) return;
         const isAdmin = role === 'admin';
         badge.classList.remove('d-none', 'admin');
-        badge.textContent = isAdmin ? 'Admin' : (role === 'player' ? 'Játékos' : (role || 'Felhasználó'));
+        badge.textContent = isAdmin ? txLocal('Admin', 'Admin') : (role === 'player' ? txLocal('Játékos', 'Player') : (role || txLocal('Felhasználó', 'User')));
         if (isAdmin) badge.classList.add('admin');
     }
 
@@ -58,15 +60,17 @@
     }
 
     function applyImageStatusLabel(status) {
+        const txLocal = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
         const el = document.getElementById('profileImageHeaderStatus');
         if (!el) return;
+        const prefix = txLocal('Profilkép státusz:', 'Profile picture status:');
         const labels = {
-            approved: 'Profilkép státusz: Jóváhagyott',
-            pending:  'Profilkép státusz: Felülvizsgálatra vár',
-            rejected: 'Profilkép státusz: Elutasítva',
-            default:  'Profilkép státusz: Alapértelmezett'
+            approved: `${prefix} ${txLocal('Jóváhagyott', 'Approved')}`,
+            pending:  `${prefix} ${txLocal('Felülvizsgálatra vár', 'Awaiting review')}`,
+            rejected: `${prefix} ${txLocal('Elutasítva', 'Rejected')}`,
+            default:  `${prefix} ${txLocal('Alapértelmezett', 'Default')}`
         };
-        el.textContent = labels[status] || `Profilkép státusz: ${status || 'ismeretlen'}`;
+        el.textContent = labels[status] || `${prefix} ${status || txLocal('ismeretlen', 'unknown')}`;
     }
 
     function applyStats(stats) {
@@ -75,9 +79,9 @@
         const draws = Number(stats?.draws || 0);
         const total = wins + losses + draws;
         const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
-        setText('profileStatWins', wins.toLocaleString('hu-HU'));
-        setText('profileStatLosses', losses.toLocaleString('hu-HU'));
-        setText('profileStatDraws', draws.toLocaleString('hu-HU'));
+        setText('profileStatWins', wins.toLocaleString(window.MattMesterI18n?.get?.() === 'en' ? 'en-US' : 'hu-HU'));
+        setText('profileStatLosses', losses.toLocaleString(window.MattMesterI18n?.get?.() === 'en' ? 'en-US' : 'hu-HU'));
+        setText('profileStatDraws', draws.toLocaleString(window.MattMesterI18n?.get?.() === 'en' ? 'en-US' : 'hu-HU'));
         setText('profileStatWinRate', `${winRate}%`);
     }
 

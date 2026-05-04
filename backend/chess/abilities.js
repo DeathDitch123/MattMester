@@ -73,6 +73,14 @@ function abilityAktival(jatek, szin, key, params) {
     const config = ABILITY_CONFIG[key];
     if (!config) return { success: false, error: 'Ismeretlen képesség.' };
 
+    // Issue #4 — vegtelen idős módban (mattmester ∞) az ido-alapu képességek
+    // értelmetlenek. A `time_pause` 8mp-re felfüggeszti a saját órát — ha
+    // nincs óra (ido === null), nincs mit szüneteltetni. A kliens ezt
+    // szürkén jeleníti meg, a szerver itt explicit elutasít regresszio-vedelemkent.
+    if (key === 'time_pause' && jatek.jatekosok && jatek.jatekosok.white && jatek.jatekosok.white.ido === null) {
+        return { success: false, error: 'Az időlopás végtelen idős módban nem használható.' };
+    }
+
     if (szin !== 'white' && szin !== 'black') {
         return { success: false, error: 'Érvénytelen szín.' };
     }

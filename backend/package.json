@@ -11,7 +11,7 @@
         "dev": "kill-port 3000 && nodemon",
         "dev:raw": "nodemon"
     },
-    "author": "Kardos Krisztián",
+    "author": "Bartha Bálint István, Berta Botond, Tárczy Máté",
     "license": "ISC",
     "devDependencies": {
         "jest": "^29.7.0",

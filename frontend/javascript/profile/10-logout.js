@@ -4,7 +4,7 @@ async function handleLogout() {
         logoutState.submitting = true;
         if (confirmButton) {
             confirmButton.disabled = true;
-            confirmButton.textContent = 'Kijelentkezés...';
+            confirmButton.textContent = tx('Kijelentkezés...', 'Logging out...');
         }
 
         try {
@@ -15,7 +15,7 @@ async function handleLogout() {
             const result = await parseJson(response);
 
             if (!response.ok) {
-                throw new Error(result.message || 'Sikertelen kijelentkezes.');
+                throw new Error(result.message || tx('Sikertelen kijelentkezes.', 'Logout failed.'));
             }
 
             if (socket) {
@@ -29,7 +29,7 @@ async function handleLogout() {
             logoutState.submitting = false;
             if (confirmButton) {
                 confirmButton.disabled = false;
-                confirmButton.textContent = 'Kijelentkezés';
+                confirmButton.textContent = tx('Kijelentkezés', 'Logout');
             }
         }
     }
@@ -55,7 +55,7 @@ function bindLogoutButton() {
             runSafely('logoutModalShow', () => {
                 logoutState.submitting = false;
                 confirmButton.disabled = false;
-                confirmButton.textContent = 'Kijelentkezés';
+                confirmButton.textContent = tx('Kijelentkezés', 'Logout');
             });
         });
 
@@ -63,7 +63,7 @@ function bindLogoutButton() {
             runSafely('logoutModalHidden', () => {
                 logoutState.submitting = false;
                 confirmButton.disabled = false;
-                confirmButton.textContent = 'Kijelentkezés';
+                confirmButton.textContent = tx('Kijelentkezés', 'Logout');
             });
         });
 

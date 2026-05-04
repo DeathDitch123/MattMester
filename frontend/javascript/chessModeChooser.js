@@ -16,6 +16,8 @@
 (function () {
     'use strict';
 
+    const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
     const STATE = {
         modes: null,         // /api/chess/modes válasz
         difficulties: null,  // /api/chess/difficulties válasz
@@ -40,13 +42,13 @@
 
     async function fetchModes() {
         const res = await fetch('/api/chess/modes', { credentials: 'same-origin' });
-        if (!res.ok) throw new Error('Mód-lista letöltése sikertelen.');
+        if (!res.ok) throw new Error(tx('Mód-lista letöltése sikertelen.', 'Failed to load mode list.'));
         return res.json();
     }
 
     async function fetchDifficulties() {
         const res = await fetch('/api/chess/difficulties', { credentials: 'same-origin' });
-        if (!res.ok) throw new Error('Nehézségi szintek letöltése sikertelen.');
+        if (!res.ok) throw new Error(tx('Nehézségi szintek letöltése sikertelen.', 'Failed to load difficulty levels.'));
         const data = await res.json();
         return data.szintek || [];
     }
@@ -65,7 +67,7 @@
         try {
             const res = await fetch('/api/friends/list?status=friend', { credentials: 'same-origin' });
             const data = await res.json();
-            if (!res.ok || !data.success) throw new Error(data.message || 'Barátlista hiba.');
+            if (!res.ok || !data.success) throw new Error(data.message || tx('Barátlista hiba.', 'Friend list error.'));
             return data.data || [];
         } catch (_) {
             return [];
@@ -101,8 +103,8 @@
             // Masik tab elen jatszik → modal blokkol
             if (typeof window.mmAlert === 'function') {
                 await window.mmAlert({
-                    title: 'Már fut egy meccsed',
-                    message: 'Egy másik oldalról már fut egy játék ezzel a felhasználóval. Fejezd be vagy add fel előbb a meccset.'
+                    title: tx('Már fut egy meccsed', 'You already have an active match'),
+                    message: tx('Egy másik oldalról már fut egy játék ezzel a felhasználóval. Fejezd be vagy add fel előbb a meccset.', 'A game is already running for this user from another tab. Finish or resign that match first.')
                 });
             }
             return true;
@@ -145,11 +147,11 @@
         const subtitle = STATE.modalEl?.querySelector('#cmcMainSubtitle');
         if (!subtitle) return;
         if (stepName === 'modes') {
-            subtitle.textContent = 'Válassz játékmódot';
+            subtitle.textContent = tx('Válassz játékmódot', 'Choose a game mode');
         } else {
             const meta = STATE.selectedModeMeta;
             if (meta) {
-                const idoTag = meta.ido === null ? '∞ idő' : `${meta.ido / 60} perc`;
+                const idoTag = meta.ido === null ? tx('∞ idő', '∞ time') : tx(`${meta.ido / 60} perc`, `${meta.ido / 60} min`);
                 subtitle.innerHTML = `<strong style="color:#c9a84c">${escapeHtml(meta.nev)}</strong> <span style="color:#8b949e;font-size:0.85rem">— ${escapeHtml(idoTag)}${meta.rankedAllowed ? '' : ', casual'}</span>`;
             }
         }
@@ -177,14 +179,14 @@
             card.type = 'button';
             card.className = 'cmc-mode-card';
             const idoTag = m.ido === null
-                ? '<span class="cmc-tag cmc-tag-time">∞ idő</span>'
-                : `<span class="cmc-tag cmc-tag-time">${m.ido / 60} perc</span>`;
+                ? `<span class="cmc-tag cmc-tag-time">${tx('∞ idő', '∞ time')}</span>`
+                : `<span class="cmc-tag cmc-tag-time">${tx(`${m.ido / 60} perc`, `${m.ido / 60} min`)}</span>`;
             const abilityTag = m.abilities
-                ? '<span class="cmc-tag cmc-tag-abilities">Képességes</span>'
-                : '<span class="cmc-tag">Klasszikus</span>';
+                ? `<span class="cmc-tag cmc-tag-abilities">${tx('Képességes', 'Abilities')}</span>`
+                : `<span class="cmc-tag">${tx('Klasszikus', 'Classical')}</span>`;
             const rankedTag = m.rankedAllowed
-                ? '<span class="cmc-tag cmc-tag-ranked">Ranked</span>'
-                : '<span class="cmc-tag cmc-tag-casual">Casual</span>';
+                ? `<span class="cmc-tag cmc-tag-ranked">${tx('Ranked', 'Ranked')}</span>`
+                : `<span class="cmc-tag cmc-tag-casual">${tx('Casual', 'Casual')}</span>`;
             card.innerHTML = `
                 <span class="cmc-mode-name">${escapeHtml(m.nev)}</span>
                 <span class="cmc-mode-tags">${abilityTag}${idoTag}${rankedTag}</span>
@@ -210,7 +212,7 @@
             btn.className = 'cmc-diff-btn';
             btn.innerHTML = `
                 <span class="cmc-diff-name">${escapeHtml(s.nev)}</span>
-                <span class="cmc-diff-elo">Ajánlott ELO: ${Number(s.elo) || 0}</span>
+                <span class="cmc-diff-elo">${tx('Ajánlott ELO', 'Suggested ELO')}: ${Number(s.elo) || 0}</span>
             `;
             btn.addEventListener('click', () => {
                 navigateToBotGame(s.szint);
@@ -224,7 +226,7 @@
         if (!wrap) return;
         wrap.innerHTML = '';
         if (!list.length) {
-            wrap.innerHTML = '<p class="cmc-empty">Nincs barátod a listában. Adj hozzá a profilodon.</p>';
+            wrap.innerHTML = `<p class="cmc-empty">${tx('Nincs barátod a listában. Adj hozzá a profilodon.', "You don't have any friends listed. Add some in your profile.")}</p>`;
             return;
         }
         list.forEach((f) => {
@@ -233,7 +235,7 @@
             row.className = 'cmc-friend-btn';
             row.innerHTML = `
                 <span class="cmc-friend-name">${escapeHtml(f.username || '')}</span>
-                <span class="cmc-friend-elo">ELO: ${Number(f.elo) || 0}</span>
+                <span class="cmc-friend-elo">${tx('ELO', 'ELO')}: ${Number(f.elo) || 0}</span>
             `;
             row.addEventListener('click', () => {
                 startFriendInvite(f.id, f.username);
@@ -279,7 +281,7 @@
         // Queue confirm — már be vagyunk a sorban, csak feedback frissítése
         socket.on('chess:queue:joined', () => {
             if (STATE.queueActive) {
-                setFeedback('Sorban — ellenfél keresése folyamatban…', 'info');
+                setFeedback(tx('Sorban — ellenfél keresése folyamatban…', 'In queue — searching for opponent…'), 'info');
             }
         });
         socket.on('chess:queue:left', () => {
@@ -289,14 +291,14 @@
         // Invite válaszok (csak akkor érdekes, ha mi vagyunk a meghívó)
         socket.on('chess:invite:declined', () => {
             if (STATE.inviteTargetUserId) {
-                setFeedback('Az ellenfél elutasította a meghívást.', 'error');
+                setFeedback(tx('Az ellenfél elutasította a meghívást.', 'The opponent declined the invitation.'), 'error');
                 STATE.inviteTargetUserId = 0;
                 showStep('pvp');
             }
         });
         socket.on('chess:invite:expired', (data) => {
             if (STATE.inviteTargetUserId && data && data.targetUserId === STATE.inviteTargetUserId) {
-                setFeedback('A meghívás lejárt — nem reagált 60 másodperc alatt.', 'error');
+                setFeedback(tx('A meghívás lejárt — nem reagált 60 másodperc alatt.', 'The invitation expired — no response within 60 seconds.'), 'error');
                 STATE.inviteTargetUserId = 0;
                 showStep('pvp');
             }
@@ -309,7 +311,7 @@
 
         // Backend hibaüzenetek
         socket.on('chess:error', (data) => {
-            const msg = (data && data.uzenet) || 'Ismeretlen hiba.';
+            const msg = (data && data.uzenet) || tx('Ismeretlen hiba.', 'Unknown error.');
             // First-tab-priority: a "Mar van aktiv ..." backend uzenet azt
             // jelenti, hogy a felhasznalonak van mar aktiv meccse egy masik
             // tab-on. Korabban a frontend automatikusan rejoin-olt (atvitte a
@@ -323,8 +325,8 @@
                 setFeedback('');
                 if (typeof window.mmAlert === 'function') {
                     window.mmAlert({
-                        title: 'Már fut egy meccsed',
-                        message: 'Egy másik oldalról már fut egy játék ezzel a felhasználóval. Fejezd be vagy add fel előbb a meccset.'
+                        title: tx('Már fut egy meccsed', 'You already have an active match'),
+                        message: tx('Egy másik oldalról már fut egy játék ezzel a felhasználóval. Fejezd be vagy add fel előbb a meccset.', 'A game is already running for this user from another tab. Finish or resign that match first.')
                     });
                 }
                 return;
@@ -349,7 +351,7 @@
     async function startQueue() {
         const socket = getSocket();
         if (!socket) {
-            setFeedback('Nincs socket kapcsolat — frissítsd az oldalt.', 'error');
+            setFeedback(tx('Nincs socket kapcsolat — frissítsd az oldalt.', 'No socket connection — please refresh the page.'), 'error');
             return;
         }
         // First-tab-priority: emit ELOTT ellenorizzuk, hogy van-e mar aktiv meccs.
@@ -363,7 +365,7 @@
         if (label && STATE.selectedModeMeta) {
             label.textContent = STATE.selectedModeMeta.nev;
         }
-        setFeedback('Csatlakozás a sorhoz…', 'info');
+        setFeedback(tx('Csatlakozás a sorhoz…', 'Joining queue…'), 'info');
         socket.emit('chess:queue:join', {
             mode: STATE.selectedMode,
             ranked: STATE.selectedRanked
@@ -387,7 +389,7 @@
     async function startFriendInvite(targetUserId, targetName) {
         const socket = getSocket();
         if (!socket) {
-            setFeedback('Nincs socket kapcsolat — frissítsd az oldalt.', 'error');
+            setFeedback(tx('Nincs socket kapcsolat — frissítsd az oldalt.', 'No socket connection — please refresh the page.'), 'error');
             return;
         }
         // First-tab-priority: invite emit ELOTT ellenorizzuk, hogy van-e mar
@@ -402,7 +404,7 @@
         if (nameEl) nameEl.textContent = STATE.inviteTargetName;
         const modeEl = STATE.modalEl?.querySelector('#cmcInviteModeName');
         if (modeEl && STATE.selectedModeMeta) modeEl.textContent = STATE.selectedModeMeta.nev;
-        setFeedback('Meghívás elküldve — várakozás a válaszra…', 'info');
+        setFeedback(tx('Meghívás elküldve — várakozás a válaszra…', 'Invitation sent — waiting for reply…'), 'info');
         socket.emit('chess:invite', {
             targetUserId: STATE.inviteTargetUserId,
             mode: STATE.selectedMode,
@@ -474,58 +476,58 @@
 <div id="chessModeChooserModal" class="cmc-modal" role="dialog" aria-modal="true" aria-labelledby="cmcTitle">
     <div class="cmc-overlay" data-action="cmc-close"></div>
     <div class="cmc-content">
-        <button type="button" class="cmc-close" data-action="cmc-close" aria-label="Bezárás">×</button>
-        <h2 id="cmcTitle" class="cmc-title"><i class="bi bi-king-fill"></i> Új meccs</h2>
-        <p id="cmcMainSubtitle" class="cmc-subtitle">Válassz játékmódot</p>
+        <button type="button" class="cmc-close" data-action="cmc-close" aria-label="Bezárás" data-i18n-attr="aria-label:common.close">×</button>
+        <h2 id="cmcTitle" class="cmc-title"><i class="bi bi-king-fill"></i> <span data-i18n="cmc.new_match">Új meccs</span></h2>
+        <p id="cmcMainSubtitle" class="cmc-subtitle" data-i18n="cmc.choose_mode">Válassz játékmódot</p>
         <div class="cmc-step" data-step="modes">
             <div id="cmcModeList" class="cmc-mode-list"></div>
         </div>
         <div class="cmc-step hidden" data-step="opponent">
             <button type="button" class="cmc-action-btn" id="cmcBtnBot">
-                <span class="cmc-icon">🤖</span><span class="cmc-label">Robot ellen</span>
+                <span class="cmc-icon">🤖</span><span class="cmc-label" data-i18n="cmc.vs_bot">Robot ellen</span>
             </button>
             <div style="height:0.5rem"></div>
             <button type="button" class="cmc-action-btn" id="cmcBtnPvp">
-                <span class="cmc-icon">👥</span><span class="cmc-label">Játékos ellen</span>
+                <span class="cmc-icon">👥</span><span class="cmc-label" data-i18n="cmc.vs_player">Játékos ellen</span>
             </button>
-            <button type="button" class="cmc-back" data-back="modes">← Vissza</button>
+            <button type="button" class="cmc-back" data-back="modes" data-i18n="cmc.back">← Vissza</button>
         </div>
         <div class="cmc-step hidden" data-step="botDifficulty">
-            <p class="cmc-section-hint">Robot nehézség <small style="color:#8b949e">(casual, ELO nem frissül)</small></p>
+            <p class="cmc-section-hint"><span data-i18n="cmc.bot_difficulty">Robot nehézség</span> <small style="color:#8b949e" data-i18n="cmc.casual_no_elo">(casual, ELO nem frissül)</small></p>
             <div id="cmcDifficultyList"></div>
-            <button type="button" class="cmc-back" data-back="opponent">← Vissza</button>
+            <button type="button" class="cmc-back" data-back="opponent" data-i18n="cmc.back">← Vissza</button>
         </div>
         <div class="cmc-step hidden" data-step="pvp">
             <div class="cmc-ranked">
-                <span><span class="cmc-ranked-label">Ranked</span><br><span class="cmc-ranked-hint">ELO frissül (csak időkorlátos módoknál)</span></span>
+                <span><span class="cmc-ranked-label" data-i18n="cmc.ranked">Ranked</span><br><span class="cmc-ranked-hint" data-i18n="cmc.ranked_hint">ELO frissül (csak időkorlátos módoknál)</span></span>
                 <label class="form-check form-switch m-0"><input class="form-check-input" type="checkbox" id="cmcRankedToggle" checked></label>
             </div>
             <button type="button" class="cmc-action-btn" id="cmcBtnPvpFriend">
-                <span class="cmc-icon">👤</span><span class="cmc-label">Barát meghívása</span>
+                <span class="cmc-icon">👤</span><span class="cmc-label" data-i18n="cmc.invite_friend">Barát meghívása</span>
             </button>
             <div style="height:0.5rem"></div>
             <button type="button" class="cmc-action-btn" id="cmcBtnPvpRandom">
-                <span class="cmc-icon">🎲</span><span class="cmc-label">Random ellenfél</span>
+                <span class="cmc-icon">🎲</span><span class="cmc-label" data-i18n="cmc.random_opp">Random ellenfél</span>
             </button>
-            <button type="button" class="cmc-back" data-back="opponent">← Vissza</button>
+            <button type="button" class="cmc-back" data-back="opponent" data-i18n="cmc.back">← Vissza</button>
         </div>
         <div class="cmc-step hidden" data-step="friends">
-            <p class="cmc-section-hint">Válassz ellenfelet</p>
+            <p class="cmc-section-hint" data-i18n="cmc.choose_opp">Válassz ellenfelet</p>
             <div id="cmcFriendList"></div>
-            <button type="button" class="cmc-back" data-back="pvp">← Vissza</button>
+            <button type="button" class="cmc-back" data-back="pvp" data-i18n="cmc.back">← Vissza</button>
         </div>
         <div class="cmc-step hidden" data-step="queue">
-            <p class="cmc-section-hint">Ellenfél keresése — <strong id="cmcQueueModeName">…</strong></p>
+            <p class="cmc-section-hint"><span data-i18n="cmc.searching_opp">Ellenfél keresése</span> — <strong id="cmcQueueModeName">…</strong></p>
             <div class="cmc-spinner-wrap"><div class="cmc-spinner"></div></div>
-            <button type="button" class="cmc-back" id="cmcBtnQueueCancel">Mégsem</button>
+            <button type="button" class="cmc-back" id="cmcBtnQueueCancel" data-i18n="common.cancel">Mégsem</button>
         </div>
         <div class="cmc-step hidden" data-step="inviteWaiting">
-            <p class="cmc-section-hint">Várakozás — <strong id="cmcInviteTargetName">…</strong> válaszára <small style="color:#8b949e">(<span id="cmcInviteModeName">…</span>)</small></p>
+            <p class="cmc-section-hint"><span data-i18n="cmc.waiting">Várakozás</span> — <strong id="cmcInviteTargetName">…</strong> <span data-i18n="cmc.for_response">válaszára</span> <small style="color:#8b949e">(<span id="cmcInviteModeName">…</span>)</small></p>
             <div class="cmc-spinner-wrap"><div class="cmc-spinner"></div></div>
-            <button type="button" class="cmc-back" id="cmcBtnInviteCancel">Meghívás visszavonása</button>
+            <button type="button" class="cmc-back" id="cmcBtnInviteCancel" data-i18n="cmc.cancel_invite">Meghívás visszavonása</button>
         </div>
         <div id="cmcFeedback" class="cmc-feedback" aria-live="polite"></div>
-        <div class="cmc-elo-display">A te ELO-d: <strong id="cmcEloValue">800</strong></div>
+        <div class="cmc-elo-display"><span data-i18n="cmc.your_elo">A te ELO-d</span>: <strong id="cmcEloValue">800</strong></div>
     </div>
 </div>`;
 
@@ -563,7 +565,7 @@
             try {
                 STATE.modes = await fetchModes();
             } catch (e) {
-                setFeedback('Nem sikerült betölteni a játékmódokat. Próbáld újra.', 'error');
+                setFeedback(tx('Nem sikerült betölteni a játékmódokat. Próbáld újra.', 'Failed to load game modes. Please try again.'), 'error');
                 return;
             }
         }
@@ -620,7 +622,7 @@
                 try {
                     STATE.difficulties = await fetchDifficulties();
                 } catch (e) {
-                    setFeedback('Nem sikerült betölteni a nehézségeket.', 'error');
+                    setFeedback(tx('Nem sikerült betölteni a nehézségeket.', 'Failed to load difficulties.'), 'error');
                     return;
                 }
             }
@@ -652,7 +654,7 @@
         STATE.modalEl.querySelector('#cmcBtnPvpFriend')?.addEventListener('click', async () => {
             showStep('friends');
             const wrap = STATE.modalEl.querySelector('#cmcFriendList');
-            if (wrap) wrap.innerHTML = '<p class="cmc-empty">Betöltés…</p>';
+            if (wrap) wrap.innerHTML = `<p class="cmc-empty">${tx('Betöltés…', 'Loading…')}</p>`;
             const friends = await fetchFriends();
             renderFriends(friends);
         });

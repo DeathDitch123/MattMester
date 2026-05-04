@@ -21,7 +21,7 @@ function renderAdminUserRow(user) {
             const statusCell = renderUserStatusCell(user);
             const lastActiveSource = user.online ? (user.presenceLastSeenAt || user.lastActive) : user.lastActive;
             const lastActiveCell = lastActiveSource
-                ? `<span class="${user.online ? 'text-success fw-semibold' : 'text-secondary'}" title="${escapeHtml(new Date(lastActiveSource).toLocaleString('hu-HU'))}">${escapeHtml(user.online ? 'Most' : formatRelative(lastActiveSource))}</span>`
+                ? `<span class="${user.online ? 'text-success fw-semibold' : 'text-secondary'}" title="${escapeHtml(window.MattMesterI18n?.formatDateTime ? window.MattMesterI18n.formatDateTime(lastActiveSource) : new Date(lastActiveSource).toLocaleString('hu-HU'))}">${escapeHtml(user.online ? tx('Most', 'Now') : formatRelative(lastActiveSource))}</span>`
                 : '<span class="text-muted">—</span>';
             const joinedCell = `<span class="text-secondary">${escapeHtml(formatDateOnly(user.createdAt))}</span>`;
 
@@ -29,20 +29,20 @@ function renderAdminUserRow(user) {
             let actionItems;
             if (isPendingDeletion) {
                 actionItems = [
-                    { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
-                    { icon: 'bi-arrow-counterclockwise', variant: 'success', title: 'Visszaállít (törlés visszavonása)', onclick: `restoreUserDeletion(${user.id})` }
+                    { icon: 'bi-eye', variant: 'light', title: tx('Megtekintés', 'View'), onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-arrow-counterclockwise', variant: 'success', title: tx('Visszaállít (törlés visszavonása)', 'Restore (cancel deletion)'), onclick: `restoreUserDeletion(${user.id})` }
                 ];
             } else if (banned) {
                 actionItems = [
-                    { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
-                    { icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés', onclick: `editAdminUser(${user.id})` },
-                    { icon: 'bi-check-circle', variant: 'success', title: 'Tiltás kezelése', onclick: `banAdminUser(${user.id})` }
+                    { icon: 'bi-eye', variant: 'light', title: tx('Megtekintés', 'View'), onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-pencil', variant: 'gold', title: tx('Szerkesztés', 'Edit'), onclick: `editAdminUser(${user.id})` },
+                    { icon: 'bi-check-circle', variant: 'success', title: tx('Tiltás kezelése', 'Manage ban'), onclick: `banAdminUser(${user.id})` }
                 ];
             } else {
                 actionItems = [
-                    { icon: 'bi-eye', variant: 'light', title: 'Megtekintés', onclick: `openAdminUserView(${user.id})` },
-                    { icon: 'bi-pencil', variant: 'gold', title: 'Szerkesztés', onclick: `editAdminUser(${user.id})` },
-                    { icon: 'bi-ban', variant: 'danger', title: 'Tiltás (kritikus)', onclick: `banAdminUser(${user.id})` }
+                    { icon: 'bi-eye', variant: 'light', title: tx('Megtekintés', 'View'), onclick: `openAdminUserView(${user.id})` },
+                    { icon: 'bi-pencil', variant: 'gold', title: tx('Szerkesztés', 'Edit'), onclick: `editAdminUser(${user.id})` },
+                    { icon: 'bi-ban', variant: 'danger', title: tx('Tiltás (kritikus)', 'Ban (critical)'), onclick: `banAdminUser(${user.id})` }
                 ];
             }
 
@@ -70,10 +70,10 @@ function renderAdminUsersEmptyRow(reason) {
     let html = '';
     try {
         const messages = {
-            no_token: { icon: 'bi-shield-slash', title: 'Nincs admin token', sub: 'A lista betöltéséhez aktív admin step-up token szükséges.' },
-            loading: { icon: 'bi-arrow-repeat', title: 'Felhasználói lista betöltése…', sub: '' },
-            error: { icon: 'bi-exclamation-triangle', title: 'Hiba a lista betöltésénél', sub: state.users.error || 'Ismeretlen hiba.' },
-            empty: { icon: 'bi-inbox', title: 'Nincs találat', sub: 'Próbáld törölni vagy módosítani a szűrőket.' }
+            no_token: { icon: 'bi-shield-slash', title: tx('Nincs admin token', 'No admin token'), sub: tx('A lista betöltéséhez aktív admin step-up token szükséges.', 'An active admin step-up token is required to load the list.') },
+            loading: { icon: 'bi-arrow-repeat', title: tx('Felhasználói lista betöltése…', 'Loading user list…'), sub: '' },
+            error: { icon: 'bi-exclamation-triangle', title: tx('Hiba a lista betöltésénél', 'Error loading list'), sub: state.users.error || tx('Ismeretlen hiba.', 'Unknown error.') },
+            empty: { icon: 'bi-inbox', title: tx('Nincs találat', 'No results'), sub: tx('Próbáld törölni vagy módosítani a szűrőket.', 'Try clearing or adjusting the filters.') }
         };
         const m = messages[reason] || messages.empty;
         html = `
@@ -87,7 +87,7 @@ function renderAdminUsersEmptyRow(reason) {
         `;
     } catch (err) {
         console.error('renderAdminUsersEmptyRow hiba:', err);
-        html = '<tr><td colspan="7" class="text-center py-4">Hiba.</td></tr>';
+        html = `<tr><td colspan="7" class="text-center py-4">${tx('Hiba.', 'Error.')}</td></tr>`;
     }
     return html;
 }
@@ -200,14 +200,14 @@ function updateAdminUsersMeta(total, visibleCount) {
         const countEl = document.getElementById('adminUsersCount');
         const timeEl = document.getElementById('adminUsersUpdatedAt');
         const footerEl = document.getElementById('adminUsersFooterText');
-        if (countEl) countEl.textContent = `${total} felhasználó`;
+        if (countEl) countEl.textContent = `${total} ${tx('felhasználó', 'users')}`;
         if (timeEl) {
             if (state.users.loading) {
-                timeEl.textContent = 'frissítés…';
+                timeEl.textContent = tx('frissítés…', 'refreshing…');
             } else if (state.users.error) {
-                timeEl.textContent = 'hiba';
+                timeEl.textContent = tx('hiba', 'error');
             } else if (state.users.loadedAt) {
-                timeEl.textContent = `frissítve: ${formatRelative(state.users.loadedAt)}`;
+                timeEl.textContent = `${tx('frissítve', 'updated')}: ${formatRelative(state.users.loadedAt)}`;
             } else {
                 timeEl.textContent = '—';
             }
@@ -216,9 +216,9 @@ function updateAdminUsersMeta(total, visibleCount) {
             if (total === 0) {
                 footerEl.textContent = '—';
             } else if (visibleCount >= total) {
-                footerEl.textContent = `Mind a ${total} felhasználó megjelenítve.`;
+                footerEl.textContent = tx(`Mind a ${total} felhasználó megjelenítve.`, `All ${total} users shown.`);
             } else {
-                footerEl.textContent = `${visibleCount} / ${total} felhasználó megjelenítve — görgess lefelé a továbbiakhoz.`;
+                footerEl.textContent = tx(`${visibleCount} / ${total} felhasználó megjelenítve — görgess lefelé a továbbiakhoz.`, `${visibleCount} / ${total} users shown — scroll down for more.`);
             }
         }
     } catch (err) {
@@ -375,11 +375,11 @@ function selectAdminUser(userId, nav) {
                     state.selectedUser = refreshed;
                     if (nav) showSection(nav);
                 } else {
-                    showToast('A felhasználó nem található.', 'warning', 'bi-exclamation-triangle');
+                    showToast(tx('A felhasználó nem található.', 'User not found.'), 'warning', 'bi-exclamation-triangle');
                 }
             }).catch((err) => {
                 console.warn('selectAdminUser betoltesi hiba:', err);
-                showToast('Nem sikerült betölteni a felhasználói listát.', 'danger', 'bi-x-circle');
+                showToast(tx('Nem sikerült betölteni a felhasználói listát.', 'Failed to load the user list.'), 'danger', 'bi-x-circle');
             });
             return false;
         }
@@ -389,7 +389,7 @@ function selectAdminUser(userId, nav) {
             if (nav) showSection(nav);
             ok = true;
         } else {
-            showToast('A felhasználó nem található.', 'warning', 'bi-exclamation-triangle');
+            showToast(tx('A felhasználó nem található.', 'User not found.'), 'warning', 'bi-exclamation-triangle');
         }
     } catch (err) {
         console.error('selectAdminUser hiba:', err);

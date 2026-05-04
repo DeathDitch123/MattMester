@@ -2,7 +2,7 @@ function handleProfileSettings(sessionInfo) {
     try {
         const user = sessionInfo?.user || sessionInfo?.data?.user || null;
         if (!user) {
-            throw new Error('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.');
+            throw new Error(tx('Nincs bejelentkezett felhasznalo a statok megjelenitesehez.', 'No logged-in user to display stats for.'));
         }
         const settingsUsername = document.getElementById('settingsUsername');
         const settingsEmail = document.getElementById('settingsEmail');
@@ -43,7 +43,7 @@ function bindProfileSettingsEvents() {
     try {
         const elements = getProfileSettingsElements();
         if (!elements.form) {
-            throw new Error('Hianyzik a profile settings form.');
+            throw new Error(tx('Hianyzik a profile settings form.', 'Missing profile settings form.'));
         }
 
         const onInputChange = () => {
@@ -65,7 +65,7 @@ function bindProfileSettingsEvents() {
 
                 const validation = validateProfileSettingsForm();
                 if (!validation.isValid) {
-                    throw new Error('Ervenytelen profile settings form.');
+                    throw new Error(tx('Ervenytelen profile settings form.', 'Invalid profile settings form.'));
                 }
 
                 profileSettingsState.pendingPayload = validation.payload;
@@ -165,14 +165,14 @@ function validatePasswordByPolicy(passwordInput, {
 
     if (!password) {
         if (required) {
-            error = 'A jelenlegi jelszó kötelező.';
+            error = tx('A jelenlegi jelszó kötelező.', 'The current password is required.');
         }
     } else if (!allowBackslash && password.includes('\\')) {
-        error = 'A jelszó nem megengedett karaktert tartalmaz.';
+        error = tx('A jelszó nem megengedett karaktert tartalmaz.', 'The password contains a disallowed character.');
     } else if (password.length < minLength) {
-        error = `A jelszónak legalább ${minLength} karakter hosszú kell legyen.`;
+        error = tx(`A jelszónak legalább ${minLength} karakter hosszú kell legyen.`, `The password must be at least ${minLength} characters long.`);
     } else if (enforceComplexity && !PASSWORD_REGEX.test(password)) {
-        error = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
+        error = tx('A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.', 'The password must contain an uppercase letter, lowercase letter, and a number.');
     }
 
     return {
@@ -225,21 +225,21 @@ function validateProfileSettingsForm() {
     const hasUsernameChanged = values.username !== profileSettingsState.initial.username;
     const hasEmailChanged = values.email !== profileSettingsState.initial.email;
     if (!values.username) {
-        fieldErrors.username = 'A felhasználónév kötelező.';
+        fieldErrors.username = tx('A felhasználónév kötelező.', 'The username is required.');
     } else if (values.username.length < 3 || values.username.length > 50) {
-        fieldErrors.username = 'A felhasználónévnek 3 és 50 karakter között kell lennie.';
+        fieldErrors.username = tx('A felhasználónévnek 3 és 50 karakter között kell lennie.', 'The username must be between 3 and 50 characters.');
     } else if (!USERNAME_REGEX.test(values.username)) {
-        fieldErrors.username = 'A felhasználónév formátuma érvénytelen.';
+        fieldErrors.username = tx('A felhasználónév formátuma érvénytelen.', 'The username format is invalid.');
     }
 
     if (!values.email) {
-        fieldErrors.email = 'Az e-mail cím kötelező.';
+        fieldErrors.email = tx('Az e-mail cím kötelező.', 'The email address is required.');
     } else if (!EMAIL_REGEX.test(values.email)) {
-        fieldErrors.email = 'Érvénytelen e-mail formátum.';
+        fieldErrors.email = tx('Érvénytelen e-mail formátum.', 'Invalid email format.');
     }
 
     if (values.confirmPassword && !values.newPassword) {
-        fieldErrors.newPassword = 'Adj meg új jelszót is.';
+        fieldErrors.newPassword = tx('Adj meg új jelszót is.', 'Please also provide a new password.');
     }
 
     if (values.newPassword) {
@@ -254,9 +254,9 @@ function validateProfileSettingsForm() {
 
     if (values.newPassword || values.confirmPassword) {
         if (!values.confirmPassword) {
-            fieldErrors.confirmPassword = 'Erősítsd meg az új jelszót.';
+            fieldErrors.confirmPassword = tx('Erősítsd meg az új jelszót.', 'Please confirm the new password.');
         } else if (values.newPassword !== values.confirmPassword) {
-            fieldErrors.confirmPassword = 'A két jelszó nem egyezik.';
+            fieldErrors.confirmPassword = tx('A két jelszó nem egyezik.', 'The two passwords do not match.');
         }
     }
 
@@ -268,28 +268,28 @@ function validateProfileSettingsForm() {
         elements.usernameInput,
         elements.usernameFeedback,
         fieldErrors.username ? 'error' : (hasUsernameChanged ? 'success' : 'neutral'),
-        fieldErrors.username || (hasUsernameChanged ? 'A felhasználónév módosításra kerül.' : 'Nincs változás.')
+        fieldErrors.username || (hasUsernameChanged ? tx('A felhasználónév módosításra kerül.', 'The username will be updated.') : tx('Nincs változás.', 'No change.'))
     );
 
     applyInputFeedback(
         elements.emailInput,
         elements.emailFeedback,
         fieldErrors.email ? 'error' : (hasEmailChanged ? 'success' : 'neutral'),
-        fieldErrors.email || (hasEmailChanged ? 'Az e-mail cím módosításra kerül.' : 'Nincs változás.')
+        fieldErrors.email || (hasEmailChanged ? tx('Az e-mail cím módosításra kerül.', 'The email address will be updated.') : tx('Nincs változás.', 'No change.'))
     );
 
     applyInputFeedback(
         elements.newPasswordInput,
         elements.newPasswordFeedback,
         fieldErrors.newPassword ? 'error' : (values.newPassword ? 'success' : 'neutral'),
-        fieldErrors.newPassword || (values.newPassword ? 'Az új jelszó formátuma megfelelő.' : 'A jelszó nem változik.')
+        fieldErrors.newPassword || (values.newPassword ? tx('Az új jelszó formátuma megfelelő.', 'The new password format is valid.') : tx('A jelszó nem változik.', 'The password will not change.'))
     );
 
     applyInputFeedback(
         elements.confirmPasswordInput,
         elements.confirmPasswordFeedback,
         fieldErrors.confirmPassword ? 'error' : (values.confirmPassword ? 'success' : 'neutral'),
-        fieldErrors.confirmPassword || (values.confirmPassword ? 'A jelszó megerősítése rendben.' : 'Megerősítés nem szükséges.')
+        fieldErrors.confirmPassword || (values.confirmPassword ? tx('A jelszó megerősítése rendben.', 'Password confirmation is OK.') : tx('Megerősítés nem szükséges.', 'No confirmation needed.'))
     );
 
     if (elements.saveButton) {
@@ -298,22 +298,22 @@ function validateProfileSettingsForm() {
 
     if (hasFieldError) {
         const firstError = Object.values(fieldErrors).find(Boolean);
-        setProfileSettingsMessage('danger', firstError || 'Ellenőrizd a mezőket.');
+        setProfileSettingsMessage('danger', firstError || tx('Ellenőrizd a mezőket.', 'Please check the fields.'));
     } else if (!hasAnyChange) {
-        setProfileSettingsMessage('warning', 'Nincs változás. Módosíts legalább egy mezőt a mentéshez.');
+        setProfileSettingsMessage('warning', tx('Nincs változás. Módosíts legalább egy mezőt a mentéshez.', 'No change. Modify at least one field to save.'));
     } else {
-        setProfileSettingsMessage('success', 'Minden rendben, mentésre kész.');
+        setProfileSettingsMessage('success', tx('Minden rendben, mentésre kész.', 'All good, ready to save.'));
     }
 
     const changedFieldLabels = [];
     if (hasUsernameChanged) {
-        changedFieldLabels.push(`Felhasználónév: ${profileSettingsState.initial.username} -> ${values.username}`);
+        changedFieldLabels.push(`${tx('Felhasználónév:', 'Username:')} ${profileSettingsState.initial.username} -> ${values.username}`);
     }
     if (hasEmailChanged) {
-        changedFieldLabels.push(`Email: ${profileSettingsState.initial.email} -> ${values.email}`);
+        changedFieldLabels.push(`${tx('Email:', 'Email:')} ${profileSettingsState.initial.email} -> ${values.email}`);
     }
     if (values.newPassword) {
-        changedFieldLabels.push('Jelszó frissítésre kerül.');
+        changedFieldLabels.push(tx('Jelszó frissítésre kerül.', 'The password will be updated.'));
     }
 
     const payload = isValid ? {
@@ -337,11 +337,11 @@ function resetProfileSettingsConfirmState() {
 
     if (elements.confirmSaveButton) {
         elements.confirmSaveButton.disabled = true;
-        elements.confirmSaveButton.textContent = `Mentes (${PROFILE_SETTINGS_CONFIRM_SECONDS}s)`;
+        elements.confirmSaveButton.textContent = `${tx('Mentés', 'Save')} (${PROFILE_SETTINGS_CONFIRM_SECONDS}s)`;
     }
 
     if (elements.confirmHint) {
-        elements.confirmHint.textContent = `A mentés gomb ${PROFILE_SETTINGS_CONFIRM_SECONDS} másodperc múlva lesz aktív.`;
+        elements.confirmHint.textContent = `${tx('A mentés gomb', 'The save button')} ${PROFILE_SETTINGS_CONFIRM_SECONDS} ${tx('másodperc múlva lesz aktív.', 'seconds will activate.')}`;
     }
 
     if (elements.modalCurrentPasswordInput) {
@@ -373,7 +373,7 @@ function openProfileSettingsConfirmModal(changedFieldLabels) {
         }
 
         if (profileSettingsState.requiresPasswordCheck) {
-            setModalCurrentPasswordFeedback('neutral', 'A mentéshez add meg a jelenlegi jelszavad.');
+            setModalCurrentPasswordFeedback('neutral', tx('A mentéshez add meg a jelenlegi jelszavad.', 'Enter your current password to save.'));
         }
 
         const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
@@ -384,18 +384,18 @@ function openProfileSettingsConfirmModal(changedFieldLabels) {
 
             if (elements.confirmSaveButton) {
                 if (profileSettingsState.countdownLeft > 0) {
-                    elements.confirmSaveButton.textContent = `Mentes (${profileSettingsState.countdownLeft}s)`;
+                    elements.confirmSaveButton.textContent = `${tx('Mentés', 'Save')} (${profileSettingsState.countdownLeft}s)`;
                 } else {
                     profileSettingsState.countdownFinished = true;
-                    elements.confirmSaveButton.textContent = 'Mentes';
+                    elements.confirmSaveButton.textContent = tx('Mentés', 'Save');
                     updateModalSaveButtonState();
                 }
             }
 
             if (elements.confirmHint) {
                 elements.confirmHint.textContent = profileSettingsState.countdownLeft > 0
-                    ? `A mentés gomb ${profileSettingsState.countdownLeft} másodperc múlva lesz aktív.`
-                    : 'A mentés gomb most már aktív.';
+                    ? `${tx('A mentés gomb', 'The save button')} ${profileSettingsState.countdownLeft} ${tx('másodperc múlva lesz aktív.', 'seconds will activate.')}`
+                    : tx('A mentés gomb most már aktív.', 'The save button is now active.');
             }
 
             if (profileSettingsState.countdownLeft <= 0) {
@@ -449,7 +449,7 @@ function verifyModalCurrentPassword() {
             setModalCurrentPasswordFeedback('error', passwordValidation.error);
         } else {
             profileSettingsState.passwordVerified = true;
-            setModalCurrentPasswordFeedback('success', 'A jelszó formátuma megfelelő.');
+            setModalCurrentPasswordFeedback('success', tx('A jelszó formátuma megfelelő.', 'The password format is valid.'));
         }
 
         updateModalSaveButtonState();
@@ -460,7 +460,7 @@ async function submitProfileSettingsChanges() {
     const elements = getProfileSettingsElements();
     if (profileSettingsState.pendingPayload && elements.confirmSaveButton) {
         elements.confirmSaveButton.disabled = true;
-        elements.confirmSaveButton.textContent = 'Mentés folyamatban...';
+        elements.confirmSaveButton.textContent = tx('Mentés folyamatban...', 'Saving...');
 
         try {
             const response = await fetch('/api/profile/settings', {
@@ -476,7 +476,7 @@ async function submitProfileSettingsChanges() {
             if (!response.ok || !result.success) {
                 handleEmailNotVerifiedCta(result);
                 if (result?.code === 'PASSWORD_SAME_AS_OLD') {
-                    const sameAsOldMessage = 'Az új jelszó nem lehet ugyanaz, mint a jelenlegi jelszó!';
+                    const sameAsOldMessage = tx('Az új jelszó nem lehet ugyanaz, mint a jelenlegi jelszó!', 'The new password cannot be the same as the current password!');
                     applyInputFeedback(
                         elements.newPasswordInput,
                         elements.newPasswordFeedback,
@@ -487,7 +487,7 @@ async function submitProfileSettingsChanges() {
                         elements.confirmPasswordInput,
                         elements.confirmPasswordFeedback,
                         'error',
-                        'Adj meg egy másik jelszót.'
+                        tx('Adj meg egy másik jelszót.', 'Please enter a different password.')
                     );
                     if (elements.confirmModal) {
                         const modal = bootstrap.Modal.getOrCreateInstance(elements.confirmModal);
@@ -497,15 +497,15 @@ async function submitProfileSettingsChanges() {
                         elements.newPasswordInput.focus();
                     }
                 }
-                throw new Error(result.message || 'Nem sikerült menteni a profil beállításokat.');
+                throw new Error(result.message || tx('Nem sikerült menteni a profil beállításokat.', 'Failed to save the profile settings.'));
             }
 
-            setProfileSettingsMessage('success', result.message || 'A profil beállítások sikeresen frissültek.');
+            setProfileSettingsMessage('success', result.message || tx('A profil beállítások sikeresen frissültek.', 'Profile settings updated successfully.'));
             if (result?.emailVerification?.required) {
                 if (result?.emailVerification?.sent) {
-                    setAccountStatusFeedback('warning', 'Az email címed megváltozott és most újra nem verifikált állapotban van. A megerősítő emailt elküldtük, kérjük erősítsd meg a címet.');
+                    setAccountStatusFeedback('warning', tx('Az email címed megváltozott és most újra nem verifikált állapotban van. A megerősítő emailt elküldtük, kérjük erősítsd meg a címet.', 'Your email address has changed and is again unverified. The confirmation email has been sent, please verify the address.'));
                 } else {
-                    setAccountStatusFeedback('danger', 'Az email címed megváltozott, de a verifikációs email küldése sikertelen volt. Kattints az újraküldés gombra az Account Status szekcióban.');
+                    setAccountStatusFeedback('danger', tx('Az email címed megváltozott, de a verifikációs email küldése sikertelen volt. Kattints az újraküldés gombra az Account Status szekcióban.', 'Your email has changed, but sending the verification email failed. Click the resend button in the Account Status section.'));
                     scrollToAccountStatusAndHighlightResend();
                 }
             }
@@ -525,10 +525,10 @@ async function submitProfileSettingsChanges() {
             await syncSocketContextOrReconnect('profile-settings-save');
             await refreshAuthUi('profile-settings-save-success');
         } catch (error) {
-            setProfileSettingsMessage('danger', error.message || 'Hiba történt a mentés során.');
-            elements.confirmSaveButton.textContent = 'Mentes';
+            setProfileSettingsMessage('danger', error.message || tx('Hiba történt a mentés során.', 'An error occurred during save.'));
+            elements.confirmSaveButton.textContent = tx('Mentés', 'Save');
             updateModalSaveButtonState();
-            throw new Error(error.message || 'Profil beállítás mentési hiba.');
+            throw new Error(error.message || tx('Profil beállítás mentési hiba.', 'Profile settings save error.'));
         }
     }
 }

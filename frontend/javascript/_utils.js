@@ -11,6 +11,8 @@
 (function () {
     'use strict';
 
+    const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
     // Try-catch wrapper sync handler-hez. Hiba esetén logol, undefined-et ad vissza.
     function runSafely(label, handler) {
         let value;
@@ -79,6 +81,7 @@
         runSafely,
         runSafelyAsync,
         escapeHtml,
-        fetchSessionInfo
+        fetchSessionInfo,
+        tx
     };
 })();

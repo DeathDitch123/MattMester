@@ -13,6 +13,8 @@
 (function () {
     'use strict';
 
+    const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
     function escapeHtml(s) {
         if (s == null) return '';
         const div = document.createElement('div');
@@ -56,10 +58,10 @@
      */
     window.mmConfirm = function mmConfirm(options) {
         const opts = options || {};
-        const title = opts.title || 'Megerősítés';
+        const title = opts.title || tx('Megerősítés', 'Confirm');
         const message = opts.message || '';
-        const confirmLabel = opts.confirmLabel || 'Igen';
-        const cancelLabel = opts.cancelLabel || 'Mégse';
+        const confirmLabel = opts.confirmLabel || tx('Igen', 'Yes');
+        const cancelLabel = opts.cancelLabel || tx('Mégse', 'Cancel');
         const danger = Boolean(opts.danger);
 
         return new Promise((resolve) => {
@@ -111,9 +113,9 @@
      */
     window.mmAlert = function mmAlert(options) {
         const opts = options || {};
-        const title = opts.title || 'Üzenet';
+        const title = opts.title || tx('Üzenet', 'Message');
         const message = opts.message || '';
-        const okLabel = opts.okLabel || 'Rendben';
+        const okLabel = opts.okLabel || tx('Rendben', 'OK');
 
         return new Promise((resolve) => {
             const overlay = buildOverlay(`

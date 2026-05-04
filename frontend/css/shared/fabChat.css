@@ -1,0 +1,74 @@
+/* =============================================================
+   Lebegő chat ikon (FAB) — közös markup minden oldalon, ami a
+   `MattMesterChatModal`-t használja (profile, adminPanel, …).
+   A `floatBounce` keyframe is itt él, hogy az adminPanel ne
+   függjön a profile/02-animations.css-től.
+   ============================================================= */
+
+@keyframes floatBounce {
+    0%, 100% { transform: translateY(0px); }
+    50%      { transform: translateY(-8px); }
+}
+
+.fab-chat {
+    position: fixed;
+    bottom: 104px;
+    right: 32px;
+    width: 60px;
+    height: 60px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, var(--accent-blue, #3b82f6), #2563eb);
+    border: none;
+    color: var(--text-primary, #f8fafc);
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(59, 130, 246, 0.35);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 500;
+    animation: floatBounce 3s ease-in-out infinite;
+    animation-delay: 0.5s;
+}
+
+.fab-chat:hover {
+    transform: scale(1.1);
+    box-shadow: 0 12px 32px rgba(59, 130, 246, 0.5);
+    animation: none;
+}
+
+.fab-tooltip {
+    position: absolute;
+    right: 72px;
+    background: var(--bg-card, #1e293b);
+    color: var(--text-primary, #f8fafc);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    border: 1px solid var(--border-color, rgba(255,255,255,0.12));
+    opacity: 0;
+    transform: translateX(8px);
+    transition: all 0.2s ease;
+    pointer-events: none;
+}
+
+.fab-chat:hover .fab-tooltip {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+/* Reszponzivitas: kisebb kepernyon a FAB feljebb es kisebb */
+@media (max-width: 768px) {
+    .fab-chat {
+        bottom: 88px;
+        right: 16px;
+        width: 52px;
+        height: 52px;
+    }
+    .fab-tooltip {
+        display: none;
+    }
+}

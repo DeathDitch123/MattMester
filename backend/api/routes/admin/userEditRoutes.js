@@ -164,12 +164,10 @@ router.post(
                             reason: request.adminReason
                         }
                     };
-                    const notificationService = require('../../services.js').notificationService;
-                    if (notificationService && typeof notificationService.send === 'function') {
-                        await notificationService.send(socketHub, notifPayload);
-                    } else {
-                        await sql.insertNotification(notifPayload);
-                    }
+                    // Issue (2026-05) — a regi `services.js` modul torolve lett.
+                    // Ezert kozvetlenul a sql.insertNotification-t hivjuk. A live-broadcast
+                    // a hivasi helyen (admin notifyHandler / socketHub) tortenik mar.
+                    await sql.insertNotification(notifPayload);
                 } catch (notifyErr) {
                     console.warn('Admin user-edit értesítés küldése sikertelen:', notifyErr.message);
                 }

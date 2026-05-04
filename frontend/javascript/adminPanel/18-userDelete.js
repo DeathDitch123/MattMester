@@ -25,13 +25,13 @@ function cancelDeleteHold(btn) {
 async function submitDeleteInline(btn) {
     await runSafelyAsync('submitDeleteInline', async () => {
         const targetUserId = Number(btn?.dataset?.targetId) || 0;
-        if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+        if (!targetUserId) { showToast(tx('Nincs kiválasztott felhasználó.', 'No user selected.'), 'danger'); return; }
 
         const reason = (document.getElementById('deleteReason')?.value || '').trim();
         const currentPassword = document.getElementById('deletePassword')?.value || '';
 
         if (!currentPassword) {
-            showToast('A saját admin jelszó megadása kötelező.', 'warning', 'bi-exclamation-circle');
+            showToast(tx('A saját admin jelszó megadása kötelező.', 'Your admin password is required.'), 'warning', 'bi-exclamation-circle');
             return;
         }
 
@@ -48,9 +48,12 @@ async function submitDeleteInline(btn) {
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
-                const name = data.deletedUsername ? escapeHtml(data.deletedUsername) : 'A felhasználó';
+                const name = data.deletedUsername ? escapeHtml(data.deletedUsername) : tx('A felhasználó', 'The user');
                 showToast(
-                    data.message || `${name} törlésre kijelölve. 24 órán belül visszaállítható a Felhasználó listából.`,
+                    data.message || tx(
+                        `${name} törlésre kijelölve. 24 órán belül visszaállítható a Felhasználó listából.`,
+                        `${name} marked for deletion. Restorable from the user list within 24 hours.`
+                    ),
                     'success',
                     'bi-hourglass-split'
                 );
@@ -62,11 +65,11 @@ async function submitDeleteInline(btn) {
                 showSection('users', null, { silent: true });
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba a profil törlése során.', 'danger');
+                showToast(data.message || tx('Hiba a profil törlése során.', 'Error deleting profile.'), 'danger');
                 btn.disabled = false;
             }
         } catch (err) {
-            showToast('Hálózati hiba a profil törlése során.', 'danger');
+            showToast(tx('Hálózati hiba a profil törlése során.', 'Network error during profile deletion.'), 'danger');
             console.error('inline delete hiba:', err);
             btn.disabled = false;
         }
@@ -81,11 +84,11 @@ async function restoreUserDeletion(userId) {
         // Fallback: ha valamiert nincs Bootstrap modal, custom mmConfirm
         const ok = typeof window.mmConfirm === 'function'
             ? await window.mmConfirm({
-                title: 'Felhasználó visszaállítása',
-                message: 'Visszaállítja a felhasználót?',
-                confirmLabel: 'Visszaállítás'
+                title: tx('Felhasználó visszaállítása', 'Restore user'),
+                message: tx('Visszaállítja a felhasználót?', 'Restore the user?'),
+                confirmLabel: tx('Visszaállítás', 'Restore')
               })
-            : window.confirm('Visszaállítja a felhasználót?');
+            : window.confirm(tx('Visszaállítja a felhasználót?', 'Restore the user?'));
         if (ok) executeUserRestore(userId);
         return;
     }
@@ -94,7 +97,9 @@ async function restoreUserDeletion(userId) {
     setText('restoreUserModalName', u?.username || `#${userId}`);
     const untilEl = document.getElementById('restoreUserModalUntil');
     if (untilEl && u?.pendingDeletionUntil) {
-        untilEl.textContent = new Date(u.pendingDeletionUntil).toLocaleString('hu-HU');
+        untilEl.textContent = window.MattMesterI18n?.formatDateTime
+            ? window.MattMesterI18n.formatDateTime(u.pendingDeletionUntil)
+            : new Date(u.pendingDeletionUntil).toLocaleString('hu-HU');
     } else if (untilEl) {
         untilEl.textContent = '—';
     }
@@ -118,7 +123,7 @@ async function executeUserRestore(userId) {
                 window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
             }
             if (res.ok && data?.success) {
-                showToast(data.message || 'Felhasználó visszaállítva.', 'success', 'bi-arrow-counterclockwise');
+                showToast(data.message || tx('Felhasználó visszaállítva.', 'User restored.'), 'success', 'bi-arrow-counterclockwise');
                 await loadAdminUsersList({ silent: true });
                 const refreshable = ['users', 'userDetail', 'userBan', 'userDelete'];
                 if (refreshable.includes(state.currentSectionId)) {
@@ -126,11 +131,11 @@ async function executeUserRestore(userId) {
                 }
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba a visszaállításkor.', 'danger');
+                showToast(data.message || tx('Hiba a visszaállításkor.', 'Error restoring user.'), 'danger');
             }
         } catch (err) {
             console.error('executeUserRestore hiba:', err);
-            showToast('Hálózati hiba a visszaállításkor.', 'danger');
+            showToast(tx('Hálózati hiba a visszaállításkor.', 'Network error during restore.'), 'danger');
         }
     });
 }
@@ -234,18 +239,18 @@ async function saveAdminUserDetailChanges() {
     try {
         const user = state.selectedUser;
         if (!user) {
-            showToast('Nincs kiválasztott felhasználó.', 'warning', 'bi-exclamation-triangle');
+            showToast(tx('Nincs kiválasztott felhasználó.', 'No user selected.'), 'warning', 'bi-exclamation-triangle');
             return false;
         }
 
         const validation = validateAdminUserDetailForm();
         if (!validation.canSave) {
             if (!validation.anyChange) {
-                showToast('Nincs változás a mentéshez.', 'warning', 'bi-exclamation-circle');
+                showToast(tx('Nincs változás a mentéshez.', 'No changes to save.'), 'warning', 'bi-exclamation-circle');
             } else if (validation.hasErrors) {
-                showToast('Javítsd ki a piros mezőket a mentés előtt.', 'warning', 'bi-exclamation-circle');
+                showToast(tx('Javítsd ki a piros mezőket a mentés előtt.', 'Fix the red fields before saving.'), 'warning', 'bi-exclamation-circle');
             } else {
-                showToast('Az indok legalább 10 karakter legyen.', 'warning', 'bi-exclamation-circle');
+                showToast(tx('Az indok legalább 10 karakter legyen.', 'Reason must be at least 10 characters.'), 'warning', 'bi-exclamation-circle');
             }
             return false;
         }
@@ -280,7 +285,7 @@ async function saveAdminUserDetailChanges() {
 
         if (saveBtn) {
             saveBtn.disabled = true;
-            saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>Mentés...';
+            saveBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>${tx('Mentés...', 'Saving...')}`;
         }
 
         const response = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}/edit`, {
@@ -295,7 +300,7 @@ async function saveAdminUserDetailChanges() {
             if (code && getAdminAuthFlow().handleAdminAuthError(code)) {
                 return false;
             }
-            throw new Error(result?.message || 'A mentés sikertelen.');
+            throw new Error(result?.message || tx('A mentés sikertelen.', 'Save failed.'));
         }
 
         // Backend válasz alapján szinkronizáljuk a globális state-et és minden felületet.
@@ -332,15 +337,15 @@ async function saveAdminUserDetailChanges() {
             }
         } catch (_) { }
 
-        showToast(result.message || 'Mentés sikeres.', 'success', 'bi-check2-circle');
+        showToast(result.message || tx('Mentés sikeres.', 'Saved successfully.'), 'success', 'bi-check2-circle');
         return true;
     } catch (err) {
         console.warn('saveAdminUserDetailChanges hiba:', err);
-        showToast(err?.message || 'A mentés sikertelen.', 'danger', 'bi-x-circle');
+        showToast(err?.message || tx('A mentés sikertelen.', 'Save failed.'), 'danger', 'bi-x-circle');
         return false;
     } finally {
         if (saveBtn) {
-            saveBtn.innerHTML = originalLabel || '<i class="bi bi-check2-circle me-1"></i>Mentés';
+            saveBtn.innerHTML = originalLabel || `<i class="bi bi-check2-circle me-1"></i>${tx('Mentés', 'Save')}`;
             // a disabled állapotot a következő validateAdminUserDetailForm() helyreteszi
             try { validateAdminUserDetailForm(); } catch (_) { }
         }
@@ -351,7 +356,7 @@ function adminSendPasswordReset(userId) {
     try {
         const user = state.selectedUser && Number(state.selectedUser.id) === Number(userId) ? state.selectedUser : (Array.isArray(state.users.list) ? state.users.list.find((x) => Number(x.id) === Number(userId)) : null);
         if (!user || !user.email) {
-            showToast('Nincs kiválasztva felhasználó vagy email cím hiányzik.', 'danger', 'bi-x-circle');
+            showToast(tx('Nincs kiválasztva felhasználó vagy email cím hiányzik.', 'No user selected or email is missing.'), 'danger', 'bi-x-circle');
             return;
         }
 
@@ -365,16 +370,16 @@ function adminSendPasswordReset(userId) {
             body: JSON.stringify({ email: user.email })
         }).then((res) => res.json().catch(() => ({}))).then((result) => {
             if (result && result.success) {
-                showToast('Jelszó-visszaállító email elküldve.', 'success', 'bi-check2-circle');
+                showToast(tx('Jelszó-visszaállító email elküldve.', 'Password reset email sent.'), 'success', 'bi-check2-circle');
             } else {
-                showToast(result.message || 'Nem sikerült elküldeni a visszaállító emailt.', 'danger', 'bi-x-circle');
+                showToast(result.message || tx('Nem sikerült elküldeni a visszaállító emailt.', 'Failed to send the reset email.'), 'danger', 'bi-x-circle');
             }
         }).catch((err) => {
-            showToast('Hálózati hiba történt a küldés során.', 'danger', 'bi-x-circle');
+            showToast(tx('Hálózati hiba történt a küldés során.', 'Network error during sending.'), 'danger', 'bi-x-circle');
         }).finally(() => { if (btn) { btn.disabled = false; btn.innerHTML = originalText; } });
     } catch (e) {
         console.error('adminSendPasswordReset hiba:', e);
-        showToast('Hiba történt a jelszó-visszaállítás során.', 'danger', 'bi-x-circle');
+        showToast(tx('Hiba történt a jelszó-visszaállítás során.', 'Error during password reset.'), 'danger', 'bi-x-circle');
     }
 }
 
@@ -382,26 +387,33 @@ async function adminRevokeUserSessions(userId, event) {
     try {
         const user = findAdminUserById(userId) || state.selectedUser;
         if (!user) {
-            showToast('A felhasználó nem található.', 'danger', 'bi-x-circle');
+            showToast(tx('A felhasználó nem található.', 'User not found.'), 'danger', 'bi-x-circle');
             return;
         }
 
         // Biztonsági megerősítés kérése — custom HTML modal (no native confirm)
+        const userLabel = user.username || tx('a felhasználó', 'the user');
         const ok = typeof window.mmConfirm === 'function'
             ? await window.mmConfirm({
-                title: 'Munkamenetek megszakítása',
-                message: `Biztosan meg akarod szakítani ${user.username || 'a felhasználó'} összes aktív munkamenetét (kijelentkeztetés minden eszközről)?`,
-                confirmLabel: 'Megszakítás',
+                title: tx('Munkamenetek megszakítása', 'Revoke sessions'),
+                message: tx(
+                    `Biztosan meg akarod szakítani ${userLabel} összes aktív munkamenetét (kijelentkeztetés minden eszközről)?`,
+                    `Are you sure you want to revoke all active sessions of ${userLabel} (sign out from all devices)?`
+                ),
+                confirmLabel: tx('Megszakítás', 'Revoke'),
                 danger: true
               })
-            : window.confirm(`Biztosan meg akarod szakítani ${user.username || 'a felhasználó'} összes aktív munkamenetét?`);
+            : window.confirm(tx(
+                `Biztosan meg akarod szakítani ${userLabel} összes aktív munkamenetét?`,
+                `Are you sure you want to revoke all active sessions of ${userLabel}?`
+            ));
         if (!ok) return;
 
         const btn = event ? event.target.closest('button') : null;
         const originalText = btn ? btn.innerHTML : '';
         if (btn) {
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Folyamatban...';
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${tx('Folyamatban...', 'In progress...')}`;
         }
 
         const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/revoke-sessions`, {
@@ -414,7 +426,7 @@ async function adminRevokeUserSessions(userId, event) {
         const result = await response.json().catch(() => ({}));
 
         if (response.ok && result?.success) {
-            showToast(result.message || 'Munkamenetek sikeresen megszakítva.', 'success', 'bi-check2-circle');
+            showToast(result.message || tx('Munkamenetek sikeresen megszakítva.', 'Sessions revoked successfully.'), 'success', 'bi-check2-circle');
 
             // Ha épp nyitva van a részletek modal, csendben frissítjük a jelenléti állapotot (offline-ra fog ugrani)
             if (state.userView?.userId && Number(state.userView.userId) === Number(userId)) {
@@ -424,7 +436,7 @@ async function adminRevokeUserSessions(userId, event) {
             const code = result?.code || '';
             // Ellenőrizzük, hogy nem auth hiba-e (pl. lejárt az admin tokenünk közben)
             if (!getAdminAuthFlow().handleAdminAuthError(code)) {
-                showToast(result?.message || 'Hiba történt a munkamenetek megszakításakor.', 'danger', 'bi-x-circle');
+                showToast(result?.message || tx('Hiba történt a munkamenetek megszakításakor.', 'Error revoking sessions.'), 'danger', 'bi-x-circle');
             }
         }
 
@@ -434,18 +446,18 @@ async function adminRevokeUserSessions(userId, event) {
         }
     } catch (e) {
         console.error('adminRevokeUserSessions hiba:', e);
-        showToast('Hálózati hiba történt a művelet során.', 'danger', 'bi-x-circle');
+        showToast(tx('Hálózati hiba történt a művelet során.', 'Network error during operation.'), 'danger', 'bi-x-circle');
     }
 }
 
 function validateAdminUserDetailImageFile(file) {
-    if (!file) return 'Nincs kiválasztott fájl.';
+    if (!file) return tx('Nincs kiválasztott fájl.', 'No file selected.');
     if (!ADMIN_USER_DETAIL_IMAGE_ALLOWED_MIME_TYPES.has(file.type)) {
-        return 'Csak JPG, PNG vagy WEBP fájl tölthető fel.';
+        return tx('Csak JPG, PNG vagy WEBP fájl tölthető fel.', 'Only JPG, PNG or WEBP files allowed.');
     }
-    if (file.size <= 0) return 'Üres fájl nem tölthető fel.';
+    if (file.size <= 0) return tx('Üres fájl nem tölthető fel.', 'Empty file cannot be uploaded.');
     if (file.size > ADMIN_USER_DETAIL_IMAGE_MAX_SIZE_BYTES) {
-        return 'A fájl túl nagy. Maximum 3 MB engedélyezett.';
+        return tx('A fájl túl nagy. Maximum 3 MB engedélyezett.', 'File too large. Maximum 3 MB allowed.');
     }
     return '';
 }
@@ -490,13 +502,13 @@ function openSelectedUserProfileView() {
     try {
         const selectedId = Number(state.selectedUser?.id || 0);
         if (!selectedId) {
-            showToast('Nincs kiválasztott felhasználó.', 'warning', 'bi-exclamation-triangle');
+            showToast(tx('Nincs kiválasztott felhasználó.', 'No user selected.'), 'warning', 'bi-exclamation-triangle');
             return false;
         }
         return openAdminUserView(selectedId);
     } catch (err) {
         console.warn('openSelectedUserProfileView hiba:', err);
-        showToast('A profil megtekintés most nem elérhető.', 'danger', 'bi-x-circle');
+        showToast(tx('A profil megtekintés most nem elérhető.', 'Profile view is currently unavailable.'), 'danger', 'bi-x-circle');
         return false;
     }
 }

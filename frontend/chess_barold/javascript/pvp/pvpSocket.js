@@ -84,19 +84,19 @@ export function pvpSocketInit() {
         rematchBejovoModal(true, data && data.gameId);
     });
     socket.on('chess:rematch:declined', (data) => {
-        rematchUiReset('Az ellenfél elutasította a revanst.');
+        rematchUiReset(window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Az ellenfél elutasította a revanst.', 'The opponent declined the rematch.') : 'Az ellenfél elutasította a revanst.');
         rematchBejovoModal(false);
     });
     socket.on('chess:rematch:expired', () => {
-        rematchUiReset('A revans lejárt.');
+        rematchUiReset(window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('A revans lejárt.', 'The rematch expired.') : 'A revans lejárt.');
         rematchBejovoModal(false);
     });
     socket.on('chess:rematch:cancelled', () => {
-        rematchUiReset('A revans érvénytelen — ellenfél kilépett.');
+        rematchUiReset(window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('A revans érvénytelen — ellenfél kilépett.', 'Rematch invalid — opponent left.') : 'A revans érvénytelen — ellenfél kilépett.');
         rematchBejovoModal(false);
     });
     socket.on('chess:rematch:error', (data) => {
-        rematchUiReset((data && data.uzenet) || 'Revans hiba');
+        rematchUiReset((data && data.uzenet) || (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Revans hiba', 'Rematch error') : 'Revans hiba'));
         rematchBejovoModal(false);
     });
 
@@ -115,15 +115,16 @@ export function pvpSocketInit() {
     socket.on('chess:error', (data) => {
         console.warn('[PvP hiba]', data.uzenet);
         // Custom HTML modal a natív alert() helyett (memoria-szabaly).
+        const txp = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
         if (typeof window.mmAlert === 'function') {
-            window.mmAlert({ title: 'PvP hiba', message: data.uzenet || 'Ismeretlen hiba.' });
+            window.mmAlert({ title: txp('PvP hiba', 'PvP error'), message: data.uzenet || txp('Ismeretlen hiba.', 'Unknown error.') });
         }
         const statusElem = document.getElementById('status');
         if (statusElem) {
-            statusElem.textContent = data.uzenet || 'Hiba';
+            statusElem.textContent = data.uzenet || txp('Hiba', 'Error');
             setTimeout(() => {
                 if (state.utolsoAllapot && !state.utolsoAllapot.vege) {
-                    statusElem.textContent = 'játékon';
+                    statusElem.textContent = txp('játékon', 'in game');
                 }
             }, 3000);
         }
@@ -133,7 +134,7 @@ export function pvpSocketInit() {
     socket.on('chess:invite:received', (data) => {
         const popup = document.getElementById('pvp-invite');
         const nameElem = document.getElementById('pvp-invite-name');
-        if (nameElem) nameElem.textContent = data.inviterName || 'Ismeretlen';
+        if (nameElem) nameElem.textContent = data.inviterName || (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Ismeretlen', 'Unknown') : 'Ismeretlen');
         if (popup) popup.classList.remove('hidden');
 
         const acceptBtn = document.getElementById('pvp-invite-accept');
@@ -157,7 +158,8 @@ export function pvpSocketInit() {
         const waiting = document.getElementById('pvp-waiting');
         if (waiting) waiting.classList.add('hidden');
         if (typeof window.mmAlert === 'function') {
-            window.mmAlert({ title: 'Meghívás elutasítva', message: 'Az ellenfél elutasította a meghívást.' });
+            const txi = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+            window.mmAlert({ title: txi('Meghívás elutasítva', 'Invitation declined'), message: txi('Az ellenfél elutasította a meghívást.', 'The opponent declined the invitation.') });
         }
     });
 
@@ -248,7 +250,7 @@ export function pvpSocketInit() {
         const statusElem = document.getElementById('status');
         if (statusElem) {
             const eredetiSzoveg = statusElem.textContent;
-            statusElem.textContent = 'Döntetlen ajánlat elutasítva';
+            statusElem.textContent = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Döntetlen ajánlat elutasítva', 'Draw offer declined') : 'Döntetlen ajánlat elutasítva';
             setTimeout(() => {
                 if (state.utolsoAllapot && !state.utolsoAllapot.vege) {
                     statusElem.textContent = eredetiSzoveg;

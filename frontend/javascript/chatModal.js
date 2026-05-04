@@ -1,4 +1,5 @@
 (function initMattMesterChatModal(globalScope) {
+    const tx = (hu, en) => (globalScope.MattMesterI18n?.tx ? globalScope.MattMesterI18n.tx(hu, en) : hu);
     const CHAT_OPEN_EVENT_NAME = 'mattmester:chat:open-conversation';
     const MOBILE_BREAKPOINT_QUERY = '(max-width: 767.98px)';
 
@@ -1022,7 +1023,7 @@
                     reportBtn.dataset.messageId = String(Number(message.id) || 0);
                     reportBtn.dataset.senderUsername = String(message.senderUsername || '');
                     reportBtn.dataset.body = String(message.body || '');
-                    reportBtn.title = 'Üzenet bejelentése moderátoroknak';
+                    reportBtn.title = tx('Üzenet bejelentése moderátoroknak', 'Report message to moderators');
                     reportBtn.innerHTML = '<span aria-hidden="true">&#9873;</span> Bejelentés';
                     actions.appendChild(reportBtn);
 
@@ -1272,13 +1273,13 @@
     function resolveConversationUnavailableMessage(reason) {
         const normalized = String(reason || '').toLowerCase();
         const mapping = {
-            blocked: 'A beszélgetés megszűnt: a másik fél tiltásba került.',
-            unfriended: 'A beszélgetés megszűnt: a barát kapcsolat törölve.',
-            not_friends: 'A beszélgetés megszűnt: már nem vagytok barátok.',
-            user_banned: 'A beszélgetés megszűnt: a másik fél letiltott.',
-            user_deleted: 'A beszélgetés megszűnt: a másik fél profilja törölve.'
+            blocked: tx('A beszélgetés megszűnt: a másik fél tiltásba került.', 'Conversation ended: the other party has been blocked.'),
+            unfriended: tx('A beszélgetés megszűnt: a barát kapcsolat törölve.', 'Conversation ended: friend connection removed.'),
+            not_friends: tx('A beszélgetés megszűnt: már nem vagytok barátok.', 'Conversation ended: you are no longer friends.'),
+            user_banned: tx('A beszélgetés megszűnt: a másik fél letiltott.', 'Conversation ended: the other party has been banned.'),
+            user_deleted: tx('A beszélgetés megszűnt: a másik fél profilja törölve.', "Conversation ended: the other party's profile was deleted.")
         };
-        return mapping[normalized] || 'A beszélgetés már nem elérhető.';
+        return mapping[normalized] || tx('A beszélgetés már nem elérhető.', 'This conversation is no longer available.');
     }
 
     function onSocketConversationDeleted(payload = {}) {
@@ -1691,14 +1692,14 @@
         const reasonField = globalScope.document.getElementById('chatReportReason');
 
         if (targetBody) targetBody.textContent = body || '—';
-        if (targetMeta) targetMeta.textContent = `Feladó: ${senderUsername || '—'} · #${id}`;
+        if (targetMeta) targetMeta.textContent = `${tx('Feladó:', 'Sender:')} ${senderUsername || '—'} · #${id}`;
         if (reasonField) reasonField.value = '';
         setReportFeedback(null, '');
         updateReportCounter();
 
         const modal = getReportModalInstance();
         if (!modal) {
-            setFeedback('A bejelentés modal nem érhető el. Frissítsd az oldalt.', true);
+            setFeedback(tx('A bejelentés modal nem érhető el. Frissítsd az oldalt.', 'The report modal is not available. Refresh the page.'), true);
             return;
         }
         modal.show();
@@ -1769,20 +1770,20 @@
                     const data = await response.json().catch(() => ({}));
 
                     if (!response.ok || !data?.success) {
-                        throw new Error(data?.message || 'A bejelentés nem sikerült.');
+                        throw new Error(data?.message || tx('A bejelentés nem sikerült.', 'The report failed.'));
                     }
 
                     if (data.duplicate) {
-                        setReportFeedback('warning', data.message || 'Már korábban bejelentetted ezt az üzenetet.');
+                        setReportFeedback('warning', data.message || tx('Már korábban bejelentetted ezt az üzenetet.', 'You already reported this message earlier.'));
                     } else {
-                        setReportFeedback('success', data.message || 'Bejelentés rögzítve.');
+                        setReportFeedback('success', data.message || tx('Bejelentés rögzítve.', 'Report submitted.'));
                         setTimeout(() => {
                             getReportModalInstance()?.hide();
                         }, 900);
                     }
                 } catch (error) {
                     console.error('chat report hiba:', error);
-                    setReportFeedback('danger', error.message || 'Hálózati hiba.');
+                    setReportFeedback('danger', error.message || tx('Hálózati hiba.', 'Network error.'));
                 } finally {
                     state.reportInFlight = false;
                     confirmBtn.disabled = false;

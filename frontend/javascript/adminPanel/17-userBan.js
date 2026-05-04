@@ -11,7 +11,7 @@ function onBanTypeChange() {
     if (banType === 'Végleges') {
         banDuration.disabled = true;
         banDuration.value = '';
-        banDuration.placeholder = 'Nincs lejárat';
+        banDuration.placeholder = tx('Nincs lejárat', 'No expiry');
     } else {
         banDuration.disabled = false;
         banDuration.placeholder = '';
@@ -49,7 +49,7 @@ function cancelBanHold(btn) {
 async function submitBanInline(btn) {
     await runSafelyAsync('submitBanInline', async () => {
         const targetUserId = Number(btn?.dataset?.targetId) || 0;
-        if (!targetUserId) { showToast('Nincs kiválasztott felhasználó.', 'danger'); return; }
+        if (!targetUserId) { showToast(tx('Nincs kiválasztott felhasználó.', 'No user selected.'), 'danger'); return; }
 
         const banType = document.getElementById('banType')?.value || 'Ideiglenes';
         const durationHours = Number(document.getElementById('banDuration')?.value) || 24;
@@ -57,11 +57,11 @@ async function submitBanInline(btn) {
         const currentPassword = document.getElementById('banPassword')?.value || '';
 
         if (reason.length < 10) {
-            showToast('Az indoknak legalább 10 karakter hosszúnak kell lennie.', 'warning', 'bi-exclamation-circle');
+            showToast(tx('Az indoknak legalább 10 karakter hosszúnak kell lennie.', 'The reason must be at least 10 characters long.'), 'warning', 'bi-exclamation-circle');
             return;
         }
         if (!currentPassword) {
-            showToast('A saját admin jelszó megadása kötelező.', 'warning', 'bi-exclamation-circle');
+            showToast(tx('A saját admin jelszó megadása kötelező.', 'Your admin password is required.'), 'warning', 'bi-exclamation-circle');
             return;
         }
 
@@ -75,16 +75,16 @@ async function submitBanInline(btn) {
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
-                showToast('A felhasználó sikeresen tiltva lett.', 'success', 'bi-shield-fill-check');
+                showToast(tx('A felhasználó sikeresen tiltva lett.', 'User has been banned successfully.'), 'success', 'bi-shield-fill-check');
                 await loadAdminUsersList({ silent: true });
                 showSection(state.currentSectionId, null, { silent: true });
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba a tiltás alkalmazásánál.', 'danger');
+                showToast(data.message || tx('Hiba a tiltás alkalmazásánál.', 'Error applying ban.'), 'danger');
                 btn.disabled = false;
             }
         } catch (err) {
-            showToast('Hálózati hiba a tiltás során.', 'danger');
+            showToast(tx('Hálózati hiba a tiltás során.', 'Network error during ban.'), 'danger');
             console.error('inline ban hiba:', err);
             btn.disabled = false;
         }

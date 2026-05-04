@@ -74,21 +74,25 @@ function applyRankBadge(rankElement, eloValue) {
 
 function formatDateTimeHuman(value) {
     if (!value) {
-        return 'Nincs adat';
+        return tx('Nincs adat', 'No data');
     }
 
     const date = new Date(value);
     if (Number.isNaN(date.getTime())) {
-        return 'Nincs adat';
+        return tx('Nincs adat', 'No data');
     }
 
-    return date.toLocaleString('hu-HU', {
+    const opts = {
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
         hour: '2-digit',
         minute: '2-digit'
-    });
+    };
+    if (window.MattMesterI18n?.formatDateTime) {
+        return window.MattMesterI18n.formatDateTime(date, opts);
+    }
+    return date.toLocaleString('hu-HU', opts);
 }
 
 function setPlayerProfileModalFeedback(message = '', type = 'neutral') {
@@ -115,27 +119,27 @@ function setPlayerProfileModalFeedback(message = '', type = 'neutral') {
 function fillPlayerProfileModal(player) {
     const elements = getPlayerProfileModalElements();
     if (!elements.modal) {
-        throw new Error('A játékos profil modal elemei nem találhatók a DOM-ban.');
+        throw new Error(tx('A játékos profil modal elemei nem találhatók a DOM-ban.', 'Player profile modal elements not found in the DOM.'));
     }
 
     if (elements.titleText) {
-        elements.titleText.textContent = `${player.username || 'Játékos'} profilja`;
+        elements.titleText.textContent = `${player.username || tx('Játékos', 'Player')} ${tx('profilja', 'profile')}`;
     }
 
     if (elements.avatar) {
         window.MattMesterProfileImage.applyProfileImagePresentation(elements.avatar, {
             source: player,
-            alt: `${player.username || 'Játékos'} profilképe`
+            alt: `${player.username || tx('Játékos', 'Player')} ${tx('profilképe', 'profile picture')}`
         });
     }
 
     if (elements.username) {
-        elements.username.textContent = player.username || 'Ismeretlen játékos';
+        elements.username.textContent = player.username || tx('Ismeretlen játékos', 'Unknown player');
     }
 
     if (elements.role) {
         const roleValue = String(player.role || 'player').toLowerCase();
-        elements.role.textContent = roleValue === 'admin' ? 'Admin' : 'Player';
+        elements.role.textContent = roleValue === 'admin' ? tx('Admin', 'Admin') : tx('Player', 'Player');
         elements.role.classList.remove('admin');
         if (roleValue === 'admin') {
             elements.role.classList.add('admin');
@@ -187,7 +191,7 @@ async function fetchPlayerPublicProfile(userId) {
     const result = await parseJson(response);
 
     if (!response.ok || !result.success) {
-        throw new Error(result.message || 'Nem sikerült a játékos profil betöltése.');
+        throw new Error(result.message || tx('Nem sikerült a játékos profil betöltése.', 'Failed to load the player profile.'));
     }
 
     return result.data || null;
@@ -196,20 +200,20 @@ async function fetchPlayerPublicProfile(userId) {
 async function openPlayerProfileModalByUserId(userId) {
     const elements = getPlayerProfileModalElements();
     if (!elements.modal) {
-        throw new Error('A játékos profil modal nem található.');
+        throw new Error(tx('A játékos profil modal nem található.', 'Player profile modal not found.'));
     }
 
     const modalInstance = bootstrap.Modal.getOrCreateInstance(elements.modal);
-    setPlayerProfileModalFeedback('Játékos adatok betöltése...', 'success');
+    setPlayerProfileModalFeedback(tx('Játékos adatok betöltése...', 'Loading player data...'), 'success');
     modalInstance.show();
 
     try {
         const playerData = await fetchPlayerPublicProfile(userId);
         fillPlayerProfileModal(playerData || {});
-        setPlayerProfileModalFeedback('Profil adatok betöltve.', 'success');
+        setPlayerProfileModalFeedback(tx('Profil adatok betöltve.', 'Profile data loaded.'), 'success');
         lucide.createIcons();
     } catch (error) {
-        setPlayerProfileModalFeedback(error.message || 'Nem sikerült a játékos profil betöltése.', 'error');
+        setPlayerProfileModalFeedback(error.message || tx('Nem sikerült a játékos profil betöltése.', 'Failed to load the player profile.'), 'error');
         throw error;
     }
 }

@@ -111,7 +111,7 @@ async function loadActivityChart(options = {}) {
     const silent = options.silent === true;
     try {
         if (!state.adminToken) {
-            applyActivityChartStatus({ status: 'error', error: 'Nincs admin token — a 24h aktivitás nem tölthető be.' });
+            applyActivityChartStatus({ status: 'error', error: tx('Nincs admin token — a 24h aktivitás nem tölthető be.', 'No admin token — 24h activity cannot be loaded.') });
         } else {
             if (!silent) applyActivityChartStatus({ status: 'loading' });
             const headers = adminAuthHeaders({ Accept: 'application/json' });
@@ -133,7 +133,7 @@ async function loadActivityChart(options = {}) {
             } else {
                 const json = await response.json();
                 if (!json?.success || !json?.data) {
-                    applyActivityChartStatus({ status: 'error', error: json?.message || 'Ismeretlen válasz.' });
+                    applyActivityChartStatus({ status: 'error', error: json?.message || tx('Ismeretlen válasz.', 'Unknown response.') });
                 } else {
                     const totals = json.data.totals || {};
                     const records = Number(totals.records || 0);
@@ -149,7 +149,7 @@ async function loadActivityChart(options = {}) {
         }
     } catch (err) {
         console.error('loadActivityChart hiba:', err);
-        applyActivityChartStatus({ status: 'error', error: err?.message || 'Hálózati hiba.' });
+        applyActivityChartStatus({ status: 'error', error: err?.message || tx('Hálózati hiba.', 'Network error.') });
     }
 }
 
@@ -183,9 +183,9 @@ function applyActivityChartStatus(next) {
         if (labelEl) labelEl.textContent = meta.label;
         if (detailEl) {
             const recordCount = state.activityChart.totals?.records ?? 0;
-            const time = state.activityChart.loadedAt ? `frissítve: ${formatRelative(state.activityChart.loadedAt)}` : '';
+            const time = state.activityChart.loadedAt ? `${tx('frissítve', 'updated')}: ${formatRelative(state.activityChart.loadedAt)}` : '';
             if (status === 'loaded') {
-                detailEl.textContent = `· ${recordCount} rekord${time ? ' · ' + time : ''}`;
+                detailEl.textContent = `· ${recordCount} ${tx('rekord', 'records')}${time ? ' · ' + time : ''}`;
             } else if (status === 'error') {
                 detailEl.textContent = `· ${state.activityChart.error || ''}`;
             } else if (status === 'empty') {
@@ -209,9 +209,9 @@ function applyActivityChartStatus(next) {
             if (state.activityChart.totals && status !== 'idle' && status !== 'loading') {
                 totalsEl.innerHTML = renderChartTotals(state.activityChart.totals);
             } else if (status === 'idle' || status === 'loading') {
-                totalsEl.innerHTML = '<span class="text-secondary small">A 24h összegzések a chart betöltése után jelennek meg.</span>';
+                totalsEl.innerHTML = `<span class="text-secondary small">${tx('A 24h összegzések a chart betöltése után jelennek meg.', '24h totals appear after the chart loads.')}</span>`;
             } else if (status === 'error') {
-                totalsEl.innerHTML = `<span class="text-danger small"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(state.activityChart.error || 'Hiba a betöltésnél.')}</span>`;
+                totalsEl.innerHTML = `<span class="text-danger small"><i class="bi bi-exclamation-triangle me-1"></i>${escapeHtml(state.activityChart.error || tx('Hiba a betöltésnél.', 'Loading error.'))}</span>`;
             }
         }
 

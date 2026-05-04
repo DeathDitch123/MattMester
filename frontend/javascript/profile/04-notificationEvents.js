@@ -224,7 +224,7 @@ function bindNotificationCenterEvents() {
                         if (action === 'remove') {
                             const isDismissSaved = await dismissNotificationOnServer(notificationId);
                             if (!isDismissSaved) {
-                                restoreOnFailure('Az ertesites eltavolitasa nem sikerult.');
+                                restoreOnFailure(tx('Az ertesites eltavolitasa nem sikerult.', 'Failed to remove the notification.'));
                             }
                         } else {
                             // accept / reject / block: friend action elobb, dismiss utana.
@@ -232,7 +232,7 @@ function bindNotificationCenterEvents() {
                             if (result.success) {
                                 const isDismissSaved = await dismissNotificationOnServer(notificationId);
                                 if (!isDismissSaved && typeof setFriendsFeedback === 'function') {
-                                    setFriendsFeedback('A muvelet sikerult, de az ertesites eltavolitasa nem sikerult. Frissitsd az oldalt.', 'warning');
+                                    setFriendsFeedback(tx('A muvelet sikerult, de az ertesites eltavolitasa nem sikerult. Frissitsd az oldalt.', 'The operation succeeded, but removing the notification failed. Please refresh the page.'), 'warning');
                                 }
                                 if (typeof setFriendsFeedback === 'function') {
                                     setFriendsFeedback(result.message, 'success');
@@ -243,7 +243,7 @@ function bindNotificationCenterEvents() {
                             } else {
                                 restoreOnFailure(null);
                                 if (typeof setFriendsFeedback === 'function') {
-                                    setFriendsFeedback(result.message || 'Hiba a muvelet soran.', 'error');
+                                    setFriendsFeedback(result.message || tx('Hiba a muvelet soran.', 'Error during the operation.'), 'error');
                                 }
                             }
                         }
@@ -283,7 +283,7 @@ function bindNotificationCenterEvents() {
                             setNotificationBadge(previousUnread);
                             renderNotificationCenterList();
                             if (typeof setFriendsFeedback === 'function') {
-                                setFriendsFeedback('Az ertesitesek tomeges eltavolitasa nem sikerult.', 'warning');
+                                setFriendsFeedback(tx('Az ertesitesek tomeges eltavolitasa nem sikerult.', 'Bulk removal of notifications failed.'), 'warning');
                             }
                         }
                     } finally {

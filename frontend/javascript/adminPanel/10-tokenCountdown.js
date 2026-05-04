@@ -26,7 +26,7 @@ function startTokenCountdown() {
         if (state.adminToken && left === 0) {
             clearAdminToken();
             updateTokenPill();
-            showToast('Az admin token lejárt — újra elevate.', 'warning', 'bi-shield-fill-x');
+            showToast(tx('Az admin token lejárt — újra elevate.', 'Admin token expired — re-elevate.'), 'warning', 'bi-shield-fill-x');
             showElevateModal();
             return;
         }

@@ -4,7 +4,7 @@
 function renderAuditRow(a, idx = 0) {
     const sev = a.severity || 'info';
     const time = formatAuditTime(a.occurredAt);
-    const actor = a.actor?.username || 'rendszer';
+    const actor = a.actor?.username || tx('rendszer', 'system');
     const targetLabel = a.target?.label
         ? `<span class="audit-row-target"><i class="bi bi-bullseye me-1"></i>${escapeHtml(a.target.label)}</span>` : '';
     const detailId = `auditDetail-${a.eventId || idx}-${Math.random().toString(36).slice(2, 7)}`;
@@ -20,7 +20,7 @@ function renderAuditRow(a, idx = 0) {
                 ${severityPill(sev)}
                 <button type="button" class="btn btn-sm btn-outline-gold btn-icon ms-2 audit-row-toggle"
                     onclick="document.getElementById('${detailId}').classList.toggle('d-none'); this.classList.toggle('open');"
-                    aria-label="Részletek">
+                    aria-label="${tx('Részletek', 'Details')}">
                     <i class="bi bi-chevron-down"></i>
                 </button>
             </div>
@@ -61,7 +61,7 @@ function renderAlertRow(a) {
                 <div class="alert-row-head">
                     ${alertKindLabel(kind)}
                     ${severityPill(sev)}
-                    ${isDismissed ? '<span class="badge bg-secondary ms-2"><i class="bi bi-eye-slash me-1"></i>Elrejtett</span>' : ''}
+                    ${isDismissed ? `<span class="badge bg-secondary ms-2"><i class="bi bi-eye-slash me-1"></i>${tx('Elrejtett', 'Hidden')}</span>` : ''}
                     <span class="alert-row-time font-monospace ms-auto">${time}</span>
                 </div>
                 <div class="alert-row-meta">
@@ -72,13 +72,13 @@ function renderAlertRow(a) {
                 <div class="alert-row-detail">${formatJSON(a.detail)}</div>
                 <div class="alert-row-actions">
                     ${a.ip && a.ip !== 'ismeretlen'
-                        ? h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm', onclick: `openIpBlockModal('${ipEsc.replace(/'/g, "\\'")}', ${a.id || 'null'})` })
-                        : h.btn({ label: 'IP tiltás', icon: 'bi-ban', variant: 'outline-danger', size: 'sm', attrs: 'disabled title="Nincs IP cim"' })
+                        ? h.btn({ label: tx('IP tiltás', 'IP block'), icon: 'bi-ban', variant: 'outline-danger', size: 'sm', onclick: `openIpBlockModal('${ipEsc.replace(/'/g, "\\'")}', ${a.id || 'null'})` })
+                        : h.btn({ label: tx('IP tiltás', 'IP block'), icon: 'bi-ban', variant: 'outline-danger', size: 'sm', attrs: `disabled title="${tx('Nincs IP cim', 'No IP address')}"` })
                     }
-                    ${h.btn({ label: 'Audit nyitás', icon: 'bi-journal-text', variant: 'outline-gold', size: 'sm', onclick: `openAuditFromAlert(${a.id || 'null'}, '${ipEsc.replace(/'/g, "\\'")}', ${a.userId || 'null'}, '${occurredEsc.replace(/'/g, "\\'")}')` })}
+                    ${h.btn({ label: tx('Audit nyitás', 'Open audit'), icon: 'bi-journal-text', variant: 'outline-gold', size: 'sm', onclick: `openAuditFromAlert(${a.id || 'null'}, '${ipEsc.replace(/'/g, "\\'")}', ${a.userId || 'null'}, '${occurredEsc.replace(/'/g, "\\'")}')` })}
                     ${isDismissed
-                        ? h.btn({ label: 'Visszaállít', icon: 'bi-arrow-counterclockwise', variant: 'outline-success', size: 'sm', onclick: `restoreOneAlert(${a.id || 'null'})` })
-                        : h.btn({ label: 'Elrejtés', icon: 'bi-eye-slash', variant: 'outline-secondary', size: 'sm', onclick: `dismissOneAlert(${a.id || 'null'})` })
+                        ? h.btn({ label: tx('Visszaállít', 'Restore'), icon: 'bi-arrow-counterclockwise', variant: 'outline-success', size: 'sm', onclick: `restoreOneAlert(${a.id || 'null'})` })
+                        : h.btn({ label: tx('Elrejtés', 'Hide'), icon: 'bi-eye-slash', variant: 'outline-secondary', size: 'sm', onclick: `dismissOneAlert(${a.id || 'null'})` })
                     }
                 </div>
             </div>

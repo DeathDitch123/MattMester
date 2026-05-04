@@ -52,13 +52,13 @@ async function adminFetchJson(path, options = {}) {
         if ((res.status === 401 || res.status === 403) && json?.code) {
             const flow = getAdminAuthFlow();
             if (flow?.handleAdminAuthError && flow.handleAdminAuthError(json.code)) {
-                throw new Error(json.message || 'Auth hiba');
+                throw new Error(json.message || tx('Auth hiba', 'Auth error'));
             }
         }
         throw new Error(json?.message || `HTTP ${res.status}`);
     }
     if (json && json.success === false) {
-        throw new Error(json.message || 'Ismeretlen szerver hiba.');
+        throw new Error(json.message || tx('Ismeretlen szerver hiba.', 'Unknown server error.'));
     }
     return json;
 }
@@ -101,17 +101,17 @@ async function submitSiteSettings() {
     console.log('[settings] before=', before, 'patch=', patch);
     const enablingMaintenance = patch.maintenanceMode && !before.maintenanceMode;
     const desc = enablingMaintenance
-        ? '<strong class="text-warning">Figyelem:</strong> a karbantartasi mod aktivalasa minden NEM-admin user-t kizar a platformrol!<br>'
+        ? `<strong class="text-warning">${tx('Figyelem', 'Warning')}:</strong> ${tx('a karbantartasi mod aktivalasa minden NEM-admin user-t kizar a platformrol!', 'enabling maintenance mode locks out every NON-admin user from the platform!')}<br>`
         : '';
     console.log('[settings] openCriticalAction("settings.edit") hivasa');
     // FONTOS: a patch-et az `extras` paraméterben adjuk at — különben az
     // openCriticalAction felülírja a state.criticalActionData-t a sajat objektumaval.
-    openCriticalAction('settings.edit', `Beallitasok mentese${enablingMaintenance ? ' (karbantartas BE)' : ''}`, null, { patch });
+    openCriticalAction('settings.edit', `${tx('Beallitasok mentese', 'Save settings')}${enablingMaintenance ? ` (${tx('karbantartas BE', 'maintenance ON')})` : ''}`, null, { patch });
     // openCriticalAction megnyitja a modalt; a leiras-szoveg felulirasahoz toldjunk:
     setTimeout(() => {
         const descEl = document.getElementById('criticalActionDescription');
         if (descEl) {
-            descEl.innerHTML = `${desc}<strong class="text-white">Muvelet:</strong> <code class="text-gold">settings.edit</code><br><strong class="text-white">Mezok:</strong> ${Object.keys(patch).join(', ')}`;
+            descEl.innerHTML = `${desc}<strong class="text-white">${tx('Muvelet', 'Action')}:</strong> <code class="text-gold">settings.edit</code><br><strong class="text-white">${tx('Mezok', 'Fields')}:</strong> ${Object.keys(patch).join(', ')}`;
         }
     }, 30);
 }
@@ -132,11 +132,11 @@ async function applySettingsEditFromCritical(reason) {
         console.log('[settings] PUT sikeres, valasz=', json);
         state.siteSettings.data = json.data;
         state.siteSettings.loaded = true;
-        showToast('Beallitasok mentve.', 'success', 'bi-check-circle-fill');
+        showToast(tx('Beallitasok mentve.', 'Settings saved.'), 'success', 'bi-check-circle-fill');
         if (state.currentSectionId === 'settings') showSection('settings', null, { silent: true });
     } catch (err) {
         console.error('[settings] PUT hiba:', err);
-        showToast(err.message || 'Hiba a settings mentes soran.', 'danger');
+        showToast(err.message || tx('Hiba a settings mentes soran.', 'Error saving settings.'), 'danger');
     }
 }
 
@@ -166,26 +166,26 @@ function openAdminGrantPicker() {
         if (inputEl) inputEl.value = '';
         new window.bootstrap.Modal(modalEl).show();
     } else {
-        showToast('A grant modal meg nem kesz.', 'info');
+        showToast(tx('A grant modal meg nem kesz.', 'The grant modal is not ready.'), 'info');
     }
 }
 
 async function adminGrantPickerSubmit() {
     const username = document.getElementById('adminGrantUsername')?.value?.trim();
     const makeSuper = Boolean(document.getElementById('adminGrantMakeSuper')?.checked);
-    if (!username) { showToast('Felhasznalonev kotelezo.', 'warning'); return; }
+    if (!username) { showToast(tx('Felhasznalonev kotelezo.', 'Username is required.'), 'warning'); return; }
     try {
         // Mivel nincs lookup-by-username admin endpoint, hasznaljuk a meglevo /admin/users/list-et
         const json = await adminFetchJson('/api/admin/users/list');
         const target = (json.data || []).find((u) => String(u.username).toLowerCase() === username.toLowerCase());
-        if (!target) { showToast(`Nincs ilyen felhasznalo: ${username}`, 'warning'); return; }
+        if (!target) { showToast(`${tx('Nincs ilyen felhasznalo', 'No such user')}: ${username}`, 'warning'); return; }
         const modalEl = document.getElementById('adminGrantPickerModal');
         if (modalEl && window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
         // openCriticalAction felulirja a state.criticalActionData-t — minden szukseges
         // mezot az `extras` paramen keresztul kell atadni, hogy megmaradjon.
         openCriticalAction('admin.grant', target.username, target.id, { makeSuper });
     } catch (err) {
-        showToast(err.message || 'Hiba a user keresenel.', 'danger');
+        showToast(err.message || tx('Hiba a user keresenel.', 'Error searching for user.'), 'danger');
     }
 }
 
@@ -197,10 +197,10 @@ async function applyAdminGrantFromCritical(reason) {
             method: 'POST',
             body: { targetUserId: data.targetUserId, makeSuper: Boolean(data.makeSuper), reason }
         });
-        showToast('Admin jog megadva.', 'success', 'bi-shield-fill-check');
+        showToast(tx('Admin jog megadva.', 'Admin rights granted.'), 'success', 'bi-shield-fill-check');
         await loadAdminAdminsList();
     } catch (err) {
-        showToast(err.message || 'Hiba a grant soran.', 'danger');
+        showToast(err.message || tx('Hiba a grant soran.', 'Error during grant.'), 'danger');
     }
 }
 
@@ -212,10 +212,10 @@ async function applyAdminRevokeFromCritical(reason) {
             method: 'POST',
             body: { targetUserId: data.targetUserId, reason }
         });
-        showToast('Admin jog visszavonva.', 'success', 'bi-shield-fill-x');
+        showToast(tx('Admin jog visszavonva.', 'Admin rights revoked.'), 'success', 'bi-shield-fill-x');
         await loadAdminAdminsList();
     } catch (err) {
-        showToast(err.message || 'Hiba a revoke soran.', 'danger');
+        showToast(err.message || tx('Hiba a revoke soran.', 'Error during revoke.'), 'danger');
     }
 }
 
@@ -248,7 +248,7 @@ function openAbilityEditor(id) {
     state.abilities.editing = editing || { id: null, name: '', description: '', cooldownTurns: 0 };
     const modalEl = document.getElementById('abilityEditorModal');
     if (!modalEl || !window.bootstrap?.Modal) {
-        showToast('A kepesseg-editor meg nem kesz.', 'info');
+        showToast(tx('A kepesseg-editor meg nem kesz.', 'The ability editor is not ready.'), 'info');
         return;
     }
     // Null-safe field hozzaferes — a HTML-ben opcionalis elemek (pl.
@@ -262,7 +262,7 @@ function openAbilityEditor(id) {
         const el = document.getElementById(elId);
         if (el) el.textContent = value;
     };
-    setText('abilityEditorTitle', editing ? `Kepesseg szerkesztese: ${editing.name}` : 'Uj kepesseg');
+    setText('abilityEditorTitle', editing ? `${tx('Kepesseg szerkesztese', 'Edit ability')}: ${editing.name}` : tx('Uj kepesseg', 'New ability'));
     setVal('abilityEditorName', state.abilities.editing.name || '');
     setVal('abilityEditorDescription', state.abilities.editing.description || '');
     setVal('abilityEditorCooldown', state.abilities.editing.cooldownTurns ?? 0);
@@ -278,7 +278,7 @@ async function abilityEditorSubmit() {
     const description = document.getElementById('abilityEditorDescription')?.value?.trim();
     const cooldownTurns = Number(document.getElementById('abilityEditorCooldown')?.value) || 0;
     const reason = document.getElementById('abilityEditorReason')?.value?.trim() || '';
-    if (!name) { showToast('A nev kotelezo.', 'warning'); return; }
+    if (!name) { showToast(tx('A nev kotelezo.', 'Name is required.'), 'warning'); return; }
     // abilities.edit opcionalis reason muvelet — uresen is OK
 
     try {
@@ -287,19 +287,19 @@ async function abilityEditorSubmit() {
                 method: 'PATCH',
                 body: { name, description, cooldownTurns, reason }
             });
-            showToast('Kepesseg modositva.', 'success', 'bi-check-circle-fill');
+            showToast(tx('Kepesseg modositva.', 'Ability updated.'), 'success', 'bi-check-circle-fill');
         } else {
             await adminFetchJson('/api/admin/abilities/', {
                 method: 'POST',
                 body: { name, description, cooldownTurns, reason }
             });
-            showToast('Kepesseg letrehozva.', 'success', 'bi-plus-circle-fill');
+            showToast(tx('Kepesseg letrehozva.', 'Ability created.'), 'success', 'bi-plus-circle-fill');
         }
         const modalEl = document.getElementById('abilityEditorModal');
         if (modalEl && window.bootstrap?.Modal) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
         await loadAdminAbilities();
     } catch (err) {
-        showToast(err.message || 'Hiba a mentes soran.', 'danger');
+        showToast(err.message || tx('Hiba a mentes soran.', 'Error during save.'), 'danger');
     }
 }
 
@@ -307,7 +307,7 @@ function confirmDeleteAbility(id) {
     const ab = state.abilities.list.find((a) => a.id === Number(id));
     if (!ab) return;
     // openCriticalAction felulirja a state.criticalActionData-t — extras-be tesszuk a custom mezoket.
-    openCriticalAction('abilities.edit', `Kepesseg torles: ${ab.name}`, null, { abilityId: id, deleteFlow: true });
+    openCriticalAction('abilities.edit', `${tx('Kepesseg torles', 'Delete ability')}: ${ab.name}`, null, { abilityId: id, deleteFlow: true });
 }
 
 async function applyAbilityDeleteFromCritical(reason) {
@@ -318,10 +318,10 @@ async function applyAbilityDeleteFromCritical(reason) {
             method: 'DELETE',
             body: { reason }
         });
-        showToast('Kepesseg torolve.', 'success', 'bi-trash3-fill');
+        showToast(tx('Kepesseg torolve.', 'Ability deleted.'), 'success', 'bi-trash3-fill');
         await loadAdminAbilities();
     } catch (err) {
-        showToast(err.message || 'Hiba a torles soran.', 'danger');
+        showToast(err.message || tx('Hiba a torles soran.', 'Error during deletion.'), 'danger');
     }
 }
 
@@ -355,7 +355,7 @@ async function loadAdminSocial() {
 function confirmAdminUnblock(blockerId, blockedId, blockerName, blockedName) {
     if (!blockerId || !blockedId) return;
     // openCriticalAction felulirja a state.criticalActionData-t — extras-be tesszuk a custom mezoket.
-    openCriticalAction('social.unblock', `Blokk feloldas: ${blockerName} → ${blockedName}`, null,
+    openCriticalAction('social.unblock', `${tx('Blokk feloldas', 'Unblock')}: ${blockerName} → ${blockedName}`, null,
         { blockerId, blockedId, blockerName, blockedName });
 }
 
@@ -367,10 +367,10 @@ async function applySocialUnblockFromCritical(reason) {
             method: 'POST',
             body: { reason }
         });
-        showToast('Blokk feloldva.', 'success', 'bi-unlock-fill');
+        showToast(tx('Blokk feloldva.', 'Block lifted.'), 'success', 'bi-unlock-fill');
         await loadAdminSocial();
     } catch (err) {
-        showToast(err.message || 'Hiba a feloldas soran.', 'danger');
+        showToast(err.message || tx('Hiba a feloldas soran.', 'Error during unblock.'), 'danger');
     }
 }
 
@@ -434,7 +434,7 @@ function downloadGamePgn(gameId) {
             a.click();
             setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 300);
         } catch (err) {
-            showToast(err.message || 'PGN letoltes hiba.', 'danger');
+            showToast(err.message || tx('PGN letoltes hiba.', 'PGN download error.'), 'danger');
         }
     })();
 }
@@ -442,7 +442,7 @@ function downloadGamePgn(gameId) {
 function confirmForceEndGame(gameId) {
     if (!gameId) return;
     // openCriticalAction felulirja a state.criticalActionData-t — extras-be tesszuk.
-    openCriticalAction('games.force_end', `Meccs eroszakos befejezese: #${gameId}`, null, { gameId });
+    openCriticalAction('games.force_end', `${tx('Meccs eroszakos befejezese', 'Force-end match')}: #${gameId}`, null, { gameId });
 }
 
 async function applyGameForceEndFromCritical(reason) {
@@ -453,10 +453,10 @@ async function applyGameForceEndFromCritical(reason) {
             method: 'POST',
             body: { reason }
         });
-        showToast('Meccs befejezve (forced).', 'success', 'bi-stop-circle-fill');
+        showToast(tx('Meccs befejezve (forced).', 'Match ended (forced).'), 'success', 'bi-stop-circle-fill');
         await loadAdminGames();
     } catch (err) {
-        showToast(err.message || 'Hiba a force-end soran.', 'danger');
+        showToast(err.message || tx('Hiba a force-end soran.', 'Error during force-end.'), 'danger');
     }
 }
 
@@ -467,12 +467,12 @@ async function openSpectator(gameId) {
     state.gamesAdmin.spectator = { gameId, game: null, loading: true, error: null };
     const modalEl = document.getElementById('spectatorModal');
     if (!modalEl || !window.bootstrap?.Modal) {
-        showToast('Spectator modal nem kesz.', 'info');
+        showToast(tx('Spectator modal nem kesz.', 'Spectator modal not ready.'), 'info');
         return;
     }
     new window.bootstrap.Modal(modalEl).show();
-    document.getElementById('spectatorTitle').textContent = `Spectator: meccs #${gameId}`;
-    document.getElementById('spectatorBody').innerHTML = '<div class="text-center py-4"><i class="bi bi-arrow-repeat spin"></i> Meccs adat betoltese...</div>';
+    document.getElementById('spectatorTitle').textContent = `${tx('Spectator: meccs', 'Spectator: match')} #${gameId}`;
+    document.getElementById('spectatorBody').innerHTML = `<div class="text-center py-4"><i class="bi bi-arrow-repeat spin"></i> ${tx('Meccs adat betoltese...', 'Loading match data...')}</div>`;
 
     try {
         const json = await adminFetchJson(`/api/admin/games/${gameId}`);
@@ -495,7 +495,7 @@ function renderSpectatorBody() {
     const game = sp.game;
     const body = document.getElementById('spectatorBody');
     if (!body) return;
-    if (!game) { body.innerHTML = '<div class="text-secondary">Nincs adat.</div>'; return; }
+    if (!game) { body.innerHTML = `<div class="text-secondary">${tx('Nincs adat.', 'No data.')}</div>`; return; }
 
     const fen = game.currentFen || game.initialFen || 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
     const lastMoves = (game.moves || []).slice(-10).reverse();
@@ -510,19 +510,19 @@ function renderSpectatorBody() {
     body.innerHTML = `
         <div class="row g-3">
             <div class="col-md-7">
-                <div class="text-secondary small mb-1">Aktualis allas (FEN):</div>
+                <div class="text-secondary small mb-1">${tx('Aktualis allas (FEN)', 'Current position (FEN)')}:</div>
                 <pre class="json-block" style="font-size:0.75rem;white-space:pre-wrap;word-break:break-all;">${escapeHtml(fen)}</pre>
                 <div class="text-secondary small mt-3">
-                    <strong>Vilagos:</strong> ${escapeHtml(game.white?.username || '—')} ·
-                    <strong>Sotet:</strong> ${escapeHtml(game.black?.username || '—')} ·
-                    <strong>Allapot:</strong> ${escapeHtml(game.status)}
-                    ${game.timeControl ? ` · <strong>Idokontroll:</strong> ${escapeHtml(game.timeControl)}` : ''}
+                    <strong>${tx('Vilagos', 'White')}:</strong> ${escapeHtml(game.white?.username || '—')} ·
+                    <strong>${tx('Sotet', 'Black')}:</strong> ${escapeHtml(game.black?.username || '—')} ·
+                    <strong>${tx('Allapot', 'Status')}:</strong> ${escapeHtml(game.status)}
+                    ${game.timeControl ? ` · <strong>${tx('Idokontroll', 'Time control')}:</strong> ${escapeHtml(game.timeControl)}` : ''}
                 </div>
             </div>
             <div class="col-md-5">
-                <div class="text-secondary small mb-1">Utolso 10 lepes:</div>
+                <div class="text-secondary small mb-1">${tx('Utolso 10 lepes', 'Last 10 moves')}:</div>
                 <ol class="list-unstyled mb-0" style="max-height:280px;overflow:auto;" id="spectatorMoves">
-                    ${moveList || '<li class="text-secondary">Meg nincs lepes.</li>'}
+                    ${moveList || `<li class="text-secondary">${tx('Meg nincs lepes.', 'No moves yet.')}</li>`}
                 </ol>
             </div>
         </div>
@@ -671,8 +671,8 @@ async function loadAdminTests() {
 }
 
 function confirmRunTests() {
-    if (state.testsAdmin.running) { showToast('Mar fut egy teszt.', 'warning'); return; }
-    if (!state.isSuperAdmin) { showToast('Csak super-admin futtathat tesztet.', 'warning'); return; }
+    if (state.testsAdmin.running) { showToast(tx('Mar fut egy teszt.', 'A test is already running.'), 'warning'); return; }
+    if (!state.isSuperAdmin) { showToast(tx('Csak super-admin futtathat tesztet.', 'Only a super-admin can run tests.'), 'warning'); return; }
     const modalEl = document.getElementById('testsRunConfirmModal');
     if (!modalEl || !window.bootstrap?.Modal) {
         // Fallback: ha valamiert nem lenne modal, kozvetlenul futtatas reason nelkul.
@@ -702,7 +702,7 @@ async function runTestsDirectly(reason) {
             method: 'POST',
             body: { reason: reason || '' }
         });
-        showToast(`Teszt futas elinditva (run #${json.data?.runId}).`, 'success', 'bi-play-fill');
+        showToast(`${tx('Teszt futas elinditva', 'Test run started')} (run #${json.data?.runId}).`, 'success', 'bi-play-fill');
         // Uj run inditasakor toroljuk a regi latest-et (ha volt) — a felhasznalo
         // explicit kerese: ne lassa a regi adatokat amig az uj fut.
         clearTestsLatest();
@@ -713,7 +713,7 @@ async function runTestsDirectly(reason) {
         };
         if (state.currentSectionId === 'tests') showSection('tests', null, { silent: true });
     } catch (err) {
-        showToast(err.message || 'Hiba a teszt inditasanal.', 'danger');
+        showToast(err.message || tx('Hiba a teszt inditasanal.', 'Error starting test.'), 'danger');
     }
 }
 
@@ -773,7 +773,7 @@ async function applyTestsRunFromCritical(reason) {
             console.log('[critical] reason length=', reason.length, 'optional=', OPTIONAL_REASON_ACTIONS.has(action));
             if (!OPTIONAL_REASON_ACTIONS.has(action) && reason.length < 10) {
                 console.warn('[critical] reason tul rovid (<10 char) — abort');
-                showToast('Az indoklasnak legalabb 10 karakter hosszunak kell lennie.', 'warning');
+                showToast(tx('Az indoklasnak legalabb 10 karakter hosszunak kell lennie.', 'The reason must be at least 10 characters long.'), 'warning');
                 return;
             }
             try {
@@ -843,7 +843,7 @@ function attachAdminSocketListeners(socket) {
     socket.on('admin:games:move', onAdminGamesMove);
     socket.on('admin:games:ability', onAdminGamesMove);
     socket.on('admin:games:force_end', () => {
-        showToast('A nezett meccs adminisztratorian befejezve.', 'warning');
+        showToast(tx('A nezett meccs adminisztratorian befejezve.', 'The watched match was administratively ended.'), 'warning');
     });
     socket.on('admin:tests:started', (payload) => {
         // Uj run kezdodik (akar mas admin tab-bol) -> regi latest takaritasa.
@@ -889,16 +889,16 @@ function attachAdminSocketListeners(socket) {
 function openAdminQuickChatModal() {
     const u = state.selectedUser;
     if (!u || !u.id) {
-        showToast('Nincs kiválasztott felhasználó.', 'warning');
+        showToast(tx('Nincs kiválasztott felhasználó.', 'No user selected.'), 'warning');
         return;
     }
     if (Number(state.currentUser?.id || 0) === Number(u.id)) {
-        showToast('Önmagadnak nem küldhetsz üzenetet.', 'warning');
+        showToast(tx('Önmagadnak nem küldhetsz üzenetet.', 'You cannot send a message to yourself.'), 'warning');
         return;
     }
     const modalEl = document.getElementById('adminQuickChatModal');
     if (!modalEl || !window.bootstrap?.Modal) {
-        showToast('Nem érhető el a modal.', 'danger');
+        showToast(tx('Nem érhető el a modal.', 'Modal unavailable.'), 'danger');
         return;
     }
     const targetEl = document.getElementById('adminQuickChatTargetName');
@@ -938,7 +938,7 @@ async function submitAdminQuickChat() {
         if (feedback) {
             feedback.classList.remove('d-none', 'alert-success');
             feedback.classList.add('alert-danger');
-            feedback.textContent = 'Üres üzenet — írj valamit.';
+            feedback.textContent = tx('Üres üzenet — írj valamit.', 'Empty message — write something.');
         }
         return;
     }
@@ -946,7 +946,7 @@ async function submitAdminQuickChat() {
         if (feedback) {
             feedback.classList.remove('d-none', 'alert-success');
             feedback.classList.add('alert-danger');
-            feedback.textContent = 'Túl hosszú (max 1000 karakter).';
+            feedback.textContent = tx('Túl hosszú (max 1000 karakter).', 'Too long (max 1000 characters).');
         }
         return;
     }
@@ -960,7 +960,7 @@ async function submitAdminQuickChat() {
             body: { targetUserId: Number(u.id) }
         });
         const conversationId = openRes?.data?.conversationId;
-        if (!conversationId) throw new Error('A beszélgetés nem nyitható meg.');
+        if (!conversationId) throw new Error(tx('A beszélgetés nem nyitható meg.', 'The conversation cannot be opened.'));
 
         // 2) Üzenet küldése — a chat.js endpoint a `message` field-et várja a body-ban
         await adminFetchJson(`/api/chat/conversations/${conversationId}/messages`, {
@@ -971,10 +971,10 @@ async function submitAdminQuickChat() {
         if (feedback) {
             feedback.classList.remove('d-none', 'alert-danger');
             feedback.classList.add('alert-success');
-            feedback.textContent = 'Üzenet elküldve.';
+            feedback.textContent = tx('Üzenet elküldve.', 'Message sent.');
         }
         if (msgEl) msgEl.setAttribute('disabled', 'true');
-        showToast(`Üzenet elküldve ${u.username || '#' + u.id} részére.`, 'success', 'bi-send-check-fill');
+        showToast(`${tx('Üzenet elküldve', 'Message sent to')} ${u.username || '#' + u.id} ${tx('részére.', '.')}`, 'success', 'bi-send-check-fill');
 
         // Auto-close 1.5 mp után
         setTimeout(() => {
@@ -987,7 +987,7 @@ async function submitAdminQuickChat() {
         if (feedback) {
             feedback.classList.remove('d-none', 'alert-success');
             feedback.classList.add('alert-danger');
-            feedback.textContent = err?.message || 'Ismeretlen hiba a küldés során.';
+            feedback.textContent = err?.message || tx('Ismeretlen hiba a küldés során.', 'Unknown error while sending.');
         }
     } finally {
         if (sendBtn) sendBtn.disabled = false;

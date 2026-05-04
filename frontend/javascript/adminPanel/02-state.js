@@ -3,10 +3,10 @@
         tick-band, kezi frissites gomb szamara.
    ============================================================= */
 const WS_STATUS = Object.freeze({
-    no_token: { key: 'no_token', label: 'Nincs admin token', short: 'Nincs token', variant: 'secondary', icon: 'bi-shield-slash', dotClass: 'ws-dot-idle', spin: false },
-    connecting: { key: 'connecting', label: 'Csatlakozás…', short: 'Csatlakozás…', variant: 'warning', icon: 'bi-arrow-repeat', dotClass: 'ws-dot-connecting', spin: true },
-    connected: { key: 'connected', label: 'Élő — WS /admin', short: 'Élő', variant: 'success', icon: 'bi-broadcast-pin', dotClass: 'ws-dot-live', spin: false },
-    disconnected: { key: 'disconnected', label: 'Megszakadt — újrapróbálom', short: 'Offline', variant: 'danger', icon: 'bi-plug', dotClass: 'ws-dot-down', spin: false }
+    no_token: { key: 'no_token', get label() { return tx('Nincs admin token', 'No admin token'); }, get short() { return tx('Nincs token', 'No token'); }, variant: 'secondary', icon: 'bi-shield-slash', dotClass: 'ws-dot-idle', spin: false },
+    connecting: { key: 'connecting', get label() { return tx('Csatlakozás…', 'Connecting…'); }, get short() { return tx('Csatlakozás…', 'Connecting…'); }, variant: 'warning', icon: 'bi-arrow-repeat', dotClass: 'ws-dot-connecting', spin: true },
+    connected: { key: 'connected', get label() { return tx('Élő — WS /admin', 'Live — WS /admin'); }, get short() { return tx('Élő', 'Live'); }, variant: 'success', icon: 'bi-broadcast-pin', dotClass: 'ws-dot-live', spin: false },
+    disconnected: { key: 'disconnected', get label() { return tx('Megszakadt — újrapróbálom', 'Disconnected — retrying'); }, get short() { return tx('Offline', 'Offline'); }, variant: 'danger', icon: 'bi-plug', dotClass: 'ws-dot-down', spin: false }
 });
 const WS_STATUS_VARIANTS = ['success', 'warning', 'danger', 'secondary'];
 
@@ -15,7 +15,7 @@ const WS_STATUS_VARIANTS = ['success', 'warning', 'danger', 'secondary'];
 // funkcionális, ahogyan a Vezérlőpulton is.
 function buildWsLiveActions() {
     const wsStatus = WS_STATUS[state.wsStatus] || WS_STATUS.no_token;
-    const tickText = state.liveStatsAt ? `tick: ${formatRelative(state.liveStatsAt)}` : 'nincs tick';
+    const tickText = state.liveStatsAt ? `${tx('tick', 'tick')}: ${formatRelative(state.liveStatsAt)}` : tx('nincs tick', 'no tick');
     return [
         {
             label: `<span class="ws-pill-content">
@@ -25,13 +25,13 @@ function buildWsLiveActions() {
                     </span>`,
             variant: `outline-${wsStatus.variant}`,
             size: 'sm',
-            attrs: `id="wsStatusBtn" data-ws-status="${wsStatus.key}" title="WS /admin kapcsolat állapota — kattintásra újracsatlakozás" aria-label="WebSocket kapcsolat állapota: ${wsStatus.label}"`,
+            attrs: `id="wsStatusBtn" data-ws-status="${wsStatus.key}" title="${tx('WS /admin kapcsolat állapota — kattintásra újracsatlakozás', 'WS /admin connection status — click to reconnect')}" aria-label="${tx('WebSocket kapcsolat állapota', 'WebSocket connection status')}: ${wsStatus.label}"`,
             icon: wsStatus.icon,
             classes: `ws-status-pill ws-status-${wsStatus.key}${wsStatus.spin ? ' ws-status-spin' : ''}`,
             onclick: 'reconnectAdminSocket()'
         },
         {
-            label: 'Kézi frissítés',
+            label: tx('Kézi frissítés', 'Manual refresh'),
             icon: 'bi-arrow-clockwise',
             size: 'sm',
             attrs: 'id="manualRefreshBtn"',
@@ -323,26 +323,26 @@ function latestEventTime(auditItems, alertItems) {
 
 // Reason -> emberi szoveg + ikon, a feed ures allapota es hibajelzes szamara.
 function feedEmptyMessage(reason) {
-    let result = { icon: 'bi-inbox', title: 'Nincs adat', sub: '' };
+    let result = { icon: 'bi-inbox', title: tx('Nincs adat', 'No data'), sub: '' };
     if (reason === 'no_token') {
         result = {
-            icon: 'bi-shield-slash', title: 'Nincs admin token',
-            sub: 'A bejövő események betöltéséhez aktív admin step-up token szükséges.'
+            icon: 'bi-shield-slash', title: tx('Nincs admin token', 'No admin token'),
+            sub: tx('A bejövő események betöltéséhez aktív admin step-up token szükséges.', 'An active admin step-up token is required to load incoming events.')
         };
     } else if (reason === 'offline') {
         result = {
-            icon: 'bi-plug', title: 'WS /admin offline',
-            sub: 'A WebSocket kapcsolat megszakadt — kattints a fejléc pill-jén az újracsatlakozáshoz.'
+            icon: 'bi-plug', title: tx('WS /admin offline', 'WS /admin offline'),
+            sub: tx('A WebSocket kapcsolat megszakadt — kattints a fejléc pill-jén az újracsatlakozáshoz.', 'The WebSocket connection dropped — click the header pill to reconnect.')
         };
     } else if (reason === 'empty') {
         result = {
-            icon: 'bi-inbox', title: 'Még nem érkezett esemény',
-            sub: 'Az új audit / riasztás sorok automatikusan ide kerülnek, amint történik valami.'
+            icon: 'bi-inbox', title: tx('Még nem érkezett esemény', 'No events received yet'),
+            sub: tx('Az új audit / riasztás sorok automatikusan ide kerülnek, amint történik valami.', 'New audit / alert rows will appear here automatically as soon as something happens.')
         };
     } else if (reason === 'error') {
         result = {
-            icon: 'bi-exclamation-triangle', title: 'Hiba a feed betöltésénél',
-            sub: 'Ellenőrizd a böngésző konzolt a részletekért.'
+            icon: 'bi-exclamation-triangle', title: tx('Hiba a feed betöltésénél', 'Error loading feed'),
+            sub: tx('Ellenőrizd a böngésző konzolt a részletekért.', 'Check the browser console for details.')
         };
     }
     return result;

@@ -1,3 +1,5 @@
+const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
 function getQueryParams() {
     const params = new URLSearchParams(window.location.search || '');
     return {
@@ -21,48 +23,48 @@ function getPageElements() {
 function resolvePresentation(payload) {
     let presentation = {
         state: 'error',
-        statusLabel: 'Sikertelen',
+        statusLabel: tx('Sikertelen', 'Failed'),
         statusIcon: 'bi-x-circle-fill',
-        title: 'Az email megerősítése nem sikerült',
-        subtitle: 'Ellenőrizd a hivatkozást, vagy kérj új verifikációs emailt az Account Status szekcióban.',
-        details: payload.message || 'Ismeretlen hiba történt az email megerősítése során.'
+        title: tx('Az email megerősítése nem sikerült', 'Email verification failed'),
+        subtitle: tx('Ellenőrizd a hivatkozást, vagy kérj új verifikációs emailt az Account Status szekcióban.', 'Check the link, or request a new verification email in the Account Status section.'),
+        details: payload.message || tx('Ismeretlen hiba történt az email megerősítése során.', 'An unknown error occurred during email verification.')
     };
 
     if (payload.success && payload.alreadyVerified) {
         presentation = {
             state: 'info',
-            statusLabel: 'Már megerősítve',
+            statusLabel: tx('Már megerősítve', 'Already verified'),
             statusIcon: 'bi-info-circle-fill',
-            title: 'Az email cím már megerősített állapotban van',
-            subtitle: 'Nincs további teendő, a fiókod használatra kész.',
-            details: payload.message || 'A megerősítés korábban már megtörtént.'
+            title: tx('Az email cím már megerősített állapotban van', 'The email address is already verified'),
+            subtitle: tx('Nincs további teendő, a fiókod használatra kész.', 'Nothing else to do — your account is ready to use.'),
+            details: payload.message || tx('A megerősítés korábban már megtörtént.', 'Verification already completed earlier.')
         };
     } else if (payload.success) {
         presentation = {
             state: 'success',
-            statusLabel: 'Sikeres',
+            statusLabel: tx('Sikeres', 'Success'),
             statusIcon: 'bi-check-circle-fill',
-            title: 'Sikeres email megerősítés',
-            subtitle: 'Most már minden olyan funkciót használhatsz, ami verifikált emailt igényel.',
-            details: payload.message || 'A megerősítés sikeresen megtörtént.'
+            title: tx('Sikeres email megerősítés', 'Email verification successful'),
+            subtitle: tx('Most már minden olyan funkciót használhatsz, ami verifikált emailt igényel.', 'You can now use every feature that requires a verified email.'),
+            details: payload.message || tx('A megerősítés sikeresen megtörtént.', 'Verification completed successfully.')
         };
     } else if (payload.code === 'TOKEN_EXPIRED') {
         presentation = {
             state: 'warning',
-            statusLabel: 'Lejárt link',
+            statusLabel: tx('Lejárt link', 'Expired link'),
             statusIcon: 'bi-exclamation-triangle-fill',
-            title: 'A verifikációs link lejárt',
-            subtitle: 'Kérj új megerősítő emailt az Account Status szekcióban.',
-            details: payload.message || 'A korábbi link már nem használható.'
+            title: tx('A verifikációs link lejárt', 'The verification link has expired'),
+            subtitle: tx('Kérj új megerősítő emailt az Account Status szekcióban.', 'Request a new verification email in the Account Status section.'),
+            details: payload.message || tx('A korábbi link már nem használható.', 'The previous link can no longer be used.')
         };
     } else if (payload.code === 'INVALID_TOKEN') {
         presentation = {
             state: 'error',
-            statusLabel: 'Érvénytelen link',
+            statusLabel: tx('Érvénytelen link', 'Invalid link'),
             statusIcon: 'bi-shield-x',
-            title: 'A verifikációs link érvénytelen',
-            subtitle: 'Valószínűleg hibás vagy már felhasznált hivatkozásra kattintottál.',
-            details: payload.message || 'Kérj új megerősítő emailt a profilodban.'
+            title: tx('A verifikációs link érvénytelen', 'The verification link is invalid'),
+            subtitle: tx('Valószínűleg hibás vagy már felhasznált hivatkozásra kattintottál.', 'You probably clicked an incorrect or already used link.'),
+            details: payload.message || tx('Kérj új megerősítő emailt a profilodban.', 'Request a new verification email from your profile.')
         };
     }
 

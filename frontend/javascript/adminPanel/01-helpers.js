@@ -1,6 +1,7 @@
 // MINDEN API AMI ITT MEG VAN HÍVVA ISADMIN() VALIDÁLÁSSAL KELL TÖRTÉNJEN A BACKENDEN,
 // HOGY CSAK ADMINOK FÉRHESSENEK HOZZÁJUK
 const requestController = window.createRequestController(300);
+const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
 
 /* =============================================================
    1) Apró segédek — delegate-ek a `_utils.js` egyetlen kanonikus implementációjára
@@ -31,11 +32,11 @@ const formatRelative = (date) => {
         if (date) {
             const d = date instanceof Date ? date : new Date(date);
             const diffSec = Math.max(0, Math.round((Date.now() - d.getTime()) / 1000));
-            if (diffSec < 5) result = 'Épp most';
-            else if (diffSec < 60) result = `${diffSec} mp-e`;
-            else if (diffSec < 3600) result = `${Math.floor(diffSec / 60)} perce`;
-            else if (diffSec < 86400) result = `${Math.floor(diffSec / 3600)} órája`;
-            else result = `${Math.floor(diffSec / 86400)} napja`;
+            if (diffSec < 5) result = tx('Épp most', 'Just now');
+            else if (diffSec < 60) result = tx(`${diffSec} mp-e`, `${diffSec}s ago`);
+            else if (diffSec < 3600) result = tx(`${Math.floor(diffSec / 60)} perce`, `${Math.floor(diffSec / 60)}m ago`);
+            else if (diffSec < 86400) result = tx(`${Math.floor(diffSec / 3600)} órája`, `${Math.floor(diffSec / 3600)}h ago`);
+            else result = tx(`${Math.floor(diffSec / 86400)} napja`, `${Math.floor(diffSec / 86400)}d ago`);
         }
     } catch (err) {
         console.warn('formatRelative hiba:', err);
@@ -174,8 +175,8 @@ const h = {
     avatar: (userObj, size = 32) => {
         const viewModel = window.MattMesterProfileImage?.buildProfileImageViewModel?.(userObj) || {
             src: '/profile_pictures/default.png',
-            username: typeof userObj === 'string' ? userObj : (userObj?.username || 'Felhasználó'),
-            alt: 'Profilkép'
+            username: typeof userObj === 'string' ? userObj : (userObj?.username || tx('Felhasználó', 'User')),
+            alt: tx('Profilkép', 'Profile image')
         };
         return `
             <img src="${viewModel.src}"
@@ -233,11 +234,11 @@ const h = {
         return `<div class="col-md-${col}">${labelHtml}${input}</div>`;
     },
 
-    form: ({ fields, submit = { label: 'Mentés', icon: 'bi-check2', variant: 'gold' }, cancel, extraButtons = [] }) => `
+    form: ({ fields, submit = { label: tx('Mentés', 'Save'), icon: 'bi-check2', variant: 'gold' }, cancel, extraButtons = [] }) => `
         <form class="row g-3" onsubmit="event.preventDefault();">
             ${fields.map(h.field).join('')}
             <div class="col-12 d-flex justify-content-end gap-2 mt-2">
-                ${cancel ? h.btn({ label: cancel.label || 'Mégse', variant: 'outline-light' }) : ''}
+                ${cancel ? h.btn({ label: cancel.label || tx('Mégse', 'Cancel'), variant: 'outline-light' }) : ''}
                 ${extraButtons.map(h.btn).join('')}
                 ${h.btn(submit)}
             </div>
@@ -274,57 +275,69 @@ const h = {
    3) Severity / alert helperek
    ============================================================= */
 const SEVERITY = {
-    info: { label: 'Info', icon: 'bi-info-circle-fill', cls: 'sev-info' },
-    warning: { label: 'Warning', icon: 'bi-exclamation-triangle-fill', cls: 'sev-warning' },
-    critical: { label: 'Critical', icon: 'bi-exclamation-octagon-fill', cls: 'sev-critical' }
+    info: { label: () => tx('Info', 'Info'), icon: 'bi-info-circle-fill', cls: 'sev-info' },
+    warning: { label: () => tx('Warning', 'Warning'), icon: 'bi-exclamation-triangle-fill', cls: 'sev-warning' },
+    critical: { label: () => tx('Critical', 'Critical'), icon: 'bi-exclamation-octagon-fill', cls: 'sev-critical' }
 };
 const ALERT_KIND = {
-    unauthorized: { label: 'Jogosulatlan próba', icon: 'bi-shield-fill-x' },
-    rate_escalated: { label: 'Rate limit szigorítás', icon: 'bi-speedometer2' },
-    token_invalid: { label: 'Token hiba', icon: 'bi-key-fill' },
-    suspicious_pattern: { label: 'Gyanús minta', icon: 'bi-bug-fill' },
-    user_banned:   { label: 'Felhasználó tiltva',   icon: 'bi-slash-circle-fill' },
-    user_unbanned: { label: 'Tiltás feloldva',      icon: 'bi-check-circle-fill' },
-    user_deleted:  { label: 'Felhasználó törölve',  icon: 'bi-trash3-fill' }
+    unauthorized: { label: () => tx('Jogosulatlan próba', 'Unauthorized attempt'), icon: 'bi-shield-fill-x' },
+    rate_escalated: { label: () => tx('Rate limit szigorítás', 'Rate limit escalated'), icon: 'bi-speedometer2' },
+    token_invalid: { label: () => tx('Token hiba', 'Token error'), icon: 'bi-key-fill' },
+    suspicious_pattern: { label: () => tx('Gyanús minta', 'Suspicious pattern'), icon: 'bi-bug-fill' },
+    user_banned:   { label: () => tx('Felhasználó tiltva', 'User banned'),   icon: 'bi-slash-circle-fill' },
+    user_unbanned: { label: () => tx('Tiltás feloldva', 'Ban lifted'),      icon: 'bi-check-circle-fill' },
+    user_deleted:  { label: () => tx('Felhasználó törölve', 'User deleted'),  icon: 'bi-trash3-fill' }
 };
 const severityPill = (key) => {
     const s = SEVERITY[key] || SEVERITY.info;
-    return `<span class="severity-pill ${s.cls}"><i class="bi ${s.icon}"></i>${s.label}</span>`;
+    const label = typeof s.label === 'function' ? s.label() : s.label;
+    return `<span class="severity-pill ${s.cls}"><i class="bi ${s.icon}"></i>${label}</span>`;
 };
 const alertKindLabel = (key) => {
-    const k = ALERT_KIND[key] || { label: key, icon: 'bi-question-circle' };
-    return `<span class="alert-kind"><i class="bi ${k.icon}"></i>${k.label}</span>`;
+    const k = ALERT_KIND[key] || { label: () => key, icon: 'bi-question-circle' };
+    const label = typeof k.label === 'function' ? k.label() : k.label;
+    return `<span class="alert-kind"><i class="bi ${k.icon}"></i>${label}</span>`;
 };
 
 const STATUS_BADGE = {
-    active: { label: 'Aktív', cls: 'badge-status-active' },
-    banned: { label: 'Tiltott', cls: 'badge-status-banned' },
-    pending: { label: 'Függő', cls: 'badge-status-pending' },
-    live: { label: 'Folyamatban', cls: 'bg-success' },
-    ongoing: { label: 'Élő', cls: 'bg-success' },
-    finished: { label: 'Befejezett', cls: 'bg-secondary' },
-    abandoned: { label: 'Megszakított', cls: 'bg-warning text-dark' }
+    active: { label: () => tx('Aktív', 'Active'), cls: 'badge-status-active' },
+    banned: { label: () => tx('Tiltott', 'Banned'), cls: 'badge-status-banned' },
+    pending: { label: () => tx('Függő', 'Pending'), cls: 'badge-status-pending' },
+    live: { label: () => tx('Folyamatban', 'In progress'), cls: 'bg-success' },
+    ongoing: { label: () => tx('Élő', 'Live'), cls: 'bg-success' },
+    finished: { label: () => tx('Befejezett', 'Finished'), cls: 'bg-secondary' },
+    abandoned: { label: () => tx('Megszakított', 'Abandoned'), cls: 'bg-warning text-dark' }
 };
 const UNKNOWN_BADGE = { label: '—', cls: 'bg-secondary' };
 const ROLE_BADGE = {
-    admin: { label: 'Admin', cls: 'badge-role-admin' },
-    player: { label: 'Játékos', cls: 'badge-role-player' }
+    admin: { label: () => tx('Admin', 'Admin'), cls: 'badge-role-admin' },
+    player: { label: () => tx('Játékos', 'Player'), cls: 'badge-role-player' }
 };
 const RISK_BADGE = {
-    low: { label: 'Alacsony', cls: 'bg-success' },
-    medium: { label: 'Közepes', cls: 'bg-warning text-dark' },
-    high: { label: 'Magas', cls: 'bg-danger' }
+    low: { label: () => tx('Alacsony', 'Low'), cls: 'bg-success' },
+    medium: { label: () => tx('Közepes', 'Medium'), cls: 'bg-warning text-dark' },
+    high: { label: () => tx('Magas', 'High'), cls: 'bg-danger' }
+};
+const _resolveLabel = (s, key) => {
+    if (!s) return key || UNKNOWN_BADGE.label;
+    return typeof s.label === 'function' ? s.label() : s.label;
 };
 const statusPill = (key) => {
-    const s = STATUS_BADGE[key] || { ...UNKNOWN_BADGE, label: key || UNKNOWN_BADGE.label };
-    return `<span class="badge ${s.cls}">${s.label}</span>`;
+    const s = STATUS_BADGE[key];
+    const label = s ? _resolveLabel(s) : (key || UNKNOWN_BADGE.label);
+    const cls = s ? s.cls : UNKNOWN_BADGE.cls;
+    return `<span class="badge ${cls}">${label}</span>`;
 };
 const rolePill = (key) => {
-    const s = ROLE_BADGE[key] || { ...UNKNOWN_BADGE, label: key || UNKNOWN_BADGE.label };
-    return `<span class="badge ${s.cls}">${s.label}</span>`;
+    const s = ROLE_BADGE[key];
+    const label = s ? _resolveLabel(s) : (key || UNKNOWN_BADGE.label);
+    const cls = s ? s.cls : UNKNOWN_BADGE.cls;
+    return `<span class="badge ${cls}">${label}</span>`;
 };
 const riskPill = (key) => {
-    const s = RISK_BADGE[key] || { ...UNKNOWN_BADGE, label: key || UNKNOWN_BADGE.label };
-    return `<span class="badge ${s.cls}">${s.label}</span>`;
+    const s = RISK_BADGE[key];
+    const label = s ? _resolveLabel(s) : (key || UNKNOWN_BADGE.label);
+    const cls = s ? s.cls : UNKNOWN_BADGE.cls;
+    return `<span class="badge ${cls}">${label}</span>`;
 };
 

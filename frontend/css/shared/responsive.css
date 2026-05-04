@@ -1,0 +1,205 @@
+/* =============================================================
+   Issue #2 — Reszponzivitas all in one
+   =============================================================
+   5 fix breakpoint, mind a 4 fo oldalon (index, profile, adminPanel, chess)
+   bekotve. Ez a fajl NEM ir felul oldal-specifikus stilusokat;
+   csak globalis layout-finomhangolas (font-size, gap, padding,
+   navbar-tomoritese, oldalsav-osszehuzas, max-width 1920px).
+
+   Breakpoints (mobile-first stilus, desktop-as default):
+       phone:        max-width: 480px
+       tablet:       max-width: 768px
+       laptop:       max-width: 1024px
+       small monitor: max-width: 1366px
+       large monitor: max-width: 1920px
+   ============================================================= */
+
+/* ── 1. Globalis max-width 1920px ──
+   1920px-nel szelesebb monitoron a tartalmat kozeperitjuk, hogy
+   ne oszoljon szet ervenytelenul. */
+html {
+    max-width: 100%;
+}
+body {
+    max-width: 1920px;
+    margin-left: auto;
+    margin-right: auto;
+    overflow-x: hidden;
+}
+
+/* ── 2. Touch-target minimum 44x44px ──
+   Az iOS HIG es a WCAG 2.1 AA elhozza ezt a meretet a touch-eszkozokon.
+   Apply CSAK olyan oldalakon, ahol a sugarazott pointer-coarse media query
+   matchel — desktop egerre nem kell. */
+@media (pointer: coarse) {
+    button:not(.fab-chat):not(.navbar-toggler):not(.btn-close),
+    .btn,
+    .nav-link,
+    a.btn,
+    [role="button"] {
+        min-height: 40px;
+    }
+}
+
+/* =============================================================
+   ── 3. PHONE (≤ 480px) ──
+   Kicsi telefon (iPhone SE / Mini), szabaly: minden 1 oszlopra
+   stack-el, font-size csokkentve, navigaciok bezarodnak hamburger
+   menube. A `.hide-on-phone` osztaly lehetove teszi a explicit
+   elrejtest egyes elemekre.
+   ============================================================= */
+@media (max-width: 480px) {
+    html { font-size: 14px; }
+    body { padding: 0; }
+
+    /* Containerek: full-width, kis padding */
+    .container, .container-fluid, .container-lg, .container-xl {
+        padding-left: 0.75rem;
+        padding-right: 0.75rem;
+    }
+
+    /* Tipikus 2-3-4 oszlopos sor mobilon 1 oszlopra omlik */
+    .row > [class*="col-"] {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    /* Modal-ok teljes szelesseguek */
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: calc(100vw - 1rem);
+    }
+
+    /* Heading-ek kisebbre */
+    h1, .h1 { font-size: 1.5rem; }
+    h2, .h2 { font-size: 1.25rem; }
+    h3, .h3 { font-size: 1.1rem; }
+
+    /* Hide-on-phone marker */
+    .hide-on-phone, .hide-mobile { display: none !important; }
+
+    /* Chess-sakktabla mobilra: a tabla szelessege kovesse a viewport-ot */
+    .board-wrap, .board {
+        max-width: calc(100vw - 1rem);
+    }
+
+    /* Topbar kompresszio */
+    .topbar { padding: 0.5rem 0.75rem; gap: 0.5rem; }
+    .clock { font-size: 1rem; }
+
+    /* Sidebar: collapse-elve marad kezdetben mobilon */
+    .sidebar { width: 100%; max-width: 280px; }
+}
+
+/* =============================================================
+   ── 4. TABLET (481px – 768px) ──
+   Kozepes telefon / kicsi tablet. 2 oszlopos elrendezesek
+   maradnak, sidebar collapsed-default.
+   ============================================================= */
+@media (min-width: 481px) and (max-width: 768px) {
+    html { font-size: 15px; }
+
+    .container, .container-fluid, .container-lg, .container-xl {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    /* col-md-6 szeru elemek 50/50 maradnak, kisebbek 100% */
+    .row > [class*="col-12"]:not([class*="col-sm"]):not([class*="col-md"]) {
+        flex: 0 0 100%;
+    }
+
+    .modal-dialog { max-width: 95vw; }
+
+    h1, .h1 { font-size: 1.75rem; }
+    h2, .h2 { font-size: 1.4rem; }
+
+    .hide-on-tablet { display: none !important; }
+
+    .board-wrap, .board {
+        max-width: 90vw;
+    }
+}
+
+/* =============================================================
+   ── 5. LAPTOP (769px – 1024px) ──
+   Standard laptop kepernyo (1024×768, 13" Macbook). A sidebar
+   keskenyebb, content szelesebb. Bootstrap col-lg-* mar
+   beallitja ezt — a finomhangolas a custom layout-ra (.app, .grid).
+   ============================================================= */
+@media (min-width: 769px) and (max-width: 1024px) {
+    html { font-size: 15px; }
+
+    .container, .container-fluid, .container-lg, .container-xl {
+        max-width: 96%;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+
+    /* Chess oldal: a sidebar es a tabla osszehugulnak hogy elferjenek */
+    .app { gap: 0.75rem; }
+
+    .hide-on-laptop { display: none !important; }
+}
+
+/* =============================================================
+   ── 6. KIS MONITOR (1025px – 1366px) ──
+   Tipikus 14"-15" laptop / kis irodaszek monitor. A default
+   stilusok itt mar joak — csak a max-width-et finomhangoljuk.
+   ============================================================= */
+@media (min-width: 1025px) and (max-width: 1366px) {
+    .container, .container-lg, .container-xl {
+        max-width: 1240px;
+    }
+}
+
+/* =============================================================
+   ── 7. NAGY MONITOR (1367px – 1920px) ──
+   24-27" desktop monitor. A content max-width-jet 1600px-re
+   limitaljuk hogy ne hosszuljon a sor, javitva a olvashatosagot.
+   ============================================================= */
+@media (min-width: 1367px) and (max-width: 1920px) {
+    .container, .container-lg, .container-xl {
+        max-width: 1600px;
+    }
+
+    /* Olvashatosag: max-width 70-80ch a long-form content-en */
+    article p, .text-content p {
+        max-width: 80ch;
+    }
+}
+
+/* =============================================================
+   ── 8. ULTRA-WIDE (> 1920px) — body cap mar megvan ──
+   ============================================================= */
+@media (min-width: 1921px) {
+    /* A body { max-width: 1920px } mar limitalja, semmi tovabbi tennivalo. */
+}
+
+/* =============================================================
+   ── 9. Landscape mobile fix (legmagasabb prioritas) ──
+   Telefon landscape orientacio: a felso navbar magassagat
+   csokkentjuk hogy ne foglalja el a viewport-felet.
+   ============================================================= */
+@media (max-height: 480px) and (orientation: landscape) {
+    :root { --mm-tnb-h: 44px; }
+    .mm-top-navbar-greeting { display: none; }
+    .navbar { min-height: 44px; padding-top: 0.25rem; padding-bottom: 0.25rem; }
+}
+
+/* =============================================================
+   ── 10. Reduced-motion support ──
+   A felhasznalo OS-szintu prefers-reduced-motion beallitasat
+   tiszteljuk: animaciokat es transition-oket lecsokkentjuk.
+   ============================================================= */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+    .fab-chat { animation: none !important; }
+}

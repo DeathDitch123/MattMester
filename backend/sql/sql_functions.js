@@ -106,6 +106,7 @@ module.exports = {
     cleanupDirectConversationBetween: chat.cleanupDirectConversationBetween,
     cleanupUnusableConversationsForUser: chat.cleanupUnusableConversationsForUser,
     containsBlockedWord: chat.containsBlockedWord,
+    maskBlockedWords: chat.maskBlockedWords,
     normalizeTextForModeration: chat.normalizeTextForModeration,
     getUnreadChatMessageTotal: chat.getUnreadChatMessageTotal,
     markConversationReadForUser: chat.markConversationReadForUser,

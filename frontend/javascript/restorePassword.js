@@ -1,3 +1,4 @@
+const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
 const RESTORE_PASSWORD_REGEX = window.MattMesterValidationRules?.PASSWORD_REGEX || /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
 const RESET_TOKEN = new URLSearchParams(window.location.search).get('token') || '';
 let resetTokenState = RESET_TOKEN ? 'pending' : 'invalid';
@@ -92,14 +93,14 @@ function validatePasswordByPolicy(passwordInput, options = {}) {
 
     if (!password) {
         if (settings.required) {
-            error = 'A jelszó megadása kötelező.';
+            error = tx('A jelszó megadása kötelező.', 'Password is required.');
         }
     } else if (!settings.allowBackslash && password.includes('\\')) {
-        error = 'A jelszó nem megengedett karaktert tartalmaz.';
+        error = tx('A jelszó nem megengedett karaktert tartalmaz.', 'The password contains a disallowed character.');
     } else if (password.length < settings.minLength) {
-        error = `A jelszónak legalább ${settings.minLength} karakter hosszúnak kell lennie.`;
+        error = tx(`A jelszónak legalább ${settings.minLength} karakter hosszúnak kell lennie.`, `Password must be at least ${settings.minLength} characters long.`);
     } else if (settings.enforceComplexity && !RESTORE_PASSWORD_REGEX.test(password)) {
-        error = 'A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.';
+        error = tx('A jelszónak tartalmaznia kell nagybetűt, kisbetűt és számot.', 'Password must contain an uppercase letter, lowercase letter and a digit.');
     }
 
     const result = {
@@ -128,14 +129,14 @@ function validateRestorePasswordForm() {
 
         if (passwordValidation.isValid && isRejectedSameAsOld) {
             passwordValidation.isValid = false;
-            passwordValidation.error = 'Az új jelszó nem lehet ugyanaz, mint a régi jelszó! Változtasd meg.';
+            passwordValidation.error = tx('Az új jelszó nem lehet ugyanaz, mint a régi jelszó! Változtasd meg.', 'The new password cannot be the same as the old one! Please change it.');
         }
 
         applyPasswordFeedback(
             elements.newPasswordInput,
             elements.newPasswordFeedback,
             passwordValidation.isValid ? 'success' : 'error',
-            passwordValidation.isValid ? 'A jelszó formátuma megfelelő.' : passwordValidation.error
+            passwordValidation.isValid ? tx('A jelszó formátuma megfelelő.', 'Password format is OK.') : passwordValidation.error
         );
 
         if (!confirmPassword) {
@@ -143,15 +144,15 @@ function validateRestorePasswordForm() {
                 elements.confirmPasswordInput,
                 elements.confirmPasswordFeedback,
                 'neutral',
-                'Erősítsd meg az új jelszót.'
+                tx('Erősítsd meg az új jelszót.', 'Confirm the new password.')
             );
-            overallMessage = 'Erősítsd meg az új jelszót.';
+            overallMessage = tx('Erősítsd meg az új jelszót.', 'Confirm the new password.');
         } else if (!passwordValidation.isValid) {
             applyPasswordFeedback(
                 elements.confirmPasswordInput,
                 elements.confirmPasswordFeedback,
                 'neutral',
-                'Előbb javítsd az új jelszót.'
+                tx('Előbb javítsd az új jelszót.', 'Fix the new password first.')
             );
             overallMessage = passwordValidation.error;
         } else if (!passwordsMatch) {
@@ -159,17 +160,17 @@ function validateRestorePasswordForm() {
                 elements.confirmPasswordInput,
                 elements.confirmPasswordFeedback,
                 'error',
-                'A két jelszó nem egyezik.'
+                tx('A két jelszó nem egyezik.', 'The two passwords do not match.')
             );
-            overallMessage = 'A két jelszó nem egyezik.';
+            overallMessage = tx('A két jelszó nem egyezik.', 'The two passwords do not match.');
         } else {
             applyPasswordFeedback(
                 elements.confirmPasswordInput,
                 elements.confirmPasswordFeedback,
                 'success',
-                'A jelszó megerősítése rendben.'
+                tx('A jelszó megerősítése rendben.', 'Password confirmation OK.')
             );
-            overallMessage = 'Minden rendben, jelszó frissítésre kész.';
+            overallMessage = tx('Minden rendben, jelszó frissítésre kész.', 'All good, ready to update password.');
             isValid = true;
         }
 
@@ -187,8 +188,8 @@ function validateRestorePasswordForm() {
             elements.confirmPasswordInput.classList.remove('is-valid', 'is-invalid');
         }
         overallMessage = resetTokenState === 'invalid'
-            ? 'A visszaállító link érvénytelen vagy lejárt.'
-            : 'A visszaállító link ellenőrzése folyamatban van.';
+            ? tx('A visszaállító link érvénytelen vagy lejárt.', 'The reset link is invalid or expired.')
+            : tx('A visszaállító link ellenőrzése folyamatban van.', 'Verifying the reset link...');
         setRestorePasswordStatus(resetTokenState === 'invalid' ? 'danger' : 'warning', overallMessage);
         setRestorePasswordAlert('', '');
     }
@@ -243,22 +244,22 @@ async function verifyResetToken() {
     let tokenValid = false;
     try {
         if (!RESET_TOKEN) {
-            setTokenState('invalid', 'Hiányzó vagy érvénytelen visszaállító token. Kérj új emailt a bejelentkezési oldalon.');
+            setTokenState('invalid', tx('Hiányzó vagy érvénytelen visszaállító token. Kérj új emailt a bejelentkezési oldalon.', 'Missing or invalid reset token. Request a new email on the sign-in page.'));
         } else {
             const response = await fetch(`/api/auth/reset-password/verify?token=${encodeURIComponent(RESET_TOKEN)}`);
             const result = await response.json().catch(() => ({}));
 
             if (!response.ok || !result.success) {
-                setTokenState('invalid', result.message || 'A visszaállító link érvénytelen vagy lejárt.');
+                setTokenState('invalid', result.message || tx('A visszaállító link érvénytelen vagy lejárt.', 'The reset link is invalid or expired.'));
             } else {
                 tokenValid = true;
-                setTokenState('ready', result.message || 'A visszaállító link érvényes. Add meg az új jelszavad.');
+                setTokenState('ready', result.message || tx('A visszaállító link érvényes. Add meg az új jelszavad.', 'The reset link is valid. Enter your new password.'));
                 validateRestorePasswordForm();
             }
         }
     } catch (error) {
         console.error('Token ellenőrzési hiba:', error);
-        setTokenState('invalid', 'Nem sikerült ellenőrizni a visszaállító linket.');
+        setTokenState('invalid', tx('Nem sikerült ellenőrizni a visszaállító linket.', 'Could not verify the reset link.'));
     }
     return tokenValid;
 }
@@ -270,12 +271,12 @@ async function submitRestorePassword() {
         const validation = validateRestorePasswordForm();
         if (!validation.isValid || resetTokenState !== 'ready') {
             if (resetTokenState !== 'ready') {
-                setRestorePasswordAlert('danger', 'Hiányzó token. Nyisd meg újra a levélben kapott linket.');
+                setRestorePasswordAlert('danger', tx('Hiányzó token. Nyisd meg újra a levélben kapott linket.', 'Missing token. Reopen the link from your email.'));
             }
         } else {
             if (elements.submitButton) {
                 elements.submitButton.disabled = true;
-                elements.submitButton.textContent = 'Frissítés folyamatban...';
+                elements.submitButton.textContent = tx('Frissítés folyamatban...', 'Updating...');
             }
 
             const response = await fetch('/api/auth/reset-password', {
@@ -296,12 +297,12 @@ async function submitRestorePassword() {
                         elements.newPasswordInput.focus();
                     }
                 }
-                throw new Error(result.message || 'Sikertelen jelszó-visszaállítás.');
+                throw new Error(result.message || tx('Sikertelen jelszó-visszaállítás.', 'Password reset failed.'));
             }
 
             success = true;
-            setRestorePasswordAlert('success', result.message || 'A jelszavad sikeresen frissítve lett.');
-            setRestorePasswordStatus('success', 'A jelszófrissítés sikeres.');
+            setRestorePasswordAlert('success', result.message || tx('A jelszavad sikeresen frissítve lett.', 'Your password was updated successfully.'));
+            setRestorePasswordStatus('success', tx('A jelszófrissítés sikeres.', 'Password update successful.'));
             if (elements.form) {
                 elements.form.reset();
             }
@@ -314,10 +315,10 @@ async function submitRestorePassword() {
         }
     } catch (error) {
         console.error('Jelszó visszaállítási hiba:', error);
-        setRestorePasswordAlert('danger', error.message || 'Nem sikerült frissíteni a jelszót.');
+        setRestorePasswordAlert('danger', error.message || tx('Nem sikerült frissíteni a jelszót.', 'Could not update the password.'));
     } finally {
         if (elements.submitButton) {
-            elements.submitButton.textContent = 'Jelszó frissítése';
+            elements.submitButton.textContent = tx('Jelszó frissítése', 'Update password');
             if (success) {
                 elements.submitButton.disabled = true;
             } else {
@@ -359,7 +360,7 @@ function bindRestorePasswordPage() {
     if (canProceed) {
         verifyResetToken();
     } else {
-        setTokenState('invalid', 'Hiányzó visszaállító token. Kérj új emailt a bejelentkezési oldalon.');
+        setTokenState('invalid', tx('Hiányzó visszaállító token. Kérj új emailt a bejelentkezési oldalon.', 'Missing reset token. Request a new email on the sign-in page.'));
     }
 
     validateRestorePasswordForm();

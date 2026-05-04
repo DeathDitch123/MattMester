@@ -28,7 +28,10 @@ const {
 } = require('../chess/abilities.js');
 
 function freshAbilGame() {
-    const { jatek, gameId } = jatekLetrehoz({ mode: 'mattmester' }); // abilities-be aktivalt
+    // Issue #4 — alap teszt-meccs `mattmester_10p` (idokorlatos), hogy a
+    // `time_pause` aktivalhato legyen. A `mattmester` ∞ mode kulon test-case-ben
+    // ellenorzott (lasd `time_pause vegtelen idős módban`).
+    const { jatek, gameId } = jatekLetrehoz({ mode: 'mattmester_10p' });
     jatekUjraIndit(jatek);
     return { jatek, gameId };
 }
@@ -152,6 +155,16 @@ describe('time_pause', () => {
         jatek.abilities.points.white = 100;
         abilityAktival(jatek, 'white', 'time_pause');
         expect(jatek.koronLevo).toBe('white');
+    });
+
+    // Issue #4 — vegtelen idős módban a time_pause értelmetlen.
+    test('vegtelen idős módban (mattmester ∞) elutasitva', () => {
+        const { jatek } = jatekLetrehoz({ mode: 'mattmester' });
+        jatekUjraIndit(jatek);
+        jatek.abilities.points.white = 100;
+        const r = abilityAktival(jatek, 'white', 'time_pause');
+        expect(r.success).toBe(false);
+        expect(r.error).toMatch(/(végtelen|nincs óra|időlop)/i);
     });
 });
 

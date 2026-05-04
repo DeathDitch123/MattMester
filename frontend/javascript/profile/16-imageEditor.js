@@ -46,7 +46,7 @@ function resetProfileImageEditorState() {
 
     if (elements.saveButton) {
         elements.saveButton.disabled = !profileImageEditorState.image;
-        elements.saveButton.textContent = 'Mentés';
+        elements.saveButton.textContent = tx('Mentés', 'Save');
     }
 
     setProfileImageEditorMessage('danger', '');
@@ -110,7 +110,7 @@ function renderProfileImageEditor() {
         ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
         ctx.font = '15px Inter, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Válassz egy képet a szerkesztéshez.', canvas.width / 2, canvas.height / 2);
+        ctx.fillText(tx('Válassz egy képet a szerkesztéshez.', 'Select an image to edit.'), canvas.width / 2, canvas.height / 2);
         return;
     }
 
@@ -216,15 +216,15 @@ function bindProfileImageEditorCanvasEvents() {
 
 function validateProfileImageFile(file) {
     if (!file) {
-        return 'A kép kiválasztása kötelező.';
+        return tx('A kép kiválasztása kötelező.', 'Image selection is required.');
     }
 
     if (!PROFILE_IMAGE_ALLOWED_MIME_TYPES.has(file.type)) {
-        return 'Nem támogatott képformátum. Csak JPG, PNG és WEBP engedélyezett.';
+        return tx('Nem támogatott képformátum. Csak JPG, PNG és WEBP engedélyezett.', 'Unsupported image format. Only JPG, PNG and WEBP are allowed.');
     }
 
     if (file.size > PROFILE_IMAGE_MAX_SIZE_BYTES) {
-        return 'A kép mérete legfeljebb 3 MB lehet.';
+        return tx('A kép mérete legfeljebb 3 MB lehet.', 'The image size can be at most 3 MB.');
     }
 
     return '';
@@ -244,7 +244,7 @@ async function openProfileImageEditorFromFile(file) {
 
     await new Promise((resolve, reject) => {
         image.onload = () => resolve();
-        image.onerror = () => reject(new Error('A kép betöltése sikertelen.'));
+        image.onerror = () => reject(new Error(tx('A kép betöltése sikertelen.', 'Image loading failed.')));
     });
 
     profileImageEditorState.image = image;
@@ -259,7 +259,7 @@ function getCroppedProfileImageBlob() {
     const { canvas } = getProfileImageEditorElements();
     const image = profileImageEditorState.image;
     if (!canvas || !image) {
-        return Promise.reject(new Error('Nincs szerkesztésre kiválasztott kép.'));
+        return Promise.reject(new Error(tx('Nincs szerkesztésre kiválasztott kép.', 'No image selected for editing.')));
     }
 
     const cropRadius = getEditorCropRadius(canvas);
@@ -268,7 +268,7 @@ function getCroppedProfileImageBlob() {
     outputCanvas.height = 512;
     const outputCtx = outputCanvas.getContext('2d');
     if (!outputCtx) {
-        return Promise.reject(new Error('Nem sikerült előkészíteni a kép mentését.'));
+        return Promise.reject(new Error(tx('Nem sikerült előkészíteni a kép mentését.', 'Failed to prepare image saving.')));
     }
 
     outputCtx.drawImage(
@@ -286,7 +286,7 @@ function getCroppedProfileImageBlob() {
     return new Promise((resolve, reject) => {
         outputCanvas.toBlob((blob) => {
             if (!blob) {
-                reject(new Error('A kép mentése sikertelen.'));
+                reject(new Error(tx('A kép mentése sikertelen.', 'Image saving failed.')));
                 return;
             }
 
@@ -302,13 +302,13 @@ async function submitProfileImageUpload() {
     }
 
     if (!profileImageEditorState.image) {
-        setProfileImageEditorMessage('danger', 'Nincs szerkesztésre kiválasztott kép.');
+        setProfileImageEditorMessage('danger', tx('Nincs szerkesztésre kiválasztott kép.', 'No image selected for editing.'));
         return;
     }
 
     profileImageEditorState.uploading = true;
     elements.saveButton.disabled = true;
-    elements.saveButton.textContent = 'Feltöltés...';
+    elements.saveButton.textContent = tx('Feltöltés...', 'Uploading...');
     setProfileImageEditorMessage('danger', '');
 
     try {
@@ -324,10 +324,10 @@ async function submitProfileImageUpload() {
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
             handleEmailNotVerifiedCta(result);
-            throw new Error(result.message || 'A képfeltöltés nem sikerült.');
+            throw new Error(result.message || tx('A képfeltöltés nem sikerült.', 'Image upload failed.'));
         }
 
-        setProfileSettingsMessage('success', result.message || 'A profilkép feltöltve, függő státuszba került.');
+        setProfileSettingsMessage('success', result.message || tx('A profilkép feltöltve, függő státuszba került.', 'The profile picture was uploaded and is now pending.'));
 
         if (elements.modal) {
             const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
@@ -341,13 +341,13 @@ async function submitProfileImageUpload() {
         await syncSocketContextOrReconnect('profile-image-upload');
         await refreshAuthUi('profile-image-upload-success');
     } catch (error) {
-        setProfileImageEditorMessage('danger', error.message || 'Hiba történt a képfeltöltés közben.');
-        throw new Error(error.message || 'Profilkép feltöltési hiba.');
+        setProfileImageEditorMessage('danger', error.message || tx('Hiba történt a képfeltöltés közben.', 'An error occurred during image upload.'));
+        throw new Error(error.message || tx('Profilkép feltöltési hiba.', 'Profile picture upload error.'));
     } finally {
         profileImageEditorState.uploading = false;
         if (elements.saveButton) {
             elements.saveButton.disabled = !profileImageEditorState.image;
-            elements.saveButton.textContent = 'Mentés';
+            elements.saveButton.textContent = tx('Mentés', 'Save');
         }
     }
 }
@@ -356,11 +356,11 @@ function bindProfileImageUploadEvents() {
     try {
         const elements = getProfileImageEditorElements();
         if (!elements.uploadInput || !elements.modal) {
-            throw new Error('Hianyzik a profile image upload input vagy modal.');
+            throw new Error(tx('Hianyzik a profile image upload input vagy modal.', 'Missing profile image upload input or modal.'));
         }
 
         if (profileImageEditorState.bound) {
-            throw new Error('A profile image upload esemenyek mar be vannak kotve.');
+            throw new Error(tx('A profile image upload esemenyek mar be vannak kotve.', 'Profile image upload events are already bound.'));
         }
 
         profileImageEditorState.bound = true;
@@ -377,7 +377,7 @@ function bindProfileImageUploadEvents() {
 
                     await openProfileImageEditorFromFile(file);
                 } catch (error) {
-                    setProfileSettingsMessage('danger', error.message || 'A kiválasztott kép nem nyitható meg.');
+                    setProfileSettingsMessage('danger', error.message || tx('A kiválasztott kép nem nyitható meg.', 'The selected image cannot be opened.'));
                     elements.uploadInput.value = '';
                     throw error;
                 }

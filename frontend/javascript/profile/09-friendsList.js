@@ -1,21 +1,21 @@
 async function openChatConversationFlow({ conversationId = 0, targetUserId = 0, source = 'friends-list', username = '' } = {}) {
     if (!window.MattMesterChatModal) {
-        throw new Error('A chat modal API nem érhető el.');
+        throw new Error(tx('A chat modal API nem érhető el.', 'The chat modal API is not available.'));
     }
 
     await window.MattMesterChatModal.init();
 
     const normalizedConversationId = Number(conversationId) || 0;
     const normalizedTargetUserId = Number(targetUserId) || 0;
-    let successMessage = 'Beszélgetés megnyitva.';
+    let successMessage = tx('Beszélgetés megnyitva.', 'Conversation opened.');
 
     if (normalizedConversationId) {
         await window.MattMesterChatModal.openConversation(normalizedConversationId);
     } else if (!normalizedTargetUserId) {
-        throw new Error('Hiányzik a cél felhasználó azonosító a chat nyitáshoz.');
+        throw new Error(tx('Hiányzik a cél felhasználó azonosító a chat nyitáshoz.', 'Missing target user id for opening chat.'));
     } else {
         await window.MattMesterChatModal.openDirectByUserId(normalizedTargetUserId);
-        successMessage = username ? `Beszélgetés megnyitva: ${username}` : 'Beszélgetés megnyitva.';
+        successMessage = username ? `${tx('Beszélgetés megnyitva:', 'Conversation opened:')} ${username}` : tx('Beszélgetés megnyitva.', 'Conversation opened.');
     }
 
     setProfileChatFeedbackBySource(source, successMessage, 'success');
@@ -59,7 +59,7 @@ function getRelationMeta(relationStatusInput) {
         return {
             relationStatus,
             listStatus: 'pending',
-            statusLabel: 'Függő kérés',
+            statusLabel: tx('Függő kérés', 'Pending request'),
             statusClass: 'text-warning'
         };
     }
@@ -68,7 +68,7 @@ function getRelationMeta(relationStatusInput) {
         return {
             relationStatus,
             listStatus: 'blocked',
-            statusLabel: 'Tiltott',
+            statusLabel: tx('Tiltott', 'Blocked'),
             statusClass: 'text-danger'
         };
     }
@@ -77,7 +77,7 @@ function getRelationMeta(relationStatusInput) {
         return {
             relationStatus,
             listStatus: 'blocked',
-            statusLabel: 'Engem tiltott',
+            statusLabel: tx('Engem tiltott', 'Blocked me'),
             statusClass: 'text-danger'
         };
     }
@@ -86,7 +86,7 @@ function getRelationMeta(relationStatusInput) {
         return {
             relationStatus,
             listStatus: 'blocked',
-            statusLabel: 'Kölcsönös tiltás',
+            statusLabel: tx('Kölcsönös tiltás', 'Mutual block'),
             statusClass: 'text-danger'
         };
     }
@@ -94,7 +94,7 @@ function getRelationMeta(relationStatusInput) {
     return {
         relationStatus: 'friends',
         listStatus: 'friend',
-        statusLabel: 'Már barát',
+        statusLabel: tx('Már barát', 'Already friend'),
         statusClass: 'text-success'
     };
 }
@@ -126,31 +126,31 @@ function getFriendActionConfigs(friend) {
     const actions = [];
 
     if (friend.canChat) {
-        actions.push({ action: 'chat', title: 'Üzenet küldése', label: 'Üzenet küldése', icon: 'message-square', buttonClass: 'btn-outline-gold' });
+        actions.push({ action: 'chat', title: tx('Üzenet küldése', 'Send message'), label: tx('Üzenet küldése', 'Send message'), icon: 'message-square', buttonClass: 'btn-outline-gold' });
     }
 
     if (friend.canDeleteFriend) {
-        actions.push({ action: 'delete-friend', title: 'Barát törlése', label: 'Barát törlése', icon: 'user-x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+        actions.push({ action: 'delete-friend', title: tx('Barát törlése', 'Delete friend'), label: tx('Barát törlése', 'Delete friend'), icon: 'user-x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
     }
 
     if (friend.canAccept) {
-        actions.push({ action: 'accept', title: 'Barát kérelem elfogadása', label: 'Elfogadás', icon: 'check', buttonClass: 'btn-outline-success', dropdownClass: 'text-success' });
+        actions.push({ action: 'accept', title: tx('Barát kérelem elfogadása', 'Accept friend request'), label: tx('Elfogadás', 'Accept'), icon: 'check', buttonClass: 'btn-outline-success', dropdownClass: 'text-success' });
     }
 
     if (friend.canReject) {
-        actions.push({ action: 'reject', title: 'Barát kérelem elutasítása', label: 'Elutasítás', icon: 'x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+        actions.push({ action: 'reject', title: tx('Barát kérelem elutasítása', 'Reject friend request'), label: tx('Elutasítás', 'Reject'), icon: 'x', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
     }
 
     if (friend.canBlock) {
-        actions.push({ action: 'block', title: 'Felhasználó tiltása', label: 'Tiltás', icon: 'ban', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
+        actions.push({ action: 'block', title: tx('Felhasználó tiltása', 'Block user'), label: tx('Tiltás', 'Block'), icon: 'ban', buttonClass: 'btn-outline-danger', dropdownClass: 'text-danger' });
     }
 
     if (friend.canUnblock) {
-        actions.push({ action: 'unblock', title: 'Tiltás visszavonása', label: 'Tiltás visszavonása', icon: 'shield-check', buttonClass: 'btn-outline-warning', dropdownClass: 'text-warning' });
+        actions.push({ action: 'unblock', title: tx('Tiltás visszavonása', 'Unblock'), label: tx('Tiltás visszavonása', 'Unblock'), icon: 'shield-check', buttonClass: 'btn-outline-warning', dropdownClass: 'text-warning' });
     }
 
     if (friend.canView) {
-        actions.push({ action: 'view', title: 'Profil megtekintése', label: 'Profil megtekintése', icon: 'eye', buttonClass: 'btn-outline-gold' });
+        actions.push({ action: 'view', title: tx('Profil megtekintése', 'View profile'), label: tx('Profil megtekintése', 'View profile'), icon: 'eye', buttonClass: 'btn-outline-gold' });
     }
 
     return actions;
@@ -174,7 +174,7 @@ function createFriendListItem(friend) {
     avatar.className = 'friend-avatar rounded-circle';
     window.MattMesterProfileImage.applyProfileImagePresentation(avatar, {
         source: friend,
-        alt: `${friend.username || 'Jatekos'} profilkepe`,
+        alt: `${friend.username || tx('Játékos', 'Player')} ${tx('profilképe', 'profile picture')}`,
         size: 40
     });
 
@@ -189,7 +189,7 @@ function createFriendListItem(friend) {
     const username = document.createElement('h6');
     username.className = 'mb-0 text-white text-truncate';
     username.style.fontSize = '0.9rem';
-    username.textContent = friend.username || 'Ismeretlen jatekos';
+    username.textContent = friend.username || tx('Ismeretlen játékos', 'Unknown player');
 
     const relation = document.createElement('small');
     relation.className = `${relationMeta.statusClass} d-block text-truncate`;
@@ -231,7 +231,7 @@ function createFriendListItem(friend) {
     dropdownToggle.className = 'btn btn-sm btn-outline-gold dropdown-toggle';
     dropdownToggle.dataset.bsToggle = 'dropdown';
     dropdownToggle.setAttribute('aria-expanded', 'false');
-    dropdownToggle.innerHTML = '<i data-lucide="ellipsis-vertical" style="width: 16px; height: 16px;"></i><span class="ms-1">Műveletek</span>';
+    dropdownToggle.innerHTML = `<i data-lucide="ellipsis-vertical" style="width: 16px; height: 16px;"></i><span class="ms-1">${tx('Műveletek', 'Actions')}</span>`;
 
     const dropdownMenu = document.createElement('div');
     dropdownMenu.className = 'dropdown-menu dropdown-menu-end friend-actions-menu';
@@ -259,7 +259,8 @@ function createFriendListItem(friend) {
     return item;
 }
 
-function setFriendListLoading(isLoading, label = 'Betöltés folyamatban...') {
+function setFriendListLoading(isLoading, label = null) {
+    if (label === null) label = tx('Betöltés folyamatban...', 'Loading...');
     const { list, refreshButton, filterButtons } = getFriendsSectionElements();
     if (list) {
         friendsState.loading = Boolean(isLoading);
@@ -292,7 +293,7 @@ function renderFriendsList(items = []) {
         list.innerHTML = '';
 
         if (!hasItems) {
-            list.innerHTML = '<div class="friend-list-empty">Nincs megjeleníthető kapcsolat ebben a nézetben.</div>';
+            list.innerHTML = `<div class="friend-list-empty">${tx('Nincs megjeleníthető kapcsolat ebben a nézetben.', 'No relationships to display in this view.')}</div>`;
         } else {
             items.forEach((friend) => {
                 list.appendChild(createFriendListItem(friend));
@@ -309,23 +310,23 @@ async function refreshFriendsList(filterValue = friendsState.activeFilter) {
         const normalizedFilter = normalizeFriendFilter(filterValue);
         friendsState.activeFilter = normalizedFilter;
         setFriendFilterButtonsState(normalizedFilter);
-        setFriendListLoading(true, 'Barátok frissítése...');
+        setFriendListLoading(true, tx('Barátok frissítése...', 'Refreshing friends...'));
 
         try {
             const response = await fetch(`/api/friends/list?status=${encodeURIComponent(normalizedFilter)}`);
             const result = await parseJson(response);
 
             if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Nem sikerült a barát lista lekérése.');
+                throw new Error(result.message || tx('Nem sikerült a barát lista lekérése.', 'Failed to fetch the friends list.'));
             }
 
             friendsState.items = Array.isArray(result.data) ? result.data : [];
             renderFriendsList(friendsState.items);
-            setFriendsFeedback(result.message || 'Barátok frissítve.', 'success');
+            setFriendsFeedback(result.message || tx('Barátok frissítve.', 'Friends refreshed.'), 'success');
         } catch (error) {
             friendsState.items = [];
-            list.innerHTML = `<div class="friend-list-empty text-danger">${error.message || 'Sikertelen barát lista frissítés.'}</div>`;
-            setFriendsFeedback(error.message || 'Sikertelen barát lista frissítés.', 'error');
+            list.innerHTML = `<div class="friend-list-empty text-danger">${error.message || tx('Sikertelen barát lista frissítés.', 'Friends list refresh failed.')}</div>`;
+            setFriendsFeedback(error.message || tx('Sikertelen barát lista frissítés.', 'Friends list refresh failed.'), 'error');
         } finally {
             friendsState.loading = false;
             const { refreshButton, filterButtons } = getFriendsSectionElements();
@@ -342,7 +343,7 @@ async function refreshFriendsList(filterValue = friendsState.activeFilter) {
 
 async function executeFriendAction(actionName, targetUserId) {
     if (!targetUserId) {
-        throw new Error('Hiányzó cél felhasználó azonosító.');
+        throw new Error(tx('Hiányzó cél felhasználó azonosító.', 'Missing target user id.'));
     }
 
     if (actionName === 'accept') {
@@ -381,7 +382,7 @@ async function executeFriendAction(actionName, targetUserId) {
         });
     }
 
-    throw new Error('Ismeretlen friend akció.');
+    throw new Error(tx('Ismeretlen friend akció.', 'Unknown friend action.'));
 }
 
 function bindFriendsSectionEvents() {
@@ -413,7 +414,7 @@ function bindFriendsSectionEvents() {
                     const actionName = String(actionButton.dataset.friendAction || '').trim().toLowerCase();
 
                     if (!actionName || !targetUserId) {
-                        throw new Error('Érvénytelen barát lista művelet.');
+                        throw new Error(tx('Érvénytelen barát lista művelet.', 'Invalid friends list action.'));
                     }
 
                     let actionHandled = false;
@@ -431,7 +432,7 @@ function bindFriendsSectionEvents() {
                                 username
                             });
                         } catch (error) {
-                            setProfileChatFeedbackBySource('friends-list', error.message || 'A chat megnyitása sikertelen.', 'error');
+                            setProfileChatFeedbackBySource('friends-list', error.message || tx('A chat megnyitása sikertelen.', 'Failed to open chat.'), 'error');
                             throw error;
                         }
                         actionHandled = true;
@@ -442,12 +443,12 @@ function bindFriendsSectionEvents() {
                         const response = await executeFriendAction(actionName, targetUserId);
                         const result = await parseJson(response);
                         if (!response.ok || !result.success) {
-                            throw new Error(result.message || 'A friend művelet nem sikerült.');
+                            throw new Error(result.message || tx('A friend művelet nem sikerült.', 'The friend operation failed.'));
                         }
 
-                        setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
+                        setFriendsFeedback(result.message || tx('A művelet sikeres volt.', 'The operation was successful.'), 'success');
                         await refreshFriendsList(friendsState.activeFilter);
-                        setFriendsFeedback(result.message || 'A művelet sikeres volt.', 'success');
+                        setFriendsFeedback(result.message || tx('A művelet sikeres volt.', 'The operation was successful.'), 'success');
                     }
                 }
             });

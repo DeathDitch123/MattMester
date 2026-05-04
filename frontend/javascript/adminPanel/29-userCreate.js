@@ -7,6 +7,7 @@
    modallal mutatja a generalt ideiglenes jelszot (egyszer kerul mutatasra,
    az admin-nak masolnia kell). */
 
+
 async function submitCreateUser() {
     return runSafelyAsync('submitCreateUser', async () => {
         const usernameEl = document.getElementById('createUserUsername');
@@ -39,21 +40,21 @@ async function submitCreateUser() {
         const reason = (reasonEl?.value || '').trim();
 
         if (!username || !email) {
-            setFeedback('A felhasználónév és az email kötelező.', 'warning');
+            setFeedback(tx('A felhasználónév és az email kötelező.', 'Username and email are required.'), 'warning');
             return;
         }
         if (reason.length < 10) {
-            setFeedback('Az indoklásnak legalább 10 karakter hosszúnak kell lennie.', 'warning');
+            setFeedback(tx('Az indoklásnak legalább 10 karakter hosszúnak kell lennie.', 'The reason must be at least 10 characters long.'), 'warning');
             return;
         }
         if (!Number.isFinite(initialElo) || initialElo < 0 || initialElo > 4000) {
-            setFeedback('Az ELO 0 és 4000 közötti egész szám lehet.', 'warning');
+            setFeedback(tx('Az ELO 0 és 4000 közötti egész szám lehet.', 'ELO must be an integer between 0 and 4000.'), 'warning');
             return;
         }
 
         if (submitBtn) {
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Létrehozás…';
+            submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${tx('Létrehozás…', 'Creating…')}`;
         }
 
         try {
@@ -67,7 +68,7 @@ async function submitCreateUser() {
 
             if (!res.ok || !data?.success) {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                setFeedback(data?.message || 'Hiba a létrehozás során.', 'danger');
+                setFeedback(data?.message || tx('Hiba a létrehozás során.', 'Error during creation.'), 'danger');
                 return;
             }
 
@@ -85,18 +86,18 @@ async function submitCreateUser() {
             clearFeedback();
 
             await showCreatedUserCredentialsModal(data.data || {});
-            showToast('Felhasználó sikeresen létrehozva.', 'success', 'bi-person-plus-fill');
+            showToast(tx('Felhasználó sikeresen létrehozva.', 'User successfully created.'), 'success', 'bi-person-plus-fill');
 
             // Frissitjuk a felhasznaloi listat hogy az ujon megjelenjen
             try { await loadAdminUsersList({ silent: true }); } catch (_) {}
             if (state.currentSectionId === 'users') showSection('users', null, { silent: true });
         } catch (err) {
             console.error('submitCreateUser hiba:', err);
-            setFeedback('Hálózati hiba. Próbáld újra.', 'danger');
+            setFeedback(tx('Hálózati hiba. Próbáld újra.', 'Network error. Try again.'), 'danger');
         } finally {
             if (submitBtn) {
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = 'Felhasználó létrehozása';
+                submitBtn.innerHTML = tx('Felhasználó létrehozása', 'Create user');
             }
         }
     });
@@ -107,22 +108,22 @@ async function submitCreateUser() {
 async function showCreatedUserCredentialsModal(info) {
     if (typeof window.mmAlert !== 'function') {
         // Vegso fallback: showToast + console
-        showToast(`Új user: ${info.username} | Jelszo: ${info.tempPassword}`, 'success');
+        showToast(`${tx('Új user', 'New user')}: ${info.username} | ${tx('Jelszo', 'Password')}: ${info.tempPassword}`, 'success');
         return;
     }
     const message = [
-        `Felhasználó: ${info.username || '—'}`,
-        `Email: ${info.email || '—'}`,
-        `Szerepkör: ${info.role || 'player'}`,
-        `Kezdeti ELO: ${info.initialElo || 1200}`,
+        `${tx('Felhasználó', 'User')}: ${info.username || '—'}`,
+        `${tx('Email', 'Email')}: ${info.email || '—'}`,
+        `${tx('Szerepkör', 'Role')}: ${info.role || 'player'}`,
+        `${tx('Kezdeti ELO', 'Initial ELO')}: ${info.initialElo || 1200}`,
         '',
-        `Ideiglenes jelszó: ${info.tempPassword || '(hiányzik)'}`,
+        `${tx('Ideiglenes jelszó', 'Temporary password')}: ${info.tempPassword || tx('(hiányzik)', '(missing)')}`,
         '',
-        info.note || 'A jelszót másold ki és továbbítsd a felhasználónak — bezárás után nem jelenik meg újra.'
+        info.note || tx('A jelszót másold ki és továbbítsd a felhasználónak — bezárás után nem jelenik meg újra.', 'Copy the password and forward it to the user — after closing it will not be shown again.')
     ].join('\n');
     await window.mmAlert({
-        title: '✅ Új felhasználó létrehozva',
+        title: tx('✅ Új felhasználó létrehozva', '✅ New user created'),
         message,
-        okLabel: 'Kimásoltam'
+        okLabel: tx('Kimásoltam', 'Copied')
     });
 }

@@ -12,6 +12,19 @@
 import { mezoElemKeres } from './UI-megjelenites.js';
 import { kepessegHangLejatszas } from './audio.js';
 
+const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
+function getFeliratok() {
+    return {
+        time_pause: { nev: tx('Időmegállítás', 'Time stop'),       rovid: tx('IDŐ', 'TIME') },
+        freeze:     { nev: tx('Bábu fagyasztás', 'Freeze piece'),  rovid: tx('FAG', 'FRZ') },
+        swap:       { nev: tx('Bábucsere', 'Piece swap'),          rovid: tx('CSE', 'SWP') },
+        board_hide: { nev: tx('Tábla eltakar', 'Board hide'),      rovid: tx('TAK', 'HID') },
+        shield:     { nev: tx('Pajzs', 'Shield'),                  rovid: tx('PJZ', 'SHD') },
+        lefokozas:  { nev: tx('Lefokozás', 'Demote'),              rovid: tx('LEF', 'DEM') }
+    };
+}
+
 let cfg = null;                    // szerver-tól lekért ABILITY_CONFIG
 let ctxKeret = null;               // { getGameId, getSzin, isPvp, getSocket }
 let armed = null;                  // { key, lepesek: [] } — célpont-választó mód
@@ -19,14 +32,7 @@ let lastAllapot = null;            // legutolsó server allapot (effektek render
 let boardHideTimer = null;         // countdown interval
 let kovetoSquareKattReg = false;   // egyszer regisztráljuk a board click handlert
 
-const FELIRATOK = {
-    time_pause: { nev: 'Időmegállítás',  rovid: 'IDŐ' },
-    freeze:     { nev: 'Bábu fagyasztás', rovid: 'FAG' },
-    swap:       { nev: 'Bábucsere',       rovid: 'CSE' },
-    board_hide: { nev: 'Tábla eltakar',   rovid: 'TAK' },
-    shield:     { nev: 'Pajzs',           rovid: 'PJZ' },
-    lefokozas:  { nev: 'Lefokozás',       rovid: 'LEF' }
-};
+let FELIRATOK = getFeliratok();
 
 // ──────────────────────────────────────────────────────────
 // PUBLIC API
@@ -35,8 +41,34 @@ const FELIRATOK = {
 /**
  * @param {object} keret - { getGameId(), getSzin(), isPvp(), getSocket() }
  */
+let langChangeRegistered = false;
+function regisztralNyelvValtas() {
+    if (langChangeRegistered) return;
+    if (!window.MattMesterI18n?.onLangChange) return;
+    langChangeRegistered = true;
+    window.MattMesterI18n.onLangChange(() => {
+        try {
+            FELIRATOK = getFeliratok();
+            const szin = ctxKeret?.getSzin?.() || (lastAllapot?.botAktiv ? 'white' : null);
+            if (szin) {
+                // teljes ujrarender — torolni kell a `cfgKeyCount` early-return-t
+                document.querySelectorAll('.player-abilities').forEach((el) => {
+                    el.innerHTML = '';
+                    el.classList.remove('is-mine', 'is-opp');
+                });
+                playerBadgeAbilitiesRender(szin);
+                if (lastAllapot) {
+                    pontokFrissit(lastAllapot);
+                    gombokFrissit(lastAllapot);
+                }
+            }
+        } catch (_) {}
+    });
+}
+
 export async function abilitiesInit(keret) {
     ctxKeret = keret;
+    regisztralNyelvValtas();
     if (!cfg) {
         try {
             const res = await fetch('/api/chess/abilities');
@@ -216,6 +248,11 @@ function frissitOldalt(cont, allapot, oldalSzin, isMine) {
         const enoughPts = points >= c.ar;
         const maxedOut = usedDb >= c.maxPerGame;
         const wrongTiming = c.mikor === 'sajatKor' && allapot.koronLevo !== oldalSzin;
+        // Issue #4 — vegtelen idős módban (allapot.ido.* === null) az
+        // időmegállítás (`time_pause`) értelmetlen. A gombot szürkén renderelhetjuk,
+        // a szerver is elutasítja a hivast (lasd backend abilities.js).
+        const idoNelkul = !!(allapot.ido && allapot.ido[oldalSzin] === null);
+        const ertelmetlenIdoNelkul = key === 'time_pause' && idoNelkul;
 
         // Cooldown overlay — `isMine`-nal lathato szammal, opp-nal csak vizualis
         // dim (ne lassa az ellenfel pontos cooldownjat). Ezert a textContent
@@ -243,9 +280,22 @@ function frissitOldalt(cont, allapot, oldalSzin, isMine) {
         if (usesEl) usesEl.textContent = `${usedDb}/${c.maxPerGame}`;
 
         if (isMine) {
-            btn.disabled = !enoughPts || onCd || maxedOut || wrongTiming || allapot.vege;
+            btn.disabled = !enoughPts || onCd || maxedOut || wrongTiming || allapot.vege || ertelmetlenIdoNelkul;
         } else {
             btn.disabled = true; // opp NEM klikkelheto soha
+        }
+        // Vizualis jelolés a `time_pause`-ra végtelen idős módban — title-tooltip
+        // jelzi, miért nem aktiv. A `.ability-disabled-mode` osztály opaque-csokkenest
+        // ad, hogy ne csak `disabled` legyen.
+        const noClockTitle = tx('Végtelen idős módban nem használható (nincs óra).', 'Not usable in unlimited-time mode (no clock).');
+        if (ertelmetlenIdoNelkul) {
+            btn.classList.add('ability-disabled-mode');
+            btn.title = noClockTitle;
+        } else {
+            btn.classList.remove('ability-disabled-mode');
+            if (btn.title === noClockTitle) {
+                btn.title = '';
+            }
         }
     }
 }
@@ -379,10 +429,10 @@ function onAbilityKattintas(key) {
     armed = { key, lepesek: [] };
     btnArmedJelolo(key, true);
     if (c.kellKetCelpont) {
-        hintMutat(`${FELIRATOK[key]?.nev || key}: válassz KÉT saját bábut a táblán.`);
+        hintMutat(tx(`${FELIRATOK[key]?.nev || key}: válassz KÉT saját bábut a táblán.`, `${FELIRATOK[key]?.nev || key}: pick TWO of your own pieces on the board.`));
     } else {
-        const cel = key === 'shield' ? 'saját' : 'ellenséges';
-        hintMutat(`${FELIRATOK[key]?.nev || key}: válassz egy ${cel} bábut a táblán.`);
+        const cel = key === 'shield' ? tx('saját', 'own') : tx('ellenséges', 'enemy');
+        hintMutat(tx(`${FELIRATOK[key]?.nev || key}: válassz egy ${cel} bábut a táblán.`, `${FELIRATOK[key]?.nev || key}: pick a ${cel} piece on the board.`));
     }
     targetMezokKiemel(key);
 }
@@ -468,7 +518,7 @@ function boardClickReg() {
         if (c.kellKetCelpont) {
             armed.lepesek.push({ x, y });
             if (armed.lepesek.length === 1) {
-                hintMutat('Most válaszd a MÁSODIK saját bábut.');
+                hintMutat(tx('Most válaszd a MÁSODIK saját bábut.', 'Now pick the SECOND of your own pieces.'));
                 return;
             }
             const params = { from: armed.lepesek[0], to: armed.lepesek[1] };
@@ -494,7 +544,7 @@ function boardClickReg() {
 function kuldRequest(key, params) {
     const gameId = ctxKeret?.getGameId?.();
     if (!gameId) {
-        hintMutat('Nincs aktív játék.');
+        hintMutat(tx('Nincs aktív játék.', 'No active game.'));
         return;
     }
 
@@ -519,7 +569,7 @@ function kuldRequest(key, params) {
         .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
         .then(({ ok, data }) => {
             if (!ok) {
-                hintMutat(data.error || 'Sikertelen aktiválás.');
+                hintMutat(data.error || tx('Sikertelen aktiválás.', 'Activation failed.'));
                 return;
             }
             // Sikeres aktivalas — sajat hang. (A szerver-allapotbol nem latszik,
@@ -535,6 +585,6 @@ function kuldRequest(key, params) {
         })
         .catch(err => {
             console.error('[abilities] REST hiba:', err);
-            hintMutat('Hálózati hiba.');
+            hintMutat(tx('Hálózati hiba.', 'Network error.'));
         });
 }

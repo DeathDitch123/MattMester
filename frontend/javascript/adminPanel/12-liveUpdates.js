@@ -68,12 +68,12 @@ function applyDashboardLiveStats() {
 
         const onlineHint = document.getElementById('mainOnlineHint');
         if (onlineHint) {
-            onlineHint.textContent = `${stats.online?.totalAdmins ?? 0} admin · ${stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0} aktív tab`;
+            onlineHint.textContent = `${stats.online?.totalAdmins ?? 0} admin · ${stats.online?.activeTabs ?? stats.online?.totalTabs ?? 0} ${tx('aktív tab', 'active tab(s)')}`;
         }
         const critHint = document.getElementById('mainAuditCriticalHint');
-        if (critHint) critHint.textContent = `${last24.criticalAuditEntries ?? 0} kritikus művelet`;
+        if (critHint) critHint.textContent = `${last24.criticalAuditEntries ?? 0} ${tx('kritikus művelet', 'critical action(s)')}`;
         const bansHint = document.getElementById('mainNewBansHint');
-        if (bansHint) bansHint.textContent = `${last24.newBans ?? 0} új tiltás`;
+        if (bansHint) bansHint.textContent = `${last24.newBans ?? 0} ${tx('új tiltás', 'new ban(s)')}`;
 
         // Az 'Aktív játszma' kartya konstans 'success' szinezesu — nem
         // valt 'empty' allapotba ha nincs eppen meccs (lasd 06-sections.js
@@ -120,9 +120,9 @@ function prependLiveFeedRow(html) {
             }
             const rowCount = feed.querySelectorAll('.live-feed-row').length;
             const counter = document.getElementById('liveFeedCount');
-            if (counter) counter.innerHTML = `<i class="bi bi-list-ul me-1"></i>${rowCount} esemény`;
+            if (counter) counter.innerHTML = `<i class="bi bi-list-ul me-1"></i>${rowCount} ${tx('esemény', 'event(s)')}`;
             const lastTime = document.getElementById('liveFeedLastTime');
-            if (lastTime) lastTime.textContent = 'Utolsó: épp most';
+            if (lastTime) lastTime.textContent = tx('Utolsó: épp most', 'Last: just now');
         }
     } catch (err) {
         console.warn('prependLiveFeedRow hiba:', err);
@@ -175,7 +175,7 @@ function applyWsStatusToDashboard() {
             }
         }
         if (labelEl) labelEl.textContent = status.label;
-        if (timeEl) timeEl.textContent = state.liveStatsAt ? `tick: ${formatRelative(state.liveStatsAt)}` : 'nincs tick';
+        if (timeEl) timeEl.textContent = state.liveStatsAt ? `${tx('tick', 'tick')}: ${formatRelative(state.liveStatsAt)}` : tx('nincs tick', 'no tick');
 
         if (badge) {
             ['no_token', 'connecting', 'connected', 'disconnected'].forEach((k) => badge.classList.remove(`ws-feed-${k}`));
@@ -222,7 +222,7 @@ function rescheduleStaleWatchdog() {
             const band = document.getElementById('tickBand');
             if (band) band.classList.add('tick-band-stale');
             const timeEl = document.getElementById('wsStatusTime');
-            if (timeEl && state.liveStatsAt) timeEl.textContent = `⚠ elavult (${formatRelative(state.liveStatsAt)})`;
+            if (timeEl && state.liveStatsAt) timeEl.textContent = `⚠ ${tx('elavult', 'stale')} (${formatRelative(state.liveStatsAt)})`;
         }, 15000);
     } catch (err) {
         console.warn('rescheduleStaleWatchdog hiba:', err);
@@ -237,7 +237,7 @@ function startWsRelativeTicker() {
         __wsRelativeIntervalId = setInterval(() => {
             const timeEl = document.getElementById('wsStatusTime');
             if (timeEl && state.liveStatsAt && !state.wsStale) {
-                timeEl.textContent = `tick: ${formatRelative(state.liveStatsAt)}`;
+                timeEl.textContent = `${tx('tick', 'tick')}: ${formatRelative(state.liveStatsAt)}`;
             }
             const tickTime = document.getElementById('tickBandTime');
             if (tickTime && state.liveStatsAt) {
@@ -247,14 +247,14 @@ function startWsRelativeTicker() {
             const lastTime = document.getElementById('liveFeedLastTime');
             if (lastTime) {
                 const last = latestEventTime(state.liveAudit, state.liveAlerts);
-                if (last) lastTime.textContent = `Utolsó: ${formatRelative(last)}`;
+                if (last) lastTime.textContent = `${tx('Utolsó', 'Last')}: ${formatRelative(last)}`;
             }
             // Activity chart pill detail (loaded allapotban frissul az ido)
             if (state.activityChart.status === 'loaded') {
                 const detailEl = document.getElementById('chartStatusDetail');
                 if (detailEl && state.activityChart.loadedAt) {
                     const recordCount = state.activityChart.totals?.records ?? 0;
-                    detailEl.textContent = `· ${recordCount} rekord · frissítve: ${formatRelative(state.activityChart.loadedAt)}`;
+                    detailEl.textContent = `· ${recordCount} ${tx('rekord', 'records')} · ${tx('frissítve', 'updated')}: ${formatRelative(state.activityChart.loadedAt)}`;
                 }
             }
         }, 1000);
@@ -266,11 +266,11 @@ function startWsRelativeTicker() {
 function reconnectAdminSocket() {
     try {
         if (!state.adminToken) {
-            showToast('Nincs admin token — kérlek aktiváld újra.', 'warning', 'bi-shield-slash');
+            showToast(tx('Nincs admin token — kérlek aktiváld újra.', 'No admin token — please re-elevate.'), 'warning', 'bi-shield-slash');
         } else {
             setWsStatus('connecting');
             connectAdminSocket();
-            showToast('Újracsatlakozás folyamatban…', 'info', 'bi-arrow-repeat');
+            showToast(tx('Újracsatlakozás folyamatban…', 'Reconnecting…'), 'info', 'bi-arrow-repeat');
         }
     } catch (err) {
         console.error('reconnectAdminSocket hiba:', err);
@@ -309,9 +309,9 @@ function requestStatsTick() {
         const sock = state.adminSocket;
         const refreshBtn = document.getElementById('manualRefreshBtn');
         if (!sock || !state.adminSocketConnected) {
-            showToast('Nincs élő WS kapcsolat — a tick frissítés nem küldhető.', 'warning', 'bi-exclamation-triangle');
+            showToast(tx('Nincs élő WS kapcsolat — a tick frissítés nem küldhető.', 'No live WS connection — tick refresh cannot be sent.'), 'warning', 'bi-exclamation-triangle');
         } else if (Date.now() < state.manualRefreshLockUntil) {
-            showToast('Túl gyors — várj egy pillanatot.', 'info', 'bi-hourglass-split');
+            showToast(tx('Túl gyors — várj egy pillanatot.', 'Too fast — wait a moment.'), 'info', 'bi-hourglass-split');
         } else {
             sock.emit('admin:stats:request');
             // A 24h chart-ot is frissitjuk (REST), hogy a kezi gomb teljes egeszet jelentsen.
@@ -335,7 +335,7 @@ function requestStatsTick() {
         }
     } catch (error) {
         console.error('requestStatsTick hiba:', error);
-        showToast('Tick frissítés hiba: ' + (error?.message || 'ismeretlen'), 'danger', 'bi-x-circle');
+        showToast(tx('Tick frissítés hiba: ', 'Tick refresh error: ') + (error?.message || tx('ismeretlen', 'unknown')), 'danger', 'bi-x-circle');
     }
 }
 

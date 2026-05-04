@@ -29,7 +29,7 @@ async function submitRemoveAvatar() {
     }
 
     elements.confirmButton.disabled = true;
-    elements.confirmButton.textContent = 'Eltávolítás...';
+    elements.confirmButton.textContent = tx('Eltávolítás...', 'Removing...');
     setRemoveAvatarMessage('danger', '');
 
     try {
@@ -40,10 +40,10 @@ async function submitRemoveAvatar() {
 
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
-            throw new Error(result.message || 'A profilkép eltávolítása nem sikerült.');
+            throw new Error(result.message || tx('A profilkép eltávolítása nem sikerült.', 'Profile picture removal failed.'));
         }
 
-        setProfileSettingsMessage('success', result.message || 'A profilkép visszaállítva az alapértelmezett képre.');
+        setProfileSettingsMessage('success', result.message || tx('A profilkép visszaállítva az alapértelmezett képre.', 'The profile picture has been reset to the default.'));
 
         if (elements.modal) {
             const modal = bootstrap.Modal.getOrCreateInstance(elements.modal);
@@ -53,11 +53,11 @@ async function submitRemoveAvatar() {
         await syncSocketContextOrReconnect('profile-image-remove');
         await refreshAuthUi('profile-image-remove-success');
     } catch (error) {
-        setRemoveAvatarMessage('danger', error.message || 'Hiba történt a profilkép eltávolítása közben.');
-        throw new Error(error.message || 'Profilkép eltávolítási hiba.');
+        setRemoveAvatarMessage('danger', error.message || tx('Hiba történt a profilkép eltávolítása közben.', 'An error occurred while removing the profile picture.'));
+        throw new Error(error.message || tx('Profilkép eltávolítási hiba.', 'Profile picture removal error.'));
     } finally {
         elements.confirmButton.disabled = false;
-        elements.confirmButton.textContent = 'Eltávolítás';
+        elements.confirmButton.textContent = tx('Eltávolítás', 'Remove');
     }
 }
 
@@ -65,7 +65,7 @@ function bindRemoveAvatarEvents() {
     try {
         const elements = getRemoveAvatarElements();
         if (!elements.modal || !elements.confirmButton) {
-            throw new Error('Hianyzik a remove avatar modal vagy confirm gomb.');
+            throw new Error(tx('Hianyzik a remove avatar modal vagy confirm gomb.', 'Missing remove avatar modal or confirm button.'));
         }
 
         elements.confirmButton.addEventListener('click', async () => {

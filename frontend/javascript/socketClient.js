@@ -1,4 +1,5 @@
 (function attachMattMesterSocket(globalScope) {
+    const tx = (hu, en) => (globalScope.MattMesterI18n?.tx ? globalScope.MattMesterI18n.tx(hu, en) : hu);
     // Socket műveletek timeoutjai: connect és context-sync műveletekhez.
     const SOCKET_SYNC_TIMEOUT_MS = 2500;
     const SOCKET_CONNECT_TIMEOUT_MS = 3000;
@@ -100,14 +101,14 @@
 
     function getSocketStatusLabel(state) {
         // Emberi olvasható státusz címke az info panelhez.
-        let statusLabel = 'Kapcsolódásra vár';
+        let statusLabel = tx('Kapcsolódásra vár', 'Waiting for connection');
 
         if (state.connected) {
-            statusLabel = state.sessionBound ? 'Kapcsolódva, sessionnel' : 'Kapcsolódva, vendégként';
+            statusLabel = state.sessionBound ? tx('Kapcsolódva, sessionnel', 'Connected, with session') : tx('Kapcsolódva, vendégként', 'Connected, as guest');
         } else if (state.lastDisconnectReason === 'io server disconnect') {
-            statusLabel = 'Szerver bontotta a kapcsolatot';
+            statusLabel = tx('Szerver bontotta a kapcsolatot', 'Server closed the connection');
         } else if (state.lastDisconnectReason === 'transport close') {
-            statusLabel = 'Szállítási kapcsolat megszakadt';
+            statusLabel = tx('Szállítási kapcsolat megszakadt', 'Transport connection lost');
         }
 
         return statusLabel;
@@ -128,7 +129,7 @@
         updateText('[data-socket-bind="clientId"]', state.clientId || '-');
         updateText('[data-socket-bind="tabId"]', state.tabId || '-');
         updateText('[data-socket-bind="reconnectAttempts"]', String(state.reconnectAttempts || 0));
-        updateText('[data-socket-bind="presence"]', `${state.presence.onlineUsers || 0} online felhasználó`);
+        updateText('[data-socket-bind="presence"]', tx(`${state.presence.onlineUsers || 0} online felhasználó`, `${state.presence.onlineUsers || 0} online users`));
         updateText('[data-socket-bind="rooms"]', String(state.roomCount || 0));
 
         const featureList = globalScope.document.querySelector('[data-socket-bind="features"]');
@@ -153,19 +154,19 @@
             // Ha nincs roomState, adunk egy fallback sort a panelen.
             const roomStateItems = state.roomState.length > 0
                 ? state.roomState
-                : [{ roomId: 'general-room', state: 'Nincs aktív játékszoba állapot.' }];
+                : [{ roomId: 'general-room', state: tx('Nincs aktív játékszoba állapot.', 'No active game room state.') }];
 
             roomStateList.innerHTML = roomStateItems.map((entry) => `
                 <div class="socket-meta-item">
                     <span>${entry.roomId}</span>
-                    <strong>${typeof entry.state === 'string' ? entry.state : 'Szinkronban'}</strong>
+                    <strong>${typeof entry.state === 'string' ? entry.state : tx('Szinkronban', 'In sync')}</strong>
                 </div>
             `).join('');
         }
 
         const clientList = globalScope.document.querySelector('[data-socket-bind="clientCount"]');
         if (clientList) {
-            clientList.textContent = `${state.presence.onlineTabs || 0} aktív tab`;
+            clientList.textContent = tx(`${state.presence.onlineTabs || 0} aktív tab`, `${state.presence.onlineTabs || 0} active tabs`);
         }
     }
 

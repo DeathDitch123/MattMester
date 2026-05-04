@@ -20,13 +20,15 @@
 import { state } from '../state.js';
 import { pvpSocketKeres } from './socketRef.js';
 
+const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
 // "Varakozas az ellenfelre" UI: a gomb letiltodik + szoveg cserélődik.
 // Akkor hivjuk amikor a sajat oldal ajanlott rematch-et (chess:rematch:offered).
 export function rematchUiVarakozas() {
     const rematchBtn = document.getElementById('rematchBtn');
     if (rematchBtn) {
         rematchBtn.disabled = true;
-        rematchBtn.textContent = 'Várakozás az ellenfélre...';
+        rematchBtn.textContent = tx('Várakozás az ellenfélre...', 'Waiting for opponent...');
     }
 }
 
@@ -36,7 +38,7 @@ export function rematchUiReset(uzenet) {
     const rematchBtn = document.getElementById('rematchBtn');
     if (rematchBtn) {
         rematchBtn.disabled = false;
-        rematchBtn.textContent = 'Revans';
+        rematchBtn.textContent = tx('Revans', 'Rematch');
     }
     if (uzenet) {
         const statusElem = document.getElementById('status');
@@ -72,7 +74,7 @@ export function rematchEsemenyekKot() {
         rematchBtn.addEventListener('click', () => {
             const socket = pvpSocketKeres && pvpSocketKeres();
             if (!socket || !socket.connected) {
-                rematchUiReset('Nincs kapcsolat a szerverrel.');
+                rematchUiReset(tx('Nincs kapcsolat a szerverrel.', 'No connection to the server.'));
                 return;
             }
             const targetGameId = (state.utolsoAllapot && state.utolsoAllapot.gameId) || state.pvpGameId;

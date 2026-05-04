@@ -89,7 +89,7 @@ export function pvpJatekKezdet(data) {
     if (rematchBtn) {
         rematchBtn.classList.add('hidden');
         rematchBtn.disabled = false;
-        rematchBtn.textContent = 'Revans';
+        rematchBtn.textContent = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Revans', 'Rematch') : 'Revans';
     }
     // Uj meccs indulasakor a game-end modal eltunjon (ha veletlenul nyitva
     // maradt egy elozo veg utan a felhasznalo rakattintasra varakozott).
@@ -189,7 +189,7 @@ export function pvpJatekVege(data) {
     if (data.eloValtozas) {
         eloValtozas = data.eloValtozas[state.sajatSzin];
     }
-    uiJatekVegeMegjelenit(data.uzenet || 'Játék vége');
+    uiJatekVegeMegjelenit(data.uzenet || (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Játék vége', 'Game over') : 'Játék vége'));
     // A `#elo-change` div a `.sidebar`-ban van, ami `display: none` — igy a
     // korabbi `eloValtozasFrissit(eloValtozas)` PvP meccs vegen NEM volt
     // lathato. (User-feedback 2026-05-04: "nem szamolja az ELO-t".) A javitas:
@@ -208,7 +208,7 @@ export function pvpJatekVege(data) {
     if (rematchBtn) {
         rematchBtn.classList.remove('hidden');
         rematchBtn.disabled = false;
-        rematchBtn.textContent = 'Revans';
+        rematchBtn.textContent = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Revans', 'Rematch') : 'Revans';
     }
     if (offerElem) offerElem.classList.add('hidden');
     // (a `dcElem` mar a fuggveny tetejen elrejtve a banner-cleanup blokkban)
@@ -216,5 +216,5 @@ export function pvpJatekVege(data) {
     // Ranked meccs eseten itt jelenik meg az ELO-valtozas (+12 / -8 stb.) — a
     // sidebar #elo-change rejtett, igy ez az egyetlen lathato visszajelzes.
     chatPanelEnged(false);
-    gameEndModalMegnyit(data.uzenet || 'Játék vége', eloValtozas);
+    gameEndModalMegnyit(data.uzenet || (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Játék vége', 'Game over') : 'Játék vége'), eloValtozas);
 }

@@ -128,16 +128,18 @@ function capturedPanelFrissit(allapot, utottListaFn) {
     renderBig(opp, oppUtottList, mySzin);
 
     // Nev cimke beirasa — state.sajatUsername / state.botInfo / pvpJatekosNevek alapjan.
+    const txYou = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Te', 'You') : 'Te';
+    const txOpp = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Ellenfél', 'Opponent') : 'Ellenfél';
     if (mineName) {
-        mineName.textContent = state.sajatUsername || (state.pvpAktiv ? state.sajatNev : 'Te') || 'Te';
+        mineName.textContent = state.sajatUsername || (state.pvpAktiv ? state.sajatNev : txYou) || txYou;
     }
     if (oppName) {
         if (state.pvpAktiv) {
-            oppName.textContent = state.ellenfelNev || 'Ellenfél';
+            oppName.textContent = state.ellenfelNev || txOpp;
         } else if (state.botInfo) {
             oppName.textContent = `🤖 ${state.botInfo.nev}`;
         } else {
-            oppName.textContent = 'Ellenfél';
+            oppName.textContent = txOpp;
         }
     }
 }

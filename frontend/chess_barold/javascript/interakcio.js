@@ -85,7 +85,7 @@ export function esemenyekUjraKot() {
             if (rematchBtnReset) {
                 rematchBtnReset.classList.add('hidden');
                 rematchBtnReset.disabled = false;
-                rematchBtnReset.textContent = 'Revans';
+                rematchBtnReset.textContent = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Revans', 'Rematch') : 'Revans';
             }
             ujMeccsChooserNyitas();
         });

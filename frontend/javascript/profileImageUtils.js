@@ -1,8 +1,10 @@
 (function initMattMesterProfileImageUtils(globalScope) {
+    const tx = (hu, en) => (globalScope.MattMesterI18n?.tx ? globalScope.MattMesterI18n.tx(hu, en) : hu);
+
     const DEFAULT_PROFILE_IMAGE_SRC = '/profile_pictures/default.png';
     const PENDING_STATUS = 'pending';
-    const DEFAULT_ALT_TEXT = 'Profilkép';
-    const DEFAULT_USERNAME = 'Felhasználó';
+    const getDefaultAltText = () => tx('Profilkép', 'Profile picture');
+    const getDefaultUsername = () => tx('Felhasználó', 'User');
 
     const SOURCE_KEYS = ['profile_image', 'profileImage', 'image'];
     const STATUS_KEYS = ['profile_image_status', 'profileImageStatus', 'imageStatus'];
@@ -102,14 +104,14 @@
             status: 'approved',
             isPending: false,
             isDefault: true,
-            username: DEFAULT_USERNAME,
-            alt: DEFAULT_ALT_TEXT
+            username: getDefaultUsername(),
+            alt: getDefaultAltText()
         };
         let viewModel = fallback;
         try {
             const src = normalizeProfileImageSource(rawUserLikeObject);
             const status = normalizeProfileImageStatus(rawUserLikeObject);
-            const username = firstNonEmptyStringFromKeys(rawUserLikeObject, USERNAME_KEYS) || DEFAULT_USERNAME;
+            const username = firstNonEmptyStringFromKeys(rawUserLikeObject, USERNAME_KEYS) || getDefaultUsername();
             const isDefault = isDefaultProfileImageSource(src);
             const isPending = status === PENDING_STATUS && !isDefault;
             viewModel = {
@@ -118,7 +120,7 @@
                 isPending,
                 isDefault,
                 username,
-                alt: `${username} profilképe`
+                alt: tx(`${username} profilképe`, `${username}'s profile picture`)
             };
         } catch (error) {
             viewModel = fallback;

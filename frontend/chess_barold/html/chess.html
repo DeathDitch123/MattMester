@@ -17,12 +17,15 @@
     <link rel="stylesheet" href="../css/chess.css">
     <link rel="stylesheet" href="../../css/shared/chessModeChooser.css">
     <link rel="stylesheet" href="../../css/shared/confirmModal.css">
+    <link rel="stylesheet" href="../../css/shared/i18nSwitch.css">
+    <link rel="stylesheet" href="../../css/shared/responsive.css">
     <script src="/socket.io/socket.io.js" defer></script>
     <script src="../../javascript/_utils.js" defer></script>
     <script src="../../javascript/shared/confirmModal.js" defer></script>
     <script src="../../javascript/socketClient.js" defer></script>
     <script src="../../javascript/shared/maintenanceClient.js" defer></script>
     <script src="../../javascript/chessModeChooser.js" defer></script>
+    <script src="../../javascript/shared/i18n.js" defer></script>
     <script type="module" src="../javascript/main.js"></script>
 </head>
 
@@ -38,28 +41,28 @@
     <div id="rejoin-overlay" class="rejoin-overlay hidden" role="status" aria-live="polite">
         <div class="rejoin-overlay-content">
             <div class="rejoin-overlay-spinner" aria-hidden="true"></div>
-            <p class="rejoin-overlay-title">Visszacsatlakozás a meccsedhez…</p>
-            <p class="rejoin-overlay-sub">Az időd a szerveren tovább fut, addig is kérlek várj.</p>
+            <p class="rejoin-overlay-title" data-i18n="chess.reconnecting_title">Visszacsatlakozás a meccsedhez…</p>
+            <p class="rejoin-overlay-sub" data-i18n="chess.reconnecting_sub">Az időd a szerveren tovább fut, addig is kérlek várj.</p>
         </div>
     </div>
 
     <!-- PVP VÁRAKOZÁS OVERLAY (meghívás elküldve) -->
     <div id="pvp-waiting" class="pvp-waiting hidden">
         <div class="pvp-waiting-content">
-            <p>Várakozás az ellenfélre...</p>
+            <p data-i18n="chess.waiting_opponent">Várakozás az ellenfélre...</p>
             <p id="pvp-waiting-name" class="pvp-waiting-name"></p>
             <div class="queue-spinner"></div>
-            <button id="pvp-cancel" class="mode-back-btn">Mégsem</button>
+            <button id="pvp-cancel" class="mode-back-btn" data-i18n="chess.cancel">Mégsem</button>
         </div>
     </div>
 
     <!-- PVP BEJÖVŐ MEGHÍVÁS POPUP -->
     <div id="pvp-invite" class="pvp-invite hidden">
         <div class="pvp-invite-content">
-            <p><strong id="pvp-invite-name"></strong> sakkpartira hív!</p>
+            <p><strong id="pvp-invite-name"></strong> <span data-i18n="chess.invite_text">sakkpartira hív!</span></p>
             <div class="pvp-invite-buttons">
-                <button id="pvp-invite-accept" class="pvp-invite-btn accept">Elfogadom</button>
-                <button id="pvp-invite-decline" class="pvp-invite-btn decline">Elutasítom</button>
+                <button id="pvp-invite-accept" class="pvp-invite-btn accept" data-i18n="chess.accept_invite">Elfogadom</button>
+                <button id="pvp-invite-decline" class="pvp-invite-btn decline" data-i18n="chess.decline_invite">Elutasítom</button>
             </div>
         </div>
     </div>
@@ -70,28 +73,25 @@
     <aside id="ingame-chat-panel" class="ingame-chat-panel hidden" aria-label="Ingame chat">
         <div class="ingame-chat-header">
             <i class="ingame-chat-icon" aria-hidden="true">💬</i>
-            <span>Beszélgetés</span>
+            <span data-i18n="chess.chat">Beszélgetés</span>
         </div>
         <div class="ingame-chat-messages" id="ingame-chat-messages" role="log" aria-live="polite">
-            <div class="ingame-chat-empty">Még nincs üzenet — szólj az ellenfélnek!</div>
+            <div class="ingame-chat-empty" data-i18n="chess.chat_empty">Még nincs üzenet — szólj az ellenfélnek!</div>
         </div>
-        <!-- Quick-chat sav (bot meccsen aktiv): elore-megirt uzenetek gombokent.
-             A sav default `hidden`, csak bot-meccsen mutatjuk; PvP-n a sima
-             input forma latszik helyette. -->
         <div class="ingame-chat-quick hidden" id="ingame-chat-quick">
-            <button type="button" class="quick-chat-btn" data-key="gl">Sok szerencsét!</button>
-            <button type="button" class="quick-chat-btn" data-key="hello">Hello!</button>
-            <button type="button" class="quick-chat-btn" data-key="nice">Szép lépés!</button>
-            <button type="button" class="quick-chat-btn" data-key="wow">Hűha!</button>
-            <button type="button" class="quick-chat-btn" data-key="oops">Hopp!</button>
-            <button type="button" class="quick-chat-btn" data-key="thinking">Gondolkodok…</button>
-            <button type="button" class="quick-chat-btn" data-key="thanks">Köszi a meccset!</button>
-            <button type="button" class="quick-chat-btn" data-key="wp">Jól játszottál!</button>
-            <button type="button" class="quick-chat-btn" data-key="gg">GG</button>
+            <button type="button" class="quick-chat-btn" data-key="gl" data-i18n="chess.qc_gl">Sok szerencsét!</button>
+            <button type="button" class="quick-chat-btn" data-key="hello" data-i18n="chess.qc_hello">Hello!</button>
+            <button type="button" class="quick-chat-btn" data-key="nice" data-i18n="chess.qc_nice">Szép lépés!</button>
+            <button type="button" class="quick-chat-btn" data-key="wow" data-i18n="chess.qc_wow">Hűha!</button>
+            <button type="button" class="quick-chat-btn" data-key="oops" data-i18n="chess.qc_oops">Hopp!</button>
+            <button type="button" class="quick-chat-btn" data-key="thinking" data-i18n="chess.qc_thinking">Gondolkodok…</button>
+            <button type="button" class="quick-chat-btn" data-key="thanks" data-i18n="chess.qc_thanks">Köszi a meccset!</button>
+            <button type="button" class="quick-chat-btn" data-key="wp" data-i18n="chess.qc_wp">Jól játszottál!</button>
+            <button type="button" class="quick-chat-btn" data-key="gg" data-i18n="chess.qc_gg">GG</button>
         </div>
         <form class="ingame-chat-input-wrap" id="ingame-chat-form">
-            <input type="text" id="ingame-chat-input" placeholder="Üzenet…" maxlength="240" autocomplete="off" disabled />
-            <button type="submit" id="ingame-chat-send" disabled>Küld</button>
+            <input type="text" id="ingame-chat-input" placeholder="Üzenet…" data-i18n-attr="placeholder:chess.message_ph" maxlength="240" autocomplete="off" disabled />
+            <button type="submit" id="ingame-chat-send" data-i18n="chess.send" disabled>Küld</button>
         </form>
     </aside>
 
@@ -100,11 +100,15 @@
              feletti / melletti viewport-sarokba kerulnek a CSS altal) -->
         <div id="game-corner-status" class="game-corner-status">
             <div class="status-row">
-                Aktív: <strong id="turn-name">fehér</strong>
+                <span data-i18n="chess.active">Aktív</span>: <strong id="turn-name" data-i18n="chess.white">fehér</strong>
             </div>
-            <div id="status" class="status">játékon</div>
+            <div id="status" class="status" data-i18n="chess.in_game">játékon</div>
         </div>
-        <button id="feladBtn" class="felad-btn felad-btn-fixed">Feladás</button>
+        <div class="mm-i18n-switch" role="group" aria-label="Nyelv / Language" style="position:fixed;top:8px;right:8px;z-index:1100;">
+            <button type="button" data-i18n-toggle="hu" aria-pressed="true">HU</button>
+            <button type="button" data-i18n-toggle="en" aria-pressed="false">EN</button>
+        </div>
+        <button id="feladBtn" class="felad-btn felad-btn-fixed" data-i18n="chess.surrender">Feladás</button>
 
         <header class="topbar">
             <div class="player player-black">
@@ -114,7 +118,7 @@
                      A material-adv (+N) cimke maradt, mert az numerikus elony
                      informacio mas elem-bol nem jon at. -->
                 <span id="material-black" class="material-adv hidden">+0</span>
-                <div class="name" id="name-black">Ellenfél</div>
+                <div class="name" id="name-black" data-i18n="chess.opponent">Ellenfél</div>
                 <div class="player-abilities" id="player-abilities-black"></div>
                 <div class="clock" id="clock-black">10:00</div>
             </div>
@@ -126,7 +130,7 @@
 
                 <!-- TÁBLAKITAKARÁS overlay -->
                 <div id="board-hide-overlay" class="board-hide-overlay hidden">
-                    <span>Tábla eltakarva</span>
+                    <span data-i18n="chess.board_hidden_label">Tábla eltakarva</span>
                     <span id="board-hide-countdown">5</span>
                 </div>
 
@@ -150,7 +154,7 @@
                 <!-- KÉPESSÉG BAR -->
                 <div id="ability-bar" class="ability-bar hidden">
                     <div class="ability-points">
-                        <span class="ap-label">Pontok</span>
+                        <span class="ap-label" data-i18n="chess.points">Pontok</span>
                         <span class="ap-mine" id="ap-mine">0</span>
                         <span class="ap-sep">vs</span>
                         <span class="ap-opp" id="ap-opp">0</span>
@@ -159,7 +163,7 @@
                     <div id="ability-hint" class="ability-hint hidden"></div>
                 </div>
 
-                <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
+                <div id="bot-thinking" class="bot-thinking hidden" data-i18n="chess.bot_thinking">🤖 A bot gondolkodik...</div>
                 <!-- Az `#opponent-disconnected` mar NEM itt van — a sidebar
                      `display: none` miatt minden gyermek (akkor is fixed-position-os)
                      rejtve marad a parent miatt. Az element a `body` szintre
@@ -169,14 +173,14 @@
                 <div id="elo-change" class="elo-change hidden"></div>
 
                 <!-- Döntetlen ajánlat gomb (PvP) -->
-                <button id="drawOfferBtn" class="draw-btn hidden">Döntetlen ajánlat</button>
+                <button id="drawOfferBtn" class="draw-btn hidden" data-i18n="chess.draw_offer_btn">Döntetlen ajánlat</button>
 
                 <!-- Bejövő döntetlen ajánlat -->
                 <div id="draw-offer-received" class="draw-offer hidden">
-                    <p>Ellenfeled döntetlent ajánl</p>
+                    <p data-i18n="chess.opp_offers_draw">Ellenfeled döntetlent ajánl</p>
                     <div class="draw-offer-buttons">
-                        <button id="draw-accept" class="pvp-invite-btn accept">Elfogad</button>
-                        <button id="draw-decline" class="pvp-invite-btn decline">Elutasít</button>
+                        <button id="draw-accept" class="pvp-invite-btn accept" data-i18n="chess.accept">Elfogad</button>
+                        <button id="draw-decline" class="pvp-invite-btn decline" data-i18n="chess.decline">Elutasít</button>
                     </div>
                 </div>
 
@@ -185,18 +189,18 @@
                      itt maradtak a sidebar-ban, de a sidebar `display: none`,
                      igy nem latszanak — a 2026-05-04 layoutban a uj `#game-end-modal`
                      vette at a szerepuket (Fololdal + Uj jatek). -->
-                <button id="rematchBtn" class="rematch-btn hidden">Revans</button>
-                <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
+                <button id="rematchBtn" class="rematch-btn hidden" data-i18n="chess.rematch">Revans</button>
+                <button id="newGameBtn" class="new-game-btn hidden" data-i18n="chess.new_game">Új játék</button>
 
                 <!-- Lepeslista panel (algebrai notacio) -->
                 <div id="move-list-panel" class="move-list-panel">
                     <div class="move-list-head">
-                        <span class="move-list-title">Lépések</span>
-                        <button id="flipBoardBtn" class="flip-board-btn" title="Tábla forgatás">⇅</button>
-                        <button id="chessSettingsBtn" class="chess-settings-btn" title="Beállítások">⚙</button>
+                        <span class="move-list-title" data-i18n="chess.moves">Lépések</span>
+                        <button id="flipBoardBtn" class="flip-board-btn" title="Tábla forgatás" data-i18n-attr="title:chess.flip_board_title">⇅</button>
+                        <button id="chessSettingsBtn" class="chess-settings-btn" title="Beállítások" data-i18n-attr="title:chess.settings_title">⚙</button>
                     </div>
                     <ol id="move-list-body" class="move-list-body">
-                        <li class="move-list-empty">Még nincs lépés</li>
+                        <li class="move-list-empty" data-i18n="chess.no_moves_yet">Még nincs lépés</li>
                     </ol>
                 </div>
             </aside>
@@ -206,7 +210,7 @@
             <div class="player player-white">
                 <!-- captured-pieces eltavolitva (lasd player-black komment). -->
                 <span id="material-white" class="material-adv hidden">+0</span>
-                <div class="name" id="name-white">Te</div>
+                <div class="name" id="name-white" data-i18n="chess.you_label">Te</div>
                 <div class="player-abilities" id="player-abilities-white"></div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
@@ -219,7 +223,7 @@
          ha az ellenfel kapcsolata megszakadt; a chess.com-szeru 1:00 countdown
          tickel benne lefele. Lasd chess.css `.opponent-dc`. -->
     <div id="opponent-disconnected" class="opponent-dc hidden" role="status" aria-live="polite">
-        <span class="opponent-dc-text">Ellenfél kapcsolata megszakadt — visszacsatlakozás:</span>
+        <span class="opponent-dc-text" data-i18n="chess.opp_dc_text">Ellenfél kapcsolata megszakadt — visszacsatlakozás:</span>
         <span id="dc-countdown">1:00</span>
     </div>
 
@@ -231,15 +235,15 @@
     <aside id="captured-panel" class="captured-panel" aria-label="Leütött bábuk">
         <div class="captured-section captured-section-opp">
             <div class="captured-section-head">
-                <span class="captured-section-label">Leütött bábuk</span>
-                <span class="captured-section-name" id="captured-name-opp">Ellenfél</span>
+                <span class="captured-section-label" data-i18n="chess.captured_pieces">Leütött bábuk</span>
+                <span class="captured-section-name" id="captured-name-opp" data-i18n="chess.opponent">Ellenfél</span>
             </div>
             <div class="captured-section-pieces" id="captured-pieces-opp"></div>
         </div>
         <div class="captured-section captured-section-mine">
             <div class="captured-section-head">
-                <span class="captured-section-label">Leütött bábuk</span>
-                <span class="captured-section-name" id="captured-name-mine">Te</span>
+                <span class="captured-section-label" data-i18n="chess.captured_pieces">Leütött bábuk</span>
+                <span class="captured-section-name" id="captured-name-mine" data-i18n="chess.you_label">Te</span>
             </div>
             <div class="captured-section-pieces" id="captured-pieces-mine"></div>
         </div>
@@ -248,10 +252,10 @@
     <!-- REVANS BEJOVO AJANLAT MODAL -->
     <div id="rematch-offer-modal" class="rematch-modal hidden">
         <div class="rematch-modal-content">
-            <p class="rematch-title">Ellenfeled revans-t kér!</p>
+            <p class="rematch-title" data-i18n="chess.opp_wants_rematch">Ellenfeled revans-t kér!</p>
             <div class="rematch-modal-buttons">
-                <button id="rematchAcceptBtn" class="pvp-invite-btn accept">Elfogadom</button>
-                <button id="rematchDeclineBtn" class="pvp-invite-btn decline">Elutasítom</button>
+                <button id="rematchAcceptBtn" class="pvp-invite-btn accept" data-i18n="chess.accept_invite">Elfogadom</button>
+                <button id="rematchDeclineBtn" class="pvp-invite-btn decline" data-i18n="chess.decline_invite">Elutasítom</button>
             </div>
         </div>
     </div>
@@ -259,42 +263,42 @@
     <!-- BEALLITASOK MODAL -->
     <div id="chess-settings-modal" class="chess-settings-modal hidden">
         <div class="chess-settings-content">
-            <h3 class="chess-settings-title">Beállítások</h3>
+            <h3 class="chess-settings-title" data-i18n="chess.settings_title_full">Beállítások</h3>
             <div class="chess-settings-row">
-                <label>Tábla téma</label>
+                <label data-i18n="chess.board_theme">Tábla téma</label>
                 <select id="setting-theme">
-                    <option value="gold">Arany (alap)</option>
-                    <option value="green">Zöld</option>
-                    <option value="brown">Fa</option>
-                    <option value="blue">Kék</option>
+                    <option value="gold" data-i18n="chess.theme_gold">Arany (alap)</option>
+                    <option value="green" data-i18n="chess.theme_green">Zöld</option>
+                    <option value="brown" data-i18n="chess.theme_brown">Fa</option>
+                    <option value="blue" data-i18n="chess.theme_blue">Kék</option>
                 </select>
             </div>
             <div class="chess-settings-row">
                 <label>
                     <input type="checkbox" id="setting-sound" checked>
-                    Hang
+                    <span data-i18n="chess.sound">Hang</span>
                 </label>
             </div>
             <div class="chess-settings-row">
                 <label>
                     <input type="checkbox" id="setting-coords" checked>
-                    Koordináták (a–h, 1–8)
+                    <span data-i18n="chess.coords">Koordináták (a–h, 1–8)</span>
                 </label>
             </div>
             <div class="chess-settings-row">
                 <label>
                     <input type="checkbox" id="setting-anim" checked>
-                    Sima lépés-animáció
+                    <span data-i18n="chess.smooth_anim">Sima lépés-animáció</span>
                 </label>
             </div>
             <div class="chess-settings-row">
                 <label>
                     <input type="checkbox" id="setting-autoflip" checked>
-                    Auto-flip black-ként
+                    <span data-i18n="chess.auto_flip">Auto-flip black-ként</span>
                 </label>
             </div>
             <div class="chess-settings-row chess-settings-actions">
-                <button id="chessSettingsClose" class="chess-settings-close">Kész</button>
+                <button id="chessSettingsClose" class="chess-settings-close" data-i18n="chess.done">Kész</button>
             </div>
         </div>
     </div>
@@ -306,36 +310,37 @@
          aria-labelledby="gameEndTitle">
         <div class="game-end-modal-overlay"></div>
         <div class="game-end-modal-content">
-            <h3 id="gameEndTitle" class="game-end-modal-title">Játék vége</h3>
+            <h3 id="gameEndTitle" class="game-end-modal-title" data-i18n="chess.game_over">Játék vége</h3>
             <p id="gameEndMessage" class="game-end-modal-message">—</p>
             <p id="gameEndElo" class="game-end-modal-elo"></p>
             <div class="game-end-modal-actions">
-                <button type="button" id="gameEndHomeBtn" class="game-end-modal-btn">Főoldal</button>
-                <button type="button" id="gameEndNewGameBtn" class="game-end-modal-btn primary">Új játék</button>
+                <button type="button" id="gameEndHomeBtn" class="game-end-modal-btn" data-i18n="chess.home">Főoldal</button>
+                <button type="button" id="gameEndNewGameBtn" class="game-end-modal-btn primary" data-i18n="chess.new_game">Új játék</button>
             </div>
         </div>
     </div>
 
     <!-- SEGITSEG (legend) MODAL — bal-also lebego gomb nyitja meg -->
     <button type="button" id="helpFloatingBtn" class="help-floating-btn"
-            aria-label="Segítség / jelmagyarázat" title="Segítség / jelmagyarázat">?</button>
+            aria-label="Segítség / jelmagyarázat" title="Segítség / jelmagyarázat"
+            data-i18n-attr="title:chess.help_legend,aria-label:chess.help_legend">?</button>
     <div id="help-modal" class="help-modal hidden" role="dialog" aria-modal="true"
          aria-labelledby="helpModalTitle">
         <div class="help-modal-overlay"></div>
         <div class="help-modal-content">
             <div class="help-modal-head">
-                <h3 id="helpModalTitle" class="help-modal-title">Jelmagyarázat</h3>
+                <h3 id="helpModalTitle" class="help-modal-title" data-i18n="chess.legend">Jelmagyarázat</h3>
                 <button type="button" id="helpModalClose" class="help-modal-close"
-                        aria-label="Bezárás">×</button>
+                        aria-label="Bezárás" data-i18n-attr="aria-label:common.close">×</button>
             </div>
             <div class="help-modal-body">
                 <div class="legend">
-                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
-                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
-                    <div><span class="legend-sq check"></span> Király sakkban</div>
-                    <div><span class="legend-sq enpassant"></span> En passant</div>
-                    <div><span class="legend-sq castle"></span> Sáncolás</div>
-                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
+                    <div><span class="legend-sq from"></span> <span data-i18n="chess.last_move">Utolsó lépés</span></div>
+                    <div><span class="legend-sq capture"></span> <span data-i18n="chess.capture">Ütés lehetőség</span></div>
+                    <div><span class="legend-sq check"></span> <span data-i18n="chess.king_check">Király sakkban</span></div>
+                    <div><span class="legend-sq enpassant"></span> <span data-i18n="chess.en_passant">En passant</span></div>
+                    <div><span class="legend-sq castle"></span> <span data-i18n="chess.castle">Sáncolás</span></div>
+                    <div><span class="legend-sq promotion"></span> <span data-i18n="chess.promotion">Átváltozás</span></div>
                 </div>
             </div>
         </div>
@@ -344,13 +349,13 @@
     <!-- FELADÁS MEGERŐSÍTŐ MODAL -->
     <div id="surrender-modal" class="surrender-modal hidden">
         <div class="surrender-modal-content">
-            <p class="surrender-title">Biztos fel akarod adni?</p>
-            <p class="surrender-subtitle">Nyomd hosszan:</p>
+            <p class="surrender-title" data-i18n="chess.surrender_confirm">Biztos fel akarod adni?</p>
+            <p class="surrender-subtitle" data-i18n="chess.long_press">Nyomd hosszan:</p>
             <button id="surrenderConfirmBtn" class="surrender-confirm-btn">
-                Feladás
-                <small>(Nyomja hosszan)</small>
+                <span data-i18n="chess.surrender">Feladás</span>
+                <small data-i18n="chess.long_press_hint">(Nyomja hosszan)</small>
             </button>
-            <button id="surrenderCancelBtn" class="surrender-cancel-btn">Mégse</button>
+            <button id="surrenderCancelBtn" class="surrender-cancel-btn" data-i18n="common.cancel">Mégse</button>
         </div>
     </div>
 </body>

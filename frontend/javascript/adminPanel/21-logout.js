@@ -11,12 +11,12 @@ async function logout() {
     try {
         const ok = typeof window.mmConfirm === 'function'
             ? await window.mmConfirm({
-                title: 'Kijelentkezés',
-                message: 'Biztosan ki szeretnél lépni az admin felületről?',
-                confirmLabel: 'Kijelentkezés',
+                title: tx('Kijelentkezés', 'Logout'),
+                message: tx('Biztosan ki szeretnél lépni az admin felületről?', 'Are you sure you want to leave the admin panel?'),
+                confirmLabel: tx('Kijelentkezés', 'Logout'),
                 danger: true
             })
-            : window.confirm('Biztosan ki szeretnél lépni?');
+            : window.confirm(tx('Biztosan ki szeretnél lépni?', 'Are you sure you want to log out?'));
         if (!ok) return false;
         requestController.cancelAll?.();
         clearAdminToken();

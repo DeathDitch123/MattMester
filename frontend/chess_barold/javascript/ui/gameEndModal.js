@@ -44,7 +44,8 @@ export function gameEndModalMegnyit(uzenet, eloValtozas) {
     const msgEl = document.getElementById('gameEndMessage');
     const eloEl = document.getElementById('gameEndElo');
     if (!modal) return;
-    if (msgEl) msgEl.textContent = uzenet || 'Játék vége';
+    const txGameOver = window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Játék vége', 'Game over') : 'Játék vége';
+    if (msgEl) msgEl.textContent = uzenet || txGameOver;
     if (eloEl) {
         eloEl.classList.remove('positive', 'negative');
         eloEl.textContent = '';

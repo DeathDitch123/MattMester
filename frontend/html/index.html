@@ -19,6 +19,8 @@
 
     <link rel="stylesheet" href="../css/index.css" />
     <link rel="stylesheet" href="../css/shared/confirmModal.css" />
+    <link rel="stylesheet" href="../css/shared/i18nSwitch.css" />
+    <link rel="stylesheet" href="../css/shared/responsive.css" />
 
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
@@ -34,6 +36,7 @@
     <script src="../javascript/playerActions.js" defer></script>
     <script src="../javascript/shared/houseRules.js" defer></script>
     <script src="../javascript/chessModeChooser.js" defer></script>
+    <script src="../javascript/shared/i18n.js" defer></script>
     <link rel="stylesheet" href="../css/shared/chessModeChooser.css">
 </head>
 
@@ -45,6 +48,11 @@
                 <i class="bi bi-king-fill"></i>
                 <span>MATTMESTER</span>
             </a>
+
+            <div class="mm-i18n-switch d-flex" role="group" aria-label="Nyelv / Language">
+                <button type="button" data-i18n-toggle="hu" aria-pressed="true">HU</button>
+                <button type="button" data-i18n-toggle="en" aria-pressed="false">EN</button>
+            </div>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav">
                 <span class="navbar-toggler-icon"></span>
@@ -58,11 +66,11 @@
                     </li> -->
                     <li class="nav-item">
                         <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
-                            data-bs-target="#loginModal">Bejelentkezés</button>
+                            data-bs-target="#loginModal" data-i18n="index.login">Bejelentkezés</button>
                     </li>
                     <li class="nav-item">
                         <button class="btn btn-outline-gold btn-sm" data-bs-toggle="modal"
-                            data-bs-target="#registerModal">Regisztráció</button>
+                            data-bs-target="#registerModal" data-i18n="index.register">Regisztráció</button>
                     </li>
                 </ul>
                 <!--? Bejelentkezett felhasználó menü -->
@@ -74,11 +82,11 @@
                         <span class="nav-link welcomeMessage"></span>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'">Profil
+                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'" data-i18n="nav.profile_settings">Profil
                             beállítás</button>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" id="logoutBtnUser">Kijelentkezés</button>
+                        <button class="btn btn-outline-gold btn-sm" id="logoutBtnUser" data-i18n="nav.logout">Kijelentkezés</button>
                     </li>
                 </ul>
                 <!-- Bejelentkezett admin -->
@@ -91,14 +99,14 @@
                     </li>
                     <li class="nav-item">
                         <button class="btn btn-outline-gold btn-sm"
-                            onclick="location.href='/html/adminPanel.html'">Admin felület</button>
+                            onclick="location.href='/html/adminPanel.html'" data-i18n="nav.admin_panel">Admin felület</button>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'">Profil
+                        <button class="btn btn-outline-gold btn-sm" onclick="location.href='/html/profile.html'" data-i18n="nav.profile_settings">Profil
                             beállítás</button>
                     </li>
                     <li class="nav-item">
-                        <button class="btn btn-outline-gold btn-sm" id="logoutBtnAdmin">Kijelentkezés</button>
+                        <button class="btn btn-outline-gold btn-sm" id="logoutBtnAdmin" data-i18n="nav.logout">Kijelentkezés</button>
                     </li>
                 </ul>
             </div>
@@ -111,22 +119,19 @@
             <div class="row g-4 align-items-center">
                 <div class="col-lg-12">
                     <div class="hero-card h-100">
-                        <span class="badge badge-soft mb-3"><i class="bi bi-lightning-charge-fill me-1"></i>Élő
-                            közösségi sakk platform</span>
-                        <h1 class="display-5 fw-bold mb-3">Játssz, fejlődj, lépj a ranglétra élére</h1>
-                        <p class="text-secondary mb-4">Versenyezz Mattmester, Klasszikus vagy Gép elleni módban.
-                            Vendégként azonnal elkezdheted,
-                            fiókkal pedig követheted az ELO fejlődésedet</p>
+                        <span class="badge badge-soft mb-3"><i class="bi bi-lightning-charge-fill me-1"></i><span data-i18n="index.live_chess_platform">Élő közösségi sakk platform</span></span>
+                        <h1 class="display-5 fw-bold mb-3" data-i18n="index.hero_title">Játssz, fejlődj, lépj a ranglétra élére</h1>
+                        <p class="text-secondary mb-4" data-i18n="index.hero_subtitle">Versenyezz Mattmester, Klasszikus vagy Gép elleni módban. Vendégként azonnal elkezdheted, fiókkal pedig követheted az ELO fejlődésedet</p>
 
                         <div class="d-flex justify-content-around">
                             <div class="d-flex flex-wrap gap-2">
                                 <button type="button" class="btn btn-gold btn-lg"
                                     onclick="window.MattMesterChessModeChooser?.open()">
-                                    <i class="bi bi-play-fill me-1"></i> Játék
+                                    <i class="bi bi-play-fill me-1"></i> <span data-i18n="index.play">Játék</span>
                                 </button>
                             </div>
                             <a href="#ranglista" class="btn btn-outline-gold btn-lg"><i
-                                    class="bi bi-trophy-fill me-1"></i>Ranglista</a>
+                                    class="bi bi-trophy-fill me-1"></i><span data-i18n="index.leaderboard">Ranglista</span></a>
                         </div>
                     </div>
                 </div>
@@ -140,30 +145,30 @@
             <div class="row g-3" id="eloStats">
                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">Klasszikus</div>
+                        <div class="stat-label" data-i18n="index.classical">Klasszikus</div>
                         <div class="stat-value" data-stat="user_elo">0</div>
-                        <div class="stat-sub">ELO</div>
+                        <div class="stat-sub" data-i18n="index.elo">ELO</div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">MattMester</div>
+                        <div class="stat-label" data-i18n="index.mattmester">MattMester</div>
                         <div class="stat-value" data-stat="user_MM_elo">0</div>
-                        <div class="stat-sub">ELO</div>
+                        <div class="stat-sub" data-i18n="index.elo">ELO</div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">Bullet</div>
+                        <div class="stat-label" data-i18n="index.bullet">Bullet</div>
                         <div class="stat-value" data-stat="user_bullet_elo">0</div>
-                        <div class="stat-sub">ELO</div>
+                        <div class="stat-sub" data-i18n="index.elo">ELO</div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">WinRate</div>
+                        <div class="stat-label" data-i18n="index.winrate">WinRate</div>
                         <div class="stat-value" data-stat="winRate">0%</div>
-                        <div class="stat-sub">Nyert játszmák aránya</div>
+                        <div class="stat-sub" data-i18n="index.win_ratio">Nyert játszmák aránya</div>
                     </div>
                 </div>
             </div>
@@ -173,30 +178,30 @@
             <div class="row g-3" id="quickStats">
                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">Összes játékos</div>
+                        <div class="stat-label" data-i18n="index.all_players">Összes játékos</div>
                         <div class="stat-value" data-stat="players">0</div>
-                        <div class="stat-sub">regisztrált fiók</div>
+                        <div class="stat-sub" data-i18n="index.registered_accounts">regisztrált fiók</div>
                     </div>
                 </div>
                                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">Online játékosok</div>
+                        <div class="stat-label" data-i18n="index.online_players">Online játékosok</div>
                         <div class="stat-value" data-stat="online">0</div>
-                        <div class="stat-sub">most aktív</div>
+                        <div class="stat-sub" data-i18n="index.now_active">most aktív</div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">Élő játszmák</div>
+                        <div class="stat-label" data-i18n="index.live_games">Élő játszmák</div>
                         <div class="stat-value" data-stat="liveGames">0</div>
-                        <div class="stat-sub">jelenleg fut</div>
+                        <div class="stat-sub" data-i18n="index.now_running">jelenleg fut</div>
                     </div>
                 </div>
                 <div class="col-6 col-lg-3">
                     <div class="stat-card">
-                        <div class="stat-label">Összes játszma</div>
+                        <div class="stat-label" data-i18n="index.all_games">Összes játszma</div>
                         <div class="stat-value" data-stat="allGames">0</div>
-                        <div class="stat-sub">Ennyiszer játszottak már velünk</div>
+                        <div class="stat-sub" data-i18n="index.played_with_us">Ennyiszer játszottak már velünk</div>
                     </div>
                 </div>
             </div>
@@ -207,29 +212,29 @@
                 <div class="d-flex justify-content-between align-items-center p-3 p-md-4 border-bottom"
                     style="border-color: var(--border-color) !important;">
                     <h2 class="section-title h4"><i class="bi bi-trophy-fill me-2"
-                            style="color: var(--accent-gold);"></i>Top játékosok ELO szerint</h2>
-                    <span id="lastUpdated" class="text-secondary small">Frissítve: ma</span>
+                            style="color: var(--accent-gold);"></i><span data-i18n="index.top_players">Top játékosok ELO szerint</span></h2>
+                    <span id="lastUpdated" class="text-secondary small" data-i18n="index.updated">Frissítve: ma</span>
                 </div>
                 <!-- itt ezt meg kell csinálni, hogy a backendről jön a frissítés ideje, és ne csak statikusan legyen kiírva, hogy "ma" -->
                 <div class="table-controls p-3">
                     <div class="row g-2 d-flex justify-content-around align-items-center">
                         <div class="col-12 col-md-6">
                             <label class="me-2 text-secondary small text-uppercase fw-bold"
-                                style="min-width: 80px;">Rendezés:</label>
+                                style="min-width: 80px;" data-i18n="index.sort_by">Rendezés:</label>
                             <select id="leaderboardEloFilter" class="form-select">
-                                <option value="elo" selected>ELO</option>
-                                <option value="elo_MM">ELO MattMester</option>
-                                <option value="elo_bullet">ELO Bullet</option>
-                                <option value="winRate">WinRate</option>
+                                <option value="elo" selected data-i18n="index.elo">ELO</option>
+                                <option value="elo_MM" data-i18n="index.elo_mattmester">ELO MattMester</option>
+                                <option value="elo_bullet" data-i18n="index.elo_bullet">ELO Bullet</option>
+                                <option value="winRate" data-i18n="index.winrate">WinRate</option>
                             </select>
                         </div>
                         <div class="col-12 col-md-2">
                             <label class="me-2 text-secondary small text-uppercase fw-bold"
-                                style="min-width: 80px;">Limit:</label>
+                                style="min-width: 80px;" data-i18n="index.limit">Limit:</label>
                             <select id="leaderboardLimit" class="form-select">
-                                <option value="10" selected>Top 10</option>
-                                <option value="25">Top 25</option>
-                                <option value="100">Top 100</option>
+                                <option value="10" selected data-i18n="index.top10">Top 10</option>
+                                <option value="25" data-i18n="index.top25">Top 25</option>
+                                <option value="100" data-i18n="index.top100">Top 100</option>
                             </select>
                         </div>
                     </div>
@@ -239,27 +244,27 @@
                         <thead>
                             <tr class="align-items-center">
                                 <th class="leaderboard-th-rank">#</th>
-                                <th class="leaderboard-th-player">Játékos</th>
-                                <th class="text-center leaderboard-th-elo">ELO</th>
-                                <th class="text-center d-none d-md-table-cell">Utoljára itt járt</th>
-                                <th class="text-center d-none d-lg-table-cell">Felhasználó ezóta</th>
+                                <th class="leaderboard-th-player" data-i18n="index.player">Játékos</th>
+                                <th class="text-center leaderboard-th-elo" data-i18n="index.elo">ELO</th>
+                                <th class="text-center d-none d-md-table-cell" data-i18n="index.last_seen">Utoljára itt járt</th>
+                                <th class="text-center d-none d-lg-table-cell" data-i18n="index.user_since">Felhasználó ezóta</th>
                             </tr>
                         </thead>
                         <tbody id="leaderboardBody">
                         </tbody>
                     </table>
                 </div>
-                <div id="leaderboardEmpty" class="table-empty d-none">Nincs találat a megadott szűrőkkel.</div>
+                <div id="leaderboardEmpty" class="table-empty d-none" data-i18n="index.no_results">Nincs találat a megadott szűrőkkel.</div>
             </div>
         </section>
     </main>
     <!-- Footer -->
     <footer class="footer">
         <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
-            <div><span class="brand">MATTMESTER</span> &middot; Modern sakkélmény</div>
+            <div><span class="brand">MATTMESTER</span> &middot; <span data-i18n="index.modern_chess">Modern sakkélmény</span></div>
             <div class="small"><a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener" class="text-secondary text-decoration-none">mattmester.support@gmail.com</a></div>
             <button type="button" class="house-rules-footer-link" onclick="MattMesterHouseRules.open()" title="Sakk szabályok, házirend, tudnivalók">
-                <i class="bi bi-info-circle"></i> Szabályok
+                <i class="bi bi-info-circle"></i> <span data-i18n="index.rules">Szabályok</span>
             </button>
             <small>2026 MattMester</small>
         </div>
@@ -271,7 +276,7 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i>Bejelentkezés</h5>
+                    <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i><span data-i18n="login.title">Bejelentkezés</span></h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="loginForm" novalidate>
@@ -280,30 +285,30 @@
                             <div class="row justify-content-center">
                                 <div class="col-12">
                                     <div class="card shadow p-4 login-panel">
-                                        <h1 class="text-center mb-4 h4 login-heading">Bejelentkezés</h1>
+                                        <h1 class="text-center mb-4 h4 login-heading" data-i18n="login.title">Bejelentkezés</h1>
                                         <div>
                                             <div class="mb-3">
                                                 <label for="loginUsername"
-                                                    class="form-label">Felhasználónév/Email:</label>
+                                                    class="form-label" data-i18n="login.username_label">Felhasználónév/Email:</label>
                                                 <input class="form-control" type="text" id="loginUsername"
-                                                    placeholder="Mattmester / mattmester@gmail.com" required>
+                                                    placeholder="Mattmester / mattmester@gmail.com" data-i18n-attr="placeholder:login.username_ph" required>
                                                 <div id="loginUsernameFeedback" class="form-text mt-2" aria-live="polite"></div>
                                             </div>
                                             <div class="mb-3">
-                                                <label for="loginPassword" class="form-label">Jelszó:</label>
+                                                <label for="loginPassword" class="form-label" data-i18n="login.password_label">Jelszó:</label>
                                                 <input class="form-control" type="password" id="loginPassword"
-                                                    placeholder="Jelszó" required>
+                                                    placeholder="Jelszó" data-i18n-attr="placeholder:login.password_ph" required>
                                                 <div id="loginPasswordFeedback" class="form-text mt-2" aria-live="polite"></div>
                                             </div>
                                             <div class="mb-3 form-check">
                                                 <input type="checkbox" class="form-check-input" id="rememberMe">
-                                                <label class="form-check-label" for="rememberMe">Emlékezz rám:</label>
+                                                <label class="form-check-label" for="rememberMe" data-i18n="login.remember_me">Emlékezz rám:</label>
                                             </div>
                                             <div class="d-flex justify-content-end mb-3">
                                                 <button type="button" class="btn btn-link p-0 forgot-password-link"
-                                                    id="openForgotPasswordModal">Jelszó elfelejtve?</button>
+                                                    id="openForgotPasswordModal" data-i18n="login.forgot">Jelszó elfelejtve?</button>
                                             </div>
-                                            <button type="submit" class="btn btn-gold w-100" id="loginSubmitButton">Bejelentkezés</button>
+                                            <button type="submit" class="btn btn-gold w-100" id="loginSubmitButton" data-i18n="login.submit">Bejelentkezés</button>
                                             <div id="loginMessage" class="mt-3 text-center alert d-none"></div>
                                         </div>
                                     </div>
@@ -320,7 +325,7 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-envelope-paper me-2"></i>Jelszó visszaállítása</h5>
+                    <h5 class="modal-title"><i class="bi bi-envelope-paper me-2"></i><span data-i18n="forgot.title">Jelszó visszaállítása</span></h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="forgotPasswordForm" novalidate>
@@ -329,21 +334,21 @@
                             <div class="row justify-content-center">
                                 <div class="col-12">
                                     <div class="card shadow p-4 login-panel">
-                                        <h1 class="text-center mb-3 h4 login-heading">Új jelszó kérése</h1>
-                                        <p class="text-secondary text-center mb-4 forgot-password-note">
+                                        <h1 class="text-center mb-3 h4 login-heading" data-i18n="forgot.heading">Új jelszó kérése</h1>
+                                        <p class="text-secondary text-center mb-4 forgot-password-note" data-i18n="forgot.note">
                                             Add meg a fiókod email címét, és küldünk egy visszaállító linket.
                                         </p>
                                         <div class="mb-3">
-                                            <label for="forgotPasswordEmail" class="form-label">Email cím</label>
+                                            <label for="forgotPasswordEmail" class="form-label" data-i18n="forgot.email_label">Email cím</label>
                                             <input class="form-control" type="email" id="forgotPasswordEmail"
-                                                placeholder="mattmester@gmail.com" autocomplete="email" required>
+                                                placeholder="mattmester@gmail.com" data-i18n-attr="placeholder:forgot.email_ph" autocomplete="email" required>
                                             <div id="forgotPasswordEmailFeedback" class="form-text mt-2" aria-live="polite"></div>
                                         </div>
-                                        <button type="submit" class="btn btn-gold w-100" id="forgotPasswordSubmitButton">
+                                        <button type="submit" class="btn btn-gold w-100" id="forgotPasswordSubmitButton" data-i18n="forgot.send">
                                             Email küldése
                                         </button>
                                         <button type="button" class="btn btn-outline-secondary w-100 mt-2"
-                                            id="forgotPasswordBackButton">Vissza a bejelentkezéshez</button>
+                                            id="forgotPasswordBackButton" data-i18n="forgot.back_login">Vissza a bejelentkezéshez</button>
                                         <div id="forgotPasswordMessage" class="mt-3 text-center alert d-none"></div>
                                     </div>
                                 </div>
@@ -359,7 +364,7 @@
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i>Regisztráció</h5>
+                    <h5 class="modal-title"><i class="bi bi-box-arrow-in-right me-2"></i><span data-i18n="register.title">Regisztráció</span></h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="registerForm" novalidate>
@@ -368,29 +373,27 @@
                             <div class="row justify-content-center">
                                 <div class="col-12">
                                     <div class="card shadow p-4 login-panel">
-                                        <h1 class="text-center mb-4 h4 login-heading">Regisztráció</h1>
+                                        <h1 class="text-center mb-4 h4 login-heading" data-i18n="register.title">Regisztráció</h1>
                                         <div>
                                             <div class="mb-3">
-                                                <label for="registerUsername" class="form-label">Felhasználónév</label>
+                                                <label for="registerUsername" class="form-label" data-i18n="register.username_label">Felhasználónév</label>
                                                 <input class="form-control" type="text" id="registerUsername"
-                                                    placeholder="Mattmester" required>
+                                                    placeholder="Mattmester" data-i18n-attr="placeholder:register.username_ph" required>
                                                 <div id="registerUsernameFeedback" class="form-text mt-2" aria-live="polite"></div>
                                             </div>
                                             <div class="mb-3">
-                                                <label for="registerEmail" class="form-label">Email:</label>
+                                                <label for="registerEmail" class="form-label" data-i18n="register.email_label">Email:</label>
                                                 <input class="form-control" type="email" id="registerEmail"
-                                                    placeholder="mattmester@gmail.com" required>
+                                                    placeholder="mattmester@gmail.com" data-i18n-attr="placeholder:register.email_ph" required>
                                                 <div id="registerEmailFeedback" class="form-text mt-2" aria-live="polite"></div>
                                             </div>
                                             <div class="mb-3">
-                                                <label for="registerPassword" class="form-label">Jelszó:</label>
+                                                <label for="registerPassword" class="form-label" data-i18n="register.password_label">Jelszó:</label>
                                                 <input class="form-control" type="password" id="registerPassword"
-                                                    placeholder="Jelszó" minlength="8" required>
-                                                <!-- <small class="text-secondary" style="opacity: 0.75;">Min. 8 karakter,
-                                                    legalább egy szám.</small> -->
+                                                    placeholder="Jelszó" data-i18n-attr="placeholder:register.password_ph" minlength="8" required>
                                                 <div id="registerPasswordFeedback" class="form-text mt-2" aria-live="polite"></div>
                                             </div>
-                                            <button type="submit" class="btn btn-gold w-100" id="registerSubmitButton">Regisztráció</button>
+                                            <button type="submit" class="btn btn-gold w-100" id="registerSubmitButton" data-i18n="register.submit">Regisztráció</button>
                                             <div id="registerMessage" class="mt-3 text-center alert d-none"></div>
                                         </div>
                                     </div>
@@ -406,7 +409,7 @@
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
         <div id="appToast" class="toast align-items-center" role="alert" aria-live="assertive" aria-atomic="true">
             <div class="d-flex">
-                <div class="toast-body" id="appToastBody">Kész.</div>
+                <div class="toast-body" id="appToastBody" data-i18n="toast.done">Kész.</div>
                 <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
             </div>
         </div>

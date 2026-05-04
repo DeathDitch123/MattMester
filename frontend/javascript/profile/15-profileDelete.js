@@ -61,11 +61,11 @@ function updateDeleteProfileConfirmButtonState() {
         const acknowledged = elements.acknowledgeCheckbox.checked;
 
         if (!password) {
-            setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
+            setDeleteProfilePasswordFeedback('neutral', tx('A törléshez add meg a jelenlegi jelszavad.', 'Enter your current password to delete.'));
         } else if (passwordError) {
             setDeleteProfilePasswordFeedback('error', passwordError);
         } else {
-            setDeleteProfilePasswordFeedback('success', 'A jelszó formátuma megfelelő.');
+            setDeleteProfilePasswordFeedback('success', tx('A jelszó formátuma megfelelő.', 'The password format is valid.'));
         }
 
         const canSubmit = profileDeleteState.countdownFinished
@@ -99,12 +99,12 @@ function resetDeleteProfileModalState() {
     }
 
     if (elements.confirmButton) {
-        elements.confirmButton.innerHTML = `Törlés (<span id="deleteTimer">${PROFILE_DELETE_CONFIRM_SECONDS}</span>s)`;
+        elements.confirmButton.innerHTML = `${tx('Törlés', 'Delete')} (<span id="deleteTimer">${PROFILE_DELETE_CONFIRM_SECONDS}</span>s)`;
         elements.confirmButton.disabled = true;
     }
 
     setDeleteProfileMessage('danger', '');
-    setDeleteProfilePasswordFeedback('neutral', 'A törléshez add meg a jelenlegi jelszavad.');
+    setDeleteProfilePasswordFeedback('neutral', tx('A törléshez add meg a jelenlegi jelszavad.', 'Enter your current password to delete.'));
 }
 
 function startDeleteProfileCountdown() {
@@ -126,7 +126,7 @@ function startDeleteProfileCountdown() {
                 profileDeleteState.countdownFinished = true;
                 clearInterval(profileDeleteState.countdownTimer);
                 profileDeleteState.countdownTimer = null;
-                elements.confirmButton.textContent = 'Törlés';
+                elements.confirmButton.textContent = tx('Törlés', 'Delete');
             }
 
             updateDeleteProfileConfirmButtonState();
@@ -145,12 +145,12 @@ async function submitDeleteProfile() {
             setDeleteProfilePasswordFeedback('error', passwordError);
             updateDeleteProfileConfirmButtonState();
         } else if (missingAcknowledge) {
-            setDeleteProfileMessage('danger', 'Fogadd el, hogy a törlés nem visszavonható.');
+            setDeleteProfileMessage('danger', tx('Fogadd el, hogy a törlés nem visszavonható.', 'Please acknowledge that deletion is irreversible.'));
             updateDeleteProfileConfirmButtonState();
         } else {
             profileDeleteState.submitting = true;
             elements.confirmButton.disabled = true;
-            elements.confirmButton.textContent = 'Törlés folyamatban...';
+            elements.confirmButton.textContent = tx('Törlés folyamatban...', 'Deleting...');
             setDeleteProfileMessage('danger', '');
 
             try {
@@ -162,7 +162,7 @@ async function submitDeleteProfile() {
 
                 const result = await parseJson(response);
                 if (!response.ok || !result.success) {
-                    throw new Error(result.message || 'A profil törlése nem sikerült.');
+                    throw new Error(result.message || tx('A profil törlése nem sikerült.', 'Failed to delete the profile.'));
                 }
 
                 if (elements.modal) {
@@ -178,9 +178,9 @@ async function submitDeleteProfile() {
                 window.location.href = '/';
             } catch (error) {
                 profileDeleteState.submitting = false;
-                setDeleteProfileMessage('danger', error.message || 'Hiba történt a profil törlése közben.');
+                setDeleteProfileMessage('danger', error.message || tx('Hiba történt a profil törlése közben.', 'An error occurred while deleting the profile.'));
                 updateDeleteProfileConfirmButtonState();
-                throw new Error(error.message || 'Profil törlési hiba.');
+                throw new Error(error.message || tx('Profil törlési hiba.', 'Profile deletion error.'));
             }
         }
     }
@@ -190,11 +190,11 @@ function bindProfileDeleteModalEvents() {
     try {
         const elements = getProfileDeleteElements();
         if (!elements.modal) {
-            throw new Error('Hianyzik a delete profile modal.');
+            throw new Error(tx('Hianyzik a delete profile modal.', 'Missing delete profile modal.'));
         }
 
         if (profileDeleteState.bound) {
-            throw new Error('A delete profile esemenyek mar be vannak kotve.');
+            throw new Error(tx('A delete profile esemenyek mar be vannak kotve.', 'Delete profile events are already bound.'));
         }
 
         profileDeleteState.bound = true;

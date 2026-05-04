@@ -21,6 +21,8 @@
     if (globalScope.__mattmesterMaintenanceInit) return;
     globalScope.__mattmesterMaintenanceInit = true;
 
+    const tx = (hu, en) => (globalScope.MattMesterI18n?.tx ? globalScope.MattMesterI18n.tx(hu, en) : hu);
+
     const TOAST_AUTO_DISMISS_MS = 5000;
     const CONTAINER_ID = 'mmMaintenanceToastContainer';
     const STYLE_ID = 'mmMaintenanceToastStyles';
@@ -154,10 +156,11 @@
     function handleCountdown(detail) {
         console.log('[maintenanceClient] handleCountdown hivva, payload=', detail);
         if (isOnMaintenancePage()) return;
-        const message = String(detail?.message || `Karbantartás: ${detail?.remainingMinutes || '?'} perc múlva`);
+        const minutes = detail?.remainingMinutes || '?';
+        const message = String(detail?.message || tx(`Karbantartás: ${minutes} perc múlva`, `Maintenance: in ${minutes} minutes`));
         showToast({
             kind: 'countdown',
-            title: 'Karbantartás közeledik',
+            title: tx('Karbantartás közeledik', 'Maintenance approaching'),
             message
         });
     }
@@ -167,8 +170,8 @@
         if (isOnMaintenancePage()) return;
         showToast({
             kind: 'cancelled',
-            title: 'Karbantartás visszavonva',
-            message: detail?.message || 'A tervezett karbantartás vissza lett vonva.'
+            title: tx('Karbantartás visszavonva', 'Maintenance cancelled'),
+            message: detail?.message || tx('A tervezett karbantartás vissza lett vonva.', 'The scheduled maintenance has been cancelled.')
         });
     }
 

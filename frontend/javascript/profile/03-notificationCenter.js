@@ -69,7 +69,11 @@ function setChatBadge(totalUnread) {
 
 function formatNotificationTime(value) {
     const date = new Date(value || Date.now());
-    return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('hu-HU');
+    if (Number.isNaN(date.getTime())) return '';
+    if (window.MattMesterI18n?.formatDateTime) {
+        return window.MattMesterI18n.formatDateTime(date);
+    }
+    return date.toLocaleString('hu-HU');
 }
 
 function escapeHtml(value) {
@@ -96,8 +100,8 @@ function normalizeNotificationItem(payloadInput = {}) {
         || payload.userId
     ) || 0;
     const fromUsername = String(payload.senderUsername || innerPayload.senderUsername || '').trim();
-    const title = String(payload.title || '').trim() || 'Értesítés';
-    const message = String(payload.message || payload.text || '').trim() || 'Új esemény érkezett.';
+    const title = String(payload.title || '').trim() || tx('Értesítés', 'Notification');
+    const message = String(payload.message || payload.text || '').trim() || tx('Új esemény érkezett.', 'A new event has arrived.');
     const receivedAt = payload.createdAt || payload.receivedAt || payload.sentAt || new Date().toISOString();
     const severity = ['info', 'success', 'warning', 'error'].includes(payload.severity) ? payload.severity : 'info';
     const isRead = Boolean(payload.isRead);
@@ -122,15 +126,15 @@ function normalizeNotificationItem(payloadInput = {}) {
 function getNotificationActionsForItem(item) {
     const actions = [];
     if (item.type === 'friend_request' && item.fromUserId) {
-        actions.push({ key: 'profile', label: 'Profil', icon: 'user', variant: 'btn-outline-light' });
-        actions.push({ key: 'accept', label: 'Elfogad', icon: 'check', variant: 'btn-success' });
-        actions.push({ key: 'reject', label: 'Elutasít', icon: 'x', variant: 'btn-outline-danger' });
-        actions.push({ key: 'block', label: 'Letilt', icon: 'shield-off', variant: 'btn-danger' });
+        actions.push({ key: 'profile', label: tx('Profil', 'Profile'), icon: 'user', variant: 'btn-outline-light' });
+        actions.push({ key: 'accept', label: tx('Elfogad', 'Accept'), icon: 'check', variant: 'btn-success' });
+        actions.push({ key: 'reject', label: tx('Elutasít', 'Reject'), icon: 'x', variant: 'btn-outline-danger' });
+        actions.push({ key: 'block', label: tx('Letilt', 'Block'), icon: 'shield-off', variant: 'btn-danger' });
     }
     if (item.type === 'chat_message' && (item.conversationId || item.fromUserId)) {
-        actions.push({ key: 'open_chat', label: 'Megnyitás', icon: 'message-circle', variant: 'btn-outline-primary' });
+        actions.push({ key: 'open_chat', label: tx('Megnyitás', 'Open'), icon: 'message-circle', variant: 'btn-outline-primary' });
     }
-    actions.push({ key: 'remove', label: 'Bezár', icon: 'trash-2', variant: 'btn-outline-secondary' });
+    actions.push({ key: 'remove', label: tx('Bezár', 'Close'), icon: 'trash-2', variant: 'btn-outline-secondary' });
     return actions;
 }
 
@@ -183,7 +187,7 @@ function renderNotificationCenterList() {
 
 async function openChatInboxFromLauncher() {
     if (!window.MattMesterChatModal) {
-        throw new Error('A chat modal API nem érhető el.');
+        throw new Error(tx('A chat modal API nem érhető el.', 'The chat modal API is not available.'));
     }
     await window.MattMesterChatModal.openInbox();
 }
@@ -343,11 +347,11 @@ async function performFriendActionFromNotification(action, fromUserId) {
             const json = await response.json().catch(() => ({}));
             outcome = {
                 success: Boolean(json?.success),
-                message: String(json?.message || (response.ok ? 'OK' : 'Hiba a művelet során.'))
+                message: String(json?.message || (response.ok ? 'OK' : tx('Hiba a művelet során.', 'Error during the operation.')))
             };
         }
     } catch (error) {
-        outcome = { success: false, message: error.message || 'Hiba a friend művelet során.' };
+        outcome = { success: false, message: error.message || tx('Hiba a friend művelet során.', 'Error during the friend operation.') };
     }
     return outcome;
 }

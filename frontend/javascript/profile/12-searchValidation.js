@@ -17,9 +17,9 @@ function validatePlayerSearchElements(elements) {
     let errorMessage = '';
 
     if (hasValue && (value.length < 3 || value.length > 50)) {
-        errorMessage = 'A keresett felhasználónévnek 3 és 50 karakter között kell lennie.';
+        errorMessage = tx('A keresett felhasználónévnek 3 és 50 karakter között kell lennie.', 'The searched username must be between 3 and 50 characters.');
     } else if (hasValue && !USERNAME_REGEX.test(value)) {
-        errorMessage = 'A keresett felhasználónév formátuma érvénytelen.';
+        errorMessage = tx('A keresett felhasználónév formátuma érvénytelen.', 'The searched username format is invalid.');
     }
 
     const isValid = hasValue && !errorMessage;
@@ -30,8 +30,8 @@ function validatePlayerSearchElements(elements) {
     if (!hasValue) {
         input.removeAttribute('aria-invalid');
         feedback.textContent = '';
-        input.title = 'Adj meg legalább 3 karakteres felhasználónevet a kereséshez.';
-        button.title = 'Adj meg felhasználónevet a kereséshez.';
+        input.title = tx('Adj meg legalább 3 karakteres felhasználónevet a kereséshez.', 'Enter a username of at least 3 characters to search.');
+        button.title = tx('Adj meg felhasználónevet a kereséshez.', 'Enter a username to search.');
     } else if (errorMessage) {
         input.classList.add('is-invalid');
         input.setAttribute('aria-invalid', 'true');
@@ -43,9 +43,9 @@ function validatePlayerSearchElements(elements) {
         input.classList.add('is-valid');
         input.removeAttribute('aria-invalid');
         feedback.classList.add('text-success');
-        feedback.textContent = 'A felhasználónév formátuma megfelelő.';
-        input.title = 'A formátum megfelelő, indítható a keresés.';
-        button.title = 'Keresés';
+        feedback.textContent = tx('A felhasználónév formátuma megfelelő.', 'The username format is valid.');
+        input.title = tx('A formátum megfelelő, indítható a keresés.', 'The format is valid, search can be started.');
+        button.title = tx('Keresés', 'Search');
     }
 
     return isValid;

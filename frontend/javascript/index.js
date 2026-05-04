@@ -50,6 +50,21 @@ document.addEventListener('DOMContentLoaded', () => {
         await loadLeaderBoard();
         await refreshAuthUi();
     });
+
+    // Nyelvvaltaskor re-render: leaderboard, validacios feedbackek, welcome msg
+    if (window.MattMesterI18n?.onLangChange) {
+        window.MattMesterI18n.onLangChange(() => {
+            runSafely('i18nLangChangeRerender', () => {
+                try { renderLeaderBoard(); } catch (_) { /* ignore */ }
+                try { renderLoginValidation(false); } catch (_) { /* ignore */ }
+                try { renderRegisterValidation(false); } catch (_) { /* ignore */ }
+                document.querySelectorAll('.welcomeMessage').forEach((el) => {
+                    const u = el.dataset.mmUsername;
+                    if (u) el.innerText = `${tx('Szia', 'Hello')}, ${u}!`;
+                });
+            });
+        });
+    }
 });
 // Ez parsol
 async function parseJson(response) {
@@ -141,6 +156,9 @@ function getRankIcon(index) {
 }
 
 function formatLeaderboardDate(value) {
+    if (window.MattMesterI18n?.formatDate) {
+        return window.MattMesterI18n.formatDate(value);
+    }
     let formatted = '–';
     try {
         const date = new Date(value);
@@ -153,6 +171,10 @@ function formatLeaderboardDate(value) {
     return formatted;
 }
 
+function tx(hu, en) {
+    return window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu;
+}
+
 function buildLeaderboardRowHtml(player, index, filter) {
     const rankClass = getRankBadgeClass(index);
     const rankIcon = getRankIcon(index);
@@ -160,7 +182,7 @@ function buildLeaderboardRowHtml(player, index, filter) {
     const value = escapeHtmlForLeaderboard(rawValue);
     const lastActive = formatLeaderboardDate(player.last_active);
     const joinedAt = formatLeaderboardDate(player.joined_at || player.created_at);
-    const username = escapeHtmlForLeaderboard(player.username || 'Ismeretlen');
+    const username = escapeHtmlForLeaderboard(player.username || tx('Ismeretlen', 'Unknown'));
     const profileImageSrc = escapeHtmlForLeaderboard(
         (window.MattMesterProfileImage?.normalizeProfileImageSource || ((value) => value || '/profile_pictures/default.png'))(player.profile_image)
     );
@@ -209,7 +231,10 @@ function renderLeaderBoard() {
             emptyElement.classList.toggle('d-none', sortedData.length > 0);
         }
         if (lastUpdatedElement && LeaderboardData.lastUpdated) {
-            lastUpdatedElement.textContent = `frissítve: ${new Date(LeaderboardData.lastUpdated).toLocaleString('hu-HU')}`;
+            const ts = window.MattMesterI18n?.formatDateTime
+                ? window.MattMesterI18n.formatDateTime(LeaderboardData.lastUpdated)
+                : new Date(LeaderboardData.lastUpdated).toLocaleString('hu-HU');
+            lastUpdatedElement.textContent = `${tx('frissítve', 'updated')}: ${ts}`;
         }
 
         tbody.innerHTML = sortedData
@@ -254,31 +279,31 @@ function validateLoginInput(usernameOrMail, password) {
         isValid: false,
         summary: '',
         fields: {
-            username: { state: 'neutral', message: 'Add meg a felhasználóneved vagy email címed.' },
-            password: { state: 'neutral', message: 'Add meg a jelszavad.' }
+            username: { state: 'neutral', message: tx('Add meg a felhasználóneved vagy email címed.', 'Enter your username or email.') },
+            password: { state: 'neutral', message: tx('Add meg a jelszavad.', 'Enter your password.') }
         }
     };
 
     if (!usernameOrMail) {
-        result.fields.username = { state: 'error', message: 'A felhasználónév vagy email megadása kötelező.' };
+        result.fields.username = { state: 'error', message: tx('A felhasználónév vagy email megadása kötelező.', 'Username or email is required.') };
     } else if (usernameOrMail.includes('@')) {
         if (!EMAIL_REGEX.test(usernameOrMail)) {
-            result.fields.username = { state: 'error', message: 'Az email cím formátuma érvénytelen.' };
+            result.fields.username = { state: 'error', message: tx('Az email cím formátuma érvénytelen.', 'Email format is invalid.') };
         } else {
-            result.fields.username = { state: 'success', message: 'Az email cím formátuma megfelelő.' };
+            result.fields.username = { state: 'success', message: tx('Az email cím formátuma megfelelő.', 'Email format looks good.') };
         }
     } else if (usernameOrMail.length < 3 || usernameOrMail.length > 50) {
-        result.fields.username = { state: 'error', message: 'A felhasználónév 3-50 karakter között lehet.' };
+        result.fields.username = { state: 'error', message: tx('A felhasználónév 3-50 karakter között lehet.', 'Username must be 3–50 characters.') };
     } else if (!USERNAME_REGEX.test(usernameOrMail)) {
-        result.fields.username = { state: 'error', message: 'A felhasználónév tiltott karaktert tartalmaz.' };
+        result.fields.username = { state: 'error', message: tx('A felhasználónév tiltott karaktert tartalmaz.', 'Username contains forbidden characters.') };
     } else {
-        result.fields.username = { state: 'success', message: 'A felhasználónév formátuma megfelelő.' };
+        result.fields.username = { state: 'success', message: tx('A felhasználónév formátuma megfelelő.', 'Username format looks good.') };
     }
 
     if (!password) {
-        result.fields.password = { state: 'error', message: 'A jelszó megadása kötelező.' };
+        result.fields.password = { state: 'error', message: tx('A jelszó megadása kötelező.', 'Password is required.') };
     } else {
-        result.fields.password = { state: 'success', message: 'A jelszó megadva.' };
+        result.fields.password = { state: 'success', message: tx('A jelszó megadva.', 'Password entered.') };
     }
 
     const firstError = Object.values(result.fields).find((field) => field.state === 'error');
@@ -292,38 +317,38 @@ function validateRegisterInput(username, email, password) {
         isValid: false,
         summary: '',
         fields: {
-            username: { state: 'neutral', message: 'Adj meg egy 3-50 karakteres felhasználónevet.' },
-            email: { state: 'neutral', message: 'Add meg az email címed.' },
-            password: { state: 'neutral', message: 'Legalább 8 karakter, kisbetű, nagybetű, szám.' }
+            username: { state: 'neutral', message: tx('Adj meg egy 3-50 karakteres felhasználónevet.', 'Enter a username (3–50 characters).') },
+            email: { state: 'neutral', message: tx('Add meg az email címed.', 'Enter your email address.') },
+            password: { state: 'neutral', message: tx('Legalább 8 karakter, kisbetű, nagybetű, szám.', 'At least 8 chars: lowercase, uppercase, number.') }
         }
     };
 
     if (!username) {
-        result.fields.username = { state: 'error', message: 'A felhasználónév megadása kötelező.' };
+        result.fields.username = { state: 'error', message: tx('A felhasználónév megadása kötelező.', 'Username is required.') };
     } else if (username.length < 3 || username.length > 50) {
-        result.fields.username = { state: 'error', message: 'A felhasználónévnek 3 és 50 karakter között kell lennie.' };
+        result.fields.username = { state: 'error', message: tx('A felhasználónévnek 3 és 50 karakter között kell lennie.', 'Username must be between 3 and 50 characters.') };
     } else if (!USERNAME_REGEX.test(username)) {
-        result.fields.username = { state: 'error', message: 'A felhasználónév csak betűt, számot, pontot, aláhúzást és kötőjelet tartalmazhat.' };
+        result.fields.username = { state: 'error', message: tx('A felhasználónév csak betűt, számot, pontot, aláhúzást és kötőjelet tartalmazhat.', 'Username may only contain letters, numbers, dot, underscore and hyphen.') };
     } else {
-        result.fields.username = { state: 'success', message: 'A felhasználónév formátuma megfelelő.' };
+        result.fields.username = { state: 'success', message: tx('A felhasználónév formátuma megfelelő.', 'Username format looks good.') };
     }
 
     if (!email) {
-        result.fields.email = { state: 'error', message: 'Az email cím megadása kötelező.' };
+        result.fields.email = { state: 'error', message: tx('Az email cím megadása kötelező.', 'Email address is required.') };
     } else if (!EMAIL_REGEX.test(email)) {
-        result.fields.email = { state: 'error', message: 'Érvénytelen email cím formátum.' };
+        result.fields.email = { state: 'error', message: tx('Érvénytelen email cím formátum.', 'Invalid email address format.') };
     } else {
-        result.fields.email = { state: 'success', message: 'Az email cím formátuma megfelelő.' };
+        result.fields.email = { state: 'success', message: tx('Az email cím formátuma megfelelő.', 'Email format looks good.') };
     }
 
     if (!password) {
-        result.fields.password = { state: 'error', message: 'A jelszó megadása kötelező.' };
+        result.fields.password = { state: 'error', message: tx('A jelszó megadása kötelező.', 'Password is required.') };
     } else if (password.length < 8) {
-        result.fields.password = { state: 'error', message: 'A jelszónak legalább 8 karakter hosszúnak kell lennie.' };
+        result.fields.password = { state: 'error', message: tx('A jelszónak legalább 8 karakter hosszúnak kell lennie.', 'Password must be at least 8 characters.') };
     } else if (!PASSWORD_REGEX.test(password)) {
-        result.fields.password = { state: 'error', message: 'A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot.' };
+        result.fields.password = { state: 'error', message: tx('A jelszónak tartalmaznia kell legalább egy nagybetűt, egy kisbetűt és egy számot.', 'Password must include at least one uppercase, lowercase and number.') };
     } else {
-        result.fields.password = { state: 'success', message: 'A jelszó formátuma megfelelő.' };
+        result.fields.password = { state: 'success', message: tx('A jelszó formátuma megfelelő.', 'Password format looks good.') };
     }
 
     const firstError = Object.values(result.fields).find((field) => field.state === 'error');
@@ -346,8 +371,8 @@ function renderLoginValidation(showNeutral = false) {
     const validation = validateLoginInput(usernameInput.value.trim(), passwordInput.value);
     const usernameState = showNeutral ? validation.fields.username.state : (usernameInput.value.trim() ? validation.fields.username.state : 'neutral');
     const passwordState = showNeutral ? validation.fields.password.state : (passwordInput.value ? validation.fields.password.state : 'neutral');
-    const usernameMessage = showNeutral ? validation.fields.username.message : (usernameInput.value.trim() ? validation.fields.username.message : 'Add meg a felhasználóneved vagy email címed.');
-    const passwordMessage = showNeutral ? validation.fields.password.message : (passwordInput.value ? validation.fields.password.message : 'Add meg a jelszavad.');
+    const usernameMessage = showNeutral ? validation.fields.username.message : (usernameInput.value.trim() ? validation.fields.username.message : tx('Add meg a felhasználóneved vagy email címed.', 'Enter your username or email.'));
+    const passwordMessage = showNeutral ? validation.fields.password.message : (passwordInput.value ? validation.fields.password.message : tx('Add meg a jelszavad.', 'Enter your password.'));
 
     setFieldFeedback(usernameInput, usernameFeedback, usernameState, usernameMessage);
     setFieldFeedback(passwordInput, passwordFeedback, passwordState, passwordMessage);
@@ -382,9 +407,9 @@ function renderRegisterValidation(showNeutral = false) {
     const emailState = showNeutral ? validation.fields.email.state : (emailInput.value.trim() ? validation.fields.email.state : 'neutral');
     const passwordState = showNeutral ? validation.fields.password.state : (passwordInput.value ? validation.fields.password.state : 'neutral');
 
-    const usernameMessage = showNeutral ? validation.fields.username.message : (usernameInput.value.trim() ? validation.fields.username.message : 'Adj meg egy 3-50 karakteres felhasználónevet.');
-    const emailMessage = showNeutral ? validation.fields.email.message : (emailInput.value.trim() ? validation.fields.email.message : 'Add meg az email címed.');
-    const passwordMessage = showNeutral ? validation.fields.password.message : (passwordInput.value ? validation.fields.password.message : 'Legalább 8 karakter, kisbetű, nagybetű, szám.');
+    const usernameMessage = showNeutral ? validation.fields.username.message : (usernameInput.value.trim() ? validation.fields.username.message : tx('Adj meg egy 3-50 karakteres felhasználónevet.', 'Enter a username (3–50 characters).'));
+    const emailMessage = showNeutral ? validation.fields.email.message : (emailInput.value.trim() ? validation.fields.email.message : tx('Add meg az email címed.', 'Enter your email address.'));
+    const passwordMessage = showNeutral ? validation.fields.password.message : (passwordInput.value ? validation.fields.password.message : tx('Legalább 8 karakter, kisbetű, nagybetű, szám.', 'At least 8 chars: lowercase, uppercase, number.'));
 
     setFieldFeedback(usernameInput, usernameFeedback, usernameState, usernameMessage);
     setFieldFeedback(emailInput, emailFeedback, emailState, emailMessage);
@@ -471,7 +496,7 @@ function bindLoginForm() {
 
             const validation = renderLoginValidation(true);
             if (!validation.isValid) {
-                showFormMessage(messageElement, 'danger', 'Javítsd a pirossal jelölt mezőket.');
+                showFormMessage(messageElement, 'danger', tx('Javítsd a pirossal jelölt mezőket.', 'Fix the fields highlighted in red.'));
                 return;
             }
 
@@ -495,7 +520,10 @@ function bindLoginForm() {
                         if (result.code === 'account_banned') {
                             showFormMessage(
                                 messageElement, 'danger',
-                                'A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20fellebbez%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AFelhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%20a%20felhaszn%C3%A1l%C3%B3nevedet%5D%0A%0AKifog%C3%A1solom%20a%20r%C3%A1m%20kiszabott%20tilt%C3%A1st%2C%20mert%3A%0A%5Bide%20%C3%ADrd%20az%20indokot%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                tx(
+                                    'A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20fellebbez%C3%A9s%20%E2%80%94%20MattMester" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                    'This account has been banned. To appeal, please contact the site owners at: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20appeal%20%E2%80%94%20MattMester" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>'
+                                ),
                                 true
                             );
                             return;
@@ -503,21 +531,24 @@ function bindLoginForm() {
                         if (result.code === 'account_pending_deletion') {
                             showFormMessage(
                                 messageElement, 'danger',
-                                'A fiókodat az adminisztrátorok törlésre jelölték. Ha tévedésnek tartod, vedd fel a kapcsolatot a fejlesztőkkel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=T%C3%B6rl%C3%A9s%20fellebbez%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AFelhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%20a%20felhaszn%C3%A1l%C3%B3nevedet%5D%0A%0AKifog%C3%A1solom%20a%20fi%C3%B3kom%20t%C3%B6rl%C3%A9s%C3%A9t%2C%20mert%3A%0A%5Bide%20%C3%ADrd%20az%20indokot%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                tx(
+                                    'A fiókodat az adminisztrátorok törlésre jelölték. Ha tévedésnek tartod, vedd fel a kapcsolatot a fejlesztőkkel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=T%C3%B6rl%C3%A9s%20fellebbez%C3%A9s%20%E2%80%94%20MattMester" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                    'Your account has been marked for deletion by administrators. If this is a mistake, please contact the developers: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Deletion%20appeal%20%E2%80%94%20MattMester" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>'
+                                ),
                                 true
                             );
                             return;
                         }
-                        throw new Error(result.message || 'Sikertelen bejelentkezes.');
+                        throw new Error(result.message || tx('Sikertelen bejelentkezés.', 'Sign in failed.'));
                     }
 
                     loginSucceeded = true;
 
-                    showFormMessage(messageElement, 'success', result.message || 'Sikeres bejelentkezes.');
+                    showFormMessage(messageElement, 'success', result.message || tx('Sikeres bejelentkezés.', 'Signed in successfully.'));
                     loginForm.reset();
                     resetLoginValidationState();
                     hideModalById('loginModal');
-                    showToast('Sikeres bejelentkezes.');
+                    showToast(tx('Sikeres bejelentkezés.', 'Signed in successfully.'));
 
                     // forceReconnect: true — express-session `saveUninitialized: false`
                     // miatt egy anonim socket handshake-kori sessionID-je NEM egyezik a
@@ -535,7 +566,7 @@ function bindLoginForm() {
                     await refreshAuthUi('login-success');
                 } catch (error) {
                     rethrowIfAborted(error);
-                    showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                    showFormMessage(messageElement, 'danger', error.message || tx('Nem sikerült csatlakozni a szerverhez.', 'Could not connect to the server.'));
                     console.error('Hiba a bejelentkezes soran:', error);
                 } finally {
                     isSubmitting = false;
@@ -606,7 +637,7 @@ function bindRegisterForm() {
 
             const validation = renderRegisterValidation(true);
             if (!validation.isValid) {
-                showFormMessage(messageElement, 'danger', 'Javítsd a pirossal jelölt mezőket.');
+                showFormMessage(messageElement, 'danger', tx('Javítsd a pirossal jelölt mezőket.', 'Fix the fields highlighted in red.'));
                 return;
             }
 
@@ -628,12 +659,12 @@ function bindRegisterForm() {
                     const result = await parseJson(response);
 
                     if (!response.ok) {
-                        throw new Error(result.message || 'Sikertelen regisztráció.');
+                        throw new Error(result.message || tx('Sikertelen regisztráció.', 'Registration failed.'));
                     }
 
                     registerSucceeded = true;
 
-                    showFormMessage(messageElement, 'success', result.message || 'Sikeres regisztráció.');
+                    showFormMessage(messageElement, 'success', result.message || tx('Sikeres regisztráció.', 'Registered successfully.'));
                     registerForm.reset();
                     resetRegisterValidationState();
                     hideModalById('registerModal');
@@ -647,10 +678,10 @@ function bindRegisterForm() {
                         }
                     }
                     await refreshAuthUi('register-success');
-                    showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
+                    showToast(tx('Sikeres regisztráció. Most már bejelentkezhetsz.', 'Registered successfully. You can now sign in.'));
                 } catch (error) {
                     rethrowIfAborted(error);
-                    showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                    showFormMessage(messageElement, 'danger', error.message || tx('Nem sikerült csatlakozni a szerverhez.', 'Could not connect to the server.'));
                     console.error('Hiba a regisztráció soran:', error);
                 } finally {
                     isSubmitting = false;
@@ -673,10 +704,10 @@ async function handleLogout() {
         const result = await parseJson(response);
 
         if (!response.ok) {
-            throw new Error(result.message || 'Sikertelen kijelentkezés.');
+            throw new Error(result.message || tx('Sikertelen kijelentkezés.', 'Sign out failed.'));
         }
 
-        showToast(result.message || 'Sikeres kijelentkezés.');
+        showToast(result.message || tx('Sikeres kijelentkezés.', 'Signed out successfully.'));
         // Explicit badge nullázás azonnal, még a reconnect előtt: a UI ne
         // mutassa villanásnyira sem a régi user olvasatlan számát.
         try {
@@ -703,7 +734,7 @@ async function handleLogout() {
     } catch (error) {
         rethrowIfAborted(error);
         console.error('Hiba a kijelentkezés során:', error);
-        showToast(error.message || 'Hiba történt a kijelentkezés során.');
+        showToast(error.message || tx('Hiba történt a kijelentkezés során.', 'An error occurred while signing out.'));
     } finally {
         requestController.clearSignal('logout');
     }
@@ -764,7 +795,13 @@ async function refreshAuthUi(contextLabel = 'auth-refresh') {
 
         if (welcomeMessage) {
             welcomeMessage.forEach(el => {
-                el.innerText = loggedIn ? `Szia, ${user.username}!` : '';
+                if (loggedIn) {
+                    el.dataset.mmUsername = user.username || '';
+                    el.innerText = `${tx('Szia', 'Hello')}, ${user.username}!`;
+                } else {
+                    delete el.dataset.mmUsername;
+                    el.innerText = '';
+                }
             });
         }
         if (loggedIn && user.elo !== undefined && eloDisplay) {
@@ -944,17 +981,17 @@ function validateForgotPasswordEmail() {
     const emailValue = emailInput ? emailInput.value.trim() : '';
     let isValid = false;
     let state = 'neutral';
-    let message = 'Add meg az email címed.';
+    let message = tx('Add meg az email címed.', 'Enter your email address.');
 
     if (!emailValue) {
         state = 'error';
-        message = 'Az email cím megadása kötelező.';
+        message = tx('Az email cím megadása kötelező.', 'Email address is required.');
     } else if (!EMAIL_REGEX.test(emailValue)) {
         state = 'error';
-        message = 'Érvénytelen email cím formátum.';
+        message = tx('Érvénytelen email cím formátum.', 'Invalid email address format.');
     } else {
         state = 'success';
-        message = 'Az email cím formátuma megfelelő.';
+        message = tx('Az email cím formátuma megfelelő.', 'Email format looks good.');
         isValid = true;
     }
 
@@ -995,7 +1032,7 @@ function bindForgotPasswordFlow() {
             if (emailInput) {
                 emailInput.value = emailInput.value || '';
             }
-            setForgotPasswordEmailFeedback(emailInput, feedbackElement, 'neutral', 'Add meg az email címed.');
+            setForgotPasswordEmailFeedback(emailInput, feedbackElement, 'neutral', tx('Add meg az email címed.', 'Enter your email address.'));
         });
 
         forgotModal.addEventListener('hidden.bs.modal', () => {
@@ -1053,11 +1090,11 @@ function bindForgotPasswordFlow() {
                 clearFormMessage(messageElement);
 
                 if (!validateForgotPasswordEmail()) {
-                    showFormMessage(messageElement, 'danger', 'Ellenőrizd az email címet.');
+                    showFormMessage(messageElement, 'danger', tx('Ellenőrizd az email címet.', 'Please check the email address.'));
                 } else {
                     if (submitButton) {
                         submitButton.disabled = true;
-                        submitButton.textContent = 'Küldés folyamatban...';
+                        submitButton.textContent = tx('Küldés folyamatban...', 'Sending...');
                     }
 
                     requestController.schedule('forgotPasswordSubmit', async () => {
@@ -1071,23 +1108,23 @@ function bindForgotPasswordFlow() {
                             const result = await parseJson(response);
 
                             if (!response.ok) {
-                                throw new Error(result.message || 'Sikertelen jelszó-visszaállítási kérés.');
+                                throw new Error(result.message || tx('Sikertelen jelszó-visszaállítási kérés.', 'Password reset request failed.'));
                             }
 
-                            showFormMessage(messageElement, 'success', result.message || 'Ha létezik ilyen email cím, elküldtük a visszaállító levelet.');
+                            showFormMessage(messageElement, 'success', result.message || tx('Ha létezik ilyen email cím, elküldtük a visszaállító levelet.', 'If an account exists for this email, a reset link has been sent.'));
                             if (currentEmailInput) {
                                 currentEmailInput.classList.remove('is-invalid');
                                 currentEmailInput.classList.add('is-valid');
                             }
                         } catch (error) {
                             rethrowIfAborted(error);
-                            showFormMessage(messageElement, 'danger', error.message || 'Nem sikerult csatlakozni a szerverhez.');
+                            showFormMessage(messageElement, 'danger', error.message || tx('Nem sikerült csatlakozni a szerverhez.', 'Could not connect to the server.'));
                             console.error('Hiba a jelszó-visszaállítási email kérés során:', error);
                         } finally {
                             requestController.clearSignal('forgotPassword');
                             if (submitButton) {
                                 submitButton.disabled = !validateForgotPasswordEmail();
-                                submitButton.textContent = 'Email küldése';
+                                submitButton.textContent = tx('Email küldése', 'Send email');
                             }
                         }
                     });

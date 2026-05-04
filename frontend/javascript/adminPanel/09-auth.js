@@ -71,13 +71,13 @@ async function performElevate() {
     try {
         if (!password) {
             if (errBox) {
-                errBox.textContent = 'A jelszó megadása kötelező.';
+                errBox.textContent = tx('A jelszó megadása kötelező.', 'Password is required.');
                 errBox.classList.remove('d-none');
             }
         } else {
             if (submitBtn) {
                 submitBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Aktiválás...';
+                submitBtn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span>${tx('Aktiválás...', 'Activating...')}`;
             }
 
             const res = await fetch('/api/admin/auth/elevate', {
@@ -89,7 +89,7 @@ async function performElevate() {
             const data = await res.json().catch(() => ({}));
 
             if (!res.ok || !data?.success) {
-                const msg = data?.message || 'Sikertelen elevate. Ellenőrizd a jelszót.';
+                const msg = data?.message || tx('Sikertelen elevate. Ellenőrizd a jelszót.', 'Elevate failed. Check your password.');
                 if (errBox) {
                     errBox.textContent = msg;
                     errBox.classList.remove('d-none');
@@ -102,7 +102,7 @@ async function performElevate() {
                 const modalEl = document.getElementById('adminElevateModal');
                 if (modalEl) window.bootstrap.Modal.getOrCreateInstance(modalEl).hide();
 
-                showToast('Admin szint aktiválva — token kiállítva (15 perc).', 'success', 'bi-shield-fill-check');
+                showToast(tx('Admin szint aktiválva — token kiállítva (15 perc).', 'Admin level activated — token issued (15 min).'), 'success', 'bi-shield-fill-check');
                 startTokenCountdown();
                 connectAdminSocket();
                 showSection(state.currentSectionId || DEFAULT_SECTION, null, { silent: true });
@@ -112,13 +112,13 @@ async function performElevate() {
     } catch (error) {
         console.error('performElevate hiba:', error);
         if (errBox) {
-            errBox.textContent = 'Hálózati hiba az elevate során.';
+            errBox.textContent = tx('Hálózati hiba az elevate során.', 'Network error during elevate.');
             errBox.classList.remove('d-none');
         }
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.innerHTML = '<i class="bi bi-shield-fill-check me-1"></i>Aktiválás (15 perc)';
+            submitBtn.innerHTML = `<i class="bi bi-shield-fill-check me-1"></i>${tx('Aktiválás (15 perc)', 'Activate (15 min)')}`;
         }
     }
 

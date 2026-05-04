@@ -40,52 +40,57 @@ function formatSecurityEventDate(value) {
 
         let relative;
         if (diffMs < 45 * 1000) {
-            relative = 'Épp most';
+            relative = tx('Épp most', 'Just now');
         } else if (diffMinutes < 60) {
-            relative = `${diffMinutes} perce`;
+            relative = `${diffMinutes} ${tx('perce', 'min ago')}`;
         } else if (diffHours < 24) {
-            relative = `${diffHours} órája`;
+            relative = `${diffHours} ${tx('órája', 'h ago')}`;
         } else if (diffDays < 7) {
-            relative = `${diffDays} napja`;
+            relative = `${diffDays} ${tx('napja', 'd ago')}`;
         } else {
-            relative = date.toLocaleDateString('hu-HU', { year: 'numeric', month: 'short', day: 'numeric' });
+            const dOpts = { year: 'numeric', month: 'short', day: 'numeric' };
+            relative = window.MattMesterI18n?.formatDate ? window.MattMesterI18n.formatDate(date, dOpts) : date.toLocaleDateString('hu-HU', dOpts);
         }
 
-        const absolute = date.toLocaleString('hu-HU', {
+        const absOpts = {
             year: 'numeric', month: '2-digit', day: '2-digit',
             hour: '2-digit', minute: '2-digit'
-        });
+        };
+        const absolute = window.MattMesterI18n?.formatDateTime ? window.MattMesterI18n.formatDateTime(date, absOpts) : date.toLocaleString('hu-HU', absOpts);
 
         formatted = { relative, absolute };
     }
     return formatted;
 }
 
-const SECURITY_EVENT_LABELS = {
-    login: { label: 'Bejelentkezés', icon: 'log-in', category: 'auth' },
-    logout: { label: 'Kijelentkezés', icon: 'log-out', category: 'auth' },
-    register: { label: 'Regisztráció', icon: 'user-plus', category: 'auth' },
-    logout_all_devices: { label: 'Kijelentkezés minden eszközről', icon: 'shield-off', category: 'security' },
-    profile_settings_update: { label: 'Profil beállítások módosítva', icon: 'user-cog', category: 'profile' },
-    password_change: { label: 'Jelszó módosítva', icon: 'key-round', category: 'security' },
-    profile_image_upload: { label: 'Profilkép feltöltve', icon: 'image-up', category: 'profile' },
-    profile_image_remove: { label: 'Profilkép eltávolítva', icon: 'image-minus', category: 'profile' },
-    profile_delete: { label: 'Profil törölve', icon: 'user-x', category: 'security' },
-    login_failed: { label: 'Sikertelen bejelentkezés', icon: 'shield-alert', category: 'security' },
-    current_password_verify_failed: { label: 'Hibás jelszó ellenőrzés', icon: 'shield-alert', category: 'security' },
-    banned: { label: 'Admin tiltás alkalmazva', icon: 'shield-x', category: 'security' },
-    unbanned: { label: 'Admin tiltás feloldva', icon: 'shield-check', category: 'security' },
-    friend_request_sent: { label: 'Barát kérelem küldve', icon: 'user-plus', category: 'social' },
-    friend_request_accepted: { label: 'Barát kérelem elfogadva', icon: 'user-check', category: 'social' },
-    friend_request_rejected: { label: 'Barát kérelem elutasítva', icon: 'user-minus', category: 'social' },
-    friend_blocked: { label: 'Felhasználó letiltva', icon: 'user-x', category: 'social' },
-    friend_unblocked: { label: 'Letiltás feloldva', icon: 'user-check', category: 'social' },
-    friend_removed: { label: 'Barát eltávolítva', icon: 'user-minus', category: 'social' }
-};
+function getSecurityEventLabels() {
+    return {
+        login: { label: tx('Bejelentkezés', 'Login'), icon: 'log-in', category: 'auth' },
+        logout: { label: tx('Kijelentkezés', 'Logout'), icon: 'log-out', category: 'auth' },
+        register: { label: tx('Regisztráció', 'Registration'), icon: 'user-plus', category: 'auth' },
+        logout_all_devices: { label: tx('Kijelentkezés minden eszközről', 'Logout from all devices'), icon: 'shield-off', category: 'security' },
+        profile_settings_update: { label: tx('Profil beállítások módosítva', 'Profile settings updated'), icon: 'user-cog', category: 'profile' },
+        password_change: { label: tx('Jelszó módosítva', 'Password changed'), icon: 'key-round', category: 'security' },
+        profile_image_upload: { label: tx('Profilkép feltöltve', 'Profile picture uploaded'), icon: 'image-up', category: 'profile' },
+        profile_image_remove: { label: tx('Profilkép eltávolítva', 'Profile picture removed'), icon: 'image-minus', category: 'profile' },
+        profile_delete: { label: tx('Profil törölve', 'Profile deleted'), icon: 'user-x', category: 'security' },
+        login_failed: { label: tx('Sikertelen bejelentkezés', 'Failed login'), icon: 'shield-alert', category: 'security' },
+        current_password_verify_failed: { label: tx('Hibás jelszó ellenőrzés', 'Invalid password verification'), icon: 'shield-alert', category: 'security' },
+        banned: { label: tx('Admin tiltás alkalmazva', 'Admin ban applied'), icon: 'shield-x', category: 'security' },
+        unbanned: { label: tx('Admin tiltás feloldva', 'Admin ban lifted'), icon: 'shield-check', category: 'security' },
+        friend_request_sent: { label: tx('Barát kérelem küldve', 'Friend request sent'), icon: 'user-plus', category: 'social' },
+        friend_request_accepted: { label: tx('Barát kérelem elfogadva', 'Friend request accepted'), icon: 'user-check', category: 'social' },
+        friend_request_rejected: { label: tx('Barát kérelem elutasítva', 'Friend request rejected'), icon: 'user-minus', category: 'social' },
+        friend_blocked: { label: tx('Felhasználó letiltva', 'User blocked'), icon: 'user-x', category: 'social' },
+        friend_unblocked: { label: tx('Letiltás feloldva', 'User unblocked'), icon: 'user-check', category: 'social' },
+        friend_removed: { label: tx('Barát eltávolítva', 'Friend removed'), icon: 'user-minus', category: 'social' }
+    };
+}
 
 function getSecurityEventDescriptor(item) {
-    const descriptor = SECURITY_EVENT_LABELS[item.eventType] || {
-        label: (item.message || item.eventType || 'Ismeretlen esemény'),
+    const labels = getSecurityEventLabels();
+    const descriptor = labels[item.eventType] || {
+        label: (item.message || item.eventType || tx('Ismeretlen esemény', 'Unknown event')),
         icon: 'activity',
         category: item.eventCategory || 'security'
     };
@@ -94,20 +99,20 @@ function getSecurityEventDescriptor(item) {
 
 function getSecurityStatusBadge(item) {
     const severity = String(item.severity || 'info').toLowerCase();
-    let badge = { text: 'Info', className: 'security-badge security-badge-info' };
+    let badge = { text: tx('Info', 'Info'), className: 'security-badge security-badge-info' };
 
     if (item.success === false || severity === 'error' || severity === 'critical') {
-        badge = { text: 'Sikertelen', className: 'security-badge security-badge-error' };
+        badge = { text: tx('Sikertelen', 'Failed'), className: 'security-badge security-badge-error' };
     } else if (severity === 'warning') {
-        badge = { text: 'Figyelmeztetés', className: 'security-badge security-badge-warning' };
+        badge = { text: tx('Figyelmeztetés', 'Warning'), className: 'security-badge security-badge-warning' };
     } else if (item.eventType === 'login') {
-        badge = { text: 'Sikeres', className: 'security-badge security-badge-success' };
+        badge = { text: tx('Sikeres', 'Successful'), className: 'security-badge security-badge-success' };
     }
     return badge;
 }
 
 function shortenUserAgent(userAgent) {
-    let result = 'Ismeretlen';
+    let result = tx('Ismeretlen', 'Unknown');
     if (userAgent) {
         const ua = String(userAgent);
         const browserMatches = [
@@ -117,11 +122,11 @@ function shortenUserAgent(userAgent) {
             { regex: /Firefox\//i, name: 'Firefox' },
             { regex: /Safari\//i, name: 'Safari' }
         ];
-        let browser = 'Böngésző';
+        let browser = tx('Böngésző', 'Browser');
         for (const entry of browserMatches) {
             if (entry.regex.test(ua)) { browser = entry.name; break; }
         }
-        let os = 'Ismeretlen OS';
+        let os = tx('Ismeretlen OS', 'Unknown OS');
         if (/Windows/i.test(ua)) os = 'Windows';
         else if (/Android/i.test(ua)) os = 'Android';
         else if (/iPhone|iPad|iOS/i.test(ua)) os = 'iOS';
@@ -151,7 +156,7 @@ function renderSecurityActivityTable() {
         if (!items.length) {
             tbody.innerHTML = `
                 <tr class="security-empty-row">
-                    <td colspan="5" class="text-center text-secondary py-4">Nincs megjeleníthető esemény a kiválasztott szűrőre.</td>
+                    <td colspan="5" class="text-center text-secondary py-4">${tx('Nincs megjeleníthető esemény a kiválasztott szűrőre.', 'No events to display for the selected filter.')}</td>
                 </tr>
             `;
         } else {
@@ -211,7 +216,7 @@ async function refreshSecurityActivity() {
         if (tbody && !securityActivityState.items.length) {
             tbody.innerHTML = `
                 <tr class="security-empty-row">
-                    <td colspan="5" class="text-center text-secondary py-4">Biztonsági napló betöltése...</td>
+                    <td colspan="5" class="text-center text-secondary py-4">${tx('Biztonsági napló betöltése...', 'Loading security log...')}</td>
                 </tr>
             `;
         }
@@ -222,7 +227,7 @@ async function refreshSecurityActivity() {
             });
             const result = await parseJson(response);
             if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Sikertelen biztonsági napló lekérés.');
+                throw new Error(result.message || tx('Sikertelen biztonsági napló lekérés.', 'Failed to fetch security log.'));
             }
             securityActivityState.items = Array.isArray(result.data) ? result.data : [];
             renderSecurityActivityTable();
@@ -232,11 +237,11 @@ async function refreshSecurityActivity() {
             if (tbody) {
                 tbody.innerHTML = `
                     <tr class="security-empty-row">
-                        <td colspan="5" class="text-center text-danger py-4">${escapeSecurityHtml(error.message || 'Hiba a biztonsági napló betöltésekor.')}</td>
+                        <td colspan="5" class="text-center text-danger py-4">${escapeSecurityHtml(error.message || tx('Hiba a biztonsági napló betöltésekor.', 'Error loading the security log.'))}</td>
                     </tr>
                 `;
             }
-            setSecurityActivityFeedback(error.message || 'Hiba a biztonsági napló betöltésekor.', 'error');
+            setSecurityActivityFeedback(error.message || tx('Hiba a biztonsági napló betöltésekor.', 'Error loading the security log.'), 'error');
         } finally {
             securityActivityState.loading = false;
             if (refreshButton) refreshButton.disabled = false;
@@ -294,7 +299,7 @@ async function handleLogoutAllDevices() {
         logoutAllDevicesState.submitting = true;
         if (confirmButton) {
             confirmButton.disabled = true;
-            confirmButton.textContent = 'Kijelentkezés...';
+            confirmButton.textContent = tx('Kijelentkezés...', 'Logging out...');
         }
         setLogoutAllDevicesMessage('', 'info');
 
@@ -305,24 +310,24 @@ async function handleLogoutAllDevices() {
             });
             const result = await parseJson(response);
             if (!response.ok || !result.success) {
-                throw new Error(result.message || 'Nem sikerült kijelentkeztetni minden eszközről.');
+                throw new Error(result.message || tx('Nem sikerült kijelentkeztetni minden eszközről.', 'Failed to log out from all devices.'));
             }
 
             if (socket) {
                 socket.disconnect();
             }
 
-            setLogoutAllDevicesMessage(result.message || 'Sikeres kijelentkezés minden eszközről.', 'success');
+            setLogoutAllDevicesMessage(result.message || tx('Sikeres kijelentkezés minden eszközről.', 'Successfully logged out from all devices.'), 'success');
             setTimeout(() => {
                 window.location.href = '/';
             }, 800);
         } catch (error) {
             console.error('Logout all devices hiba:', error);
-            setLogoutAllDevicesMessage(error.message || 'Hiba a kijelentkezés során.', 'danger');
+            setLogoutAllDevicesMessage(error.message || tx('Hiba a kijelentkezés során.', 'Error during logout.'), 'danger');
             logoutAllDevicesState.submitting = false;
             if (confirmButton) {
                 confirmButton.disabled = false;
-                confirmButton.textContent = 'Kijelentkezés minden eszközről';
+                confirmButton.textContent = tx('Kijelentkezés minden eszközről', 'Logout from all devices');
             }
         }
     }
@@ -341,7 +346,7 @@ function bindLogoutAllDevicesButton() {
             runSafely('logoutAllDevicesModalShow', () => {
                 logoutAllDevicesState.submitting = false;
                 confirmButton.disabled = false;
-                confirmButton.textContent = 'Kijelentkezés minden eszközről';
+                confirmButton.textContent = tx('Kijelentkezés minden eszközről', 'Logout from all devices');
                 setLogoutAllDevicesMessage('', 'info');
             });
         });

@@ -1070,10 +1070,16 @@ describe('Frontend: STATUS_BADGE lefedi a backend game-status enum-jat', () => {
             }
         }
 
-        // statusPill biztonsagos fallback-tel rendelkezzen (ne crasheljen ismeretlen kulcsra)
+        // statusPill biztonsagos fallback-tel rendelkezzen (ne crasheljen ismeretlen kulcsra).
+        // A fallback ket alak valamelyikevel ervenyes:
+        //   1) `STATUS_BADGE[key] || ...`            (regi pattern)
+        //   2) `const s = STATUS_BADGE[key];` + `s ? ... : ...`  (i18n refaktor utan)
         expect(content).toMatch(/statusPill\s*=\s*\([^)]*\)\s*=>\s*\{/);
-        // a fallback ugy mukodik hogy `STATUS_BADGE[key] || ...`
-        expect(content).toMatch(/STATUS_BADGE\[key\]\s*\|\|/);
+        const hasOldFallback = /STATUS_BADGE\[key\]\s*\|\|/.test(content);
+        const hasTernaryFallback = /STATUS_BADGE\[key\][\s\S]{0,300}?\?\s*[^:]+:\s*\(?\s*key\s*\|\|/.test(content);
+        if (!hasOldFallback && !hasTernaryFallback) {
+            throw new Error('statusPill-bol hianyzik a biztonsagos fallback ismeretlen status-kulcsra.');
+        }
     });
 });
 

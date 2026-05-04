@@ -94,18 +94,18 @@ async function searchPlayer(source = 'topbar'){
             : getTopBarPlayerSearchElements();
         const { input, button, feedback } = elements;
         if (!input || !button || !feedback) {
-            throw new Error('A kereső elemek nem találhatók a DOM-ban.');
+            throw new Error(tx('A kereső elemek nem találhatók a DOM-ban.', 'Search elements not found in the DOM.'));
         }
 
         const username = (input.value || '').trim();
         if (!username || username.length < 3 || username.length > 50 || !USERNAME_REGEX.test(username)) {
-            throw new Error('Érvénytelen felhasználónév a kereséshez.');
+            throw new Error(tx('Érvénytelen felhasználónév a kereséshez.', 'Invalid username for search.'));
         }
         const searchText = username;
 
         feedback.classList.remove('text-danger', 'text-success');
         feedback.classList.add('text-secondary');
-        feedback.textContent = 'Keresés folyamatban...';
+        feedback.textContent = tx('Keresés folyamatban...', 'Searching...');
         button.disabled = true;
 
         if (runtime.abortController) {
@@ -118,19 +118,19 @@ async function searchPlayer(source = 'topbar'){
         });
 
         if (runtime.requestToken !== requestToken) {
-            const staleError = new Error('A keresés elavulttá vált.');
+            const staleError = new Error(tx('A keresés elavulttá vált.', 'The search has become stale.'));
             staleError.name = 'SearchStaleError';
             throw staleError;
         }
 
         const result = await parseJson(response);
         if (!response.ok || !result.success) {
-            throw new Error(result.message || 'Sikertelen keresés.');
+            throw new Error(result.message || tx('Sikertelen keresés.', 'Search failed.'));
         }
 
         feedback.classList.remove('text-secondary', 'text-danger');
         feedback.classList.add('text-success');
-        feedback.textContent = `A keresés eredményes: ${result.data.length} találat.`;
+        feedback.textContent = `${tx('A keresés eredményes:', 'Search successful:')} ${result.data.length} ${tx('találat.', 'result(s).')}`;
 
         openSearchResultsModal(Array.isArray(result.data) ? result.data : [], searchText);
         clearPlayerSearchInputs();
@@ -145,7 +145,7 @@ async function searchPlayer(source = 'topbar'){
         if (feedback) {
             feedback.classList.remove('text-secondary', 'text-success');
             feedback.classList.add('text-danger');
-            feedback.textContent = error.message || 'Hiba történt a játékos keresése során.';
+            feedback.textContent = error.message || tx('Hiba történt a játékos keresése során.', 'An error occurred while searching for the player.');
         }
         clearPlayerSearchInputs();
         console.error('Hiba a jatekos kereses soran:', error);

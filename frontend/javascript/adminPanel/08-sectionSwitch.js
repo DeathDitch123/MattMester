@@ -45,7 +45,8 @@ function showSection(sectionId, event, options = {}) {
         if (state.activityChart.status === 'loaded' || state.activityChart.status === 'empty') {
             applyActivityChartStatus(state.activityChart);
         } else {
-            applyActivityChartStatus({ status: state.adminToken ? 'loading' : 'error', error: state.adminToken ? null : 'Nincs admin token.' });
+            const txAS = (window.MattMesterI18n?.tx) || ((hu) => hu);
+            applyActivityChartStatus({ status: state.adminToken ? 'loading' : 'error', error: state.adminToken ? null : txAS('Nincs admin token.', 'No admin token.') });
             if (state.adminToken) loadActivityChart();
         }
         startActivityRefreshTimer();

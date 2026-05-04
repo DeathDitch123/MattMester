@@ -3,6 +3,7 @@
 // minden más oldalon ez a handler felel a meghívás megjelenítéséért és átirányításért.
 
 (function attachChessInviteGlobal(globalScope) {
+    const tx = (hu, en) => (globalScope.MattMesterI18n?.tx ? globalScope.MattMesterI18n.tx(hu, en) : hu);
     const PENDING_ACCEPT_KEY = 'mattmester.pendingChessInviteAccept';
     const CHESS_PAGE_PATH = '/chess_barold/html/chess.html';
 
@@ -110,22 +111,23 @@
             // A sakk oldalon a chess main.js saját popupja kezeli — ne nyissunk dupla popupot.
             if (aSakkOldalon()) return;
 
-            const inviter = (data && data.inviterName) || 'Egy játékos';
+            const inviter = (data && data.inviterName) || tx('Egy játékos', 'A player');
             const gameId = data && data.gameId;
             if (!gameId) return;
 
             // Custom HTML modal (mmConfirm) a natív confirm() helyett.
             // Fallback (ha a confirmModal.js nem toltodott be): native confirm.
             let elfogadta;
+            const inviteMsg = tx(`${inviter} sakkpartira hív! Elfogadod?`, `${inviter} is challenging you to a chess match! Do you accept?`);
             if (typeof globalScope.mmConfirm === 'function') {
                 elfogadta = await globalScope.mmConfirm({
-                    title: 'Sakk meghívás',
-                    message: `${inviter} sakkpartira hív! Elfogadod?`,
-                    confirmLabel: 'Elfogadom',
-                    cancelLabel: 'Elutasítom'
+                    title: tx('Sakk meghívás', 'Chess invite'),
+                    message: inviteMsg,
+                    confirmLabel: tx('Elfogadom', 'Accept'),
+                    cancelLabel: tx('Elutasítom', 'Decline')
                 });
             } else {
-                elfogadta = globalScope.confirm(`${inviter} sakkpartira hív! Elfogadod?`);
+                elfogadta = globalScope.confirm(inviteMsg);
             }
 
             if (elfogadta) {

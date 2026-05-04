@@ -69,7 +69,7 @@ async function doFeladJatek() {
 
     try {
         const data = await apiFeladMagat();
-        jatekVegeUI(data.uzenet || 'Feladtad a játékot.', data.eloValtozas ?? null);
+        jatekVegeUI(data.uzenet || (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx('Feladtad a játékot.', 'You resigned the game.') : 'Feladtad a játékot.'), data.eloValtozas ?? null);
         idoPollingLeall();
         integritasEllenorzesLeall();
         state.gameId = null;

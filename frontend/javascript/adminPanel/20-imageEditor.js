@@ -56,7 +56,7 @@ function resetAdminImageEditorState() {
     if (els.rotateInput) els.rotateInput.value = '0';
     if (els.saveButton) {
         els.saveButton.disabled = !adminImageEditorState.image;
-        els.saveButton.textContent = 'Mentés és jóváhagyás';
+        els.saveButton.textContent = tx('Mentés és jóváhagyás', 'Save and approve');
     }
     setAdminImageEditorMessage('danger', '');
 }
@@ -106,7 +106,7 @@ function renderAdminImageEditor() {
         ctx.fillStyle = 'rgba(148, 163, 184, 0.8)';
         ctx.font = '15px Inter, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('Válassz egy képet a szerkesztéshez.', canvas.width / 2, canvas.height / 2);
+        ctx.fillText(tx('Válassz egy képet a szerkesztéshez.', 'Select an image to edit.'), canvas.width / 2, canvas.height / 2);
         return;
     }
 
@@ -158,14 +158,14 @@ function renderAdminImageEditor() {
 function getAdminCroppedImageBlob() {
     const { canvas } = getAdminImageEditorElements();
     const image = adminImageEditorState.image;
-    if (!canvas || !image) return Promise.reject(new Error('Nincs szerkesztésre kiválasztott kép.'));
+    if (!canvas || !image) return Promise.reject(new Error(tx('Nincs szerkesztésre kiválasztott kép.', 'No image selected for editing.')));
 
     const cropRadius = getAdminEditorCropRadius(canvas);
     const out = document.createElement('canvas');
     out.width = 512;
     out.height = 512;
     const outCtx = out.getContext('2d');
-    if (!outCtx) return Promise.reject(new Error('Nem sikerült előkészíteni a mentést.'));
+    if (!outCtx) return Promise.reject(new Error(tx('Nem sikerült előkészíteni a mentést.', 'Could not prepare save.')));
 
     outCtx.drawImage(
         adminImageEditorState.bufferCanvas,
@@ -176,7 +176,7 @@ function getAdminCroppedImageBlob() {
 
     return new Promise((resolve, reject) => {
         out.toBlob((blob) => {
-            if (!blob) reject(new Error('A kép mentése sikertelen.'));
+            if (!blob) reject(new Error(tx('A kép mentése sikertelen.', 'Saving the image failed.')));
             else resolve(blob);
         }, 'image/png');
     });
@@ -184,7 +184,7 @@ function getAdminCroppedImageBlob() {
 
 async function openAdminImageEditorFromFile(file, userId) {
     const els = getAdminImageEditorElements();
-    if (!els.modal) throw new Error('Az admin képszerkesztő modal nem elérhető.');
+    if (!els.modal) throw new Error(tx('Az admin képszerkesztő modal nem elérhető.', 'The admin image editor modal is unavailable.'));
 
     revokeAdminImageObjectUrl();
     adminImageEditorState.objectUrl = URL.createObjectURL(file);
@@ -194,7 +194,7 @@ async function openAdminImageEditorFromFile(file, userId) {
     image.src = adminImageEditorState.objectUrl;
     await new Promise((resolve, reject) => {
         image.onload = () => resolve();
-        image.onerror = () => reject(new Error('A kép betöltése sikertelen.'));
+        image.onerror = () => reject(new Error(tx('A kép betöltése sikertelen.', 'Loading the image failed.')));
     });
 
     adminImageEditorState.image = image;
@@ -209,19 +209,19 @@ async function submitAdminImageUpload() {
     const els = getAdminImageEditorElements();
     if (!els.saveButton || adminImageEditorState.uploading) return;
     if (!adminImageEditorState.image) {
-        setAdminImageEditorMessage('danger', 'Nincs szerkesztésre kiválasztott kép.');
+        setAdminImageEditorMessage('danger', tx('Nincs szerkesztésre kiválasztott kép.', 'No image selected for editing.'));
         return;
     }
     const userId = Number(adminImageEditorState.targetUserId) || 0;
     if (!userId) {
-        setAdminImageEditorMessage('danger', 'Nincs kiválasztott felhasználó a feltöltéshez.');
+        setAdminImageEditorMessage('danger', tx('Nincs kiválasztott felhasználó a feltöltéshez.', 'No user selected for upload.'));
         return;
     }
 
     adminImageEditorState.uploading = true;
     els.saveButton.disabled = true;
-    els.saveButton.textContent = 'Feltöltés...';
-    setAdminImageEditorMessage('info', 'Feltöltés folyamatban — azonnali jóváhagyással.');
+    els.saveButton.textContent = tx('Feltöltés...', 'Uploading...');
+    setAdminImageEditorMessage('info', tx('Feltöltés folyamatban — azonnali jóváhagyással.', 'Upload in progress — with instant approval.'));
 
     try {
         const blob = await getAdminCroppedImageBlob();
@@ -237,7 +237,7 @@ async function submitAdminImageUpload() {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok || !result?.success) {
-            throw new Error(result?.message || 'A képfeltöltés nem sikerült.');
+            throw new Error(result?.message || tx('A képfeltöltés nem sikerült.', 'Image upload failed.'));
         }
 
         applyAdminUserPartialUpdate(userId, {
@@ -245,18 +245,18 @@ async function submitAdminImageUpload() {
             profileImageStatus: result?.data?.profileImageStatus || 'approved'
         });
 
-        setAdminUserDetailImageMessage('success', result?.message || 'Profilkép feltöltve és jóváhagyva.');
-        showToast('Profilkép feltöltve (jóváhagyott).', 'success', 'bi-check2-circle');
+        setAdminUserDetailImageMessage('success', result?.message || tx('Profilkép feltöltve és jóváhagyva.', 'Profile picture uploaded and approved.'));
+        showToast(tx('Profilkép feltöltve (jóváhagyott).', 'Profile picture uploaded (approved).'), 'success', 'bi-check2-circle');
 
         const modal = bootstrap.Modal.getOrCreateInstance(els.modal);
         modal.hide();
     } catch (error) {
-        setAdminImageEditorMessage('danger', error?.message || 'Hiba történt a képfeltöltés közben.');
+        setAdminImageEditorMessage('danger', error?.message || tx('Hiba történt a képfeltöltés közben.', 'An error occurred during image upload.'));
     } finally {
         adminImageEditorState.uploading = false;
         if (els.saveButton) {
             els.saveButton.disabled = !adminImageEditorState.image;
-            els.saveButton.textContent = 'Mentés és jóváhagyás';
+            els.saveButton.textContent = tx('Mentés és jóváhagyás', 'Save and approve');
         }
     }
 }
@@ -338,7 +338,7 @@ async function handleAdminUserDetailImageInputChange(event) {
     const input = event?.target || document.getElementById('adminUserDetailImageUpload');
     try {
         const selectedUser = state.selectedUser;
-        if (!selectedUser || !selectedUser.id) throw new Error('Nincs kiválasztott felhasználó.');
+        if (!selectedUser || !selectedUser.id) throw new Error(tx('Nincs kiválasztott felhasználó.', 'No user selected.'));
 
         const file = input?.files?.[0] || null;
         const validationError = validateAdminUserDetailImageFile(file);
@@ -346,9 +346,9 @@ async function handleAdminUserDetailImageInputChange(event) {
 
         bindAdminImageEditorEvents();
         await openAdminImageEditorFromFile(file, selectedUser.id);
-        setAdminUserDetailImageMessage('info', 'Kép szerkesztése folyamatban...');
+        setAdminUserDetailImageMessage('info', tx('Kép szerkesztése folyamatban...', 'Image editing in progress...'));
     } catch (err) {
-        setAdminUserDetailImageMessage('danger', err?.message || 'A kiválasztott kép nem nyitható meg.');
+        setAdminUserDetailImageMessage('danger', err?.message || tx('A kiválasztott kép nem nyitható meg.', 'The selected image cannot be opened.'));
     } finally {
         if (input) input.value = '';
     }
@@ -358,10 +358,10 @@ async function handleAdminUserDetailImageRemove() {
     try {
         const selectedUser = state.selectedUser;
         if (!selectedUser || !selectedUser.id) {
-            throw new Error('Nincs kiválasztott felhasználó.');
+            throw new Error(tx('Nincs kiválasztott felhasználó.', 'No user selected.'));
         }
 
-        setAdminUserDetailImageMessage('info', 'Profilkép eltávolítása...');
+        setAdminUserDetailImageMessage('info', tx('Profilkép eltávolítása...', 'Removing profile picture...'));
 
         let backendSuccess = false;
         try {
@@ -378,7 +378,7 @@ async function handleAdminUserDetailImageRemove() {
                     profileImage: '/profile_pictures/default.png',
                     profileImageStatus: 'default'
                 });
-                setAdminUserDetailImageMessage('success', result?.message || 'Profilkép eltávolítva.');
+                setAdminUserDetailImageMessage('success', result?.message || tx('Profilkép eltávolítva.', 'Profile picture removed.'));
             }
         } catch (_) {
             backendSuccess = false;
@@ -393,10 +393,10 @@ async function handleAdminUserDetailImageRemove() {
                 profileImage: '/profile_pictures/default.png',
                 profileImageStatus: 'default'
             });
-            setAdminUserDetailImageMessage('warning', 'Frontend állapot frissítve. A végleges mentéshez backend endpoint szükséges.');
+            setAdminUserDetailImageMessage('warning', tx('Frontend állapot frissítve. A végleges mentéshez backend endpoint szükséges.', 'Frontend state updated. A backend endpoint is required for final save.'));
         }
     } catch (err) {
-        setAdminUserDetailImageMessage('danger', err?.message || 'A profilkép eltávolítása sikertelen.');
+        setAdminUserDetailImageMessage('danger', err?.message || tx('A profilkép eltávolítása sikertelen.', 'Removing the profile picture failed.'));
     }
 }
 
@@ -408,9 +408,9 @@ function openAdminUserView(userId) {
         const user = findAdminUserById(userId);
         const modalEl = document.getElementById('adminUserViewModal');
         if (!user) {
-            showToast('A felhasználó nem található.', 'warning', 'bi-exclamation-triangle');
+            showToast(tx('A felhasználó nem található.', 'User not found.'), 'warning', 'bi-exclamation-triangle');
         } else if (!modalEl || !window.bootstrap?.Modal) {
-            showToast('A megtekintés modal nem elérhető.', 'danger', 'bi-x-circle');
+            showToast(tx('A megtekintés modal nem elérhető.', 'View modal unavailable.'), 'danger', 'bi-x-circle');
         } else {
             stopAdminUserViewRefresh();
             state.userView.userId = user.id;
@@ -431,7 +431,7 @@ function openAdminUserView(userId) {
         }
     } catch (err) {
         console.error('openAdminUserView hiba:', err);
-        showToast('Hiba a megtekintés megnyitásakor.', 'danger', 'bi-x-circle');
+        showToast(tx('Hiba a megtekintés megnyitásakor.', 'Error opening view.'), 'danger', 'bi-x-circle');
     }
     return opened;
 }
@@ -533,7 +533,7 @@ async function loadAdminUserAuditTab(tabKey) {
         if (!userId || !slot) {
             // nincs mit
         } else if (!state.adminToken) {
-            slot.error = 'Nincs admin token.';
+            slot.error = tx('Nincs admin token.', 'No admin token.');
             renderAdminUserViewAuditList(tabKey);
         } else {
             slot.loading = true;
@@ -580,7 +580,7 @@ async function loadAdminUserAuditTab(tabKey) {
         console.error('loadAdminUserAuditTab hiba:', err);
         const slot = state.userView[tabKey];
         if (slot) {
-            slot.error = err?.message || 'Hálózati hiba.';
+            slot.error = err?.message || tx('Hálózati hiba.', 'Network error.');
             slot.loading = false;
             renderAdminUserViewAuditList(tabKey);
         }
@@ -594,13 +594,13 @@ function renderAdminUserViewAuditList(tabKey) {
         if (container) {
             const slot = state.userView[tabKey];
             if (slot.loading) {
-                container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-arrow-repeat spin"></i><div>Naplóbejegyzések betöltése…</div></li>`;
+                container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-arrow-repeat spin"></i><div>${tx('Naplóbejegyzések betöltése…', 'Loading log entries…')}</div></li>`;
             } else if (slot.error) {
                 container.innerHTML = `<li class="admin-user-view-empty admin-user-view-empty-error"><i class="bi bi-exclamation-triangle"></i><div>${escapeHtml(slot.error)}</div></li>`;
             } else if (!slot.items.length) {
                 const emptyMsg = tabKey === 'target'
-                    ? 'Még nincs naplóbejegyzés erről a felhasználóról.'
-                    : 'Ez a felhasználó még nem hajtott végre admin műveletet.';
+                    ? tx('Még nincs naplóbejegyzés erről a felhasználóról.', 'No log entries yet for this user.')
+                    : tx('Ez a felhasználó még nem hajtott végre admin műveletet.', 'This user has not performed any admin actions yet.');
                 container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-inbox"></i><div>${emptyMsg}</div></li>`;
             } else {
                 container.innerHTML = slot.items.map(renderAdminUserAuditEntry).join('');
@@ -630,8 +630,8 @@ function renderAdminUserAuditEntry(entry) {
                     <div class="admin-user-view-audit-body">
                         <div class="admin-user-view-audit-action">${escapeHtml(action)}</div>
                         <div class="admin-user-view-audit-targets">
-                            <span class="text-muted">actor:</span> <span class="text-white">${escapeHtml(actor)}</span>
-                            <span class="text-muted ms-2">target:</span> <span class="text-white">${escapeHtml(target)}</span>
+                            <span class="text-muted">${tx('actor', 'actor')}:</span> <span class="text-white">${escapeHtml(actor)}</span>
+                            <span class="text-muted ms-2">${tx('target', 'target')}:</span> <span class="text-white">${escapeHtml(target)}</span>
                         </div>
                         ${reason ? `<div class="admin-user-view-audit-reason"><i class="bi bi-chat-left-quote"></i>${reason}</div>` : ''}
                     </div>
@@ -652,9 +652,9 @@ function updateAdminUserViewTabsHint(tabKey) {
         const hintEl = document.getElementById('adminUserViewTabsHint');
         if (hintEl) {
             const messages = {
-                target: '<i class="bi bi-info-circle me-1"></i>Audit napló — utolsó 100',
-                actor: '<i class="bi bi-info-circle me-1"></i>Admin műveletek — utolsó 100',
-                security: '<i class="bi bi-shield-lock me-1"></i>A felhasználó saját biztonsági naplója (max 150)'
+                target: `<i class="bi bi-info-circle me-1"></i>${tx('Audit napló — utolsó 100', 'Audit log — last 100')}`,
+                actor: `<i class="bi bi-info-circle me-1"></i>${tx('Admin műveletek — utolsó 100', 'Admin actions — last 100')}`,
+                security: `<i class="bi bi-shield-lock me-1"></i>${tx('A felhasználó saját biztonsági naplója (max 150)', "The user's own security log (max 150)")}`
             };
             hintEl.innerHTML = messages[tabKey] || messages.target;
             updated = true;
@@ -677,7 +677,7 @@ async function loadAdminUserSecurityActivity() {
         if (!userId || !slot) {
             // nincs mit
         } else if (!state.adminToken) {
-            slot.error = 'Nincs admin token.';
+            slot.error = tx('Nincs admin token.', 'No admin token.');
             renderAdminUserViewSecurityList();
         } else {
             slot.loading = true;
@@ -714,7 +714,7 @@ async function loadAdminUserSecurityActivity() {
         console.error('loadAdminUserSecurityActivity hiba:', err);
         const slot = state.userView.security;
         if (slot) {
-            slot.error = err?.message || 'Hálózati hiba.';
+            slot.error = err?.message || tx('Hálózati hiba.', 'Network error.');
             slot.loading = false;
             renderAdminUserViewSecurityList();
         }
@@ -746,7 +746,7 @@ function renderAdminUserViewSecurityList() {
         if (container) {
             const slot = state.userView.security;
             if (slot.loading) {
-                container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-arrow-repeat spin"></i><div>Biztonsági napló betöltése…</div></li>`;
+                container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-arrow-repeat spin"></i><div>${tx('Biztonsági napló betöltése…', 'Loading security log…')}</div></li>`;
             } else if (slot.error) {
                 container.innerHTML = `<li class="admin-user-view-empty admin-user-view-empty-error"><i class="bi bi-exclamation-triangle"></i><div>${escapeHtml(slot.error)}</div></li>`;
             } else {
@@ -755,7 +755,7 @@ function renderAdminUserViewSecurityList() {
                     ? slot.items
                     : slot.items.filter((item) => String(item?.eventCategory || '').toLowerCase() === filter);
                 if (!items.length) {
-                    container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-inbox"></i><div>Nincs találat ehhez a szűrőhöz.</div></li>`;
+                    container.innerHTML = `<li class="admin-user-view-empty"><i class="bi bi-inbox"></i><div>${tx('Nincs találat ehhez a szűrőhöz.', 'No results for this filter.')}</div></li>`;
                 } else {
                     container.innerHTML = items.map(renderAdminUserSecurityEntry).join('');
                 }
@@ -860,13 +860,13 @@ function renderAdminUserViewPresence(data) {
             badge.classList.toggle('user-presence-online', online);
             badge.classList.toggle('user-presence-offline', !online);
             if (online) {
-                label.textContent = 'Online';
+                label.textContent = tx('Online', 'Online');
                 const tabCount = Number(data.tabCount || data.tabs?.length || 0);
                 const sockets = Number(data.socketCount || 0);
-                meta.textContent = `${tabCount} tab · ${sockets} socket${data.lastSeenAt ? ` · utolsó: ${formatRelative(data.lastSeenAt)}` : ''}`;
+                meta.textContent = `${tabCount} ${tx('tab', 'tab')} · ${sockets} socket${data.lastSeenAt ? ` · ${tx('utolsó', 'last')}: ${formatRelative(data.lastSeenAt)}` : ''}`;
                 const tabs = Array.isArray(data.tabs) ? data.tabs : [];
                 tabsList.innerHTML = tabs.length === 0
-                    ? `<li class="admin-user-view-presence-empty">Nincs aktív tab.</li>`
+                    ? `<li class="admin-user-view-presence-empty">${tx('Nincs aktív tab.', 'No active tab.')}</li>`
                     : tabs.map((tab) => `
                         <li class="admin-user-view-presence-tab">
                             <i class="bi bi-window"></i>
@@ -875,7 +875,7 @@ function renderAdminUserViewPresence(data) {
                         </li>
                     `).join('');
             } else {
-                label.textContent = 'Offline';
+                label.textContent = tx('Offline', 'Offline');
                 meta.textContent = '—';
                 tabsList.innerHTML = '';
             }

@@ -22,36 +22,44 @@
 import { state } from '../state.js';
 import { pvpSocketKeres } from '../pvp/socketRef.js';
 
+const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
 // ──────────────────────────────────────────────────────────────
 // Quick-chat frazisok + bot canned valaszai (bot-meccshez)
 // ──────────────────────────────────────────────────────────────
 
-const QUICK_CHAT_FRAZISOK = {
-    gl:       'Sok szerencsét!',
-    hello:    'Hello!',
-    nice:     'Szép lépés!',
-    wow:      'Hűha!',
-    oops:     'Hopp!',
-    thinking: 'Gondolkodok…',
-    thanks:   'Köszi a meccset!',
-    wp:       'Jól játszottál!',
-    gg:       'GG'
-};
+function getQuickChatFrazisok() {
+    return {
+        gl:       tx('Sok szerencsét!', 'Good luck!'),
+        hello:    tx('Hello!', 'Hello!'),
+        nice:     tx('Szép lépés!', 'Nice move!'),
+        wow:      tx('Hűha!', 'Wow!'),
+        oops:     tx('Hopp!', 'Oops!'),
+        thinking: tx('Gondolkodok…', 'Thinking…'),
+        thanks:   tx('Köszi a meccset!', 'Thanks for the match!'),
+        wp:       tx('Jól játszottál!', 'Well played!'),
+        gg:       tx('GG', 'GG')
+    };
+}
+const QUICK_CHAT_FRAZISOK = getQuickChatFrazisok();
 
 // Bot canned valaszai kulcs-szerint. Tobb opcios valasz koztul random egyet
 // valasztunk, hogy ne legyen monoton. A kulcsoknak megfeleloleg "kontextualt"
 // valaszok — a "Sok szerencset!"-re a bot is sok szerencset kivan, stb.
-const BOT_CANNED_VALASZOK = {
-    gl:       ['Köszi, neked is sok szerencsét!', 'Köszi! 🤖 Lássuk!'],
-    hello:    ['Helló, készen állok!', 'Üdv! 🤖'],
-    nice:     ['Köszi! 🤖', 'Na, próbálkozok!', 'Tanulok belőled.'],
-    wow:      ['Igen, ez érdekes pozíció.', '🤖 Hmmm.'],
-    oops:     ['Mindenkivel előfordul!', 'Néha a botok is bakiznak.'],
-    thinking: ['Én is.', '🤖 számol…', 'Nehéz pozíció.'],
-    thanks:   ['Én köszönöm a meccset!', 'Bármikor! 🤖'],
-    wp:       ['Köszi! Te is jól játszottál.', '🤖 köszi!'],
-    gg:       ['GG! Jó volt játszani.', 'GG! Bármikor revans.']
-};
+function getBotCannedValaszok() {
+    return {
+        gl:       [tx('Köszi, neked is sok szerencsét!', 'Thanks, good luck to you too!'), tx('Köszi! 🤖 Lássuk!', 'Thanks! 🤖 Let\'s see!')],
+        hello:    [tx('Helló, készen állok!', 'Hi, I\'m ready!'), tx('Üdv! 🤖', 'Hi! 🤖')],
+        nice:     [tx('Köszi! 🤖', 'Thanks! 🤖'), tx('Na, próbálkozok!', 'I\'m trying!'), tx('Tanulok belőled.', 'I\'m learning from you.')],
+        wow:      [tx('Igen, ez érdekes pozíció.', 'Yes, interesting position.'), tx('🤖 Hmmm.', '🤖 Hmmm.')],
+        oops:     [tx('Mindenkivel előfordul!', 'It happens to everyone!'), tx('Néha a botok is bakiznak.', 'Even bots blunder sometimes.')],
+        thinking: [tx('Én is.', 'Me too.'), tx('🤖 számol…', '🤖 calculating…'), tx('Nehéz pozíció.', 'Tough position.')],
+        thanks:   [tx('Én köszönöm a meccset!', 'Thank YOU for the match!'), tx('Bármikor! 🤖', 'Anytime! 🤖')],
+        wp:       [tx('Köszi! Te is jól játszottál.', 'Thanks! You played well too.'), tx('🤖 köszi!', '🤖 thanks!')],
+        gg:       [tx('GG! Jó volt játszani.', 'GG! Was fun to play.'), tx('GG! Bármikor revans.', 'GG! Rematch anytime.')]
+    };
+}
+const BOT_CANNED_VALASZOK = getBotCannedValaszok();
 
 // ──────────────────────────────────────────────────────────────
 // Internal helper — chat-handler hibakezelo (try/catch warn)
@@ -100,15 +108,15 @@ export function chatPanelEnged(engedett) {
     if (input && !engedett) {
         // Game-end-en a meccs UTAN megmarad ami ki van irva, de uj uzenet
         // nem mehet — a placeholder ezt jelzi.
-        input.placeholder = 'Chat lezárva (meccs vége).';
+        input.placeholder = tx('Chat lezárva (meccs vége).', 'Chat closed (match over).');
     } else if (input) {
-        input.placeholder = 'Üzenet…';
+        input.placeholder = tx('Üzenet…', 'Message…');
     }
 }
 
 export function chatMessagesUrites() {
     const cont = document.getElementById('ingame-chat-messages');
-    if (cont) cont.innerHTML = '<div class="ingame-chat-empty">Még nincs üzenet — szólj az ellenfélnek!</div>';
+    if (cont) cont.innerHTML = `<div class="ingame-chat-empty">${tx('Még nincs üzenet — szólj az ellenfélnek!', 'No messages yet — say hi to your opponent!')}</div>`;
 }
 
 // Bot meccsen a chat panel megjelenik, de a sima text-input helyett
@@ -117,7 +125,7 @@ export function chatMessagesUrites() {
 // hasson).
 export function chatPanelBotPlaceholder() {
     const cont = document.getElementById('ingame-chat-messages');
-    if (cont) cont.innerHTML = '<div class="ingame-chat-empty">Klikkelj egy uzenetre lent a botnak!</div>';
+    if (cont) cont.innerHTML = `<div class="ingame-chat-empty">${tx('Klikkelj egy uzenetre lent a botnak!', 'Click a message below to chat with the bot!')}</div>`;
     chatPanelBotMode(true);
 }
 
@@ -154,7 +162,7 @@ export function chatUzenetRender(payload) {
     div.className = `ingame-chat-msg ${isMine ? 'is-mine' : 'is-opp'}`;
     const nameSpan = document.createElement('span');
     nameSpan.className = 'ingame-chat-msg-name';
-    nameSpan.textContent = payload?.from?.username || (isMine ? 'Te' : 'Ellenfél');
+    nameSpan.textContent = payload?.from?.username || (isMine ? tx('Te', 'You') : tx('Ellenfél', 'Opponent'));
     const textNode = document.createElement('span');
     // textContent — XSS-mentes, az input mar szerver-szanitalt
     textNode.textContent = payload?.text || '';
@@ -193,14 +201,16 @@ export function bindQuickChatPanel() {
         }, 1500);
 
         // Sajat uzenet renderelese
+        const phrases = getQuickChatFrazisok();
         chatUzenetRender({
-            from: { color: state.sajatSzin || 'white', username: state.sajatUsername || 'Te' },
-            text: QUICK_CHAT_FRAZISOK[key],
+            from: { color: state.sajatSzin || 'white', username: state.sajatUsername || tx('Te', 'You') },
+            text: phrases[key],
             ts: now
         });
 
         // Bot valasz: 800-1800ms delay, random canned valasz a `key` listabol
-        const valaszok = BOT_CANNED_VALASZOK[key] || ['🤖 Hmm.'];
+        const cannedSet = getBotCannedValaszok();
+        const valaszok = cannedSet[key] || ['🤖 Hmm.'];
         const valasz = valaszok[Math.floor(Math.random() * valaszok.length)];
         const botSzin = state.sajatSzin === 'white' ? 'black' : 'white';
         const botName = state.botInfo ? `🤖 ${state.botInfo.nev}` : '🤖 Bot';

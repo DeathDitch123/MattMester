@@ -28,11 +28,11 @@ async function loadAlerts() {
                 refreshAdminBellBadge();
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba az alertek betöltésekor.', 'danger');
+                showToast(data.message || tx('Hiba az alertek betöltésekor.', 'Error loading alerts.'), 'danger');
             }
         } catch (err) {
             console.error('loadAlerts hiba:', err);
-            showToast('Hálózati hiba az alertek betöltésekor.', 'danger');
+            showToast(tx('Hálózati hiba az alertek betöltésekor.', 'Network error loading alerts.'), 'danger');
         }
     });
 }
@@ -75,14 +75,14 @@ async function dismissOneAlert(alertId) {
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
                 }
-                showToast('Riasztás elrejtve.', 'success', 'bi-eye-slash');
+                showToast(tx('Riasztás elrejtve.', 'Alert hidden.'), 'success', 'bi-eye-slash');
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba az elrejtéskor.', 'danger');
+                showToast(data.message || tx('Hiba az elrejtéskor.', 'Error hiding alert.'), 'danger');
             }
         } catch (err) {
             console.error('dismissOneAlert hiba:', err);
-            showToast('Hálózati hiba az elrejtéskor.', 'danger');
+            showToast(tx('Hálózati hiba az elrejtéskor.', 'Network error while hiding alert.'), 'danger');
         }
     });
 }
@@ -105,14 +105,14 @@ async function restoreOneAlert(alertId) {
                 if (state.currentSectionId === 'alerts') {
                     showSection('alerts', null, { silent: true });
                 }
-                showToast('Riasztás visszaállítva.', 'success', 'bi-arrow-counterclockwise');
+                showToast(tx('Riasztás visszaállítva.', 'Alert restored.'), 'success', 'bi-arrow-counterclockwise');
             } else {
                 if (data?.code && getAdminAuthFlow().handleAdminAuthError(data.code)) return;
-                showToast(data.message || 'Hiba a visszaállításkor.', 'danger');
+                showToast(data.message || tx('Hiba a visszaállításkor.', 'Error restoring alert.'), 'danger');
             }
         } catch (err) {
             console.error('restoreOneAlert hiba:', err);
-            showToast('Hálózati hiba a visszaállításkor.', 'danger');
+            showToast(tx('Hálózati hiba a visszaállításkor.', 'Network error while restoring alert.'), 'danger');
         }
     });
 }

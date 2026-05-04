@@ -62,7 +62,8 @@ export async function jatekIndit(nehezseg, mode, ranked, modal) {
         console.error('Bot játék indítási hiba:', e);
         const diffList = document.getElementById("difficulty-list");
         if (diffList) {
-            diffList.innerHTML = `<p style="color:#f88">Hiba a játék indításakor: ${e.message || 'Ismeretlen hiba'}</p>`;
+            const txb = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+            diffList.innerHTML = `<p style="color:#f88">${txb('Hiba a játék indításakor:', 'Error starting the game:')} ${e.message || txb('Ismeretlen hiba', 'Unknown error')}</p>`;
         }
     }
 }

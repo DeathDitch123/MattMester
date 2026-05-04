@@ -139,3 +139,42 @@ body.has-mm-top-navbar .top-navbar {
     .mm-top-navbar-btn { padding: 0.32rem 0.7rem; font-size: 0.8rem; }
     .mm-top-navbar-brand { font-size: 0.95rem; }
 }
+
+/* =============================================================
+   Issue #7 — Nyelvvalto (HU/EN) widget. A globalis MattMesterI18n
+   modulhoz tartozik (shared/i18n.js). [data-i18n-toggle="hu|en"]
+   gombok aktivat ad ki, kis pirula stilussal a navbar-on belul.
+   ============================================================= */
+.mm-i18n-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid #334155;
+    margin-right: 0.5rem;
+}
+.mm-i18n-switch button {
+    background: transparent;
+    color: #cbd5e1;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 120ms ease, color 120ms ease;
+    line-height: 1.1;
+}
+.mm-i18n-switch button:hover {
+    color: #f8fafc;
+    background: rgba(255, 255, 255, 0.06);
+}
+.mm-i18n-switch button.mm-i18n-active {
+    background: var(--accent-gold, #d4af37);
+    color: #0f172a;
+}
+@media (max-width: 640px) {
+    .mm-i18n-switch button { padding: 3px 8px; font-size: 0.72rem; }
+}

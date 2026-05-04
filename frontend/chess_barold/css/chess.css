@@ -1306,6 +1306,21 @@ h1, h2, h3, h4, h5, h6 {
     opacity: 0.4;
     cursor: not-allowed;
 }
+/* Issue #4 — vegtelen idős módban a `time_pause` ertelmetlen, ezert a JS
+   ezt az osztalyt rakja ra. Vizualisan eltero a sima `:disabled`-tol (sotetebb +
+   atszurt diagonalis vonalak), hogy a felhasznalo kulonbseget tegyen
+   "ideiglenesen tiltva" (pl. cooldown) vs "ezen a moodon nincs ertelme". */
+.ability-btn.ability-disabled-mode {
+    opacity: 0.25;
+    cursor: not-allowed;
+    background-image: repeating-linear-gradient(
+        135deg,
+        transparent 0,
+        transparent 6px,
+        rgba(255, 255, 255, 0.05) 6px,
+        rgba(255, 255, 255, 0.05) 12px
+    );
+}
 .ability-btn.armed {
     background: rgba(212, 175, 55, 0.15);
     border-color: var(--accent-gold);

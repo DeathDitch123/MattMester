@@ -2,10 +2,13 @@
 // Az admin a Riasztasok oldalrol blokkolhat IP-t (ip_blocks tabla),
 // es ez a middleware mindenfele bejovo request-et 403-mal elutasit ha az IP blokkolt.
 //
-// Rendelkezesek:
-//  - In-memory cache (60sec TTL) hogy ne hivjuk a DB-t minden request-en.
-//  - Fail-open: DB hiba eseten engedi tovabb a kerest, csak loggol.
-//  - cache invalidacio: az upsertIpBlock / removeIpBlock hivasa utan toroljuk az adott IP cache-jet.
+// Issue #1 (2026-05) — DISABLED. Mivel a szerver localhost-on fut, az IP-blokk
+// rendszer ervenytelen (a tabla mindig ures, a loopback whitelist eddig is
+// `next()`-elt minden ip-t). A middleware most azonnal `next()`-el ki, igy a
+// teljes IP-blokk feature de-facto ki van kapcsolva.
+// A `ip_blocks` tabla CREATE-je megmaradt regresszio-vedelemkent (a vele
+// kapcsolt admin route + ban-cascade kod nem dob hibat ha a tabla letezik,
+// csak nem hasznal semmit), de a request-szintu enforcement nullara csokkent.
 
 const adminRepo = require('../../sql/adminRepo.js');
 const { getRequestIpAddress } = require('../routes/_shared.js');
@@ -50,29 +53,11 @@ async function getActiveIpBlockCached(ipAddress) {
 }
 
 async function ipBlockGuard(request, response, next) {
-    try {
-        const ip = getRequestIpAddress(request);
-        if (!ip || ip === 'ismeretlen') return next();
-
-        // Loopback whitelist: dev kornyezetben nem zarjuk ki a fejlesztot.
-        if (isLoopback(ip)) return next();
-
-        const block = await getActiveIpBlockCached(ip);
-        if (block) {
-            return response.status(403).json({
-                success: false,
-                code: 'ip_blocked',
-                message: 'Ezt az IP címet az adminisztrátorok blokkolták.',
-                blockedUntil: block.blocked_until,
-                reason: block.reason
-            });
-        }
-        return next();
-    } catch (error) {
-        // Fail-open: a blokk-rendszer DB-hibaja ne csukja le a teljes oldalt.
-        console.warn('ipBlockGuard fail-open:', error.message);
-        return next();
-    }
+    // Issue #1 — DISABLED. Localhost-only deploy-ban az IP-blokk feature
+    // ertelmetlen (lasd file-szintu doc-blokk). A middleware azonnal next()-el.
+    // Az admin endpoint-ok megmaradnak (felesleges UI-ramekek nelkul az admin
+    // panel hibat dobna), de tenyleges enforce nincs.
+    return next();
 }
 
 module.exports = {

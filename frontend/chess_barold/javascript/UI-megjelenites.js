@@ -102,13 +102,16 @@ function kiemelFrissit(allapot) {
  * Frissíti a körön lévő játékos szövegét.
  */
 function koronLevoFrissit(allapot) {
+    const txu = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
     const turnElem = document.getElementById("turn-name");
     if (turnElem) {
-        turnElem.textContent = allapot.koronLevo;
+        if (allapot.koronLevo === 'white') turnElem.textContent = txu('fehér', 'white');
+        else if (allapot.koronLevo === 'black') turnElem.textContent = txu('fekete', 'black');
+        else turnElem.textContent = allapot.koronLevo;
     }
     const statusElem = document.getElementById("status");
     if (statusElem && !allapot.vege) {
-        statusElem.textContent = "játékon";
+        statusElem.textContent = txu('játékon', 'in game');
     }
 }
 

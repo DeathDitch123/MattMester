@@ -13,11 +13,14 @@
 (function () {
     'use strict';
 
+    const tx = (hu, en) => (window.MattMesterI18n?.tx ? window.MattMesterI18n.tx(hu, en) : hu);
+
     function getUsernameFallback() {
         // AdminPanel betolti a #headerUsername mezot a sajat 09-auth.js-bol;
         // amig az meg nincs ott, fallback "—".
         const el = document.getElementById('headerUsername');
-        if (el && el.textContent && el.textContent.trim() && el.textContent.trim() !== 'Betöltés...') {
+        const loading = tx('Betöltés...', 'Loading...');
+        if (el && el.textContent && el.textContent.trim() && el.textContent.trim() !== loading && el.textContent.trim() !== 'Betöltés...' && el.textContent.trim() !== 'Loading...') {
             return el.textContent.trim();
         }
         return null;
@@ -33,9 +36,12 @@
         }
     }
 
+    let lastGreetingName = null;
     function setGreeting(name) {
         const el = document.getElementById('mmTopNavbarUsername');
-        if (el) el.textContent = name || 'felhasználó';
+        if (!el) return;
+        if (name) lastGreetingName = name;
+        el.textContent = name || tx('felhasználó', 'user');
     }
 
     function revealAdminButtonIfAdmin(session) {
@@ -52,16 +58,16 @@
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content bg-dark text-light border" style="border-color:#334155 !important;">
       <div class="modal-header" style="border-bottom-color:#334155;">
-        <h5 class="modal-title" id="mmAdminLogoutConfirmLabel"><i class="bi bi-box-arrow-right me-2"></i>Teljes kijelentkezés</h5>
-        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+        <h5 class="modal-title" id="mmAdminLogoutConfirmLabel"><i class="bi bi-box-arrow-right me-2"></i>${tx('Teljes kijelentkezés', 'Full log out')}</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="${tx('Bezárás', 'Close')}"></button>
       </div>
       <div class="modal-body">
-        <p class="mb-2">Ez kijelentkeztet az admin felületről <strong>és</strong> a főoldalról is.</p>
-        <p class="text-secondary small mb-0">Ha csak vissza szeretnél térni a főoldalra (bejelentkezve maradva), kattints helyette a fent baloldali <strong>MATTMESTER</strong> logóra.</p>
+        <p class="mb-2">${tx('Ez kijelentkeztet az admin felületről <strong>és</strong> a főoldalról is.', 'This will log you out of both the admin panel <strong>and</strong> the home page.')}</p>
+        <p class="text-secondary small mb-0">${tx('Ha csak vissza szeretnél térni a főoldalra (bejelentkezve maradva), kattints helyette a fent baloldali <strong>MATTMESTER</strong> logóra.', 'If you only want to return to the home page (while staying logged in), click the <strong>MATTMESTER</strong> logo in the top-left instead.')}</p>
       </div>
       <div class="modal-footer" style="border-top-color:#334155;">
-        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
-        <button type="button" class="btn btn-danger" id="mmAdminLogoutConfirmBtn">Kijelentkezés</button>
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">${tx('Mégse', 'Cancel')}</button>
+        <button type="button" class="btn btn-danger" id="mmAdminLogoutConfirmBtn">${tx('Kijelentkezés', 'Log out')}</button>
       </div>
     </div>
   </div>
@@ -107,7 +113,7 @@
         if (confirmBtn) {
             confirmBtn.addEventListener('click', async () => {
                 confirmBtn.disabled = true;
-                confirmBtn.textContent = 'Kijelentkezés…';
+                confirmBtn.textContent = tx('Kijelentkezés…', 'Logging out…');
                 await performFullLogout();
             });
         }
@@ -158,4 +164,25 @@
     } else {
         init();
     }
+
+    // Re-render dynamic strings on language change.
+    try {
+        if (window.MattMesterI18n?.onLangChange) {
+            window.MattMesterI18n.onLangChange(() => {
+                // Refresh greeting (may have been "felhasználó"/"user" fallback).
+                const el = document.getElementById('mmTopNavbarUsername');
+                if (el && (!lastGreetingName || el.textContent === 'felhasználó' || el.textContent === 'user')) {
+                    el.textContent = lastGreetingName || tx('felhasználó', 'user');
+                }
+                // Re-inject admin logout modal so its labels match the new language.
+                const old = document.getElementById('mmAdminLogoutConfirmModal');
+                if (old && old.parentNode) old.parentNode.removeChild(old);
+                const btn = document.getElementById('mmTopNavbarLogoutBtn');
+                const navbar = document.querySelector('.mm-top-navbar');
+                if (btn && navbar?.getAttribute('data-page') === 'admin') {
+                    ensureAdminLogoutModal();
+                }
+            });
+        }
+    } catch (_) { /* ignore */ }
 })();

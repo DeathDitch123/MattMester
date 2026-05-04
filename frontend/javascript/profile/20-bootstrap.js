@@ -24,4 +24,19 @@ document.addEventListener('DOMContentLoaded', () => {
         await refreshSecurityActivity();
         await loadAbilitiesUsage();
     });
+
+    // i18n: nyelvváltáskor az összes dinamikusan generált szöveget újra-render eljük.
+    if (window.MattMesterI18n?.onLangChange) {
+        window.MattMesterI18n.onLangChange(() => {
+            try { window.MattMesterI18n.applyAll?.(); } catch (_) {}
+            try { renderFriendsList(friendsState.items); } catch (_) {}
+            try { renderSecurityActivityTable(); } catch (_) {}
+            try { renderNotificationCenterList(); } catch (_) {}
+            try { refreshAuthUi('lang-change'); } catch (_) {}
+            try { window.MattMesterProfileDashboard?.reload?.(); } catch (_) {}
+            try { loadAbilitiesUsage(); } catch (_) {}
+            // Egyedi event modulok hallgathatnak rá ha kell.
+            try { window.dispatchEvent(new CustomEvent('mm:profile:rerender')); } catch (_) {}
+        });
+    }
 });

@@ -778,46 +778,57 @@ function registerPvpHandlers(socket, io) {
     // ─────────────────────────────────────
 
     socket.on('chess:chat:send', ({ gameId, text }) => {
-        const context = socket.data.socketContext;
-        if (!context.userId) return;
+        // Issue #3 — egyetlen return + try-catch. A sikertelen agakon errorMsg-be
+        // gyujtjuk az uzenetet; ha barmi error van, csak a vegen emit-elunk.
+        let errorMsg = null;
+        try {
+            const context = socket.data.socketContext;
+            if (!context.userId) {
+                errorMsg = null; // silent drop, no socket-error
+            } else {
+                const jatek = jatekKeres(gameId);
+                if (!jatek || !jatek.pvpAktiv || jatek.pvpStatusz !== 'active' || jatek.vege) {
+                    errorMsg = 'Az ingame chat csak aktiv meccs alatt elerheto.';
+                } else {
+                    const szin = getUserColorInGame(jatek, context.userId);
+                    if (!szin) {
+                        errorMsg = 'Nem vagy resztvevoje ennek a meccsnek.';
+                    } else {
+                        const raw = String(text == null ? '' : text);
+                        const trimmedRaw = raw.replace(/\s+/g, ' ').trim().slice(0, 240);
+                        if (trimmedRaw) {
+                            // Issue #6 — blacklist csillagozas
+                            const masked = sql.maskBlockedWords(trimmedRaw);
+                            const trimmed = masked.text;
 
-        const jatek = jatekKeres(gameId);
-        if (!jatek || !jatek.pvpAktiv || jatek.pvpStatusz !== 'active' || jatek.vege) {
-            return socket.emit('chess:error', { uzenet: 'Az ingame chat csak aktiv meccs alatt elerheto.' });
+                            // Per-user rate limit: max 5 uzenet 5 mp-ben
+                            if (!jatek.chatRate) jatek.chatRate = new Map();
+                            const now = Date.now();
+                            const arr = jatek.chatRate.get(context.userId) || [];
+                            const window5s = arr.filter((t) => now - t < 5000);
+                            if (window5s.length >= 5) {
+                                errorMsg = 'Tul gyors uzenetkuldes. Var 1-2 masodpercet.';
+                            } else {
+                                window5s.push(now);
+                                jatek.chatRate.set(context.userId, window5s);
+                                io.to(`chess-game:${gameId}`).emit('chess:chat:message', {
+                                    gameId,
+                                    from: { userId: context.userId, color: szin, username: context.username || szin },
+                                    text: trimmed,
+                                    ts: now
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (error) {
+            console.warn('chess:chat:send hiba:', error.message);
+            errorMsg = 'Szerverhiba az uzenet feldolgozasakor.';
         }
-
-        const szin = getUserColorInGame(jatek, context.userId);
-        if (!szin) {
-            return socket.emit('chess:error', { uzenet: 'Nem vagy resztvevoje ennek a meccsnek.' });
+        if (errorMsg) {
+            socket.emit('chess:error', { uzenet: errorMsg });
         }
-
-        // Sanitize: trim, max 240 char (chat-bubble korlat), HTML escape
-        // (a kliens textContent-tel jeleniti meg, de a szerver oldal is biztositja).
-        const raw = String(text == null ? '' : text);
-        const trimmed = raw.replace(/\s+/g, ' ').trim().slice(0, 240);
-        if (!trimmed) return; // ures uzenet -> drop, no error
-
-        // Per-user rate limit: max 5 uzenet 5 mp-ben (anti-flood).
-        // A jatek-objektumon tartjuk az utolso 5 timestamp-et userId-nkent —
-        // memoria-elhanyagolhato (max 10 datum / meccs).
-        if (!jatek.chatRate) jatek.chatRate = new Map();
-        const now = Date.now();
-        const arr = jatek.chatRate.get(context.userId) || [];
-        const window5s = arr.filter((t) => now - t < 5000);
-        if (window5s.length >= 5) {
-            return socket.emit('chess:error', { uzenet: 'Tul gyors uzenetkuldes. Var 1-2 masodpercet.' });
-        }
-        window5s.push(now);
-        jatek.chatRate.set(context.userId, window5s);
-
-        // Broadcast a szoba minden tagjanak (sajatmagunknak is, hogy
-        // egysegesen a server-time-ot lassuk).
-        io.to(`chess-game:${gameId}`).emit('chess:chat:message', {
-            gameId,
-            from: { userId: context.userId, color: szin, username: context.username || szin },
-            text: trimmed,
-            ts: now
-        });
     });
 
     // ─────────────────────────────────────

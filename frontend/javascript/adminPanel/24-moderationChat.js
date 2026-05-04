@@ -74,24 +74,24 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             if (Number.isNaN(date.getTime())) return '—';
             const diffMs = Date.now() - date.getTime();
             const diffSec = Math.max(0, Math.floor(diffMs / 1000));
-            if (diffSec < 60) return `${diffSec} mp-e`;
+            if (diffSec < 60) return `${diffSec} ${tx('mp-e', 's ago')}`;
             const diffMin = Math.floor(diffSec / 60);
-            if (diffMin < 60) return `${diffMin} perce`;
+            if (diffMin < 60) return `${diffMin} ${tx('perce', 'min ago')}`;
             const diffH = Math.floor(diffMin / 60);
-            if (diffH < 24) return `${diffH} órája`;
+            if (diffH < 24) return `${diffH} ${tx('órája', 'h ago')}`;
             const diffD = Math.floor(diffH / 24);
-            return `${diffD} napja`;
+            return `${diffD} ${tx('napja', 'd ago')}`;
         } catch (_) { return '—'; }
     }
 
     function renderRows(rows) {
         const list = document.getElementById('chatModerationList');
         const cardTitle = document.getElementById('chatModerationCardTitle');
-        if (cardTitle) cardTitle.textContent = `Megjelölt üzenetek (${rows?.length || 0})`;
+        if (cardTitle) cardTitle.textContent = `${tx('Megjelölt üzenetek', 'Flagged messages')} (${rows?.length || 0})`;
         if (!list) return;
 
         if (!rows || !rows.length) {
-            list.innerHTML = '<div class="text-center text-secondary py-4">Nincs jelölt üzenet.</div>';
+            list.innerHTML = `<div class="text-center text-secondary py-4">${tx('Nincs jelölt üzenet.', 'No flagged messages.')}</div>`;
             return;
         }
 
@@ -101,7 +101,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             const username = escapeHtml(row.senderUsername || '—');
             const safeProfileImage = escapeHtml(row.senderProfileImage || '/profile_pictures/default.png');
             const conversationType = String(row.conversationType || 'private');
-            const convLabel = conversationType === 'group' ? 'csoport' : 'privát chat';
+            const convLabel = conversationType === 'group' ? tx('csoport', 'group') : tx('privát chat', 'private chat');
             const relTime = escapeHtml(formatRelativeTime(row.sentAt));
             const safeBody = escapeHtml(row.body || '');
             const safeBodyMasked = escapeHtml(row.bodyMasked || '***');
@@ -118,9 +118,9 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             // egy esetleges Torles eseten hany. csapas lenne, es az milyen ban-t okozna.
             // A tenyleges tiltas a Tiltasok panelben latszik — ez csak vizualis hint.
             const banTypeToLabel = (t) => {
-                if (t === 'temp_1d') return '1 napos tiltás';
-                if (t === 'temp_10d') return '10 napos tiltás';
-                if (t === 'perma') return 'végleges tiltás';
+                if (t === 'temp_1d') return tx('1 napos tiltás', '1-day ban');
+                if (t === 'temp_10d') return tx('10 napos tiltás', '10-day ban');
+                if (t === 'perma') return tx('végleges tiltás', 'permanent ban');
                 return null;
             };
             let strikeInfoHtml = '';
@@ -129,9 +129,9 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                 strikeInfoHtml = `
                     <div class="text-secondary small mb-2">
                         <span class="badge bg-danger-subtle text-danger border border-danger-subtle me-1">
-                            <i class="bi bi-exclamation-octagon me-1"></i>${senderStrikeCount}. csapás
+                            <i class="bi bi-exclamation-octagon me-1"></i>${senderStrikeCount}. ${tx('csapás', 'strike')}
                         </span>
-                        <span class="text-warning">Tiltás hossza: ${label}</span>
+                        <span class="text-warning">${tx('Tiltás hossza', 'Ban length')}: ${label}</span>
                     </div>
                 `;
             } else {
@@ -141,9 +141,9 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                 strikeInfoHtml = `
                     <div class="text-secondary small mb-2">
                         <span class="badge bg-warning-subtle text-warning border border-warning-subtle me-1">
-                            <i class="bi bi-exclamation-octagon me-1"></i>Eddigi csapások: ${senderStrikeCount}
+                            <i class="bi bi-exclamation-octagon me-1"></i>${tx('Eddigi csapások', 'Previous strikes')}: ${senderStrikeCount}
                         </span>
-                        <span class="text-secondary">Törlés esetén: ${projectedStrike}. csapás · ${label}</span>
+                        <span class="text-secondary">${tx('Törlés esetén', 'If deleted')}: ${projectedStrike}. ${tx('csapás', 'strike')} · ${label}</span>
                     </div>
                 `;
             }
@@ -152,18 +152,18 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             // Ha mindketto igaz, a kind='report' es jelezzuk a kettos cimket.
             const kindBadges = [];
             if (kind === 'report') {
-                kindBadges.push(`<span class="badge bg-danger">Bejelentett (${reportCount})</span>`);
+                kindBadges.push(`<span class="badge bg-danger">${tx('Bejelentett', 'Reported')} (${reportCount})</span>`);
                 if (isAutoFlagged) {
-                    kindBadges.push(`<span class="badge bg-warning text-dark" title="Profanity-filter is jelolte">Auto-flagged</span>`);
+                    kindBadges.push(`<span class="badge bg-warning text-dark" title="${tx('Profanity-filter is jelolte', 'Also flagged by profanity filter')}">Auto-flagged</span>`);
                 }
             } else {
-                kindBadges.push(`<span class="badge bg-warning text-dark">Auto-flagged (rendszer)</span>`);
+                kindBadges.push(`<span class="badge bg-warning text-dark">${tx('Auto-flagged (rendszer)', 'Auto-flagged (system)')}</span>`);
             }
 
             const reportersHtml = reports.length
                 ? `
                     <div class="text-secondary small mb-2">
-                        <i class="bi bi-flag-fill text-danger me-1"></i>Bejelentő${reports.length > 1 ? 'k' : ''}:
+                        <i class="bi bi-flag-fill text-danger me-1"></i>${tx(`Bejelentő${reports.length > 1 ? 'k' : ''}`, `Reporter${reports.length > 1 ? 's' : ''}`)}:
                         ${reports.map((r) => {
                             const reporterName = escapeHtml(r.reporterUsername || '—');
                             const reasonText = r.reason ? ` — <em>${escapeHtml(r.reason)}</em>` : '';
@@ -177,10 +177,10 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             // a fix blocklist hard rule miatt az admin sem birálhatja felül.
             const allowBtn = kind === 'report'
                 ? `<button type="button" class="btn btn-outline-success btn-sm" data-chat-action="allow" data-message-id="${id}" data-username="${username}">
-                        <i class="bi bi-check-circle me-1"></i>Engedélyezés
+                        <i class="bi bi-check-circle me-1"></i>${tx('Engedélyezés', 'Allow')}
                     </button>`
-                : `<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="Auto-flagged üzenet — a profanity-filter blocklist hard rule, az admin sem bírálhatja felül.">
-                        <i class="bi bi-lock me-1"></i>Nem engedélyezhető
+                : `<button type="button" class="btn btn-outline-secondary btn-sm" disabled title="${tx('Auto-flagged üzenet — a profanity-filter blocklist hard rule, az admin sem bírálhatja felül.', 'Auto-flagged message — the profanity filter blocklist is a hard rule, even admins cannot override it.')}">
+                        <i class="bi bi-lock me-1"></i>${tx('Nem engedélyezhető', 'Not allowable')}
                     </button>`;
 
             // 'Tiltott szavakhoz': csak 'report' kind-on (= felhasznaloi bejelentes), ahol az
@@ -188,12 +188,12 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             // Auto-flagged uzeneteknel ez fölösleges (mar a hardcoded listan szerepel).
             const blocklistBtn = kind === 'report'
                 ? `<button type="button" class="btn btn-outline-danger btn-sm" data-chat-action="add-blocklist" data-message-id="${id}" data-body="${escapeHtml(row.body || '')}">
-                        <i class="bi bi-shield-plus me-1"></i>Tiltott szavakhoz
+                        <i class="bi bi-shield-plus me-1"></i>${tx('Tiltott szavakhoz', 'Add to blocklist')}
                     </button>`
                 : '';
 
             const maskedDisplay = isAutoFlagged
-                ? `<div class="text-secondary small mb-1">A résztvevők ezt látják: <span class="font-monospace text-warning">${safeBodyMasked}</span></div>`
+                ? `<div class="text-secondary small mb-1">${tx('A résztvevők ezt látják', 'Participants see this')}: <span class="font-monospace text-warning">${safeBodyMasked}</span></div>`
                 : '';
 
             return `
@@ -214,13 +214,13 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                     ${strikeInfoHtml}
                     <blockquote class="moderation-quote">
                         ${maskedDisplay}
-                        <div>${isAutoFlagged ? 'Eredeti: ' : ''}<span class="text-white">${safeBody}</span></div>
+                        <div>${isAutoFlagged ? tx('Eredeti', 'Original') + ': ' : ''}<span class="text-white">${safeBody}</span></div>
                     </blockquote>
                     <div class="d-flex justify-content-end gap-2 flex-wrap">
                         ${allowBtn}
                         ${blocklistBtn}
                         <button type="button" class="btn btn-outline-danger btn-sm" data-chat-action="delete" data-message-id="${id}" data-username="${username}">
-                            <i class="bi bi-trash me-1"></i>Törlés
+                            <i class="bi bi-trash me-1"></i>${tx('Törlés', 'Delete')}
                         </button>
                     </div>
                 </article>
@@ -244,7 +244,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
                 if (authHandled) {
                     renderRows([]);
                 } else if (!response.ok || !result?.success) {
-                    throw new Error(result?.message || 'Hiba a chat moderálási lista lekérdezésekor.');
+                    throw new Error(result?.message || tx('Hiba a chat moderálási lista lekérdezésekor.', 'Error fetching chat moderation list.'));
                 } else {
                     renderRows(result.data || []);
                     refreshed = true;
@@ -252,7 +252,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             }
         } catch (error) {
             console.error('admin chat moderation fetch hiba:', error);
-            setMessage('danger', error.message || 'Hiba a lekérdezés során.');
+            setMessage('danger', error.message || tx('Hiba a lekérdezés során.', 'Error during fetch.'));
             renderRows([]);
         } finally {
             STATE.loading = false;
@@ -274,7 +274,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
 
         const modal = getAllowModalInstance();
         if (!modal) {
-            setMessage('danger', 'A modal nem érhető el. Frissítsd az oldalt.');
+            setMessage('danger', tx('A modal nem érhető el. Frissítsd az oldalt.', 'Modal unavailable. Refresh the page.'));
             return false;
         }
         modal.show();
@@ -297,17 +297,17 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             const result = await response.json().catch(() => ({}));
             if (response.status === 401 && handleAdminAuthError(result?.code || '')) return false;
             if (!response.ok || !result?.success) {
-                throw new Error(result?.message || 'Az engedélyezés sikertelen.');
+                throw new Error(result?.message || tx('Az engedélyezés sikertelen.', 'Allowing failed.'));
             }
             ok = true;
-            setMessage('success', result.message || 'Az üzenet engedélyezve.');
+            setMessage('success', result.message || tx('Az üzenet engedélyezve.', 'Message allowed.'));
             if (typeof showToast === 'function') {
-                showToast('Üzenet engedélyezve.', 'success', 'bi-check-circle-fill');
+                showToast(tx('Üzenet engedélyezve.', 'Message allowed.'), 'success', 'bi-check-circle-fill');
             }
             await refresh();
         } catch (error) {
             console.error('admin chat allow hiba:', error);
-            setMessage('danger', error.message || 'Az engedélyezés sikertelen.');
+            setMessage('danger', error.message || tx('Az engedélyezés sikertelen.', 'Allowing failed.'));
         }
         return ok;
     }
@@ -433,7 +433,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
         const words = tokenizeBodyToWords(body);
         if (container) {
             if (!words.length) {
-                container.innerHTML = '<span class="text-secondary small">Nincs választható szó (mind 3-nál rövidebb).</span>';
+                container.innerHTML = `<span class="text-secondary small">${tx('Nincs választható szó (mind 3-nál rövidebb).', 'No selectable words (all shorter than 3).')}</span>`;
             } else {
                 container.innerHTML = words.map((w, idx) => {
                     const safe = escapeHtml(w);
@@ -453,7 +453,7 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
 
         const modal = getBlocklistModalInstance();
         if (!modal) {
-            setMessage('danger', 'A modal nem érhető el. Frissítsd az oldalt.');
+            setMessage('danger', tx('A modal nem érhető el. Frissítsd az oldalt.', 'Modal unavailable. Refresh the page.'));
             return false;
         }
         modal.show();
@@ -475,17 +475,17 @@ window.MattMesterAdminChatModeration = (function initAdminChatModeration() {
             const result = await response.json().catch(() => ({}));
             if (response.status === 401 && handleAdminAuthError(result?.code || '')) return false;
             if (!response.ok || !result?.success) {
-                throw new Error(result?.message || 'A hozzáadás sikertelen.');
+                throw new Error(result?.message || tx('A hozzáadás sikertelen.', 'Adding failed.'));
             }
             ok = true;
-            setMessage('success', result.message || 'Szavak hozzáadva.');
+            setMessage('success', result.message || tx('Szavak hozzáadva.', 'Words added.'));
             if (typeof showToast === 'function') {
-                showToast('Tiltott szavak hozzáadva.', 'success', 'bi-shield-check');
+                showToast(tx('Tiltott szavak hozzáadva.', 'Blocked words added.'), 'success', 'bi-shield-check');
             }
             await refresh();
         } catch (error) {
             console.error('admin chat blocklist add hiba:', error);
-            setMessage('danger', error.message || 'A hozzáadás sikertelen.');
+            setMessage('danger', error.message || tx('A hozzáadás sikertelen.', 'Adding failed.'));
         }
         return ok;
     }

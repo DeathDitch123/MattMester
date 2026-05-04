@@ -279,11 +279,16 @@ const logoutHandler = async (request, response) => {
         statusCode = 500;
         payload = { success: false, message: error.message };
     }
-    const isGet = request.method === 'GET';
-    if (isGet) {
-        return response.redirect('/');
+    // Issue #3 — egyetlen return: a GET-ag redirectel, a POST-ag json-t kuld.
+    // A meghatarozas elofeltetelei a try/catch utan latszanak; nem lehet korabban
+    // visszaterni mert a hiba-aganak is volt session-mutato hatasa.
+    let result;
+    if (request.method === 'GET') {
+        result = response.redirect('/');
+    } else {
+        result = response.status(statusCode).json(payload);
     }
-    return response.status(statusCode).json(payload);
+    return result;
 };
 router.get('/logout', logoutHandler);
 router.post('/logout', logoutHandler);
