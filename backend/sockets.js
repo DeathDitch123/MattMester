@@ -147,6 +147,34 @@ function createSocketHub(io) {
     // Reconnect (uj socket ugyanazzal a clientId-vel) eseten torolni kell.
     const presenceGraceTimers = new Map();
 
+    // Memory leak fix: a chatRateLimitByUserId Map (per-user timestamp tomboket
+    // tarol) korabban orokre nott — minden online userhez egy entry, soha nem
+    // takaritottuk. 5 perces interval-lal kiszurjuk a stale timestamp-eket es
+    // az ures user-bejegyzeseket.
+    const SOCKET_CHAT_RATE_LIMIT_CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
+    const SOCKET_CHAT_RATE_LIMIT_MAX_TIMESTAMPS_PER_USER = 100;
+    const chatRateLimitCleanupTimer = setInterval(() => {
+        const now = Date.now();
+        for (const [userId, timestamps] of chatRateLimitByUserId.entries()) {
+            if (!Array.isArray(timestamps) || timestamps.length === 0) {
+                chatRateLimitByUserId.delete(userId);
+                continue;
+            }
+            const fresh = timestamps.filter((t) => now - t < CHAT_RATE_LIMIT_WINDOW_MS);
+            if (fresh.length === 0) {
+                chatRateLimitByUserId.delete(userId);
+            } else {
+                chatRateLimitByUserId.set(
+                    userId,
+                    fresh.length > SOCKET_CHAT_RATE_LIMIT_MAX_TIMESTAMPS_PER_USER
+                        ? fresh.slice(-SOCKET_CHAT_RATE_LIMIT_MAX_TIMESTAMPS_PER_USER)
+                        : fresh
+                );
+            }
+        }
+    }, SOCKET_CHAT_RATE_LIMIT_CLEANUP_INTERVAL_MS);
+    if (chatRateLimitCleanupTimer.unref) chatRateLimitCleanupTimer.unref();
+
     function notifyConversationDeleted(conversationId, affectedUserIds = [], reason = 'unavailable') {
         const normalizedConversationId = parsePositiveInteger(conversationId, null);
         if (!normalizedConversationId) {
@@ -938,6 +966,12 @@ function createSocketHub(io) {
         socket.on('room:state:update', (payload = {}) => {
             try {
                 const currentContext = getCurrentSocketContext(socket);
+                // Auth guard: csak bejelentkezett user kuldhet room:state:update-et.
+                // Korabban hianyzott — barmely vendeg socket broadcastolhatott a
+                // szoba-feliratkozoknak (potencialis spoofing/spam vektor).
+                if (!currentContext.userId) {
+                    throw new Error('Bejelentkezés szükséges a szoba állapot frissítéséhez.');
+                }
                 const roomId = safeString(payload.roomId, 'general-room');
                 const state = payload.state ?? null;
 

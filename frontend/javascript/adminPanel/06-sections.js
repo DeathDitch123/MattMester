@@ -1037,14 +1037,50 @@ const SECTIONS = {
     /* ---------- Játékok > Képességek ---------- */
     abilities: () => {
         const a = state.abilities;
-        const cards = (a.list || []).map((ab) => `
+        // Client-side ability i18n mapping: ha az ab.name egy ismert slug,
+        // hasznaljuk a tx()-elt felhasznaloi-cimkeket. Egyebkent fallback a
+        // server-strgre. (Ihlet: chess_barold/abilities.js getFeliratok().)
+        // A backend `abilities` tabla `name` mezoje a slug-ot tartalmazza
+        // (time_pause, freeze, swap, board_hide, shield, lefokozas).
+        const abilityNameTx = (slug) => {
+            switch (String(slug || '').toLowerCase()) {
+                case 'time_pause': return tx('Időmegállítás', 'Time stop');
+                case 'freeze':     return tx('Bábu befagyasztás', 'Freeze piece');
+                case 'swap':       return tx('Bábucsere', 'Piece swap');
+                case 'board_hide': return tx('Táblakitakarás', 'Board hide');
+                case 'shield':     return tx('Pajzs', 'Shield');
+                case 'lefokozas':  return tx('Lefokozás', 'Demote');
+                default:           return null;
+            }
+        };
+        const abilityDescTx = (slug) => {
+            switch (String(slug || '').toLowerCase()) {
+                case 'time_pause': return tx('Időmegállítás — saját óra rövid szüneteltetése (8mp)',
+                                            'Time stop — pause your own clock briefly (8s)');
+                case 'freeze':     return tx('Bábu befagyasztás — egy ellenséges bábu 1 körig nem mozdulhat',
+                                            'Freeze piece — an enemy piece cannot move for 1 turn');
+                case 'swap':       return tx('Bábucsere — két saját bábu pozíciójának cseréje (a köröd is)',
+                                            'Piece swap — swap the positions of two of your own pieces (uses your turn)');
+                case 'board_hide': return tx('Táblakitakarás — ellenfél 5mp-ig nem tud lépni',
+                                            'Board hide — opponent cannot move for 5s');
+                case 'shield':     return tx('Pajzs — saját bábu 1 körre sebezhetetlenné válik',
+                                            'Shield — one of your pieces becomes invulnerable for 1 turn');
+                case 'lefokozas':  return tx('Lefokozás — ellenséges bástya/futó/vezér a következő körében max. 4 mezőt léphet',
+                                            'Demote — an enemy rook/bishop/queen may move at most 4 squares on its next turn');
+                default:           return null;
+            }
+        };
+        const cards = (a.list || []).map((ab) => {
+            const localizedName = abilityNameTx(ab.name) || ab.name;
+            const localizedDesc = abilityDescTx(ab.name) || (ab.description || '—');
+            return `
             <div class="col-md-6 col-lg-4">
                 ${h.card({
-                    title: escapeHtml(ab.name),
+                    title: escapeHtml(localizedName),
                     headerExtra: h.badge(tx(`${ab.cooldownTurns} kor cooldown`, `${ab.cooldownTurns} turn cooldown`), 'warning'),
                     classes: 'h-100',
                     body: `
-                        <p class="text-secondary mb-3">${escapeHtml(ab.description || '—')}</p>
+                        <p class="text-secondary mb-3">${escapeHtml(localizedDesc)}</p>
                         <div class="d-flex justify-content-between align-items-center">
                             <small class="text-muted">${ab.usageCount || 0} ${tx('hasznalat', 'uses')}</small>
                             <div class="btn-group">
@@ -1055,7 +1091,8 @@ const SECTIONS = {
                     `
                 })}
             </div>
-        `).join('');
+        `;
+        }).join('');
 
         return `
             ${h.header({
@@ -1102,7 +1139,7 @@ const SECTIONS = {
         const tableRows = list.map(l => [
             `<span class="fw-semibold text-white">${escapeHtml(l.username || '—')}</span>`,
             `<span class="font-monospace ${l.risk === 'high' ? 'text-danger' : 'text-gold'}">${escapeHtml(l.ip || '—')}</span>`,
-            `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(l.location?.label || '—')}</span>`,
+            `<span class="text-secondary"><i class="bi bi-geo-alt me-1"></i>${escapeHtml(typeof translateLocationLabel === 'function' ? translateLocationLabel(l.location?.label) : (l.location?.label || '—'))}</span>`,
             `<span class="text-secondary"><i class="bi ${l.device?.icon || 'bi-question-circle'} me-1"></i>${escapeHtml(l.device?.display || '—')}</span>`,
             `<span class="text-secondary" title="${escapeHtml(l.occurredAt || '')}">${escapeHtml(formatRelative(l.occurredAt))}</span>`,
             statusBadge(l),
@@ -1440,7 +1477,7 @@ const SECTIONS = {
             return `${Math.floor(sec / 60)}m ${Math.floor(sec % 60)}s`;
         };
         const isSuper = Boolean(state.isSuperAdmin);
-        const runDisabled = running ? 'disabled' : (!isSuper ? 'disabled title="Csak super-admin futtathat tesztet."' : '');
+        const runDisabled = running ? 'disabled' : (!isSuper ? `disabled title="${tx('Csak super-admin futtathat tesztet.', 'Only a super-admin can run tests.')}"` : '');
 
         // A Jest tenyleges futasi ideje (rawSummary.jestRunMs) tisztabb metrika,
         // mint a teljes spawn idotartam (durationMs = npx + jest setup + tesztek + exit).
@@ -1451,17 +1488,18 @@ const SECTIONS = {
             ? `+ ${fmtDur(latest.durationMs - jestRunMs)} startup`
             : '';
 
+        const jestTimeLabel = tx('Jest idő', 'Jest time');
         const statsRow = h.stats([
-            { icon: 'bi-check-circle-fill', value: latest ? latest.passed  : '—', label: 'Sikeres', color: 'success' },
-            { icon: 'bi-x-circle-fill',     value: latest ? latest.failed  : '—', label: 'Sikertelen', color: 'danger' },
-            { icon: 'bi-skip-forward-fill', value: latest ? latest.skipped : '—', label: 'Kihagyott', color: 'warning' },
-            { icon: 'bi-stopwatch',         value: latest ? fmtDur(displayDurationMs) : '—', label: durationSubtitle ? `Jest idő (${durationSubtitle})` : 'Jest idő', color: 'primary' }
+            { icon: 'bi-check-circle-fill', value: latest ? latest.passed  : '—', label: tx('Sikeres', 'Passed'), color: 'success' },
+            { icon: 'bi-x-circle-fill',     value: latest ? latest.failed  : '—', label: tx('Sikertelen', 'Failed'), color: 'danger' },
+            { icon: 'bi-skip-forward-fill', value: latest ? latest.skipped : '—', label: tx('Kihagyott', 'Skipped'), color: 'warning' },
+            { icon: 'bi-stopwatch',         value: latest ? fmtDur(displayDurationMs) : '—', label: durationSubtitle ? `${jestTimeLabel} (${durationSubtitle})` : jestTimeLabel, color: 'primary' }
         ]);
 
         const historyRows = (t.history || []).map((r) => `
             <tr>
                 <td><span class="font-monospace text-gold">#${r.id}</span></td>
-                <td>${escapeHtml(r.triggeredByUsername || (r.triggeredBy ? '#' + r.triggeredBy : 'rendszer'))}</td>
+                <td>${escapeHtml(r.triggeredByUsername || (r.triggeredBy ? '#' + r.triggeredBy : tx('rendszer', 'system')))}</td>
                 <td><span class="badge bg-${r.status === 'passed' ? 'success' : (r.status === 'failed' ? 'danger' : (r.status === 'running' ? 'info' : 'secondary'))}">${escapeHtml(r.status)}</span></td>
                 <td><span class="font-monospace">${r.passed}/${r.total}</span></td>
                 <td><span class="font-monospace">${r.failed}</span></td>
@@ -1472,12 +1510,12 @@ const SECTIONS = {
 
         return `
             ${h.header({
-                icon: 'bi-clipboard2-check', title: 'Tesztek',
+                icon: 'bi-clipboard2-check', title: tx('Tesztek', 'Tests'),
                 subtitle: latest
-                    ? `Utolso futas: ${fmt(latest.startedAt)} — ${escapeHtml(latest.status)}`
-                    : 'Backend Jest + Supertest tesztek',
+                    ? `${tx('Utolso futas', 'Last run')}: ${fmt(latest.startedAt)} — ${escapeHtml(latest.status)}`
+                    : tx('Backend Jest + Supertest tesztek', 'Backend Jest + Supertest tests'),
                 actions: [
-                    { label: running ? 'Fut...' : 'Tesztek futtatasa', icon: running ? 'bi-arrow-repeat' : 'bi-play-fill', variant: 'gold', size: 'sm', onclick: 'confirmRunTests()', attrs: runDisabled }
+                    { label: running ? tx('Fut...', 'Running...') : tx('Tesztek futtatása', 'Run tests'), icon: running ? 'bi-arrow-repeat' : 'bi-play-fill', variant: 'gold', size: 'sm', onclick: 'confirmRunTests()', attrs: runDisabled }
                 ]
             })}
 
@@ -1485,7 +1523,7 @@ const SECTIONS = {
                 <div class="alert alert-info bg-info bg-opacity-10 border-info d-flex align-items-center gap-2 mb-3">
                     <i class="bi bi-arrow-repeat spin"></i>
                     <div class="flex-grow-1">
-                        <strong>Fut: run #${running.runId}</strong> — eltelt: ${fmtDur(running.elapsedMs || 0)}
+                        <strong>${tx('Fut', 'Running')}: run #${running.runId}</strong> — ${tx('eltelt', 'elapsed')}: ${fmtDur(running.elapsedMs || 0)}
                     </div>
                 </div>
             ` : ''}
@@ -1496,7 +1534,7 @@ const SECTIONS = {
             <div class="row g-4">
                 <div class="col-lg-7">
                     ${h.card({
-                        title: 'Test suite-ok',
+                        title: tx('Test suite-ok', 'Test suites'),
                         icon: 'bi-list-check',
                         headerExtra: latest ? `<span class="badge bg-warning text-dark" id="testsAutoClearPillSuites" data-tests-autoclear><i class="bi bi-clock-history me-1"></i>auto-clear: <span data-tests-autoclear-seconds>—</span>s</span>` : '',
                         noBodyPadding: true,
@@ -1513,17 +1551,17 @@ const SECTIONS = {
                                 return `<div class="test-row test-${status}">
                                     <div class="test-status-dot"></div>
                                     <span class="test-suite">${escapeHtml(fileName)}</span>
-                                    <span class="test-name">${passing}/${total}${pending > 0 ? ` (${pending} skipped)` : ''}</span>
+                                    <span class="test-name">${passing}/${total}${pending > 0 ? ` (${pending} ${tx('kihagyott', 'skipped')})` : ''}</span>
                                     ${durTxt ? `<span class="test-duration text-secondary small me-2">${durTxt}</span>` : ''}
                                     <span class="test-status-label">${label}</span>
                                 </div>`;
                             }).join('')}</div>`
-                            : `<div class="text-center text-secondary py-4">${t.latestLoaded ? 'A reszletek csak a session alatt es csak a futtatas utan 1 percig lathatok. Kattints a "Tesztek futtatasa" gombra a friss eredmenyhez.' : 'Toltes...'}</div>`
+                            : `<div class="text-center text-secondary py-4">${t.latestLoaded ? tx('A reszletek csak a session alatt es csak a futtatas utan 1 percig lathatok. Kattints a "Tesztek futtatasa" gombra a friss eredmenyhez.', 'Details are visible only during the session and only for 1 minute after the run. Click the "Run tests" button to get a fresh result.') : tx('Toltes...', 'Loading...')}</div>`
                     })}
                 </div>
                 <div class="col-lg-5">
                     ${h.card({
-                        title: 'Stderr (utolso 4KB)', icon: 'bi-terminal-fill',
+                        title: tx('Stderr (utolso 4KB)', 'Stderr (last 4KB)'), icon: 'bi-terminal-fill',
                         headerExtra: latest ? `<span class="badge bg-warning text-dark" id="testsAutoClearPillStderr" data-tests-autoclear><i class="bi bi-clock-history me-1"></i>auto-clear: <span data-tests-autoclear-seconds>—</span>s</span>` : '',
                         body: latest && latest.stderrTail
                             ? (() => {
@@ -1532,18 +1570,18 @@ const SECTIONS = {
                                 const swapped = latest.stderrTail.replace(/(\d+)\s+passed,\s+(\d+)\s+total/g, '$2 total, $1 passed');
                                 return `<pre class="json-block" style="max-height:280px;overflow:auto;white-space:pre-wrap;">${escapeHtml(swapped)}</pre>`;
                             })()
-                            : `<pre class="json-block" style="max-height:280px;overflow:auto;">${latest ? '(Nincs stderr output)' : '(Meg nincs futas)'}</pre>`
+                            : `<pre class="json-block" style="max-height:280px;overflow:auto;">${latest ? tx('(Nincs stderr output)', '(No stderr output)') : tx('(Még nincs futás)', '(No run yet)')}</pre>`
                     })}
                 </div>
             </div>
 
             <div class="mt-4">
                 ${h.card({
-                    title: 'Futtatasi elozmenyek', icon: 'bi-clock-history',
+                    title: tx('Futtatási előzmények', 'Run history'), icon: 'bi-clock-history',
                     noBodyPadding: true,
                     body: historyRows.length
-                        ? `<table class="table mb-0"><thead><tr><th>ID</th><th>Inditotta</th><th>Allapot</th><th>Pass/Total</th><th>Fail</th><th>Idotartam</th><th>Indult</th></tr></thead><tbody>${historyRows}</tbody></table>`
-                        : `<div class="text-center text-secondary py-4">${t.historyLoaded ? 'Meg nincs futasi elozmeny.' : 'Toltes...'}</div>`
+                        ? `<table class="table mb-0"><thead><tr><th>ID</th><th>${tx('INDÍTOTTA', 'TRIGGERED BY')}</th><th>${tx('ÁLLAPOT', 'STATUS')}</th><th>PASS/TOTAL</th><th>FAIL</th><th>${tx('IDŐTARTAM', 'DURATION')}</th><th>${tx('INDULT', 'STARTED')}</th></tr></thead><tbody>${historyRows}</tbody></table>`
+                        : `<div class="text-center text-secondary py-4">${t.historyLoaded ? tx('Meg nincs futasi elozmeny.', 'No run history yet.') : tx('Toltes...', 'Loading...')}</div>`
                 })}
             </div>
         `;

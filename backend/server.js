@@ -167,10 +167,18 @@ try {
 }
 
 app.use(express.json()); //?Middleware JSON
-// Why: trust proxy=1 csak akkor helyes, ha a backend egyetlen reverse proxy mögött (pl. Nginx, Cloudflare) fut.
-//      Direct expose esetén X-Forwarded-* spoofolható, ezért a rate limiter és session secure-cookie félrevezethető.
-//      A `readme.md` "Környezeti változók" szekciója részletezi a feltételeket.
-app.set('trust proxy', 1); //?Middleware Proxy
+// Why: trust proxy=1 csak akkor helyes, ha a backend EGYETLEN reverse proxy mogott
+// (pl. Nginx, Cloudflare) fut. Direct expose esetn (localhost dev, vagy proxy
+// nelkuli prod) X-Forwarded-* spoofolhato, igy a rate limiter (login: 10/IP,
+// register: 5/IP) megkerulheto fake IP header-rel. Default: KIKAPCSOLVA.
+// Bekapcsoláshoz: `TRUST_PROXY=1` env var (a `readme.md` reszletezi).
+if (process.env.TRUST_PROXY === '1' || process.env.TRUST_PROXY === 'true') {
+    app.set('trust proxy', 1); //?Middleware Proxy
+    console.log('[server] trust proxy=1 enabled (TRUST_PROXY env beallitva).');
+} else {
+    // Express default: 'trust proxy' = false — a connection.remoteAddress-t hasznalja,
+    // X-Forwarded-* header-eket figyelmen kivul hagyja.
+}
 
 const socketHub = createSocketHub(io);
 app.locals.socketHub = socketHub;

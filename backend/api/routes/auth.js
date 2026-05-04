@@ -521,9 +521,18 @@ router.get('/sessionInfo', async (request, response) => {
             const dbUser = await sql.getSessionUserById(request.session.userId);
 
             if (!dbUser) {
-                request.session.destroy(() => {
-                    console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
+                // Awaited destroy + clearCookie: korabban fire-and-forget volt, ami
+                // race condition-t okozott (a stale session cookie bent maradt a
+                // bongeszoben es a kovetkezo /sessionInfo ujra ezt az agat futtatta,
+                // mig a session store async torlese folyamatban volt).
+                await new Promise((resolve) => {
+                    request.session.destroy((err) => {
+                        if (err) console.warn('sessionInfo: orphan-user destroy hiba:', err.message);
+                        resolve();
+                    });
                 });
+                response.clearCookie('connect.sid');
+                console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
             } else if (dbUser.is_banned || (dbUser.pending_deletion_until && new Date(dbUser.pending_deletion_until) > new Date())) {
                 // Banned VAGY admin-soft-deleted user: session destroy + clearCookie.
                 // A frontend loggedIn:false-ot lat -> homepage kijelentkezett UI-t mutat.

@@ -415,6 +415,7 @@
             'admin.grant_admin_title':'Admin szerep adása',
             'admin.grant_admin_intro':'Add meg a felhasználónevet, akinek admin szerepet szeretnél adni. A művelet kritikus, ezért egy további indoklást és jelszó-megerősítést is kérni fogunk.',
             'admin.grant_admin_label':'Felhasználónév',
+            'admin.grant_admin_ph': 'pl.: SakkMester99',
             'admin.grant_super_check':'Super-admin jogot is adjon',
             'admin.continue':       'Tovább',
             'admin.spectator':      'Spectator',
@@ -907,6 +908,7 @@
             'admin.grant_admin_title':'Grant admin role',
             'admin.grant_admin_intro':'Provide the username you want to grant admin role to. The action is critical, so a reason and password confirmation will also be requested.',
             'admin.grant_admin_label':'Username',
+            'admin.grant_admin_ph': 'e.g. SakkMester99',
             'admin.grant_super_check':'Also grant super-admin rights',
             'admin.continue':       'Continue',
             'admin.spectator':      'Spectator',
@@ -1058,12 +1060,43 @@
         }
     }
 
+    // A natív <input type="date"|"datetime-local"|"time"> picker-eket a böngészők
+    // a `lang` attribútum alapján renderelik (HU vs. EN naptár). A documentElement
+    // `lang` váltása nem frissíti a már létrehozott picker DOM-ot a legtöbb
+    // böngészőben — ezért minden ilyen input-ra egyenként ki kell setelni a
+    // `lang` attribútumot, és Firefox-on egy reflow-trükkel újra-rajzoltatni.
+    function syncDatePickerLang(scope) {
+        try {
+            const root = scope || document;
+            if (!root.querySelectorAll) return;
+            const pickers = root.querySelectorAll('input[type="date"], input[type="datetime-local"], input[type="time"], input[type="month"], input[type="week"]');
+            pickers.forEach((el) => {
+                try {
+                    if (el.getAttribute && el.getAttribute('lang') !== currentLang) {
+                        el.setAttribute('lang', currentLang);
+                        // Firefox quirk: reflow trigger, hogy a picker UI is frissuljon.
+                        if (el.style && typeof el.offsetHeight === 'number') {
+                            const prev = el.style.display;
+                            el.style.display = 'none';
+                            // eslint-disable-next-line no-unused-expressions
+                            void el.offsetHeight;
+                            el.style.display = prev || '';
+                        }
+                    }
+                } catch (_) { /* per-element ignore */ }
+            });
+        } catch (_) { /* ignore */ }
+    }
+
     function applyAll(root) {
         const scope = root || document;
         scope.querySelectorAll('[data-i18n], [data-i18n-html], [data-i18n-attr]').forEach(applyToElement);
         if (document.documentElement) {
             document.documentElement.setAttribute('lang', currentLang);
         }
+        // Date/time picker locale szinkronizalas — a documentElement.lang valtas
+        // nem frissiti az `<input type="date">` natív UI-t, kell explicit attr.
+        syncDatePickerLang(scope);
     }
 
     const langChangeHandlers = new Set();
@@ -1180,6 +1213,7 @@
     window.MattMesterI18n = {
         t, tx, set, get, applyAll,
         onLangChange, formatDate, formatDateTime,
+        syncDatePickerLang,
         SUPPORTED
     };
 })();

@@ -821,30 +821,32 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-stars me-2 text-gold"></i>
-                        Admin szerep adasa
+                        <span data-i18n="admin.grant_admin_title">Admin szerep adása</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-secondary small mb-3">
-                        Add meg a felhasznalonevet, akinek admin szerepet szeretnel adni. A muvelet
-                        kritikus, ezert egy tovabbi indoklast es jelszo-megerositest is kerni fogunk.
+                    <p class="text-secondary small mb-3" data-i18n="admin.grant_admin_intro">
+                        Add meg a felhasználónevet, akinek admin szerepet szeretnél adni. A művelet
+                        kritikus, ezért egy további indoklást és jelszó-megerősítést is kérni fogunk.
                     </p>
                     <div class="mb-3">
-                        <label for="adminGrantUsername" class="form-label">Felhasznalonev <span class="text-danger">*</span></label>
-                        <input type="text" id="adminGrantUsername" class="form-control" placeholder="pelda: SakkMester99">
+                        <label for="adminGrantUsername" class="form-label">
+                            <span data-i18n="admin.grant_admin_label">Felhasználónév</span> <span class="text-danger">*</span>
+                        </label>
+                        <input type="text" id="adminGrantUsername" class="form-control" placeholder="pl.: SakkMester99" data-i18n-attr="placeholder:admin.grant_admin_ph">
                     </div>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" id="adminGrantMakeSuper">
                         <label class="form-check-label" for="adminGrantMakeSuper">
-                            <i class="bi bi-stars text-gold me-1"></i>Super-admin jogot is adjon
+                            <i class="bi bi-stars text-gold me-1"></i><span data-i18n="admin.grant_super_check">Super-admin jogot is adjon</span>
                         </label>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
                     <button type="button" class="btn btn-gold" onclick="adminGrantPickerSubmit()">
-                        <i class="bi bi-arrow-right me-1"></i>Tovabb
+                        <i class="bi bi-arrow-right me-1"></i><span data-i18n="admin.continue">Tovább</span>
                     </button>
                 </div>
             </div>

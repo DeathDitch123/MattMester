@@ -97,6 +97,44 @@ function getSecurityEventDescriptor(item) {
     return descriptor;
 }
 
+// HU server-side `message` szovegek client-oldali EN forditasa. A backend a
+// `security_activity_log.message` oszlopot magyarul tarolja (pl. "Sikeres
+// bejelentkezes."), igy EN mode-ban ezt itt kell mappingelni. Ha a szoveg
+// nem szerepel a mapping-ben, az eredeti uzenetet hagyjuk meg.
+function translateSecurityEventMessage(message) {
+    if (!message) return '';
+    const map = {
+        'Sikeres bejelentkezés.': tx('Sikeres bejelentkezés.', 'Successful login.'),
+        'Sikeres kijelentkezés.': tx('Sikeres kijelentkezés.', 'Successful logout.'),
+        'Sikertelen bejelentkezési kísérlet (hibás jelszó).': tx('Sikertelen bejelentkezési kísérlet (hibás jelszó).', 'Failed login attempt (wrong password).'),
+        'Sikertelen bejelentkezés.': tx('Sikertelen bejelentkezés.', 'Failed login.'),
+        'Sikeres regisztráció.': tx('Sikeres regisztráció.', 'Successful registration.'),
+        'Automatikus bejelentkezés regisztráció után.': tx('Automatikus bejelentkezés regisztráció után.', 'Automatic login after registration.'),
+        'Profilkép feltöltve.': tx('Profilkép feltöltve.', 'Profile picture uploaded.'),
+        'Profilkép feltöltve': tx('Profilkép feltöltve', 'Profile picture uploaded'),
+        'Profilkép eltávolítva.': tx('Profilkép eltávolítva.', 'Profile picture removed.'),
+        'Profilkép jóváhagyva.': tx('Profilkép jóváhagyva.', 'Profile picture approved.'),
+        'Profilkép elutasítva.': tx('Profilkép elutasítva.', 'Profile picture rejected.'),
+        'Email cím sikeresen megerősítve.': tx('Email cím sikeresen megerősítve.', 'Email address successfully verified.'),
+        'Jelszó sikeresen visszaállítva.': tx('Jelszó sikeresen visszaállítva.', 'Password successfully reset.'),
+        'Jelszó megváltozva.': tx('Jelszó megváltozva.', 'Password changed.'),
+        'Profil beállítások módosítva.': tx('Profil beállítások módosítva.', 'Profile settings updated.'),
+        'Sikeres kijelentkezés minden eszközről.': tx('Sikeres kijelentkezés minden eszközről.', 'Successfully logged out from all devices.'),
+        'Barát hozzáadva.': tx('Barát hozzáadva.', 'Friend added.'),
+        'Barát törölve.': tx('Barát törölve.', 'Friend removed.'),
+        'Barát kérelem küldve.': tx('Barát kérelem küldve.', 'Friend request sent.'),
+        'Barát kérelem elfogadva.': tx('Barát kérelem elfogadva.', 'Friend request accepted.'),
+        'Barát kérelem elutasítva.': tx('Barát kérelem elutasítva.', 'Friend request rejected.'),
+        'Felhasználó letiltva.': tx('Felhasználó letiltva.', 'User blocked.'),
+        'Letiltás feloldva.': tx('Letiltás feloldva.', 'Block lifted.'),
+        'Üzenet elküldve.': tx('Üzenet elküldve.', 'Message sent.'),
+        'Felhasználói tiltás.': tx('Felhasználói tiltás.', 'User banned.'),
+        'Tiltás feloldva.': tx('Tiltás feloldva.', 'Ban lifted.'),
+        'Hibás jelszó ellenőrzés.': tx('Hibás jelszó ellenőrzés.', 'Invalid password verification.')
+    };
+    return map[message] || message;
+}
+
 function getSecurityStatusBadge(item) {
     const severity = String(item.severity || 'info').toLowerCase();
     let badge = { text: tx('Info', 'Info'), className: 'security-badge security-badge-info' };
@@ -166,7 +204,8 @@ function renderSecurityActivityTable() {
                 const { relative, absolute } = formatSecurityEventDate(item.occurredAt);
                 const ip = item.ipAddress || '—';
                 const uaShort = shortenUserAgent(item.userAgent);
-                const description = item.message ? escapeSecurityHtml(item.message) : '';
+                const translatedMessage = translateSecurityEventMessage(item.message);
+                const description = translatedMessage ? escapeSecurityHtml(translatedMessage) : '';
 
                 return `
                     <tr class="security-row" data-event-type="${escapeSecurityHtml(item.eventType)}" data-category="${escapeSecurityHtml(item.eventCategory || descriptor.category)}">

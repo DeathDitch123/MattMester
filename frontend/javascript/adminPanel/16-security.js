@@ -2,6 +2,35 @@
    Bejelentkezesek (security) oldal: kliens-szintu classifier-ek + handler-ek
    ============================================================= */
 
+// A backend (networkClassifier.js) Hu nyelvu, statikus location label-eket general
+// es perzisztal a payload-ba (`location.label`). Ezeket render-szinten kell
+// EN-re forditani, ha a felhasznalo angol nyelvre allt at — kulonben az admin
+// "Login history" oldalon EN modban is HU szovegek jelennek meg.
+function translateLocationLabel(label) {
+    if (!label || typeof label !== 'string') return label || '—';
+    // 100% pontos egyezesek a backend networkClassifier.js label-jeibol.
+    const map = {
+        'Szervergép': 'Server host',
+        'Link-local (APIPA)': 'Link-local (APIPA)',
+        'Belső hálózat (10.x)': 'Internal network (10.x)',
+        'Belső hálózat (LAN)': 'Internal network (LAN)',
+        'Belső hálózat (172.x)': 'Internal network (172.x)',
+        'Docker hálózat': 'Docker network',
+        'Mobilhálózat (CGNAT)': 'Mobile network (CGNAT)',
+        'IPv6 link-local': 'IPv6 link-local',
+        'Belső IPv6': 'Internal IPv6',
+        'Külső IP': 'Public IP',
+        'Ismeretlen': 'Unknown',
+        'Ismeretlen geoIP': 'Unknown geoIP',
+        'Helyi hálózat': 'Local network',
+        'Mobil hálózat': 'Mobile network'
+    };
+    if (Object.prototype.hasOwnProperty.call(map, label)) {
+        return tx(label, map[label]);
+    }
+    return label; // ismeretlen / publikus geo-label (pl. "Budapest, HU") — valtozatlanul
+}
+
 // A backend networkClassifier.js mini-masolata frontend-szintre. A socket broadcast
 // payload-ja nem tartalmazza az enrichment mezoket, ezert kliens-szinten szamoljuk.
 function classifyIpClient(ip) {
