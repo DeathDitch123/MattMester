@@ -18,27 +18,71 @@
         rel="stylesheet">
 
     <link rel="stylesheet" href="../css/profile.css" />
+    <link rel="stylesheet" href="../css/shared/confirmModal.css" />
     <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
     <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/_utils.js" defer></script>
+    <script src="../javascript/shared/confirmModal.js" defer></script>
     <script src="../javascript/profileImageUtils.js" defer></script>
     <script src="../javascript/socketClient.js" defer></script>
+    <script src="../javascript/shared/maintenanceClient.js" defer></script>
     <script src="../javascript/chessInviteGlobal.js" defer></script>
     <script src="../javascript/chatModal.js" defer></script>
-    <script src="../javascript/profile.js" defer></script>
+    <script src="../javascript/profile/01-helpers.js" defer></script>
+    <script src="../javascript/profile/02-utils.js" defer></script>
+    <script src="../javascript/profile/03-notificationCenter.js" defer></script>
+    <script src="../javascript/profile/04-notificationEvents.js" defer></script>
+    <script src="../javascript/profile/05-accountStatus.js" defer></script>
+    <script src="../javascript/profile/06-playerSearch.js" defer></script>
+    <script src="../javascript/profile/07-playerProfile.js" defer></script>
+    <script src="../javascript/profile/08-searchResults.js" defer></script>
+    <script src="../javascript/profile/09-friendsList.js" defer></script>
+    <script src="../javascript/profile/10-logout.js" defer></script>
+    <script src="../javascript/profile/11-securityActivity.js" defer></script>
+    <script src="../javascript/profile/12-searchValidation.js" defer></script>
+    <script src="../javascript/profile/13-profileImageStatus.js" defer></script>
+    <script src="../javascript/profile/14-profileSettings.js" defer></script>
+    <script src="../javascript/profile/15-profileDelete.js" defer></script>
+    <script src="../javascript/profile/16-imageEditor.js" defer></script>
+    <script src="../javascript/profile/17-removeAvatar.js" defer></script>
+    <script src="../javascript/profile/18-sidebar.js" defer></script>
+    <script src="../javascript/profile/19-navigation.js" defer></script>
+    <script src="../javascript/profile/20-bootstrap.js" defer></script>
+    <script src="../javascript/profile/21-dashboardStats.js" defer></script>
+    <script src="../javascript/playerActions.js" defer></script>
+    <script src="../javascript/shared/houseRules.js" defer></script>
+    <script src="../javascript/chessModeChooser.js" defer></script>
+    <link rel="stylesheet" href="../css/shared/chessModeChooser.css">
+    <link rel="stylesheet" href="../css/shared/topNavbar.css">
+    <script src="../javascript/shared/topNavbar.js" defer></script>
 </head>
 
-<body>
-    <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
-    <!-- Sidebar -->
-    <nav class="sidebar" id="sidebar">
-        <div class="sidebar-brand">
-            <a class="navbar-brand brand d-flex align-items-center gap-2" href="/">
+<body class="has-mm-top-navbar">
+    <!-- Kozos felso navbar (adminPanel + profile altal megosztott topNavbar
+         markup). data-page="profile" -> a logout gomb a meglevo #logoutModal
+         Bootstrap modalt nyitja, amit a confirmLogoutButton (handleLogout
+         /api/logout) zar le -> full session logout, redirect "/". -->
+    <nav class="mm-top-navbar" data-page="profile" aria-label="Felső navigáció">
+        <div class="mm-top-navbar-inner">
+            <a class="mm-top-navbar-brand" href="/">
                 <i class="bi bi-king-fill"></i>
                 <span>MATTMESTER</span>
             </a>
+            <div class="mm-top-navbar-actions">
+                <span class="mm-top-navbar-greeting">Szia, <span id="mmTopNavbarUsername">…</span>!</span>
+                <!-- Admin felulet gomb — alapbol rejtett, a topNavbar.js fedi fel
+                     ha a /api/sessionInfo szerint a user role === 'admin'. -->
+                <a class="mm-top-navbar-btn" href="/html/adminPanel.html" id="mmTopNavbarAdminBtn" hidden>Admin felület</a>
+                <button type="button" class="mm-top-navbar-btn mm-top-navbar-btn--danger" id="mmTopNavbarLogoutBtn">Kijelentkezés</button>
+            </div>
         </div>
+    </nav>
+
+    <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+    <!-- Sidebar (a felso MATTMESTER navbar mar adja a brand-et — itt csak nav menu) -->
+    <nav class="sidebar" id="sidebar">
         <div class="nav flex-column">
             <a href="#dashboard" class="nav-link active">
                 <i data-lucide="layout-dashboard"></i>
@@ -73,13 +117,8 @@
                 Settings
             </a>
         </div>
-        <div class="mt-auto p-4 border-top border-secondary" style="border-color: var(--border-color) !important;">
-            <button class="btn btn-outline-danger w-100 d-flex align-items-center justify-content-center gap-2"
-                type="button" data-bs-toggle="modal" data-bs-target="#logoutModal">
-                <i data-lucide="log-out" style="width: 18px; height: 18px;"></i>
-                Logout
-            </button>
-        </div>
+        <!-- A korabbi sidebar-alji "Logout" gomb torolve — a felso MATTMESTER
+             navbar Kijelentkezes gombja nyitja a #logoutModal-t. -->
     </nav>
 
     <main class="main-content">
@@ -149,16 +188,16 @@
                             <div class="text-center text-md-start">
                                 <div
                                     class="d-flex align-items-center justify-content-center justify-content-md-start gap-3 mb-2">
-                                    <h1 class="h3 mb-0 text-white fw-bold">GrandMaster_99</h1>
-                                    <span class="role-badge admin">Admin</span>
+                                    <h1 class="h3 mb-0 text-white fw-bold" id="profileDashboardName">…</h1>
+                                    <span class="role-badge d-none" id="profileDashboardRole">Player</span>
                                 </div>
-                                <p class="text-secondary mb-2 opacity-75">admin@mattmester.com</p>
+                                <p class="text-secondary mb-2 opacity-75" id="profileDashboardEmail">…</p>
                                 <div
                                     class="profile-status d-flex align-items-center justify-content-center justify-content-md-start gap-2">
                                     <span class="status-dot"></span>
                                     <span class="text-uppercase small fw-bold tracking-wider">Online</span>
                                 </div>
-                                <small id="profileImageHeaderStatus" class="text-secondary mt-2 d-inline-block">Profilkép státusz: Jóváhagyott</small>
+                                <small id="profileImageHeaderStatus" class="text-secondary mt-2 d-inline-block">Profilkép státusz: …</small>
                             </div>
                         </div>
                     </div>
@@ -166,19 +205,19 @@
                     <div class="col-12 col-md-5">
                         <div class="d-flex justify-content-center justify-content-md-end flex-wrap gap-3">
                             <div class="elo-display text-center">
-                                <div class="elo-number">1,500</div>
+                                <div class="elo-number" id="profileEloClassic">…</div>
                                 <div class="elo-label">Klasszikus</div>
-                                <div class="elo-rank rank-master">Master</div>
+                                <div class="elo-rank" id="profileEloClassicRank"></div>
                             </div>
                             <div class="elo-display text-center highlighted">
-                                <div class="elo-number">1,650</div>
+                                <div class="elo-number" id="profileEloMM">…</div>
                                 <div class="elo-label">MattMester</div>
-                                <div class="elo-rank rank-master">Master</div>
+                                <div class="elo-rank" id="profileEloMMRank"></div>
                             </div>
                             <div class="elo-display text-center">
-                                <div class="elo-number">1,420</div>
+                                <div class="elo-number" id="profileEloBullet">…</div>
                                 <div class="elo-label">Bullet</div>
-                                <div class="elo-rank rank-master">Master</div>
+                                <div class="elo-rank" id="profileEloBulletRank"></div>
                             </div>
                         </div>
                     </div>
@@ -191,7 +230,7 @@
                         <div class="stat-icon green">
                             <i data-lucide="trophy"></i>
                         </div>
-                        <div class="stat-value text-success">247</div>
+                        <div class="stat-value text-success" id="profileStatWins">…</div>
                         <div class="stat-label">Total Wins</div>
                     </div>
                 </div>
@@ -200,7 +239,7 @@
                         <div class="stat-icon red">
                             <i data-lucide="x-circle"></i>
                         </div>
-                        <div class="stat-value text-danger">89</div>
+                        <div class="stat-value text-danger" id="profileStatLosses">…</div>
                         <div class="stat-label">Total Losses</div>
                     </div>
                 </div>
@@ -209,7 +248,7 @@
                         <div class="stat-icon blue">
                             <i data-lucide="minus-circle"></i>
                         </div>
-                        <div class="stat-value" style="color: var(--accent-blue)">34</div>
+                        <div class="stat-value" style="color: var(--accent-blue)" id="profileStatDraws">…</div>
                         <div class="stat-label" style="color: var(--accent-blue)">Draws</div>
                     </div>
                 </div>
@@ -218,7 +257,7 @@
                         <div class="stat-icon gold">
                             <i data-lucide="percent"></i>
                         </div>
-                        <div class="stat-value" style="color: var(--accent-gold)">68%</div>
+                        <div class="stat-value" style="color: var(--accent-gold)" id="profileStatWinRate">…</div>
                         <div class="stat-label" style="color: var(--accent-gold)">Win Rate</div>
                     </div>
                 </div>
@@ -250,29 +289,23 @@
                         </div>
                     </div> -->
 
-                    <div class="card mb-4 section-block" id="games">
+                    <!-- Issue #52: a "Recent Games" szekciot torolve — halott placeholder-szekcio
+                         volt (nincs JS-loader, ures tbody, "View All" gomb nem-letezo allGamesModal-ra
+                         mutatott). A #recentOpponents szekcio (lent) ugyanezt a celt szolgalja
+                         valos adatokkal a /api/recentOpponents endpoint-bol. -->
+
+                    <!-- Legutobbi ellenfelek (Rocket League stilus) -->
+                    <div class="card mb-4 section-block" id="recentOpponents">
                         <div class="card-header d-flex justify-content-between align-items-center">
-                            <span><i data-lucide="history" class="me-2"></i>Recent Games</span>
-                            <button class="btn btn-sm btn-outline-gold" type="button" data-bs-toggle="modal"
-                                data-bs-target="#allGamesModal">View All</button>
+                            <span><i data-lucide="swords" class="me-2"></i>Legutóbbi ellenfelek</span>
+                            <small class="text-secondary">Max 25 · kattints rájuk</small>
                         </div>
-                        <div class="card-body p-0">
-                            <div class="table-responsive">
-                                <table class="table">
-                                    <thead>
-                                        <tr>
-                                            <th>Opponent</th>
-                                            <th>Result</th>
-                                            <th>Moves</th>
-                                            <th>Time Control</th>
-                                            <th>Date</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <!-- Sample game rows -->
-                                    </tbody>
-                                </table>
+                        <div class="card-body">
+                            <div id="recentOpponentsList" role="list">
+                                <div class="text-secondary text-center py-3">Betöltés...</div>
+                            </div>
+                            <div id="recentOpponentsEmpty" class="text-secondary text-center py-3 d-none">
+                                Még nem játszottál senkivel — indíts egy meccset!
                             </div>
                         </div>
                     </div>
@@ -291,17 +324,6 @@
                         </div>
                     </div>
 
-                    <!-- Per-mode ELO -->
-                    <div class="card mb-4 section-block" id="elo-by-mode">
-                        <div class="card-header">
-                            <i data-lucide="trending-up" class="me-2"></i>ELO mód szerint
-                        </div>
-                        <div class="card-body">
-                            <div id="elo-by-mode-grid" class="row g-3">
-                                <div class="col-12 text-secondary text-center py-3">Betöltés...</div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <div class="col-lg-4">
@@ -468,12 +490,12 @@
 
                                     <div class="col-md-6">
                                         <label class="form-label">Username</label>
-                                        <input id="settingsUsername" type="text" class="form-control" value="GrandMaster_99">
+                                        <input id="settingsUsername" type="text" class="form-control" value="" placeholder="Felhasználónév">
                                         <div id="settingsUsernameFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
                                     <div class="col-md-6">
                                         <label class="form-label">Email Address</label>
-                                        <input id="settingsEmail" type="email" class="form-control" value="admin@mattmester.com">
+                                        <input id="settingsEmail" type="email" class="form-control" value="" placeholder="email@példa.hu">
                                         <div id="settingsEmailFeedback" class="form-text text-secondary mt-1"></div>
                                     </div>
 
@@ -529,6 +551,10 @@
         </div>
         <div class="footer-links">
             <a href="/">Home</a>
+            <a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener">mattmester.support@gmail.com</a>
+            <button type="button" class="house-rules-footer-link" onclick="MattMesterHouseRules.open()" title="Sakk szabályok, házirend, tudnivalók">
+                <i data-lucide="info" style="width: 14px; height: 14px;"></i> Szabályok
+            </button>
         </div>
         <div class="footer-copy">2026 MattMester</div>
     </footer>
@@ -566,7 +592,7 @@
         </div>
     </div>
 
-    <button class="fab-quick-play" type="button" data-bs-toggle="modal" data-bs-target="#quickPlayModal">
+    <button class="fab-quick-play" type="button" onclick="window.MattMesterChessModeChooser?.open()">
         <span class="fab-tooltip">Quick Play</span>
         <i data-lucide="swords" style="width: 26px; height: 26px;"></i>
     </button>

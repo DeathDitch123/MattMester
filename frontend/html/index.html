@@ -18,15 +18,23 @@
         rel="stylesheet">
 
     <link rel="stylesheet" href="../css/index.css" />
+    <link rel="stylesheet" href="../css/shared/confirmModal.css" />
 
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.min.js"></script>
     <script src="/socket.io/socket.io.js" defer></script>
+    <script src="../javascript/_utils.js" defer></script>
+    <script src="../javascript/shared/confirmModal.js" defer></script>
     <script src="../javascript/profileImageUtils.js" defer></script>
     <script src="../javascript/socketClient.js" defer></script>
+    <script src="../javascript/shared/maintenanceClient.js" defer></script>
     <script src="../javascript/chessInviteGlobal.js" defer></script>
     <script src="../javascript/requestControl.js" defer></script>
     <script src="../javascript/index.js" defer></script>
+    <script src="../javascript/playerActions.js" defer></script>
+    <script src="../javascript/shared/houseRules.js" defer></script>
+    <script src="../javascript/chessModeChooser.js" defer></script>
+    <link rel="stylesheet" href="../css/shared/chessModeChooser.css">
 </head>
 
 <body>
@@ -112,8 +120,10 @@
 
                         <div class="d-flex justify-content-around">
                             <div class="d-flex flex-wrap gap-2">
-                                <a href="../chess_barold/html/chess.html" class="btn btn-gold btn-lg"><i
-                                        class="bi bi-play-fill me-1"></i> Játék</a>
+                                <button type="button" class="btn btn-gold btn-lg"
+                                    onclick="window.MattMesterChessModeChooser?.open()">
+                                    <i class="bi bi-play-fill me-1"></i> Játék
+                                </button>
                             </div>
                             <a href="#ranglista" class="btn btn-outline-gold btn-lg"><i
                                     class="bi bi-trophy-fill me-1"></i>Ranglista</a>
@@ -247,6 +257,10 @@
     <footer class="footer">
         <div class="container d-flex flex-column flex-md-row justify-content-between align-items-center gap-2">
             <div><span class="brand">MATTMESTER</span> &middot; Modern sakkélmény</div>
+            <div class="small"><a href="https://mail.google.com/mail/?view=cm&amp;fs=1&amp;to=mattmester.support@gmail.com" target="_blank" rel="noopener" class="text-secondary text-decoration-none">mattmester.support@gmail.com</a></div>
+            <button type="button" class="house-rules-footer-link" onclick="MattMesterHouseRules.open()" title="Sakk szabályok, házirend, tudnivalók">
+                <i class="bi bi-info-circle"></i> Szabályok
+            </button>
             <small>2026 MattMester</small>
         </div>
     </footer>
@@ -397,6 +411,8 @@
             </div>
         </div>
     </div>
+
+    <!-- A chess mode chooser modal HTML-jét a chessModeChooser.js inject-eli első open()-kor -->
 </body>
 
 </html>

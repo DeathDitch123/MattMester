@@ -10,6 +10,9 @@
 // ============================================================
 
 const { mezoKeres, jatekAllapotKliens, abilitiesAlapallapot } = require('./state.js');
+
+let _pieceIdGen = 0;
+function genPieceId() { return ++_pieceIdGen; }
 const { jatekAllapotEllenor, szabLepKeres, pozicioHash } = require('./logika.js');
 const { idoFut, idoLeall } = require('./timer.js');
 const { getMode } = require('./modes.js');
@@ -19,9 +22,45 @@ const {
     isMezoFagyott,
     isMezoVedett,
     isJatekosBlokkolt,
-    timeStealAlkalmaz,
     cooldownTickAndCleanup
 } = require('./abilities.js');
+
+// Egyszeru SAN-szeru notacio generalas DB-mentes + admin review celra.
+// NEM teljes szabvanyos SAN (nincs disambiguation pl. ket huszar ugyanoda lephet),
+// de emberi atnezeshez es a PGN-szeru export-hoz teljesen elegseges:
+//   "e4", "exd5", "Nf3", "Bxc4", "O-O", "O-O-O", "e8=Q", "Nf3+", "Qxh7#"
+const PIECE_SAN_LETTER = {
+    pawn: '', knight: 'N', bishop: 'B', rook: 'R', queen: 'Q', king: 'K'
+};
+const PROMO_SAN_LETTER = {
+    knight: 'N', bishop: 'B', rook: 'R', queen: 'Q'
+};
+function buildSimpleSan({ piece, fromPos, toPos, isCapture, isCheck, isCheckmate, special, promotionPiece }) {
+    if (special === 'castle-ks') return isCheckmate ? 'O-O#' : (isCheck ? 'O-O+' : 'O-O');
+    if (special === 'castle-qs') return isCheckmate ? 'O-O-O#' : (isCheck ? 'O-O-O+' : 'O-O-O');
+
+    const letter = PIECE_SAN_LETTER[String(piece || '').toLowerCase()] ?? '';
+    const target = String(toPos || '');
+    let core;
+    if (letter === '') {
+        // Gyalog: utesnel "exd5", egyebkent "e4". A gyalog from-fajilejat ('e2'-bol 'e').
+        if (isCapture) {
+            const fromFile = String(fromPos || '').slice(0, 1);
+            core = `${fromFile}x${target}`;
+        } else {
+            core = target;
+        }
+    } else {
+        core = `${letter}${isCapture ? 'x' : ''}${target}`;
+    }
+    if (promotionPiece) {
+        const promoLetter = PROMO_SAN_LETTER[String(promotionPiece).toLowerCase()] || 'Q';
+        core = `${core}=${promoLetter}`;
+    }
+    if (isCheckmate) return `${core}#`;
+    if (isCheck) return `${core}+`;
+    return core;
+}
 
 /**
  * Játék újraindítása (vagy inicializálás).
@@ -75,10 +114,10 @@ function alapfelallasHelyez(jatek) {
     const sorrend = ["rook", "knight", "bishop", "queen", "king", "bishop", "knight", "rook"];
 
     for (let x = 0; x < 8; x++) {
-        mezoKeres(jatek, x, 1).piece = { type: "pawn", color: "black", hasMoved: false };
-        mezoKeres(jatek, x, 6).piece = { type: "pawn", color: "white", hasMoved: false };
-        mezoKeres(jatek, x, 0).piece = { type: sorrend[x], color: "black", hasMoved: false };
-        mezoKeres(jatek, x, 7).piece = { type: sorrend[x], color: "white", hasMoved: false };
+        mezoKeres(jatek, x, 1).piece = { type: "pawn", color: "black", hasMoved: false, id: genPieceId() };
+        mezoKeres(jatek, x, 6).piece = { type: "pawn", color: "white", hasMoved: false, id: genPieceId() };
+        mezoKeres(jatek, x, 0).piece = { type: sorrend[x], color: "black", hasMoved: false, id: genPieceId() };
+        mezoKeres(jatek, x, 7).piece = { type: sorrend[x], color: "white", hasMoved: false, id: genPieceId() };
     }
 
     jatek.tabla.forEach(m => { if (m.piece) m.piece.square = m; });
@@ -128,8 +167,6 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         if (capturedType) {
             pontHozzaad(jatek, babu.color, capturedType);
         }
-        // Képesség: időlopás — ha aktív buff, átköt másodperceket az ellenfél órájáról.
-        timeStealAlkalmaz(jatek, babu.color);
     }
 
     // --- En passant mező frissítése ---
@@ -202,6 +239,29 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         else if (allapot.ok === "haromszor")  uzenet = "Döntetlen (háromszori ismétlés).";
     }
 
+    // SAN-szeru notacio mindig keszul (kliens move-list panel + DB-mentes is
+    // ezt hasznalja). A check/mate mar tudhato, mert az allapot ellenorzes
+    // megtortent. A szam egyszer fut, az eredmenyt a lepesTortenet entry
+    // tartalmazza, igy a kliens NEM rendel le mind igy.
+    const isCheckLepes = !!allapot.sakkban;
+    const isCheckmateLepes = allapot.ok === "matt";
+    const sanLepes = buildSimpleSan({
+        piece: eredetiTipus,
+        fromPos: from.pos,
+        toPos: to.pos,
+        isCapture: voltUtes,
+        isCheck: isCheckLepes,
+        isCheckmate: isCheckmateLepes,
+        special,
+        promotionPiece
+    });
+    const utolsoEntry = jatek.lepesTortenet[jatek.lepesTortenet.length - 1];
+    if (utolsoEntry) {
+        utolsoEntry.san = sanLepes;
+        utolsoEntry.check = isCheckLepes;
+        utolsoEntry.mate = isCheckmateLepes;
+    }
+
     // --- DB MENTÉS (nem blokkolja a kliensválaszt) ---
     if (jatek.dbGameId) {
         const dbGameId = jatek.dbGameId;
@@ -209,11 +269,13 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
         const moveNumber = jatek.lepesszam;
         const fromPos = from.pos;
         const toPos = to.pos;
-        const isCheck = !!(allapot.sakkban);
-        const isCheckmate = allapot.ok === "matt";
+        const isCheck = isCheckLepes;
+        const isCheckmate = isCheckmateLepes;
         const vege = allapot.vege;
         const allapotOk = allapot.ok;
         const nyertesSzin = allapot.nyertes;
+
+        const san = sanLepes;
 
         (async () => {
             try {
@@ -221,6 +283,7 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
                     gameId: dbGameId,
                     playerId,
                     moveNumber,
+                    san,
                     piece: eredetiTipus,
                     fromPos,
                     toPos,
@@ -231,9 +294,21 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
                 });
 
                 if (vege) {
+                    // PGN-szeru leiras a moves tablabol (a friss lepes mar bent
+                    // van) admin review celra. Hibat csak warningoljuk.
+                    let pgnResult = '*';
+                    if (allapotOk === 'matt') pgnResult = nyertesSzin === 'white' ? '1-0' : '0-1';
+                    else pgnResult = '1/2-1/2';
+                    let pgnString = null;
+                    try {
+                        pgnString = await chessSql.buildPgnLikeFromMoves(dbGameId, { result: pgnResult });
+                    } catch (pgnErr) {
+                        console.warn('PGN build hiba (engine):', pgnErr.message);
+                    }
+
                     if (allapotOk === "matt") {
                         const winnerId = jatek.jatekosok[nyertesSzin]?.userId || null;
-                        await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished');
+                        await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished', pgnString);
 
                         if (winnerId) {
                             const vesztesSzin = (nyertesSzin === "white") ? "black" : "white";
@@ -243,7 +318,7 @@ async function lepesHajt(jatek, babu, lepes, atvalTipus = "queen") {
                         }
                     } else {
                         // Döntetlen: patt, 50 lépés, elégtelen anyag, háromszori ismétlés
-                        await chessSql.jatekVegeMentDb(dbGameId, null, 'draw');
+                        await chessSql.jatekVegeMentDb(dbGameId, null, 'draw', pgnString);
                         const whiteId = jatek.jatekosok.white?.userId;
                         const blackId = jatek.jatekosok.black?.userId;
                         if (whiteId) await chessSql.dontetlenMentDb(whiteId);

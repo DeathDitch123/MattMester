@@ -1,4 +1,7 @@
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
+// N14 (#38): parsePositiveInteger atkoltozve a backend/utils/parse.js-be,
+// itt csak re-export — a hivok a regi nevet a regi helyrol importalhatjak.
+const { parsePositiveInteger } = require('../../utils/parse.js');
 
 function getRequestIpAddress(request) {
     const forwarded = request.headers['x-forwarded-for'];
@@ -46,15 +49,6 @@ function destroySessionAsync(request, errorMessage) {
             }
         });
     });
-}
-
-function parsePositiveInteger(value, fallback = null) {
-    const parsed = Number(value);
-    let result = fallback;
-    if (Number.isInteger(parsed) && parsed > 0) {
-        result = parsed;
-    }
-    return result;
 }
 
 function getAuthenticatedUserIdOrThrow(request) {

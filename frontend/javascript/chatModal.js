@@ -31,7 +31,10 @@
         isSendingMessage: false,
         searchText: '',
         modalInstance: null,
-        boundSocket: null
+        boundSocket: null,
+        reportModalInstance: null,
+        pendingReportMessageId: 0,
+        reportInFlight: false
     };
 
     const dom = {
@@ -393,6 +396,75 @@
                 font-size: 14px;
                 line-height: 1.4;
             }
+            #chatModal .chat-message-actions {
+                display: flex;
+                justify-content: flex-end;
+                gap: 4px;
+                margin-top: 2px;
+                opacity: 0;
+                transition: opacity 0.15s ease;
+            }
+            #chatModal .chat-message:hover .chat-message-actions,
+            #chatModal .chat-message:focus-within .chat-message-actions {
+                opacity: 1;
+            }
+            @media (hover: none) {
+                #chatModal .chat-message-actions { opacity: 1; }
+            }
+            #chatModal .chat-report-button {
+                background: transparent;
+                border: 1px solid rgba(239, 68, 68, 0.45);
+                color: #fca5a5;
+                border-radius: 999px;
+                padding: 1px 8px;
+                font-size: 11px;
+                line-height: 1.4;
+                cursor: pointer;
+                display: inline-flex;
+                align-items: center;
+                gap: 4px;
+            }
+            #chatModal .chat-report-button:hover {
+                background: rgba(239, 68, 68, 0.15);
+                color: #fee2e2;
+            }
+            #chatModal .chat-report-button:disabled {
+                opacity: 0.55;
+                cursor: not-allowed;
+            }
+            /* Report modal — sajat, NEM browser-natív prompt */
+            #chatReportModal .modal-content {
+                background: #0f172a;
+                color: #e2e8f0;
+                border: 1px solid #1e293b;
+            }
+            #chatReportModal .modal-header,
+            #chatReportModal .modal-footer {
+                border-color: #1e293b;
+            }
+            #chatReportModal textarea {
+                background: #0b1220;
+                color: #e2e8f0;
+                border: 1px solid #1e293b;
+            }
+            #chatReportModal .chat-report-counter {
+                font-size: 11px;
+                color: #94a3b8;
+            }
+            #chatReportModal .chat-report-counter.valid {
+                color: #22c55e;
+            }
+            #chatReportModal .chat-report-quote {
+                background: #0b1220;
+                border-left: 3px solid #ef4444;
+                padding: 8px 12px;
+                border-radius: 4px;
+                color: #cbd5e1;
+                font-style: italic;
+                font-size: 13px;
+                max-height: 80px;
+                overflow-y: auto;
+            }
             #chatModal .chat-composer {
                 border-top: 1px solid #1e293b;
                 padding: 10px 12px;
@@ -587,6 +659,46 @@
                                     </div>
                                 </div>
                             </section>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal fade" id="chatReportModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <span style="color:#ef4444;">&#9873;</span>
+                                Üzenet bejelentése
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezarás"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p class="mb-2" style="font-size: 13px; color:#94a3b8;">
+                                Ha az üzenetet trágárnak vagy nem odaillőnek érzed, küldd el az adminisztrátoroknak felülvizsgálatra. Az indok megadása ajánlott (max. 500 karakter).
+                            </p>
+                            <div class="mb-3">
+                                <label class="form-label" style="font-size:12px; color:#94a3b8;">Bejelentett üzenet</label>
+                                <div id="chatReportTargetBody" class="chat-report-quote">—</div>
+                                <small id="chatReportTargetMeta" style="display:block; margin-top:4px; color:#64748b; font-size:11px;">—</small>
+                            </div>
+                            <div class="mb-1">
+                                <label for="chatReportReason" class="form-label" style="font-size:12px; color:#cbd5e1;">
+                                    Indok (opcionális)
+                                    <span class="chat-report-counter ms-2">
+                                        <span id="chatReportReasonCount">0</span> / 500
+                                    </span>
+                                </label>
+                                <textarea id="chatReportReason" class="form-control" rows="3" maxlength="500"
+                                    placeholder="Pl. trágár, sértő, spam, fenyegetés..."></textarea>
+                            </div>
+                            <div id="chatReportFeedback" class="alert d-none mt-2 mb-0" role="alert" style="font-size:13px;"></div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                            <button type="button" class="btn btn-danger" id="chatReportConfirmBtn">
+                                Bejelentés elküldése
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -857,9 +969,11 @@
             messages.forEach((message) => {
                 const element = globalScope.document.createElement('div');
                 element.className = 'chat-message';
+                element.dataset.messageId = String(Number(message.id) || 0);
 
                 const ownUserId = Number(globalScope.MattMesterSocket?.info?.user?.id || globalScope.MattMesterSocket?.getSnapshot?.()?.user?.id || 0);
-                if (ownUserId && Number(message.senderId) === ownUserId) {
+                const isMine = Boolean(ownUserId && Number(message.senderId) === ownUserId);
+                if (isMine) {
                     element.classList.add('is-mine');
                 }
 
@@ -895,6 +1009,26 @@
 
                 element.appendChild(meta);
                 element.appendChild(body);
+
+                // Sajat uzenetet nem lehet bejelenteni — csak idegen uzenetekhez raknunk a gombot.
+                if (!isMine) {
+                    const actions = globalScope.document.createElement('div');
+                    actions.className = 'chat-message-actions';
+
+                    const reportBtn = globalScope.document.createElement('button');
+                    reportBtn.type = 'button';
+                    reportBtn.className = 'chat-report-button';
+                    reportBtn.dataset.action = 'report';
+                    reportBtn.dataset.messageId = String(Number(message.id) || 0);
+                    reportBtn.dataset.senderUsername = String(message.senderUsername || '');
+                    reportBtn.dataset.body = String(message.body || '');
+                    reportBtn.title = 'Üzenet bejelentése moderátoroknak';
+                    reportBtn.innerHTML = '<span aria-hidden="true">&#9873;</span> Bejelentés';
+                    actions.appendChild(reportBtn);
+
+                    element.appendChild(actions);
+                }
+
                 dom.messageList.appendChild(element);
             });
 
@@ -1498,6 +1632,163 @@
             dom.modal.setAttribute('aria-hidden', 'true');
             setMobileView('list');
         });
+
+        // Bejelentés gomb minden uzenetbuborekon (delegacio).
+        if (dom.messageList) {
+            dom.messageList.addEventListener('click', (event) => {
+                const btn = event.target?.closest?.('button[data-action="report"]');
+                if (!btn) return;
+                event.preventDefault();
+                const messageId = Number(btn.dataset.messageId) || 0;
+                if (!messageId) return;
+                openReportModal({
+                    messageId,
+                    senderUsername: btn.dataset.senderUsername || '',
+                    body: btn.dataset.body || ''
+                });
+            });
+        }
+
+        bindReportModalEvents();
+    }
+
+    function getReportModalInstance() {
+        if (state.reportModalInstance) return state.reportModalInstance;
+        const el = globalScope.document.getElementById('chatReportModal');
+        if (!el || typeof globalScope.bootstrap === 'undefined') return null;
+        state.reportModalInstance = globalScope.bootstrap.Modal.getOrCreateInstance(el);
+        return state.reportModalInstance;
+    }
+
+    function setReportFeedback(type, message) {
+        const el = globalScope.document.getElementById('chatReportFeedback');
+        if (!el) return;
+        if (!message) {
+            el.className = 'alert d-none mt-2 mb-0';
+            el.textContent = '';
+        } else {
+            el.className = `alert alert-${type} mt-2 mb-0`;
+            el.textContent = message;
+        }
+    }
+
+    function updateReportCounter() {
+        const reasonField = globalScope.document.getElementById('chatReportReason');
+        const counter = globalScope.document.getElementById('chatReportReasonCount');
+        if (!reasonField || !counter) return;
+        const len = reasonField.value.trim().length;
+        counter.textContent = String(len);
+        counter.parentElement?.classList.toggle('valid', len > 0 && len <= 500);
+    }
+
+    function openReportModal({ messageId, senderUsername, body }) {
+        const id = Number(messageId) || 0;
+        if (!id) return;
+        state.pendingReportMessageId = id;
+
+        const targetBody = globalScope.document.getElementById('chatReportTargetBody');
+        const targetMeta = globalScope.document.getElementById('chatReportTargetMeta');
+        const reasonField = globalScope.document.getElementById('chatReportReason');
+
+        if (targetBody) targetBody.textContent = body || '—';
+        if (targetMeta) targetMeta.textContent = `Feladó: ${senderUsername || '—'} · #${id}`;
+        if (reasonField) reasonField.value = '';
+        setReportFeedback(null, '');
+        updateReportCounter();
+
+        const modal = getReportModalInstance();
+        if (!modal) {
+            setFeedback('A bejelentés modal nem érhető el. Frissítsd az oldalt.', true);
+            return;
+        }
+        modal.show();
+        setTimeout(() => reasonField?.focus(), 200);
+    }
+
+    function bindReportModalEvents() {
+        const reasonField = globalScope.document.getElementById('chatReportReason');
+        const confirmBtn = globalScope.document.getElementById('chatReportConfirmBtn');
+        const reportModalEl = globalScope.document.getElementById('chatReportModal');
+
+        // Stacking-aware z-index bump: ha mar nyitva van egy modal (pl. a chat modal),
+        // a sajat modalt a Bootstrap default z-indexe nem rakja folé. Manualisan bumpoljuk
+        // a sajat z-indexet (es a backdropet is) az osszes nyitott modal fölé.
+        if (reportModalEl) {
+            reportModalEl.addEventListener('show.bs.modal', () => {
+                try {
+                    const openCount = globalScope.document.querySelectorAll('.modal.show').length;
+                    const baseZ = 1060;
+                    const bumpedZ = baseZ + (openCount * 20);
+                    reportModalEl.style.zIndex = String(bumpedZ);
+                    setTimeout(() => {
+                        const backdrops = globalScope.document.querySelectorAll('.modal-backdrop');
+                        if (backdrops.length) {
+                            const lastBackdrop = backdrops[backdrops.length - 1];
+                            lastBackdrop.style.zIndex = String(bumpedZ - 5);
+                        }
+                    }, 0);
+                } catch (_) {}
+            });
+            // Hidden esemenyre tisztitsuk a body 'modal-open' osztalyt — Bootstrap leveszi
+            // ha az osszes modal becsukodott; itt csak a sajat z-indexet visszaresetelni.
+            reportModalEl.addEventListener('hidden.bs.modal', () => {
+                try {
+                    reportModalEl.style.zIndex = '';
+                    if (globalScope.document.querySelector('.modal.show')) {
+                        // Ha van mas modal nyitva (pl. a chat modal mogottunk), Bootstrap
+                        // leveheti a body.modal-open osztalyt — visszarakjuk hogy a scroll
+                        // lock megmaradjon.
+                        globalScope.document.body.classList.add('modal-open');
+                    }
+                } catch (_) {}
+            });
+        }
+
+        if (reasonField) {
+            reasonField.addEventListener('input', updateReportCounter);
+        }
+
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', async () => {
+                if (state.reportInFlight) return;
+                const id = state.pendingReportMessageId;
+                if (!id) return;
+
+                const reason = String(reasonField?.value || '').trim().slice(0, 500);
+                state.reportInFlight = true;
+                confirmBtn.disabled = true;
+                setReportFeedback(null, '');
+
+                try {
+                    const response = await fetch(`/api/chat/messages/${id}/report`, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ reason: reason || null })
+                    });
+                    const data = await response.json().catch(() => ({}));
+
+                    if (!response.ok || !data?.success) {
+                        throw new Error(data?.message || 'A bejelentés nem sikerült.');
+                    }
+
+                    if (data.duplicate) {
+                        setReportFeedback('warning', data.message || 'Már korábban bejelentetted ezt az üzenetet.');
+                    } else {
+                        setReportFeedback('success', data.message || 'Bejelentés rögzítve.');
+                        setTimeout(() => {
+                            getReportModalInstance()?.hide();
+                        }, 900);
+                    }
+                } catch (error) {
+                    console.error('chat report hiba:', error);
+                    setReportFeedback('danger', error.message || 'Hálózati hiba.');
+                } finally {
+                    state.reportInFlight = false;
+                    confirmBtn.disabled = false;
+                }
+            });
+        }
     }
 
     async function init(options) {

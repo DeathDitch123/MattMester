@@ -3,15 +3,14 @@ const bcrypt = require('bcrypt');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs/promises');
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
-const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
+const { isAuthenticated, requireVerifiedEmail } = require('../functions.js');
 const {
     generateVerificationToken,
     sendVerificationEmail
 } = require('../emailVerification.js');
 const {
-    verifyPasswordLimiter,
     profileUpdateLimiter,
     profileImageUploadLimiter,
     profileImageRemoveLimiter,
@@ -52,43 +51,6 @@ const profileImageUpload = multer({
             callback(null, true);
         }
     }
-});
-
-router.post('/profile/verify-current-password', verifyPasswordLimiter, isAuthenticated, async (request, response) => {
-    let statusCode = 200;
-    let result = { success: true, valid: false, message: 'A jelenlegi jelszó hibás.' };
-    try {
-        const currentPassword = typeof request.body?.currentPassword === 'string' ? request.body.currentPassword : '';
-        if (!currentPassword) {
-            statusCode = 400;
-            result = { success: false, valid: false, message: 'A jelenlegi jelszó kötelező.' };
-        } else {
-            const user = await sql.getUserAuthById(request.session.userId);
-            if (!user) {
-                statusCode = 404;
-                result = { success: false, valid: false, message: 'A felhasználó nem található.' };
-            } else {
-                const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
-                if (isMatch) {
-                    result = { success: true, valid: true, message: 'A jelenlegi jelszó helyes.' };
-                } else {
-                    await logAuthenticatedAction(request, request.session.userId, {
-                        eventType: 'current_password_verify_failed',
-                        eventCategory: 'security',
-                        severity: 'warning',
-                        source: 'backend',
-                        success: false,
-                        message: 'Sikertelen jelenlegi jelszó ellenőrzés.'
-                    });
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Current password verify hiba:', error);
-        statusCode = 500;
-        result = { success: false, valid: false, message: 'Szerverhiba az ellenőrzés során.' };
-    }
-    return response.status(statusCode).json(result);
 });
 
 router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (request, response) => {
@@ -162,6 +124,16 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
         if (!isCurrentPasswordValid) {
             statusCode = 401;
             throw new Error('A jelenlegi jelszó hibás.');
+        }
+
+        if (hasPasswordChanged) {
+            const isSameAsOld = await bcrypt.compare(newPassword, currentAuthUser.password_hash);
+            if (isSameAsOld) {
+                statusCode = 400;
+                const sameError = new Error('Az új jelszó nem egyezhet meg a jelenlegivel.');
+                sameError.appCode = 'PASSWORD_SAME_AS_OLD';
+                throw sameError;
+            }
         }
 
         if (!hasUsernameChanged && !hasEmailChanged && !hasPasswordChanged) {
@@ -274,7 +246,11 @@ router.post('/profile/settings', profileUpdateLimiter, isAuthenticated, async (r
         console.error('Profile settings hiba:', error);
         if (statusCode === 200) statusCode = 500;
         if (error?.code === 'ER_DUP_ENTRY' || error.message?.includes('foglalt')) statusCode = 409;
-        payload = { success: false, message: error.message || 'Szerverhiba a profil beállítások mentése közben.' };
+        payload = {
+            success: false,
+            code: error?.appCode,
+            message: error.message || 'Szerverhiba a profil beállítások mentése közben.'
+        };
     }
     return response.status(statusCode).json(payload);
 });
@@ -326,7 +302,20 @@ router.post('/profile/delete', profileDeleteLimiter, isAuthenticated, async (req
             message: 'Profil törlése.'
         });
 
-        const deleteResult = await sql.deleteUserProfileWithTransaction(request.session.userId);
+        const deletedUserId = request.session.userId;
+        const deleteResult = await sql.deleteUserProfileWithTransaction(deletedUserId);
+
+        // A tobbi eszkoz (ahol szinten be van jelentkezve a user) is kapja meg az event-et
+        // -> redirect deleted.html-re, hogy ne maradjon stale session.
+        try {
+            const socketHub = request.app?.locals?.socketHub;
+            if (socketHub && typeof socketHub.notifyUserDeleted === 'function') {
+                await socketHub.notifyUserDeleted(deletedUserId);
+            }
+        } catch (kickErr) {
+            console.warn('self-delete: socket notify hiba:', kickErr.message);
+        }
+
         await destroySessionAsync(request, 'Session törlési hiba profil törlés után.');
         response.clearCookie('connect.sid');
 
@@ -406,35 +395,6 @@ router.post('/profile/upload-image', profileImageUploadLimiter, isAuthenticated,
     });
 });
 
-// Bejelentkezett user per-mode ELO értékei — minden mode-ra a megfelelő oszlopból.
-router.get('/profile/elo-by-mode', isAuthenticated, async (request, response) => {
-    try {
-        const { getPool } = require('../../sql/database.js');
-        const pool = getPool();
-        const userId = request.session.userId;
-
-        const [rows] = await pool.execute(
-            `SELECT elo, elo_mattmester, elo_classical, elo_blitz FROM users WHERE id = ?`,
-            [userId]
-        );
-        if (!rows[0]) {
-            return response.status(404).json({ success: false, message: 'Felhasználó nem található.' });
-        }
-        const r = rows[0];
-        return response.status(200).json({
-            success: true,
-            elo: {
-                mattmester: r.elo_mattmester ?? r.elo,
-                classical:  r.elo_classical  ?? r.elo,
-                blitz:      r.elo_blitz      ?? r.elo
-            }
-        });
-    } catch (error) {
-        console.error('[profile/elo-by-mode] hiba:', error);
-        return response.status(500).json({ success: false, message: 'Szerverhiba az ELO lekérdezésekor.' });
-    }
-});
-
 // Bejelentkezett user képesség-használati statisztikája — ability_log + abilities join.
 // Visszaad: [{ key, displayName, count }] minden lehetséges ability-re (count=0 ha sosem használt).
 router.get('/profile/abilities-usage', isAuthenticated, async (request, response) => {
@@ -463,7 +423,8 @@ router.get('/profile/abilities-usage', isAuthenticated, async (request, response
             swap:       { name: 'Bábucsere',       icon: 'shuffle' },
             board_hide: { name: 'Tábla eltakar',   icon: 'eye-off' },
             shield:     { name: 'Pajzs',           icon: 'shield' },
-            time_steal: { name: 'Időlopás',        icon: 'hourglass' }
+            lefokozas:  { name: 'Lefokozás',       icon: 'arrow-down-circle' }
+            
         };
 
         const items = rows.map(r => ({

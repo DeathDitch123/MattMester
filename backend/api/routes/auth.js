@@ -1,6 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
-const sql = require('../../sql/sql_funtions.js');
+const sql = require('../../sql/sql_functions.js');
 const { usernameRegex, emailRegex, passwordRegex } = require('../validation.js');
 const {
     authLoginLimiter,
@@ -10,7 +10,8 @@ const {
     passwordResetRequestLimiter,
     passwordResetTokenLimiter
 } = require('../middleware/rateLimiter.js');
-const { isAuthenticated } = require('../funtions.js');
+const { isAuthenticated } = require('../functions.js');
+const { setSessionFromUser } = require('../middleware/auth.js');
 const {
     generateVerificationToken,
     generatePasswordResetToken,
@@ -25,8 +26,27 @@ const {
     saveSessionAsync,
     destroySessionAsync
 } = require('./_shared.js');
+const networkClassifier = require('../admin/networkClassifier.js');
+const siteSettings = require('../../sql/modules/siteSettings.js');
 
 const router = express.Router();
+
+// Auth flow-ban (login / register / logout) frissitjuk az adott sessionID-vel
+// nyitott socketek context-et, hogy az admin panel azonnal online-ra valtsa a
+// usert. Backend-driven sync: nem fugg attol, hogy a frontend emit-el-e
+// `socket:sync`-et — a sessionMiddleware csak handshake-kor olvas, ezert egy
+// mar nyitott anonim socket cached session-jenek frissitese itt tortenik.
+function applySocketSessionUpdate(request, sessionData) {
+    try {
+        const socketHub = request.app?.locals?.socketHub;
+        if (!socketHub || typeof socketHub.applySessionUpdate !== 'function') return;
+        const sessionId = request.sessionID || null;
+        if (!sessionId) return;
+        socketHub.applySessionUpdate(sessionId, sessionData || {});
+    } catch (error) {
+        console.warn('applySocketSessionUpdate hiba:', error.message);
+    }
+}
 
 function buildMailVerifiedRedirectPath(payloadInput = {}) {
     const payload = payloadInput && typeof payloadInput === 'object' ? payloadInput : {};
@@ -74,19 +94,50 @@ router.post('/login', authLoginLimiter, async (request, response) => {
                 success: false,
                 message: 'Sikertelen bejelentkezési kísérlet (hibás jelszó).'
             });
+            // Live broadcast az admin Bejelentkezesek oldal feedjebe.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    const failedIp = getRequestIpAddress(request);
+                    const failedUa = request.headers['user-agent'] || null;
+                    adminSocketHub.broadcastAdmin('admin:security:login', {
+                        userId: user.id,
+                        username: user.username,
+                        eventType: 'login_failed',
+                        success: false,
+                        ip: failedIp,
+                        userAgent: failedUa,
+                        location: networkClassifier.classifyIp(failedIp),
+                        device: networkClassifier.parseUserAgent(failedUa),
+                        occurredAt: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('login_failed broadcast hiba:', broadcastErr.message);
+            }
             throw new Error('Hibás felhasználónév, emailcím vagy jelszó.');
         }
 
-        request.session.userId = user.id;
-        request.session.username = user.username;
-        request.session.role = user.role;
-        request.session.elo = user.elo;
-        request.session.elo_MM = user.elo_MM;
-        request.session.elo_bullet = user.elo_bullet;
-        request.session.profile_image = user.profile_image || '/profile_pictures/default.png';
-        request.session.profile_image_status = user.profile_image_status || 'default';
-        request.session.is_email_verified = !!user.is_email_verified;
-        request.session.cookie.maxAge = remember ? 1000 * 60 * 60 * 24 * 7 : null;
+        if (user.is_banned) {
+            statusCode = 403;
+            const banErr = new Error('A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: mattmester.support@gmail.com');
+            banErr.code = 'account_banned';
+            throw banErr;
+        }
+
+        // Soft-delete grace period: ha admin torleshez jelolte, blokkolt belepes 24 oraig.
+        // (A self-delete azonnali hard delete -> nem latja itt, mert a sor mar nincs.)
+        if (user.pending_deletion_until && new Date(user.pending_deletion_until) > new Date()) {
+            statusCode = 403;
+            const untilStr = new Date(user.pending_deletion_until).toLocaleString('hu-HU');
+            const delErr = new Error(`A fiókod admin által törlésre lett kijelölve (${untilStr} után véglegesen törlődik). Ha tévedésnek tartod, vedd fel a kapcsolatot: mattmester.support@gmail.com`);
+            delErr.code = 'account_pending_deletion';
+            throw delErr;
+        }
+
+        setSessionFromUser(request, user, {
+            cookieMaxAge: remember ? 1000 * 60 * 60 * 24 * 7 : null
+        });
 
         const ipAddress = getRequestIpAddress(request);
         const userAgent = request.headers['user-agent'] || 'Ismeretlen';
@@ -94,6 +145,27 @@ router.post('/login', authLoginLimiter, async (request, response) => {
         console.log(`User Agent: ${userAgent}`);
 
         await saveSessionAsync(request, 'Hiba a munkamenet mentésekor.');
+
+        // Mar nyitott socketek context-et a sessionID alapjan frissitjuk: a
+        // bejelentkezes utan az admin panel azonnal online-ra latja a usert,
+        // anelkul hogy a kliensnek socket reconnect-et / `socket:sync`-et kelljen
+        // emit-elnie.
+        applySocketSessionUpdate(request, {
+            userId: user.id,
+            username: user.username,
+            role: user.role,
+            profile_image: user.profile_image || '/profile_pictures/default.png',
+            profile_image_status: user.profile_image_status || 'default',
+            is_email_verified: !!user.is_email_verified
+        });
+
+        // Az utolso login IP-t bemashojuk a users tablaba — az auto IP-ban escalation
+        // rendszer ezt hasznalja, ha admin offline usert banol.
+        try {
+            await sql.setUserLastLoginIp(user.id, ipAddress);
+        } catch (ipErr) {
+            console.warn('setUserLastLoginIp hiba (login):', ipErr.message);
+        }
 
         await logAuthenticatedAction(request, user.id, {
             eventType: 'login',
@@ -104,6 +176,26 @@ router.post('/login', authLoginLimiter, async (request, response) => {
             message: 'Sikeres bejelentkezés.',
             metadata: { remember: Boolean(remember) }
         });
+
+        // Live broadcast az admin Bejelentkezesek oldal feedjebe.
+        try {
+            const adminSocketHub = request.app?.locals?.adminSocketHub;
+            if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                adminSocketHub.broadcastAdmin('admin:security:login', {
+                    userId: user.id,
+                    username: user.username,
+                    eventType: 'login',
+                    success: true,
+                    ip: ipAddress,
+                    userAgent,
+                    location: networkClassifier.classifyIp(ipAddress),
+                    device: networkClassifier.parseUserAgent(userAgent),
+                    occurredAt: new Date().toISOString()
+                });
+            }
+        } catch (broadcastErr) {
+            console.warn('login broadcast hiba:', broadcastErr.message);
+        }
 
         payload = {
             success: true,
@@ -122,6 +214,7 @@ router.post('/login', authLoginLimiter, async (request, response) => {
         console.error('Login hiba:', error);
         if (statusCode === 200) statusCode = 500;
         payload.message = error.message;
+        if (error.code) payload.code = error.code;
     }
     return response.status(statusCode).json(payload);
 });
@@ -133,6 +226,8 @@ const logoutHandler = async (request, response) => {
     try {
         if (request.session?.userId) {
             const logoutUserId = request.session.userId;
+            // sessionID-t a destroy elott kapjuk el; utana mar nem letezik a request-en.
+            const previousSessionId = request.sessionID || null;
 
             await logAuthenticatedAction(request, logoutUserId, {
                 eventType: 'logout',
@@ -143,15 +238,50 @@ const logoutHandler = async (request, response) => {
                 message: 'Sikeres kijelentkezés.'
             });
 
+            // Explicit last_active bump: a users.last_active csak `ON UPDATE
+            // CURRENT_TIMESTAMP` szabaly miatt frissulne, az pedig nem trigger-el
+            // ha a sor nem valtozik. Igy a "Utolso aktivitas" admin oszlop a
+            // login-kori timestampen ragadt volna meg ("7 perce" stb. logout
+            // utan), pedig a user epp most lett offline. Beirjuk a NOW()-t.
+            try {
+                await sql.touchUserLastActive(logoutUserId);
+            } catch (touchErr) {
+                console.warn('logout last_active touch hiba:', touchErr.message);
+            }
+
             await destroySessionAsync(request, 'Sikertelen kijelentkezés.');
             response.clearCookie('connect.sid');
             console.log('Session sikeresen megsemmisítve.');
             payload.message = 'Sikeres kijelentkezés.';
+
+            // Mar nyitott socketek context-et anonim allapotra valtjuk, hogy az
+            // admin panel azonnal offline-ra valtsa a felhasznalot a kijelentkezes
+            // utan — anelkul hogy a kliensnek socket disconnect/reconnect-et
+            // kellene kezdemenyeznie.
+            try {
+                const socketHub = request.app?.locals?.socketHub;
+                if (previousSessionId && socketHub && typeof socketHub.applySessionUpdate === 'function') {
+                    socketHub.applySessionUpdate(previousSessionId, {
+                        userId: null,
+                        username: 'Vendég',
+                        role: 'guest',
+                        profile_image: null,
+                        profile_image_status: 'default',
+                        is_email_verified: false
+                    });
+                }
+            } catch (sockErr) {
+                console.warn('logout socket session sync hiba:', sockErr.message);
+            }
         }
     } catch (error) {
         console.error('Logout hiba:', error);
         statusCode = 500;
         payload = { success: false, message: error.message };
+    }
+    const isGet = request.method === 'GET';
+    if (isGet) {
+        return response.redirect('/');
     }
     return response.status(statusCode).json(payload);
 };
@@ -163,6 +293,18 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
     let statusCode = 200;
     let payload = { success: false, message: '' };
     try {
+        // Globális regisztráció-toggle: az admin panel Beállítások oldaláról kapcsolható ki.
+        const settings = await siteSettings.getSettings();
+        if (settings && settings.registrationEnabled === false) {
+            statusCode = 403;
+            payload = {
+                success: false,
+                code: 'REGISTRATION_DISABLED',
+                message: 'A regisztráció ideiglenesen le van tiltva. Kérjük próbálkozz később.'
+            };
+            return response.status(statusCode).json(payload);
+        }
+
         const { username, password, email } = request.body;
         if (!username || !password || !email) {
             statusCode = 400;
@@ -204,6 +346,15 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
             throw new Error('Az email cím már foglalt!');
         }
 
+        const emailBan = await sql.isEmailBanned(email);
+        if (emailBan) {
+            statusCode = 403;
+            const untilStr = emailBan.banned_until
+                ? `${new Date(emailBan.banned_until).toLocaleDateString('hu-HU')}-ig`
+                : 'véglegesen';
+            throw new Error(`Ezzel az email címmel jelenleg nem lehet új fiókot regisztrálni (${untilStr}).`);
+        }
+
         if (await sql.getUserByUsername(username)) {
             statusCode = 409;
             throw new Error('A felhasználónév már foglalt!');
@@ -212,16 +363,17 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
         const passwordHash = await bcrypt.hash(password, 10);
         const result = await sql.insertUser(username, passwordHash, email);
 
-        request.session.userId = result.insertId;
-        request.session.username = username;
-        request.session.role = 'player';
-        request.session.elo = 800;
-        request.session.elo_MM = 800;
-        request.session.elo_bullet = 800;
-        request.session.profile_image = '/profile_pictures/default.png';
-        request.session.profile_image_status = 'default';
-        request.session.is_email_verified = false;   // friss regisztráció — még nincs verify
-        request.session.cookie.maxAge = null;
+        // Friss regisztráció — még nincs email-verify; a setSessionFromUser
+        // is_email_verified=false-ra állítja a flag-et a defaults-ből.
+        setSessionFromUser(request, {
+            id: result.insertId,
+            username,
+            role: 'player',
+            elo: 800,
+            elo_MM: 800,
+            elo_bullet: 800,
+            is_email_verified: false
+        }, { cookieMaxAge: null });
 
         const ipAddress = getRequestIpAddress(request);
         const userAgent = request.headers['user-agent'] || 'Ismeretlen';
@@ -232,6 +384,18 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
         await saveSessionAsync(request, 'Sikertelen regisztráció.');
         console.log('Session sikeresen mentve a regisztráció után.');
 
+        // Backend-driven socket session sync: a regisztracio auto-loginol, ezert
+        // a mar nyitott (anonim) socket context-et frissitjuk az uj userId-vel,
+        // hogy az admin panel azonnal online-ra valtsa az uj felhasznalot.
+        applySocketSessionUpdate(request, {
+            userId: result.insertId,
+            username,
+            role: 'player',
+            profile_image: '/profile_pictures/default.png',
+            profile_image_status: 'default',
+            is_email_verified: false
+        });
+
         await logAuthenticatedAction(request, result.insertId, {
             eventType: 'register',
             eventCategory: 'auth',
@@ -240,6 +404,42 @@ router.post('/register', authRegisterLimiter, async (request, response) => {
             success: true,
             message: 'Sikeres regisztráció.'
         });
+
+        // A regisztracio auto-loginol (session.userId beallitva), ezert egy
+        // 'login' eventet is rogzitunk: igy a frissen regisztralt user megjelenik
+        // az admin Bejelentkezesi elozmenyek panelen is, nem csak a 'register'
+        // sor jon le. A listAdminLoginHistory event_type IN ('login','login_failed')
+        // szurot hasznal, igy 'register' nelkul nem latszana ott a be-belepes.
+        await logAuthenticatedAction(request, result.insertId, {
+            eventType: 'login',
+            eventCategory: 'auth',
+            severity: 'info',
+            source: 'backend',
+            success: true,
+            message: 'Automatikus bejelentkezés regisztráció után.',
+            metadata: { viaRegistration: true }
+        });
+
+        // Live broadcast az admin Bejelentkezesek oldal feedjebe: a register-utani
+        // auto-login is jelenjen meg azonnal a live feed-en.
+        try {
+            const adminSocketHub = request.app?.locals?.adminSocketHub;
+            if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                adminSocketHub.broadcastAdmin('admin:security:login', {
+                    userId: result.insertId,
+                    username,
+                    eventType: 'login',
+                    success: true,
+                    ip: ipAddress,
+                    userAgent,
+                    location: networkClassifier.classifyIp(ipAddress),
+                    device: networkClassifier.parseUserAgent(userAgent),
+                    occurredAt: new Date().toISOString()
+                });
+            }
+        } catch (broadcastErr) {
+            console.warn('register auto-login broadcast hiba:', broadcastErr.message);
+        }
 
         let verificationEmailSent = false;
         try {
@@ -319,17 +519,23 @@ router.get('/sessionInfo', async (request, response) => {
                 request.session.destroy(() => {
                     console.log('Session megsemmisítve, mert a hozzá tartozó felhasználó nem található.');
                 });
+            } else if (dbUser.is_banned || (dbUser.pending_deletion_until && new Date(dbUser.pending_deletion_until) > new Date())) {
+                // Banned VAGY admin-soft-deleted user: session destroy + clearCookie.
+                // A frontend loggedIn:false-ot lat -> homepage kijelentkezett UI-t mutat.
+                await new Promise((resolve) => {
+                    request.session.destroy((err) => {
+                        if (err) console.warn('sessionInfo: eviction destroy hiba:', err.message);
+                        resolve();
+                    });
+                });
+                response.clearCookie('connect.sid');
+                const reasonLabel = dbUser.is_banned ? 'banned' : 'pending_deletion';
+                console.log(`User (${dbUser.username}) session-je evictalva sessionInfo-n: ${reasonLabel}.`);
             } else {
                 // Csak a hasznalt auth mezoket frissitjuk, nem irjuk felul a teljes session objektumot.
-                request.session.userId = dbUser.id;
-                request.session.username = dbUser.username;
-                request.session.role = dbUser.role;
-                request.session.elo = dbUser.elo;
-                request.session.profile_image = dbUser.profile_image || '/profile_pictures/default.png';
-                request.session.profile_image_status = dbUser.profile_image_status || 'default';
                 // A verify flag-et is frissítjük, hogy a más tabon történt verifikáció
                 // a következő navigáción át megjelenjen ebben a session-ben is.
-                request.session.is_email_verified = !!dbUser.is_email_verified;
+                setSessionFromUser(request, dbUser);
 
                 result.loggedIn = true;
                 result.user = {
@@ -640,13 +846,7 @@ router.get('/auth/reset-password/verify', passwordResetTokenLimiter, async (requ
             throw new Error('A jelszó-visszaállító link lejárt. Kérj új emailt a bejelentkezési oldalon.');
         }
 
-        // Ne engedjük beállítani ugyanazt a jelszót újként.
-        const isSameAsOld = await bcrypt.compare(newPassword, user.password_hash);
-        if (isSameAsOld) {
-            statusCode = 400;
-            payload.code = 'PASSWORD_SAME_AS_OLD';
-            throw new Error('Az új jelszó nem egyezhet meg a régivel.');
-        }
+        // (A jelszó-azonosság ellenőrzését a POST végponton végezzük el, mert ott érkezik az új jelszó.)
 
         payload = {
             success: true,
@@ -730,6 +930,14 @@ router.post('/auth/reset-password', passwordResetTokenLimiter, async (request, r
             });
             payload.code = 'TOKEN_EXPIRED';
             throw new Error('A jelszó-visszaállító link lejárt. Kérj új emailt a bejelentkezési oldalon.');
+        }
+
+        // Ellenőrizzük, hogy az új jelszó nem egyezik-e meg a jelenleg tárolt jelszóval.
+        const isSameAsOld = await bcrypt.compare(newPassword, user.password_hash);
+        if (isSameAsOld) {
+            statusCode = 400;
+            payload.code = 'PASSWORD_SAME_AS_OLD';
+            throw new Error('Az új jelszó nem egyezhet meg a régivel.');
         }
 
         const passwordHash = await bcrypt.hash(newPassword, 10);

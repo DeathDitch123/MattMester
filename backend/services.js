@@ -1,7 +1,7 @@
 // --HearthBeat--
 // Ez a fájl a Socket.io kapcsolat szívverés szerű adatküldésére kezelésére szolgál (SSE csak socket-al), hogy a szerver tudja, mely kliensek aktívak és elérhetőek stb...
 const { getPool } = require('./sql/database');
-const sql = require('./sql/sql_funtions.js');
+const sql = require('./sql/sql_functions.js');
 
 let currentStats = {
     public: {
@@ -121,28 +121,6 @@ const services = {
         }
     },
 
-    handleConnection(socket, io) {
-        console.log('Új Socket.io kapcsolat létrejött:', socket.id);
-
-        socket.join('general-room'); //?Mindenki csatlakozik egy "general" nevű szobához, ahol általános értesítéseket lehet küldeni
-
-        if (socket.request.session && socket.request.session.role === 'admin') {
-            console.log('Admin felhasználó csatlakozott:', socket.id);
-            socket.join('admin-room'); //?Adminok egy külön szobába kerülnek, ahol admin-specifikus értesítéseket lehet küldeni
-        }
-
-        socket.emit('stats:public', currentStats.public);
-        if (socket.request.session && socket.request.session.role === 'admin') {
-            socket.emit('stats:admin', currentStats.admin);
-        }
-
-        socket.on('disconnect', () => {
-            console.log('Socket.io kapcsolat megszakadt:', socket.id);
-            this.refreshStats(io); //?Frissítsük a statisztikákat, ha valaki kilép
-            //itt tudjuk majd kezelni ha valaki kilép a játékbol vagy mittomén, hogy frissítsük a statisztikákat stb...
-
-        });
-    },
     handleHeartbeat(io) {
         setInterval(() => {
             this.refreshStats(io);

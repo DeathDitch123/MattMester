@@ -7,8 +7,9 @@ CREATE TABLE
         email VARCHAR(100) UNIQUE,
         profile_image VARCHAR(255) DEFAULT '/profile_pictures/default.png',
         elo INT DEFAULT 800,
-        elo_MM INT DEFAULT 800,
-        elo_bullet INT DEFAULT 800,
+        elo_mattmester INT DEFAULT 800,
+        elo_classical INT DEFAULT 800,
+        elo_blitz INT DEFAULT 800,
         role ENUM ('player', 'admin') DEFAULT 'player',
         is_super_admin BOOLEAN NOT NULL DEFAULT FALSE,
         is_banned BOOLEAN DEFAULT FALSE,
@@ -22,20 +23,24 @@ CREATE TABLE
         email_verified_at TIMESTAMP NULL,
         reset_password_token VARCHAR(255),
         reset_token_expires TIMESTAMP NULL,
+        chat_report_mute_until TIMESTAMP NULL DEFAULT NULL,
+        last_login_ip VARCHAR(45) NULL DEFAULT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         INDEX idx_users_email_verification_token_hash (email_verification_token_hash)
     );
 
 -- Admin felhasználó beszúrása (ha még nem létezik) - a jelszó "chu+)2_23iIa6sou&>#o79247r9Xbsibv%" (bcrypt hash: $2b$10$haOYyFwigR.niAHSKk.F2.yYfWF27v0RyJYofUDWN981AFdNDollq)
 -- Admin user mindig is_super_admin=TRUE jelöléssel jön létre - ő az egyetlen super-admin a seedben.
+-- Contanct email: mattmester.support@gmail.com | jelszó: j?q&u5.OmV0QEa)KBpH.);8C9l)
 INSERT INTO
     users (
         username,
         password_hash,
         email,
         elo,
-        elo_MM,
-        elo_bullet,
+        elo_mattmester,
+        elo_classical,
+        elo_blitz,
         role,
         is_super_admin,
         is_email_verified,
@@ -304,6 +309,116 @@ CREATE TABLE
         FOREIGN KEY (sender_id) REFERENCES users (id) ON DELETE CASCADE,
         INDEX idx_chat_messages_conversation_sent_at (conversation_id, sent_at),
         INDEX idx_chat_messages_sender (sender_id)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS chat_message_reports (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        message_id INT NOT NULL,
+        reporter_user_id INT NOT NULL,
+        reason VARCHAR(500) NULL,
+        status ENUM ('pending', 'allowed', 'deleted', 'dismissed') NOT NULL DEFAULT 'pending',
+        reviewed_by INT NULL,
+        reviewed_at TIMESTAMP NULL DEFAULT NULL,
+        review_note VARCHAR(1000) NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_report_per_user_per_message (message_id, reporter_user_id),
+        FOREIGN KEY (message_id) REFERENCES chat_messages (id) ON DELETE CASCADE,
+        FOREIGN KEY (reporter_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by) REFERENCES users (id) ON DELETE SET NULL,
+        INDEX idx_chat_message_reports_status (status, created_at),
+        INDEX idx_chat_message_reports_message (message_id),
+        INDEX idx_chat_message_reports_reporter (reporter_user_id)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS chat_blocked_words_dynamic (
+        word VARCHAR(255) NOT NULL PRIMARY KEY,
+        added_by_admin_id INT NULL,
+        source_message_id INT NULL,
+        added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (added_by_admin_id) REFERENCES users (id) ON DELETE SET NULL,
+        FOREIGN KEY (source_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL,
+        INDEX idx_chat_blocked_words_added_at (added_at)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS chat_profanity_strikes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        message_id INT NULL,
+        source ENUM ('auto', 'admin_delete') NOT NULL,
+        ban_type ENUM ('temp_1d', 'temp_10d', 'perma', 'none') NOT NULL DEFAULT 'none',
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_message (message_id),
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_chat_profanity_strikes_user (user_id, recorded_at)
+    );
+
+CREATE TABLE
+    IF NOT EXISTS account_ban_events (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        ip_address VARCHAR(45) NULL,
+        source ENUM ('profanity_strike', 'admin_manual', 'admin_critical', 'other') NOT NULL DEFAULT 'other',
+        reason VARCHAR(500) NULL,
+        triggered_ip_block BOOLEAN NOT NULL DEFAULT FALSE,
+        ip_block_type ENUM ('temp_1d', 'perma', 'none') NOT NULL DEFAULT 'none',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_account_ban_events_ip (ip_address, created_at),
+        INDEX idx_account_ban_events_user (user_id, created_at)
+    );
+
+-- User-vs-user bejelentesek (player-actions). NEM osszekeverendo a
+-- chat_message_reports-tel: az csak chat-uzenetekre vonatkozik.
+-- Itt egy felhasznalo bejelenthet egy masik felhasznalot pl. csalas /
+-- toxikussag / spam / zaklatas / fairplay-megsertes / egyeb miatt.
+-- game_id: opcionalis - egy konkret meccshez kapcsolt bejelentes (cheating /
+-- unfair_play eseten), igy az admin a PGN + lepeslista alapjan tud
+-- dontest hozni. ON DELETE SET NULL: ha a meccs torlodne, a report megmarad.
+-- FONTOS: false report eseten NEM bunteti a bejelentot (chat-tel ellentetben),
+-- mert egy player-magaviselet utolagosan nehezen ellenorizheto.
+CREATE TABLE
+    IF NOT EXISTS user_reports (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        reporter_user_id INT NOT NULL,
+        reported_user_id INT NOT NULL,
+        game_id INT NULL,
+        category ENUM ('cheating', 'toxicity', 'spam', 'harassment', 'unfair_play', 'other') NOT NULL DEFAULT 'other',
+        message VARCHAR(1000) NULL,
+        status ENUM ('open', 'under_review', 'closed') NOT NULL DEFAULT 'open',
+        resolution ENUM ('none', 'dismissed', 'warned', 'banned') NOT NULL DEFAULT 'none',
+        admin_note VARCHAR(1000) NULL,
+        reviewed_by_user_id INT NULL,
+        reviewed_at TIMESTAMP NULL DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (reporter_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (reported_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (reviewed_by_user_id) REFERENCES users (id) ON DELETE SET NULL,
+        FOREIGN KEY (game_id) REFERENCES games (id) ON DELETE SET NULL,
+        INDEX idx_user_reports_status_created (status, created_at),
+        INDEX idx_user_reports_reported (reported_user_id, created_at),
+        INDEX idx_user_reports_reporter (reporter_user_id, created_at),
+        INDEX idx_user_reports_game (game_id)
+    );
+
+-- "Recent opponents" tabla - Rocket League stilusu lista a felhasznalo
+-- legutobbi ellenfeleirol. Egy par (user_id, opponent_user_id) UNIQUE,
+-- utolso meccs idopontjat tartjuk + meccsek szamat. A frontend listaba
+-- utolso meccs szerint csokkeno sorrendben rendez, max 25-ot mutat.
+CREATE TABLE
+    IF NOT EXISTS recent_opponents (
+        id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        opponent_user_id INT NOT NULL,
+        last_played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        match_count INT NOT NULL DEFAULT 1,
+        last_game_id INT NULL,
+        UNIQUE KEY ux_recent_opponents_pair (user_id, opponent_user_id),
+        FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+        FOREIGN KEY (opponent_user_id) REFERENCES users (id) ON DELETE CASCADE,
+        INDEX idx_recent_opponents_user_time (user_id, last_played_at)
     );
 
 -- Universal notifications table (single source of truth for badge + history)
@@ -651,5 +766,57 @@ JOIN (
 ) AS random_elo ON random_elo.id = u.id
 SET
     u.elo = random_elo.base_elo,
-    u.elo_MM = random_elo.new_elo_mm,
-    u.elo_bullet = random_elo.new_elo_bullet;
+    u.elo_classical = random_elo.new_elo_mm,
+    u.elo_blitz = random_elo.new_elo_bullet;
+
+-- ============================================================================
+-- Admin oldalak: site_settings + test_runs
+-- ============================================================================
+
+-- Site-wide beallitasok (egysoros tabla, id=1).
+-- Az admin panel "Beallitasok" oldala olvassa/irja. A maintenance_mode es a
+-- registration_enabled toggle elesben hat — middleware-ek olvassak in-memory
+-- cache-bol (TTL=30s).
+CREATE TABLE
+    IF NOT EXISTS site_settings (
+        id TINYINT PRIMARY KEY DEFAULT 1,
+        site_name VARCHAR(100) NOT NULL DEFAULT 'MattMester',
+        support_email VARCHAR(150) NOT NULL DEFAULT 'mattmester.support@gmail.com',
+        default_language ENUM ('hu', 'en') NOT NULL DEFAULT 'hu',
+        timezone VARCHAR(64) NOT NULL DEFAULT 'Europe/Budapest',
+        registration_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        maintenance_mode BOOLEAN NOT NULL DEFAULT FALSE,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        updated_by INT NULL,
+        CHECK (id = 1),
+        FOREIGN KEY (updated_by) REFERENCES users (id) ON DELETE SET NULL
+    );
+
+INSERT IGNORE INTO site_settings (id) VALUES (1);
+
+-- Tesztfutasok elozmenyei. A backend testRunnerService irja, az admin panel
+-- "Tesztek" oldal listazza (utolso N runt). status='running' alatt mutex
+-- biztositja, hogy ne legyen ket egyideju run.
+CREATE TABLE
+    IF NOT EXISTS test_runs (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        triggered_by INT NULL,
+        started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        finished_at TIMESTAMP NULL,
+        status ENUM (
+            'running',
+            'passed',
+            'failed',
+            'timeout',
+            'error'
+        ) NOT NULL DEFAULT 'running',
+        total INT DEFAULT 0,
+        passed INT DEFAULT 0,
+        failed INT DEFAULT 0,
+        skipped INT DEFAULT 0,
+        duration_ms INT NULL,
+        raw_summary JSON NULL,
+        stderr_tail TEXT NULL,
+        FOREIGN KEY (triggered_by) REFERENCES users (id) ON DELETE SET NULL,
+        INDEX idx_test_runs_started (started_at)
+    );

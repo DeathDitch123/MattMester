@@ -105,18 +105,12 @@ describe('requireReasonOnMutate', () => {
         expect(req.adminReason).toBe('1234567890');
     });
 
-    test('POST + 29 char reason kritikus -> 400 too short', () => {
-        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_BAN);
-        const req = { method: 'POST', body: { reason: 'a'.repeat(29) } };
-        const res = makeRes();
-        mw(req, res, () => {});
-        expect(res.statusCode).toBe(400);
-        expect(res.body.code).toBe('ADMIN_REASON_TOO_SHORT');
-    });
-
-    test('POST + 30 char reason kritikus -> next', () => {
-        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_BAN);
-        const req = { method: 'POST', body: { reason: 'a'.repeat(30) } };
+    // USERS_BAN szandekosan NEM kritikus (10 char min). USERS_DELETE OPCIONALIS reason
+    // (jelszo-ellenorzes elegendo vedelem). A "kritikus path" most csak severity-t
+    // befolyasol, a char-minimum mindenutt 10. ADMIN_GRANT-tal teszteljuk a kritikust.
+    test('POST + 10 char reason kritikus action -> next, isCritical=true', () => {
+        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.ADMIN_GRANT);
+        const req = { method: 'POST', body: { reason: '1234567890' } };
         const res = makeRes();
         let nextCalled = false;
         mw(req, res, () => { nextCalled = true; });
@@ -124,13 +118,43 @@ describe('requireReasonOnMutate', () => {
         expect(req.adminIsCritical).toBe(true);
     });
 
+    test('POST + 9 char reason kritikus -> 400 too short', () => {
+        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.ADMIN_GRANT);
+        const req = { method: 'POST', body: { reason: 'a'.repeat(9) } };
+        const res = makeRes();
+        mw(req, res, () => {});
+        expect(res.statusCode).toBe(400);
+        expect(res.body.code).toBe('ADMIN_REASON_TOO_SHORT');
+    });
+
+    // OPTIONAL_REASON_ACTIONS: ures reason is rendben, default placeholder kerul a logba.
+    test('POST + ures reason opcionalis action (USERS_DELETE) -> next', () => {
+        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.USERS_DELETE);
+        const req = { method: 'POST', body: {} };
+        const res = makeRes();
+        let nextCalled = false;
+        mw(req, res, () => { nextCalled = true; });
+        expect(nextCalled).toBe(true);
+        expect(req.adminReason).toContain('opcionalis reason mellozve');
+    });
+
+    test('POST + 1 char reason opcionalis action (CHAT_DELETE) -> next', () => {
+        const mw = requireReasonOnMutate(ADMIN_PERMISSIONS.CHAT_DELETE_MESSAGE);
+        const req = { method: 'POST', body: { reason: 'x' } };
+        const res = makeRes();
+        let nextCalled = false;
+        mw(req, res, () => { nextCalled = true; });
+        expect(nextCalled).toBe(true);
+        expect(req.adminReason).toBe('x');
+    });
+
     test('actionResolver fuggveny meghivasa', () => {
-        const resolver = jest.fn(() => ADMIN_PERMISSIONS.USERS_DELETE);
+        const resolver = jest.fn(() => ADMIN_PERMISSIONS.ADMIN_GRANT);
         const mw = requireReasonOnMutate(resolver);
-        const req = { method: 'POST', body: { reason: 'a'.repeat(30) } };
+        const req = { method: 'POST', body: { reason: 'a'.repeat(10) } };
         const res = makeRes();
         mw(req, res, () => {});
         expect(resolver).toHaveBeenCalled();
-        expect(req.adminAction).toBe(ADMIN_PERMISSIONS.USERS_DELETE);
+        expect(req.adminAction).toBe(ADMIN_PERMISSIONS.ADMIN_GRANT);
     });
 });

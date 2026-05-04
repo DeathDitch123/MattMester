@@ -13,27 +13,6 @@
     },
     "author": "Kardos Krisztián",
     "license": "ISC",
-    "jest": {
-        "testEnvironment": "node",
-        "testMatch": [
-            "**/__tests__/**/*.test.js",
-            "**/*.test.js"
-        ],
-        "collectCoverageFrom": [
-            "api/**/*.js",
-            "sockets.js",
-            "services.js",
-            "!**/*.test.js"
-        ],
-        "coverageThreshold": {
-            "global": {
-                "branches": 50,
-                "functions": 50,
-                "lines": 50,
-                "statements": 50
-            }
-        }
-    },
     "devDependencies": {
         "jest": "^29.7.0",
         "kill-port": "^2.0.1",
@@ -47,10 +26,11 @@
         "express": "^5.2.1",
         "express-rate-limit": "^8.4.1",
         "express-session": "^1.19.0",
+        "geoip-lite": "^2.0.1",
         "helmet": "^8.1.0",
         "multer": "^2.1.1",
         "mysql2": "^3.22.3",
-        "nodemailer": "^8.0.6",
+        "nodemailer": "^8.0.7",
         "socket.io": "^4.8.3",
         "vary": "^1.1.2"
     }

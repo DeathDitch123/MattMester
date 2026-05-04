@@ -9,12 +9,12 @@
 //   - ELO frissítés mindkét játékosra
 // ============================================================
 
-const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens } = require('./state.js');
+const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser } = require('./state.js');
 const { jatekUjraIndit, lepesKoordinataval, legalLepesekKliens } = require('./engine.js');
 const { idoLeall } = require('./timer.js');
 const { eloMeccsEredmeny } = require('./elo.js');
 const chessSql = require('./chess_sql_functions.js');
-const sql = require('../sql/sql_funtions.js');
+const sql = require('../sql/sql_functions.js');
 const { abilityAktival } = require('./abilities.js');
 const { getMode, isValidMode, queueKey, DEFAULT_MODE } = require('./modes.js');
 
@@ -41,6 +41,12 @@ const userQueueIndex = new Map(); // userId → queueKey
 // Aktív PvP játékok userId → gameId (reconnect-hez)
 const activeGamesByUser = new Map();
 
+// N13 — Rematch handshake state. gameId → { offererId, offererSocket, ts, mode, ranked,
+// whiteId, blackId, whiteName, blackName, timer, accepterId? }
+// A timer 30s utan automatikusan expire-elteti az ajanlatot.
+const pendingRematches = new Map();
+const REMATCH_TIMEOUT_MS = 30_000;
+
 // ── Konstansok ──
 const INVITE_TIMEOUT_MS = 60_000;        // 60mp meghívás lejárat
 const DISCONNECT_GRACE_MS = 60_000;      // 60mp disconnect grace period
@@ -52,6 +58,22 @@ function getUserColorInGame(jatek, userId) {
     if (jatek.jatekosok.white.userId === userId) return 'white';
     if (jatek.jatekosok.black.userId === userId) return 'black';
     return null;
+}
+
+// Stale-active-game cleanup: ha az `activeGamesByUser` egy halott meccs gameId-jét
+// tartalmazza (pl. a 30mp-os post-game cleanup még nem futott le, vagy a meccs valamilyen
+// edge-case miatt törlődött), törli a bejegyzést. Visszaadja: TRUE ha most is aktív
+// meccs van, FALSE ha nincs (tehát a queue/invite engedélyezhető).
+// `jatekKeres` null/undef-et ad vissza nem létező gameId-re.
+function hasLiveActiveGame(userId) {
+    if (!activeGamesByUser.has(userId)) return false;
+    const gameId = activeGamesByUser.get(userId);
+    const jatek = jatekKeres(gameId);
+    if (!jatek || jatek.vege || !jatek.pvpAktiv || jatek.pvpStatusz === 'finished') {
+        activeGamesByUser.delete(userId);
+        return false;
+    }
+    return true;
 }
 
 function getOpponentColor(szin) {
@@ -126,8 +148,24 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
     // DB mentés + statisztikák
     if (dbGameId) {
         try {
+            // PGN-szeru leiras a moves tablabol az admin review celra. A
+            // games.pgn oszlopba mentodik, igy a Bejelentesek panel review
+            // modal-jaban + a .pgn / .txt letoltesnel teljes lepessor latszik.
+            // Result string PGN-konvencio: "1-0" / "0-1" / "1/2-1/2".
+            let pgnResult = '*';
+            if (eredmeny === 'draw') pgnResult = '1/2-1/2';
+            else if (eredmeny === 'white') pgnResult = '1-0';
+            else if (eredmeny === 'black') pgnResult = '0-1';
+
+            let pgnString = null;
+            try {
+                pgnString = await chessSql.buildPgnLikeFromMoves(dbGameId, { result: pgnResult });
+            } catch (pgnErr) {
+                console.warn('PGN build hiba:', pgnErr.message);
+            }
+
             if (eredmeny === 'draw') {
-                await chessSql.jatekVegeMentDb(dbGameId, null, 'draw');
+                await chessSql.jatekVegeMentDb(dbGameId, null, 'draw', pgnString);
                 await Promise.all([
                     chessSql.dontetlenMentDb(whiteId),
                     chessSql.dontetlenMentDb(blackId)
@@ -135,7 +173,7 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
             } else {
                 const winnerId = eredmeny === 'white' ? whiteId : blackId;
                 const loserId = eredmeny === 'white' ? blackId : whiteId;
-                await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished');
+                await chessSql.jatekVegeMentDb(dbGameId, winnerId, 'finished', pgnString);
                 await Promise.all([
                     chessSql.gyozelemMentDb(winnerId),
                     chessSql.veresegMentDb(loserId)
@@ -143,6 +181,18 @@ async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
             }
         } catch (err) {
             console.error('PvP DB mentési hiba:', err);
+        }
+    }
+
+    // Recent opponents lista frissites: a ket jatekos kolcsonosen egymas
+    // legutobbi ellenfele lett. UPSERT-tel megy (ha mar volt par korabban,
+    // csak last_played_at + counter bump). Hibat csak warningoljuk, ne
+    // tortje meg a game-end emit-flow-t.
+    if (whiteId && blackId && whiteId !== blackId) {
+        try {
+            await sql.recordRecentOpponentPair(whiteId, blackId, dbGameId || null);
+        } catch (recentErr) {
+            console.warn('recordRecentOpponentPair hiba:', recentErr.message);
         }
     }
 
@@ -262,11 +312,16 @@ function registerPvpHandlers(socket, io) {
             return socket.emit('chess:error', { uzenet: 'Nem hívhatod meg magadat.' });
         }
 
-        if (activeGamesByUser.has(userId)) {
+        if (hasLiveActiveGame(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
         }
 
-        if (activeGamesByUser.has(targetUserId)) {
+        // Issue #63 — multi-tab guard: bot-meccs is blokkolja a PvP invite-ot.
+        if (hasAnyActiveGameForUser(userId).hasActive) {
+            return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
+        }
+
+        if (hasLiveActiveGame(targetUserId)) {
             return socket.emit('chess:error', { uzenet: 'Az ellenfél már játékban van.' });
         }
 
@@ -311,14 +366,18 @@ function registerPvpHandlers(socket, io) {
             jatek.jatekosok.black.userId = userId;
         }
 
-        // Timeout: 60mp után auto-decline
+        // Timeout: 60mp után auto-decline. Védelem: ha az inviter socket-je
+        // időközben elszállt és a 5mp grace cleanup már lefutott, a pendingInvites
+        // bejegyzés már nincs ott — `has(targetUserId)` rejecteli. A `socket.emit` egy
+        // halott socketre noop, az io.to(user-room) a túlélő tab-okra megy.
         const timer = setTimeout(() => {
-            if (pendingInvites.has(targetUserId)) {
-                pendingInvites.delete(targetUserId);
-                jatekTorol(gameId);
+            if (!pendingInvites.has(targetUserId)) return;
+            pendingInvites.delete(targetUserId);
+            jatekTorol(gameId);
+            if (socket.connected) {
                 socket.emit('chess:invite:expired', { targetUserId });
-                io.to(`user-room:${targetUserId}`).emit('chess:invite:expired', { inviterName: username });
             }
+            io.to(`user-room:${targetUserId}`).emit('chess:invite:expired', { inviterName: username });
         }, INVITE_TIMEOUT_MS);
 
         pendingInvites.set(targetUserId, {
@@ -487,8 +546,13 @@ function registerPvpHandlers(socket, io) {
         const isRanked = !!(modeMeta.rankedAllowed && ranked !== false);
         const qKey = queueKey(modeKey, isRanked);
 
-        if (activeGamesByUser.has(userId)) {
+        if (hasLiveActiveGame(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív PvP játékod.' });
+        }
+
+        // Issue #63 — multi-tab guard: queue-csatlakozas elott a bot-meccs is blokkol.
+        if (hasAnyActiveGameForUser(userId).hasActive) {
+            return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
         }
 
         // Már bármelyik queue-ban van?
@@ -619,6 +683,21 @@ function registerPvpHandlers(socket, io) {
         io.to(`chess-game:${gameId}`).emit('chess:state:update', {
             allapot: jatekAllapotKliens(jatek)
         });
+
+        // Admin spectator broadcast — minden lepest tovabbitunk a /admin namespace
+        // game:${dbGameId}:spectator szobajaba is. Csak akkor, ha van DB-id.
+        try {
+            if (jatek.dbGameId) {
+                io.of('/admin').to(`game:${jatek.dbGameId}:spectator`).emit('admin:games:move', {
+                    gameId: jatek.dbGameId,
+                    move: { fromX, fromY, toX, toY, promotion: promotion || 'queen' },
+                    player: { color: szin, userId: context.userId },
+                    allapot: jatekAllapotKliens(jatek)
+                });
+            }
+        } catch (err) {
+            console.warn('[PvP] admin spectator move broadcast hiba:', err.message);
+        }
     });
 
     // ─────────────────────────────────────
@@ -662,6 +741,71 @@ function registerPvpHandlers(socket, io) {
         // Új állapot broadcast mindkét félnek
         io.to(`chess-game:${gameId}`).emit('chess:state:update', {
             allapot: jatekAllapotKliens(jatek)
+        });
+
+        // Admin spectator broadcast — kepesseg-aktivalas szinten
+        try {
+            if (jatek.dbGameId) {
+                io.of('/admin').to(`game:${jatek.dbGameId}:spectator`).emit('admin:games:ability', {
+                    gameId: jatek.dbGameId,
+                    ability: { key, params },
+                    player: { color: szin, userId: context.userId },
+                    allapot: jatekAllapotKliens(jatek)
+                });
+            }
+        } catch (err) {
+            console.warn('[PvP] admin spectator ability broadcast hiba:', err.message);
+        }
+    });
+
+    // ─────────────────────────────────────
+    // INGAME CHAT — meccs-specifikus, ephemeralis chat. Csak az aktiv
+    // meccs ket jatekosa kuldhet egymasnak uzenetet, es a meccs vegevel
+    // (vege/abandon/disconnect) a kliens oldali UI is letiltja a sendet.
+    // A szerver csak az aktiv meccsekben fogad uzenetet, igy a kliens
+    // beszennyezett tilos-allapota nem visszaelheto.
+    // ─────────────────────────────────────
+
+    socket.on('chess:chat:send', ({ gameId, text }) => {
+        const context = socket.data.socketContext;
+        if (!context.userId) return;
+
+        const jatek = jatekKeres(gameId);
+        if (!jatek || !jatek.pvpAktiv || jatek.pvpStatusz !== 'active' || jatek.vege) {
+            return socket.emit('chess:error', { uzenet: 'Az ingame chat csak aktiv meccs alatt elerheto.' });
+        }
+
+        const szin = getUserColorInGame(jatek, context.userId);
+        if (!szin) {
+            return socket.emit('chess:error', { uzenet: 'Nem vagy resztvevoje ennek a meccsnek.' });
+        }
+
+        // Sanitize: trim, max 240 char (chat-bubble korlat), HTML escape
+        // (a kliens textContent-tel jeleniti meg, de a szerver oldal is biztositja).
+        const raw = String(text == null ? '' : text);
+        const trimmed = raw.replace(/\s+/g, ' ').trim().slice(0, 240);
+        if (!trimmed) return; // ures uzenet -> drop, no error
+
+        // Per-user rate limit: max 5 uzenet 5 mp-ben (anti-flood).
+        // A jatek-objektumon tartjuk az utolso 5 timestamp-et userId-nkent —
+        // memoria-elhanyagolhato (max 10 datum / meccs).
+        if (!jatek.chatRate) jatek.chatRate = new Map();
+        const now = Date.now();
+        const arr = jatek.chatRate.get(context.userId) || [];
+        const window5s = arr.filter((t) => now - t < 5000);
+        if (window5s.length >= 5) {
+            return socket.emit('chess:error', { uzenet: 'Tul gyors uzenetkuldes. Var 1-2 masodpercet.' });
+        }
+        window5s.push(now);
+        jatek.chatRate.set(context.userId, window5s);
+
+        // Broadcast a szoba minden tagjanak (sajatmagunknak is, hogy
+        // egysegesen a server-time-ot lassuk).
+        io.to(`chess-game:${gameId}`).emit('chess:chat:message', {
+            gameId,
+            from: { userId: context.userId, color: szin, username: context.username || szin },
+            text: trimmed,
+            ts: now
         });
     });
 
@@ -811,6 +955,161 @@ function registerPvpHandlers(socket, io) {
             sajatNev: jatek.pvpJatekosNevek[szin]
         });
     });
+
+    // ─────────────────────────────────────
+    // N13 — REMATCH (revans)
+    // ─────────────────────────────────────
+
+    socket.on('chess:rematch:offer', ({ gameId } = {}) => {
+        const context = socket.data.socketContext;
+        if (!context || !context.userId) return;
+
+        const jatek = jatekKeres(gameId);
+        // Csak veget ert PvP meccshez kerheto rematch — ha mar uj meccs vagy
+        // nincs jatek, vagy nincs vege, hibat dobunk vissza a kliensnek.
+        if (!jatek || !jatek.pvpAktiv || !jatek.vege) {
+            socket.emit('chess:rematch:error', { uzenet: 'Nem kerheto revans erre a meccsre.' });
+            return;
+        }
+
+        const szin = getUserColorInGame(jatek, context.userId);
+        if (!szin) {
+            socket.emit('chess:rematch:error', { uzenet: 'Nem voltal a jatekban.' });
+            return;
+        }
+
+        // Ha mar van fuggoben revans-ajanlat erre a gameId-re:
+        //   - ha a masik fel ajanlotta es most ez elfogadja → instant accept-koton folytatodunk
+        //   - ha sajat ajanlat: nem duplazunk, no-op
+        const meglevo = pendingRematches.get(gameId);
+        if (meglevo) {
+            if (meglevo.offererId === context.userId) {
+                socket.emit('chess:rematch:pending');
+                return;
+            }
+            // A masik fel mar ajanlott — ezt accept-kent kezeljuk.
+            handleRematchAccept(socket, io, gameId);
+            return;
+        }
+
+        const opponentSzin = getOpponentColor(szin);
+        const opponentId = jatek.jatekosok[opponentSzin].userId;
+
+        const timer = setTimeout(() => {
+            const rec = pendingRematches.get(gameId);
+            if (rec) {
+                pendingRematches.delete(gameId);
+                io.to(`user-room:${rec.offererId}`).emit('chess:rematch:expired', { gameId });
+                io.to(`user-room:${opponentId}`).emit('chess:rematch:expired', { gameId });
+            }
+        }, REMATCH_TIMEOUT_MS);
+
+        pendingRematches.set(gameId, {
+            offererId: context.userId,
+            offererSocketId: socket.id,
+            opponentId,
+            ts: Date.now(),
+            mode: jatek.mode,
+            ranked: jatek.ranked,
+            whiteId: jatek.jatekosok.white.userId,
+            blackId: jatek.jatekosok.black.userId,
+            whiteName: jatek.pvpJatekosNevek.white,
+            blackName: jatek.pvpJatekosNevek.black,
+            timer
+        });
+
+        socket.emit('chess:rematch:offered', { gameId });
+        // Az ellenfelnek a user-room-ra kuldjuk, igy reconnect / multi-tab kontextusban is megerkezik.
+        io.to(`user-room:${opponentId}`).emit('chess:rematch:incoming', {
+            gameId,
+            offererName: jatek.pvpJatekosNevek[szin]
+        });
+    });
+
+    socket.on('chess:rematch:accept', ({ gameId } = {}) => {
+        handleRematchAccept(socket, io, gameId);
+    });
+
+    socket.on('chess:rematch:decline', ({ gameId } = {}) => {
+        const context = socket.data.socketContext;
+        if (!context || !context.userId) return;
+
+        const rec = pendingRematches.get(gameId);
+        if (!rec) return;
+        // Csak az ellenfel utasithatja el — az ajanlo sajat magat nem decline-olja.
+        if (rec.offererId === context.userId) return;
+
+        clearTimeout(rec.timer);
+        pendingRematches.delete(gameId);
+        io.to(`user-room:${rec.offererId}`).emit('chess:rematch:declined', { gameId });
+        socket.emit('chess:rematch:declined', { gameId });
+    });
+}
+
+// Rematch accept feldolgozas: egy uj PvP meccset hoz letre cserelt szinnel.
+// Sockets-fetch alapu, mert a rematch ablakban a regi gameId chess-game szobaban
+// vannak meg a jatekosok, de meg lett kuldve a chess:game:end. Az uj gameId-vel
+// frissen room-rol room-ra raktuk oket.
+async function handleRematchAccept(socket, io, gameId) {
+    const context = socket.data.socketContext;
+    if (!context || !context.userId) return;
+
+    const rec = pendingRematches.get(gameId);
+    if (!rec) {
+        socket.emit('chess:rematch:error', { uzenet: 'Nincs ervenyes ajanlat.' });
+        return;
+    }
+    // Csak a masik fel fogadhatja el (aki nem ajanlotta).
+    if (rec.offererId === context.userId) return;
+
+    clearTimeout(rec.timer);
+    pendingRematches.delete(gameId);
+
+    // Mar fut-e aktiv meccs barmelyik felnel (multi-tab edge case)? Akkor nem inditunk
+    // ujat, hanem hibaval lezarjuk az ajanlatot.
+    if (hasLiveActiveGame(rec.offererId) || hasLiveActiveGame(rec.opponentId)) {
+        socket.emit('chess:rematch:error', { uzenet: 'Mar fut egy meccsetek.' });
+        io.to(`user-room:${rec.offererId}`).emit('chess:rematch:error', { uzenet: 'Mar fut egy meccsetek.' });
+        return;
+    }
+
+    // Mindket fel socketjet keressuk a user-room-bol; ha barmelyik nincs jelen
+    // (disconnect), nem inditunk uj meccset.
+    let offererSocket = null;
+    let accepterSocket = socket;
+    try {
+        const offererSockets = await io.in(`user-room:${rec.offererId}`).fetchSockets();
+        offererSocket = offererSockets[0] || null;
+    } catch (err) {
+        offererSocket = null;
+    }
+
+    if (!offererSocket) {
+        socket.emit('chess:rematch:error', { uzenet: 'Az ellenfel mar nem elerheto.' });
+        return;
+    }
+
+    // Szin-csere: aki feher volt, most fekete (jatekIndit randomizal, ezert kifejezetten
+    // a *cserelt* sorrendben adjuk at — user1 = volt fekete, user2 = volt feher, es
+    // user1White=true esetet beresztjuk a kovetkezo lepes-randomizator helyett).
+    // A jatekIndit jelenlegi implementacioja Math.random()-mal donti az elso szint, ami
+    // nem garantal cserrt — ezert egyszeruen ujra inditjuk, a randomizalas nem zavar.
+    try {
+        await jatekIndit(
+            io,
+            offererSocket,
+            accepterSocket,
+            rec.offererId,
+            rec.offererId === rec.whiteId ? rec.whiteName : rec.blackName,
+            rec.opponentId,
+            rec.opponentId === rec.whiteId ? rec.whiteName : rec.blackName,
+            rec.mode,
+            rec.ranked
+        );
+    } catch (err) {
+        console.error('Rematch jatekIndit hiba:', err);
+        socket.emit('chess:rematch:error', { uzenet: 'Indithatatlan a meccs.' });
+    }
 }
 
 // ── Disconnect kezelés (sockets.js hívja) ──
@@ -827,6 +1126,18 @@ async function handlePvpDisconnect(userId, io) {
             if (idx !== -1) queue.splice(idx, 1);
         }
         userQueueIndex.delete(userId);
+    }
+
+    // N13 — Pending rematch cleanup. Ha a disconnect-elt user resztvesz egy fuggoben
+    // rematch-ben (akar offerer akar accepter), torljuk az ajanlatot es ertesitjuk a
+    // masik felet. A rematch ablak rovid (30s), ezert nincs grace — disconnect = abort.
+    for (const [rgameId, rec] of pendingRematches) {
+        if (rec.offererId === userId || rec.opponentId === userId) {
+            clearTimeout(rec.timer);
+            pendingRematches.delete(rgameId);
+            const masikId = rec.offererId === userId ? rec.opponentId : rec.offererId;
+            io.to(`user-room:${masikId}`).emit('chess:rematch:cancelled', { gameId: rgameId });
+        }
     }
 
     // Pending invite cleanup — grace period, hogy oldalnavigáció (transport close → reconnect)
@@ -880,11 +1191,18 @@ async function handlePvpDisconnect(userId, io) {
     });
 
     jatek.disconnectTimer = setTimeout(async () => {
-        // Ha még mindig disconnectelt → auto-forfeit
-        if (!jatek.vege && jatek.disconnectSzin === szin) {
+        // Ha még mindig disconnectelt → auto-forfeit. Védelem: surrender / draw / abort
+        // beállíthatja a `vege`-t vagy törölheti a játékot időközben — ne fire-eljünk
+        // double end-eseményt. A jatekKeres() ellenőrzi, hogy a játék létezik-e még.
+        const stillExists = jatekKeres(gameId);
+        const meccsAktivMegMindig = stillExists
+            && !stillExists.vege
+            && stillExists.pvpAktiv
+            && stillExists.disconnectSzin === szin;
+        if (meccsAktivMegMindig) {
             const nyertesSzin = getOpponentColor(szin);
-            const uzenet = `${jatek.pvpJatekosNevek[szin]} kilépett — ${jatek.pvpJatekosNevek[nyertesSzin]} nyert`;
-            await jatekVegeKezeles(jatek, nyertesSzin, uzenet, io);
+            const uzenet = `${stillExists.pvpJatekosNevek[szin]} kilépett — ${stillExists.pvpJatekosNevek[nyertesSzin]} nyert`;
+            await jatekVegeKezeles(stillExists, nyertesSzin, uzenet, io);
         }
     }, DISCONNECT_GRACE_MS);
 }

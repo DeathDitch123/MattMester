@@ -21,7 +21,7 @@ jest.mock('../chess/pvp.js', () => ({
     handlePvpDisconnect: jest.fn(() => Promise.resolve())
 }));
 
-jest.mock('../sql/sql_funtions.js', () => ({
+jest.mock('../sql/sql_functions.js', () => ({
     getUnreadNotificationCount: jest.fn(() => Promise.resolve(0)),
     getUnreadChatMessageTotal: jest.fn(() => Promise.resolve(0)),
     getPrivateConversationParticipantIds: jest.fn(() => Promise.resolve([])),
@@ -42,8 +42,7 @@ jest.mock('../services.js', () => {
         services: {
             getCurrentStats: () => ({ public: {}, admin: {} }),
             refreshStats: jest.fn(() => Promise.resolve()),
-            handleHeartbeat: jest.fn(),
-            handleConnection: jest.fn()
+            handleHeartbeat: jest.fn()
         },
         notificationService: {
             send: jest.fn(() => Promise.resolve({ saved: null, deliveredTo: [], errors: [] })),
@@ -55,12 +54,18 @@ jest.mock('../services.js', () => {
 });
 
 jest.mock('../api/chatUtils.js', () => ({
+    CHAT_CONFIG: {
+        RATE_LIMIT_MAX_MESSAGES: 5,
+        RATE_LIMIT_WINDOW_MS: 10 * 1000,
+        MAX_MESSAGE_LENGTH: 1000,
+        BLACKLIST_POLICY: 'soft_mask'
+    },
     validateChatRateLimitOrThrow: jest.fn(),
     writeChatSecurityAudit: jest.fn(() => Promise.resolve())
 }));
 
 const { createSocketHub, SOCKET_ROOMS } = require('../sockets.js');
-const sql = require('../sql/sql_funtions.js');
+const sql = require('../sql/sql_functions.js');
 
 // ─── Mock Socket.IO helpers ────────────────────────────────────────────────
 function createFakeSocket({ clientId = 'c1', tabId = 't1', userId = 0, role = 'player' } = {}) {

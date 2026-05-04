@@ -1,16 +1,18 @@
 const express = require('express');
-const sql = require('../../sql/sql_funtions.js');
-const { isAuthenticated, requireVerifiedEmail } = require('../funtions.js');
+const sql = require('../../sql/sql_functions.js');
+const { isAuthenticated, requireVerifiedEmail } = require('../functions.js');
 const { chatMessageLimiter, chatDirectOpenLimiter } = require('../middleware/rateLimiter.js');
-const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('../chatUtils.js');
+const { CHAT_CONFIG, validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('../chatUtils.js');
 const { parsePositiveInteger, getAuthenticatedUserIdOrThrow } = require('./_shared.js');
 const { notificationService } = require('../../services.js');
 
 const router = express.Router();
 
-const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
-const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
-const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'hard_block').trim().toLowerCase();
+// N14 (#37): a duplikalt CHAT_RATE_LIMIT_*/CHAT_BLACKLIST_POLICY konstansok atkoltozve
+// a backend/api/chatUtils.js CHAT_CONFIG-jaba — egyetlen forras-igazsag.
+const CHAT_RATE_LIMIT_MAX_MESSAGES = CHAT_CONFIG.RATE_LIMIT_MAX_MESSAGES;
+const CHAT_RATE_LIMIT_WINDOW_MS = CHAT_CONFIG.RATE_LIMIT_WINDOW_MS;
+const CHAT_BLACKLIST_POLICY = CHAT_CONFIG.BLACKLIST_POLICY;
 const chatRateLimitByUserId = new Map();
 
 function parseChatListLimit(value, fallback = 30, min = 1, max = 50) {
@@ -391,6 +393,79 @@ router.post('/chat/conversations/direct', chatDirectOpenLimiter, isAuthenticated
         payload.message = error.message || payload.message;
     }
 
+    return response.status(statusCode).json(payload);
+});
+
+// Felhasznaloi bejelentes egy chat uzenetrol — a chat moderalas listajaba ker.
+// Egy felhasznalo egy uzenetet csak egyszer jelenthet (UNIQUE constraint), de a duplikatum
+// nem hibakent jonn vissza, hanem 200-szal "duplicate=true" jelzessel, hogy a UI elegansan
+// kezelhesse ("mar bejelentetted").
+router.post('/chat/messages/:messageId/report', isAuthenticated, async (request, response) => {
+    let statusCode = 200;
+    let payload = { success: false, message: 'Szerverhiba a bejelentes mentese soran.' };
+    try {
+        const currentUserId = getAuthenticatedUserIdOrThrow(request);
+        const messageId = parsePositiveInteger(request.params?.messageId, null);
+        if (!messageId) {
+            throw new Error('Ervenytelen uzenet azonosito.');
+        }
+
+        const rawReason = typeof request.body?.reason === 'string' ? request.body.reason.trim() : '';
+        const reason = rawReason ? rawReason.slice(0, 500) : null;
+
+        const result = await sql.reportChatMessage(messageId, currentUserId, reason);
+
+        if (result.duplicate) {
+            payload = {
+                success: true,
+                duplicate: true,
+                message: 'Mar korabban bejelentetted ezt az uzenetet.'
+            };
+        } else {
+            payload = {
+                success: true,
+                duplicate: false,
+                message: 'Bejelentes rogzitve. Az adminisztratorok at fogjak nezni.'
+            };
+
+            // Real-time push az admin moderalas listajara: uj bejelentes erkezett.
+            try {
+                const adminSocketHub = request.app?.locals?.adminSocketHub;
+                if (adminSocketHub && typeof adminSocketHub.broadcastAdmin === 'function') {
+                    adminSocketHub.broadcastAdmin('admin:chat:flagged', {
+                        messageId,
+                        reportId: result.reportId,
+                        reporterUserId: currentUserId,
+                        kind: 'report',
+                        at: new Date().toISOString()
+                    });
+                }
+            } catch (broadcastErr) {
+                console.warn('chat report admin broadcast hiba:', broadcastErr.message);
+            }
+        }
+    } catch (error) {
+        statusCode = resolveStatusCodeByError(error, 500);
+        const messageLower = String(error?.message || '').toLowerCase();
+        if (error?.code === 'CHAT_REPORT_MUTED') {
+            statusCode = 403;
+            payload = {
+                success: false,
+                code: 'CHAT_REPORT_MUTED',
+                muteUntil: error.muteUntil || null,
+                message: error.message
+            };
+            return response.status(statusCode).json(payload);
+        }
+        if (messageLower.includes('nem talalhato') || messageLower.includes('nem található')) {
+            statusCode = 404;
+        } else if (messageLower.includes('sajat uzenet') || messageLower.includes('saját üzenet')) {
+            statusCode = 400;
+        } else if (messageLower.includes('resztvevoje') || messageLower.includes('résztvevője')) {
+            statusCode = 403;
+        }
+        payload.message = error.message || payload.message;
+    }
     return response.status(statusCode).json(payload);
 });
 

@@ -10,7 +10,7 @@ const { Server } = require('socket.io'); //?npm install socket.io
 const { initDatabase } = require('./sql/database');
 const { services, leaderboardService } = require('./services.js');
 const { createSocketHub } = require('./sockets.js');
-const sql = require('./sql/sql_funtions');
+const sql = require('./sql/sql_functions');
 
 const envPaths = [
     path.resolve(__dirname, '.env'),
@@ -69,6 +69,11 @@ const sessionMiddleware = session({
 //!Session beállítása:
 app.use(sessionMiddleware);
 io.engine.use(sessionMiddleware); //?Socket.io session kezelés
+
+// ipBlockGuard: hard IP-blokk middleware. A session middleware UTAN, a route-ok ELOTT.
+// Az ip_blocks tablat olvasva 60sec cache-szel; blokkolt IP -> 403.
+const { ipBlockGuard } = require('./api/middleware/ipBlockGuard.js');
+app.use(ipBlockGuard);
 
 //?CORS beállítása production-hez
 const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
@@ -169,9 +174,10 @@ app.set('trust proxy', 1); //?Middleware Proxy
 
 const socketHub = createSocketHub(io);
 app.locals.socketHub = socketHub;
+app.locals.sessionStore = sessionMiddleware.store;
 
 // Admin panel - /admin socket namespace + service binderek (ADMIN_PANEL.md F4)
-const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter, createAdminUserDisconnector } = require('./api/admin/socketNamespace.js');
+const { createAdminNamespace, createAdminBroadcaster, createAdminUserEmitter, createAdminUserDisconnector, createSpectatorBroadcaster } = require('./api/admin/socketNamespace.js');
 const adminAuditService = require('./api/admin/auditService.js');
 const adminAlertingService = require('./api/admin/alertingService.js');
 const adminNamespace = createAdminNamespace(io);
@@ -179,6 +185,7 @@ const adminSocketHub = {
     broadcastAdmin: createAdminBroadcaster(adminNamespace),
     emitToAdminUser: createAdminUserEmitter(adminNamespace),
     disconnectAllForAdminUser: createAdminUserDisconnector(adminNamespace),
+    broadcastSpectator: createSpectatorBroadcaster(adminNamespace),
     namespace: adminNamespace
 };
 app.locals.adminSocketHub = adminSocketHub;
@@ -213,6 +220,14 @@ app.get('/html/adminPanel.html', requireAdmin, (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/html/adminPanel.html'));
 });
 
+// Karbantartas mod globalis HTML guard: a static middleware ELOTT, hogy a `/`,
+// `/html/index.html`, `/html/profile.html` stb. requesteket is atiranyitsa a
+// maintenance.html-re. A /api/* utvonalakat es a static asset-eket szandekosan
+// atengedi (azokat az api-on beluli maintenanceGuard kezeli, illetve a
+// maintenance.html maga is kell a CSS/JS-ekhez).
+const { maintenanceHtmlGuard } = require('./api/middleware/maintenanceGuard.js');
+app.use(maintenanceHtmlGuard());
+
 //!Szerver futtatása
 app.use(express.static(path.join(__dirname, '../frontend'))); //?frontend mappa tartalmának betöltése az oldal működéséhez
 app.use('/profile_pictures', express.static(path.join(__dirname, 'profile_pictures')));
@@ -226,6 +241,13 @@ if (typeof endpoints.initChatRateLimiterCleanup === 'function') {
     endpoints.initChatRateLimiterCleanup();
     console.log('[Server] Chat Rate Limiter cleanup initialized');
 }
+
+// Issue #45 — CSRF védelem: Origin/Referer header check minden state-changing
+// /api/* request-en. A SameSite cookie melle ez a 2. védelmi reteg. Itt mountoljuk
+// (express.json() utan, az /api routes ELOTT) — igy az osszes API endpoint
+// vedelem alatt van, de a static-fajl-szerver es a HTML-laporeglesek (GET) nem.
+const { csrfGuard } = require('./api/middleware/csrfGuard.js');
+app.use('/api', csrfGuard);
 
 app.use('/api', endpoints);
 const chessEndpoints = require('./api/chess_api.js');
@@ -355,6 +377,50 @@ initDatabase()
         // Admin audit retention scheduler (ADMIN_PANEL.md F9)
         const { startRetentionScheduler } = require('./api/admin/retentionJob.js');
         startRetentionScheduler();
+
+        // Soft-delete purge scheduler (admin-trigger 24h grace utan hard-delete).
+        const { startSoftDeletePurgeScheduler } = require('./api/admin/softDeletePurgeJob.js');
+        startSoftDeletePurgeScheduler();
+
+        // Test runs cleanup: server restart utan az "lengyo" running statuszu
+        // sorokat eligazitja (orphan recovery).
+        try {
+            const testRuns = require('./sql/modules/testRuns.js');
+            await testRuns.cleanupOrphanedRunning();
+        } catch (err) {
+            console.warn('test_runs cleanup kihagyva:', err.message);
+        }
+
+        // Chess games cleanup: server crash / restart utan a `status='ongoing'`
+        // PvP meccsek a memoriaban elvesztek (jatek objektum), DB-ben ottragadnak.
+        // Lezarjuk oket `abandoned`-ra ELO loss NÉLKÜL — a jatekosok nem vesztettek
+        // sajat dontesukbol, igy se a winner_id-t, se az ELO-t nem allitjuk.
+        try {
+            const chessSql = require('./chess/chess_sql_functions.js');
+            await chessSql.startupCleanupOngoingGames();
+        } catch (err) {
+            console.warn('chess startup cleanup kihagyva:', err.message);
+        }
+
+        // Site settings cache eager warmup (a maintenance middleware sync-eljen
+        // hasznalja, igy az elso request elott legyen a cache feltoltve).
+        try {
+            const siteSettings = require('./sql/modules/siteSettings.js');
+            await siteSettings.getSettings();
+        } catch (err) {
+            console.warn('siteSettings warmup kihagyva:', err.message);
+        }
+
+        // Dinamikus chat-blocklist (admin altal hozzadott szavak) betoltese DB-bol
+        // a containsBlockedWord() in-memory cachebe. A cache az admin endpoint-bol
+        // (POST /admin/chat/blocklist/add) van bovitve.
+        try {
+            const sqlFns = require('./sql/sql_functions.js');
+            const loadedCount = await sqlFns.refreshDynamicBlockedWords();
+            console.log(`[Server] Dynamic chat blocklist loaded: ${loadedCount} word(s).`);
+        } catch (err) {
+            console.warn('[Server] Dynamic chat blocklist betoltesi hiba:', err.message);
+        }
         
         server.on('error', (error) => {
             if (error && error.code === 'EADDRINUSE') {

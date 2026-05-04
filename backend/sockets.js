@@ -1,12 +1,15 @@
 const { services, notificationService } = require('./services.js');
-const sql = require('./sql/sql_funtions.js');
+const sql = require('./sql/sql_functions.js');
 const { registerPvpHandlers, handlePvpDisconnect } = require('./chess/pvp.js');
-const { validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
+const { CHAT_CONFIG, validateChatRateLimitOrThrow: validateRateLimit, writeChatSecurityAudit } = require('./api/chatUtils.js');
+// N14 (#38): parsePositiveInteger atkoltozve a backend/utils/parse.js-be (egyetlen forras).
+const { parsePositiveInteger } = require('./utils/parse.js');
 
-const CHAT_RATE_LIMIT_MAX_MESSAGES = 5;
-const CHAT_RATE_LIMIT_WINDOW_MS = 10 * 1000;
-const CHAT_MAX_MESSAGE_LENGTH = 1000;
-const CHAT_BLACKLIST_POLICY = String(process.env.CHAT_BLACKLIST_POLICY || 'hard_block').trim().toLowerCase();
+// N14 (#37): a duplikalt chat-konstansok atkoltozve a chatUtils.js CHAT_CONFIG-jaba.
+const CHAT_RATE_LIMIT_MAX_MESSAGES = CHAT_CONFIG.RATE_LIMIT_MAX_MESSAGES;
+const CHAT_RATE_LIMIT_WINDOW_MS = CHAT_CONFIG.RATE_LIMIT_WINDOW_MS;
+const CHAT_MAX_MESSAGE_LENGTH = CHAT_CONFIG.MAX_MESSAGE_LENGTH;
+const CHAT_BLACKLIST_POLICY = CHAT_CONFIG.BLACKLIST_POLICY;
 
 const SOCKET_ROOMS = Object.freeze({
     general: 'general-room',
@@ -49,16 +52,6 @@ function safeString(value, fallback = '') {
     }
 
     return value.trim();
-}
-
-function parsePositiveInteger(value, fallback = null) {
-    const parsed = Number(value);
-    let result = fallback;
-    if (Number.isInteger(parsed) && parsed > 0) {
-        result = parsed;
-    }
-
-    return result;
 }
 
 function getConversationRoomName(conversationId) {
@@ -494,6 +487,12 @@ function createSocketHub(io) {
         }
 
         const clientRecord = clientsById.get(context.clientId);
+        // VEDELEM: ha a context userId NULL (session nem toltodott be valamiert), de a meglevo
+        // record-ban van userId, NE allitsuk vissza NULL-ra. A regi bug: anonim reconnect
+        // ujraregisztralasa felulirta a logged-in userId-t -> "Offline" megjeleneses.
+        if (context.userId) {
+            clientRecord.userId = context.userId;
+        }
         clientRecord.username = context.username;
         clientRecord.role = context.role;
         clientRecord.profile_image = context.profile_image || '/profile_pictures/default.png';
@@ -520,6 +519,30 @@ function createSocketHub(io) {
         if (context.role === 'admin') {
             socket.join(SOCKET_ROOMS.admin);
         }
+
+        // Maintenance enforce: ha eppen aktiv a karbantartas modus, az uj non-admin
+        // socket kapcsolat azonnal kap egy "maintenance:enforce" eventet — a frontend
+        // erre redirectel a /html/maintenance.html-re. Igy egy uj browser tab nyitas
+        // is helyesen kerul a karbantartasi oldalra (akkor is, ha eppen pl. statikusan
+        // jott be az index.html-re).
+        // FONTOS: getSettings()-t (async) hasznalunk, NEM getSettingsCachedSync-et —
+        // a cold-start race eseteben (server restart kozben uj kapcsolat) a sync
+        // verzio meg ures cache-t adna vissza. Az async version DB-bol tolt ha kell.
+        (async () => {
+            try {
+                const siteSettings = require('./sql/modules/siteSettings.js');
+                const settings = await siteSettings.getSettings();
+                if (settings?.maintenanceMode && context.role !== 'admin') {
+                    socket.emit('maintenance:enforce', {
+                        kind: 'maintenance:enforce',
+                        message: 'A karbantartás folyamatban van.',
+                        sentAt: new Date().toISOString()
+                    });
+                }
+            } catch (mErr) {
+                console.warn('[sockets] maintenance check on connect hiba:', mErr.message);
+            }
+        })();
 
         // Automatikus védelem: az 'admin:' előtagú eventeket csak admin role fogadja el.
         socket.use((packet, next) => {
@@ -771,6 +794,92 @@ function createSocketHub(io) {
                 } catch (sideEffectError) {
                     console.warn('[sockets] chat:message:send side-effect hiba:', sideEffectError.message);
                 }
+
+                // Admin chat moderacios real-time push: ha a profanity-filter maszkolt
+                // egy uzenetet, a Chat moderalas panel azonnal lassa az uj jelolt sort.
+                if (insertedMessage?.isBodyMasked) {
+                    try {
+                        io.of('/admin').to('admin:room').emit('admin:chat:flagged', {
+                            messageId: insertedMessage.id,
+                            conversationId,
+                            senderId: insertedMessage.senderId,
+                            senderUsername: insertedMessage.senderUsername,
+                            senderProfileImage: insertedMessage.senderProfileImage,
+                            body: insertedMessage.bodyOriginal,
+                            bodyMasked: insertedMessage.body,
+                            sentAt: insertedMessage.sentAt,
+                            at: new Date().toISOString()
+                        });
+                    } catch (adminEmitErr) {
+                        console.warn('[sockets] admin:chat:flagged emit hiba:', adminEmitErr.message);
+                    }
+
+                    // 3-csapas auto-ban: a tragar uzenet kuldoje strike-ot kap;
+                    // 1. csapas -> 1 napos ban, 2. csapas -> 10 napos ban, 3+ -> perma.
+                    // Az auto-mask trigger-elte → source='auto'. Adminokra is vonatkozik.
+                    try {
+                        const senderUserId = Number(insertedMessage.senderId) || 0;
+                        if (senderUserId) {
+                            const strikeResult = await sql.recordProfanityStrikeAndMaybeBan(
+                                senderUserId,
+                                insertedMessage.id,
+                                'auto'
+                            );
+                            if (strikeResult.banApplied) {
+                                // Account-ban event + esetleges IP-ban escalation. A user IP-jet
+                                // a socket handshake-bol vesszuk (X-Forwarded-For vagy remoteAddress).
+                                let ipEscalation = null;
+                                try {
+                                    const forwarded = String(socket.handshake?.headers?.['x-forwarded-for'] || '').split(',')[0].trim();
+                                    const remote = socket.handshake?.address || null;
+                                    const senderIp = forwarded || remote || null;
+                                    ipEscalation = await sql.recordAccountBanEvent({
+                                        userId: senderUserId,
+                                        ipAddress: senderIp,
+                                        source: 'profanity_strike',
+                                        reason: strikeResult.banReason
+                                    });
+                                } catch (escErr) {
+                                    console.warn('[sockets] account-ban event hiba:', escErr.message);
+                                }
+
+                                // Real-time push az admin panelnek hogy auto-ban tortent.
+                                try {
+                                    io.of('/admin').to('admin:room').emit('admin:chat:auto-ban', {
+                                        userId: senderUserId,
+                                        username: insertedMessage.senderUsername,
+                                        strikeCount: strikeResult.strikeCount,
+                                        banType: strikeResult.banType,
+                                        bannedUntil: strikeResult.bannedUntil,
+                                        reason: strikeResult.banReason,
+                                        source: 'auto',
+                                        ipBlock: ipEscalation && ipEscalation.triggeredIpBlock ? {
+                                            ipAddress: ipEscalation.ipAddress,
+                                            blockType: ipEscalation.blockType,
+                                            blockedUntil: ipEscalation.blockedUntil
+                                        } : null,
+                                        at: new Date().toISOString()
+                                    });
+                                } catch (_) {}
+                                // Ban-os disconnect: a kliens a `user:banned` eventre a /html/ban.html-re
+                                // navigal (lasd socketClient.js). Ezert NEM force-logout-ot kuldunk,
+                                // mert az csak kijelentkeztetne a usert ban tajekoztatas nelkul.
+                                try {
+                                    io.to(`user-room:${senderUserId}`).emit('user:banned', {
+                                        reason: strikeResult.banReason || 'profanity_strike_ban',
+                                        at: new Date().toISOString()
+                                    });
+                                    const targetSockets = await io.in(`user-room:${senderUserId}`).fetchSockets();
+                                    for (const s of targetSockets) {
+                                        try { s.disconnect(true); } catch (_) {}
+                                    }
+                                } catch (_) {}
+                            }
+                        }
+                    } catch (strikeErr) {
+                        console.warn('[sockets] profanity strike hiba:', strikeErr.message);
+                    }
+                }
             } catch (error) {
                 const isRateLimited = String(error?.message || '').toLowerCase().includes('túl sok üzenet');
 
@@ -874,6 +983,22 @@ function createSocketHub(io) {
                 });
             }
 
+            // last_active bump: ha a felhasznalo utolso clientje is lecsatlakozott
+            // (osszes nyitott tab/eszkoz lement), akkor offline-ra vált. A users.last_active
+            // `ON UPDATE CURRENT_TIMESTAMP` szabaly nem trigger-el sor-modositas nelkul,
+            // ezert explicit beirjuk a NOW()-t. Ez biztositja, hogy az admin panel
+            // "Utolso aktivitas" oszlopa pontosan az offline-ra valtas pillanatat
+            // mutassa, ne pedig a regi (pl. login-kori) timestampet.
+            if (currentContext && currentContext.userId) {
+                const stillOnline = [...clientsById.values()]
+                    .some((rec) => Number(rec.userId) === Number(currentContext.userId));
+                if (!stillOnline) {
+                    sql.touchUserLastActive(currentContext.userId).catch((error) => {
+                        console.warn('socket disconnect last_active touch hiba:', error.message);
+                    });
+                }
+            }
+
             syncPresence();
             services.refreshStats(io).catch((error) => {
                 console.error('Socket disconnect utáni statisztika frissítési hiba:', error);
@@ -936,6 +1061,22 @@ function createSocketHub(io) {
             io.to(`user-room:${normalized}`).emit(String(eventName), payload || {});
             return true;
         },
+        // Rendszer-szintu broadcast minden csatlakozott klienshez (auth nelkul is).
+        // A namespace a default '/' (a /admin namespace nem kapja meg). Csak NEM-perzisztens
+        // payload-okhoz hasznald (pl. maintenance countdown, deploy figyelmeztetes).
+        broadcastSystemEvent(eventName, payload) {
+            try {
+                if (!eventName) return false;
+                io.emit(String(eventName), payload || {});
+                return true;
+            } catch (error) {
+                console.warn('[socketHub] broadcastSystemEvent hiba:', error.message);
+                return false;
+            }
+        },
+        // Az `io` objektum hozzaferese — extension-ok hasznalhatjak (pl. tesztek
+        // vagy plugin-ok ad-hoc namespace-eket).
+        io,
         pushNotification(targetUserId, notification) {
             const payload = {
                 ...notification,
@@ -1052,7 +1193,95 @@ function createSocketHub(io) {
         // Kapcsolat megszűnésekor / cleanup után valós idejű értesítés küldése
         // az érintett felhasználóknak. A frontend erre frissíti a chat listát
         // és eltünteti az aktív beszélgetést.
-        notifyConversationDeleted
+        notifyConversationDeleted,
+        async disconnectUser(targetUserId, reason) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            const at = new Date().toISOString();
+            io.to(`user-room:${normalized}`).emit('user:force-logout', {
+                reason: String(reason || 'admin_revoke_sessions'),
+                at
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
+        },
+        async banUser(targetUserId, reason) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            io.to(`user-room:${normalized}`).emit('user:banned', {
+                reason: String(reason || ''),
+                at: new Date().toISOString()
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
+        },
+        async notifyUserDeleted(targetUserId) {
+            const normalized = parsePositiveInteger(targetUserId, null);
+            if (!normalized) return false;
+            io.to(`user-room:${normalized}`).emit('user:deleted', {
+                at: new Date().toISOString()
+            });
+            const sockets = await io.in(`user-room:${normalized}`).fetchSockets();
+            sockets.forEach((s) => {
+                try { s.disconnect(true); } catch (_) { }
+            });
+            return true;
+        },
+        // Az admin szobaban levo (role==='admin') klienseknek kuldott broadcast.
+        // Az alertingService.js (safeBroadcast) ezt hivja a real-time alert push-hoz,
+        // tovabba az admin endpointok dismissal/IP blokk emit-jeihez is.
+        broadcastAdmin(eventName, payload) {
+            try {
+                io.to(SOCKET_ROOMS.admin).emit(String(eventName), payload || {});
+            } catch (error) {
+                console.warn('broadcastAdmin hiba:', error.message);
+            }
+        },
+        // Backend-driven session sync: ha a HTTP-oldali auth flow modositja a
+        // session-t (login / register / logout), itt frissitjuk MINDEN ezzel a
+        // sessionID-vel kapcsolodo, mar nyitott socket cached session-jet, majd
+        // ujragyartjuk a context-et + presence-t. Ezzel a frontend-nek nem kell
+        // kulon socket:sync-et emit-elnie ahhoz, hogy az admin panel azonnal
+        // online-ra valtsa a usert. A bug, amit ez fix-el: a sessionMiddleware csak
+        // handshake-kor olvas, igy egy mar nyitott socket request.session-je az
+        // anonim allapotnal ragad meg, amig nincs disconnect+reconnect.
+        applySessionUpdate(sessionId, sessionData) {
+            try {
+                const sid = sessionId ? String(sessionId) : '';
+                if (!sid) return false;
+                const data = sessionData || {};
+                let updatedAny = false;
+                for (const [socketId, context] of socketsById.entries()) {
+                    if (!context || context.sessionId !== sid) continue;
+                    const socket = io.sockets.sockets.get(socketId);
+                    if (!socket || !socket.request) continue;
+                    try {
+                        const sess = socket.request.session || (socket.request.session = {});
+                        sess.userId = data.userId ?? null;
+                        sess.username = data.username ?? 'Vendég';
+                        sess.role = data.role ?? 'guest';
+                        sess.profile_image = data.profile_image ?? null;
+                        sess.profile_image_status = data.profile_image_status ?? 'default';
+                        sess.is_email_verified = !!data.is_email_verified;
+                        refreshSocketContextFromSession(socket);
+                        updatedAny = true;
+                    } catch (innerErr) {
+                        console.warn('applySessionUpdate per-socket hiba:', innerErr.message);
+                    }
+                }
+                if (updatedAny) syncPresence();
+                return updatedAny;
+            } catch (error) {
+                console.warn('applySessionUpdate hiba:', error.message);
+                return false;
+            }
+        }
     };
 }
 

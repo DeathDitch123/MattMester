@@ -5,9 +5,9 @@
 //   - ABILITY_CONFIG: árak / cooldown / max-per-meccs / time-cost
 //   - PIECE_VALUES: ütésért járó pont a bábu típusától
 //   - abilityAktival: egyetlen belépési pont (REST + socket egyaránt ezt hívja)
-//   - per-effekt handlerek: time_pause, freeze, swap, board_hide, shield, time_steal
+//   - per-effekt handlerek: time_pause, freeze, swap, board_hide, shield, lefokozas
 //   - hook függvények: pontHozzaad, isMezoFagyott, isMezoVedett, isJatekosBlokkolt,
-//                       cooldownTickAndCleanup, timeStealAlkalmaz
+//                       lefokozasMaxLepes, cooldownTickAndCleanup
 // ============================================================
 // Minden szerver-oldali — a kliens semmilyen állapotot nem tart, csak request-et küld.
 // A validáció (timing, pont, cooldown, max, célpont) ITT történik központilag.
@@ -31,7 +31,7 @@ const ABILITY_CONFIG = {
     swap:       { ar: 18, cooldown: 5, maxPerGame: 2, turnCost: true,  mikor: 'sajatKor', kellKetCelpont: true },
     board_hide: { ar: 20, cooldown: 5, maxPerGame: 2, turnCost: false, mikor: 'sajatKor' },
     shield:     { ar: 10, cooldown: 4, maxPerGame: 3, turnCost: false, mikor: 'barmikor', kellCelpont: true },
-    time_steal: { ar: 6,  cooldown: 3, maxPerGame: 3, turnCost: false, mikor: 'barmikor' }
+    lefokozas:  { ar: 8,  cooldown: 4, maxPerGame: 2, turnCost: false, mikor: 'sajatKor', kellCelpont: true }
 };
 
 // ── ÜTÉSÉRT JÁRÓ PONTOK ──
@@ -45,9 +45,9 @@ const PIECE_VALUES = {
 };
 
 // ── HATÁSIDŐK ──
-const TIME_PAUSE_MS  = 8_000;   // saját óra szüneteltetése
-const BOARD_HIDE_MS  = 5_000;   // ellenfél nem léphet
-const TIME_STEAL_SEC = 5;       // ütésnél átkerülő másodperc
+const TIME_PAUSE_MS    = 8_000;   // saját óra szüneteltetése
+const BOARD_HIDE_MS    = 5_000;   // ellenfél nem léphet
+const LEFOKOZAS_MAX    = 4;       // lefokozott bábu maximum mező-távolsága a következő körében
 
 function ellenkezoSzin(szin) {
     return szin === 'white' ? 'black' : 'white';
@@ -107,7 +107,7 @@ function abilityAktival(jatek, szin, key, params) {
         case 'swap':        result = applySwap(jatek, szin, params); break;
         case 'board_hide':  result = applyBoardHide(jatek, szin); break;
         case 'shield':      result = applyShield(jatek, szin, params); break;
-        case 'time_steal':  result = applyTimeSteal(jatek, szin); break;
+        case 'lefokozas':   result = applyLefokozas(jatek, szin, params); break;
         default:            return { success: false, error: 'Nincs handler.' };
     }
 
@@ -244,8 +244,8 @@ function applySwap(jatek, szin, params) {
     // EXPLOIT FIX #3 — shield/freeze pozíció-rekordok átkötése a két mező között.
     // (Freeze itt csak akkor érintett, ha valamilyen okból ott van — a fenti check
     //  már elutasítja a jegelt mezőről induló swap-et, de a defenzív kötés ártalmatlan.)
-    swapPositionRecords(jatek.abilities.effects.shieldedPieces, a, b);
-    swapPositionRecords(jatek.abilities.effects.frozenPieces,   a, b);
+    swapPositionRecords(jatek.abilities.effects.frozenPieces, a, b);
+    swapPositionRecords(jatek.abilities.effects.demotedPieces, a, b);
 
     // Utolsó lépés frissítés (animációhoz / kiemeléshez), en passant törlés
     jatek.utolsoLepes = {
@@ -290,25 +290,47 @@ function applyShield(jatek, szin, params) {
         return { success: false, error: 'Királyra nem tehető pajzs (matt különben nem lenne lehetséges).' };
     }
 
-    if (jatek.abilities.effects.shieldedPieces.some(s => s.x === mezo.x && s.y === mezo.y)) {
+    const pieceId = mezo.piece.id;
+    if (jatek.abilities.effects.shieldedPieces.some(s => s.pieceId === pieceId)) {
         return { success: false, error: 'Ez a bábu már védett.' };
     }
 
-    // A pajzs a védett szín következő körének VÉGÉIG tart (1 körre védi).
+    // A pajzs 3 lépésig véd (a védett szín 3 saját lépése után jár le).
+    // pieceId-vel követjük a bábut, nem a mezőjét — így a pajzs a mozgással együtt jár.
     jatek.abilities.effects.shieldedPieces.push({
-        x: mezo.x,
-        y: mezo.y,
+        pieceId,
         ofColor: mezo.piece.color,
-        untilMoveOf: mezo.piece.color
+        movesLeft: 3
     });
 
     return { success: true };
 }
 
-function applyTimeSteal(jatek, szin) {
-    // Buff: a következő ütésednél TIME_STEAL_SEC másodperc átkerül az ellenfél órájáról.
-    // Stackelhető (kétszer aktiválva 2x másodperc kerül át). Nem lejár.
-    jatek.abilities.effects.pendingTimeSteal[szin] = (jatek.abilities.effects.pendingTimeSteal[szin] || 0) + 1;
+function applyLefokozas(jatek, szin, params) {
+    // Lefokozás: válassz egy ellenséges sliding bábut (rook / bishop / queen).
+    // A célpont a saját következő körében legfeljebb LEFOKOZAS_MAX mezőt léphet.
+    // Az effekt a célpont szín következő lépése után jár le (cooldownTickAndCleanup törli).
+    const v = celMezoValidate(jatek, szin, params, 'ellen');
+    if (!v.success) return v;
+    const mezo = v.mezo;
+
+    const sliding = ['rook', 'bishop', 'queen'];
+    if (!sliding.includes(mezo.piece.type)) {
+        return { success: false, error: 'Csak bástyát, futót vagy vezért lehet lefokozni.' };
+    }
+
+    if (jatek.abilities.effects.demotedPieces.some(d => d.x === mezo.x && d.y === mezo.y)) {
+        return { success: false, error: 'Ez a bábu már le van fokozva.' };
+    }
+
+    jatek.abilities.effects.demotedPieces.push({
+        x: mezo.x,
+        y: mezo.y,
+        ofColor: mezo.piece.color,
+        untilMoveOf: mezo.piece.color,
+        maxSquares: LEFOKOZAS_MAX
+    });
+
     return { success: true };
 }
 
@@ -344,7 +366,9 @@ function isMezoFagyott(jatek, x, y) {
  */
 function isMezoVedett(jatek, x, y) {
     if (!jatek.abilities) return false;
-    return jatek.abilities.effects.shieldedPieces.some(s => s.x === x && s.y === y);
+    const mezo = mezoKeres(jatek, x, y);
+    if (!mezo || !mezo.piece || !mezo.piece.id) return false;
+    return jatek.abilities.effects.shieldedPieces.some(s => s.pieceId === mezo.piece.id);
 }
 
 /**
@@ -358,24 +382,15 @@ function isJatekosBlokkolt(jatek, szin) {
 }
 
 /**
- * Időlopás alkalmazása ütéskor — ha az aktuálisan lépő színnek van pendingTimeSteal-je,
- * felhasznál belőle 1-et és átköt másodperceket.
+ * Lefokozás-cap lekérdezése egy mezőre. Ha a mezőn lévő bábu le van fokozva,
+ * visszaadja a mozgási mező-cap-et (pl. 4). Egyébként null (nincs korlát).
+ * A logika.js bishop/rook/queen lépésgenerátora ezt használja a sugár csonkolására.
  */
-function timeStealAlkalmaz(jatek, lepoSzin) {
-    if (!jatek.abilities) return 0;
-    const pending = jatek.abilities.effects.pendingTimeSteal[lepoSzin] || 0;
-    if (pending <= 0) return 0;
-
-    const ellen = ellenkezoSzin(lepoSzin);
-    const elveheto = Math.min(TIME_STEAL_SEC, jatek.jatekosok[ellen].ido);
-    if (elveheto <= 0) {
-        jatek.abilities.effects.pendingTimeSteal[lepoSzin] = pending - 1;
-        return 0;
-    }
-    jatek.jatekosok[ellen].ido -= elveheto;
-    jatek.jatekosok[lepoSzin].ido += elveheto;
-    jatek.abilities.effects.pendingTimeSteal[lepoSzin] = pending - 1;
-    return elveheto;
+function lefokozasMaxLepes(jatek, x, y) {
+    if (!jatek.abilities) return null;
+    const rec = jatek.abilities.effects.demotedPieces.find(d => d.x === x && d.y === y);
+    if (!rec) return null;
+    return rec.maxSquares || null;
 }
 
 /**
@@ -400,10 +415,16 @@ function cooldownTickAndCleanup(jatek, lepoSzin, ujSzin) {
         return f.untilMoveOf !== lepoSzin;
     });
 
-    // 3. Lejárt pajzs-effektek (ugyanaz a szabály — a védett szín lépett egyet).
-    jatek.abilities.effects.shieldedPieces = jatek.abilities.effects.shieldedPieces.filter(s => {
-        return s.untilMoveOf !== lepoSzin;
+    // 2b. Lejárt lefokozás-effektek tisztítása — ugyanaz a szabály mint a freeze-nél:
+    //     a célpont szín következő lépése után az effekt eltűnik.
+    jatek.abilities.effects.demotedPieces = jatek.abilities.effects.demotedPieces.filter(d => {
+        return d.untilMoveOf !== lepoSzin;
     });
+
+    // 3. Pajzs-effektek frissítése: ha a védett szín lépett, movesLeft -1; ha 0, töröljük.
+    jatek.abilities.effects.shieldedPieces = jatek.abilities.effects.shieldedPieces
+        .map(s => s.ofColor === lepoSzin ? { ...s, movesLeft: s.movesLeft - 1 } : s)
+        .filter(s => s.movesLeft > 0);
 
     // 4. Board_hide pending → ténylegesen aktiválás az ellenfél új körének elején.
     //    Az ujSzin kapja meg a blokkot, ha az ő blockedUntilMs-je -1 (pending).
@@ -445,13 +466,13 @@ module.exports = {
     PIECE_VALUES,
     TIME_PAUSE_MS,
     BOARD_HIDE_MS,
-    TIME_STEAL_SEC,
+    LEFOKOZAS_MAX,
     abilityAktival,
     pontHozzaad,
     isMezoFagyott,
     isMezoVedett,
     isJatekosBlokkolt,
-    timeStealAlkalmaz,
+    lefokozasMaxLepes,
     cooldownTickAndCleanup,
     getKliensConfig
 };

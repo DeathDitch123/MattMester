@@ -537,9 +537,26 @@
 
     async function syncSocketContextOrReconnect(socketInstance, reason = 'session-mutation', options = {}) {
         // Első körben normál sync; hiba esetén fallback: disconnect -> reconnect -> új sync.
+        // `options.forceReconnect: true` esetén KIHAGYJUK az optimista első próbálkozást
+        // és azonnal disconnect+reconnect-et csinálunk. Ez a login/register/logout flow-ban
+        // szükséges, mert express-session `saveUninitialized: false` mellett egy anonim
+        // socket handshake-kori sessionID-je NEM egyezik meg a login HTTP kérés
+        // sessionID-jével (utóbbi csak a login után kerül cookie-ba). Ilyenkor egy puszta
+        // `socket:sync` event-tel a backend csak a régi anonim session cache-t látja —
+        // a context-frissítéshez teljes új handshake kell.
         try {
             const connectTimeoutMs = options.connectTimeoutMs ?? SOCKET_CONNECT_TIMEOUT_MS;
             const syncTimeoutMs = options.syncTimeoutMs ?? SOCKET_SYNC_TIMEOUT_MS;
+
+            if (options.forceReconnect) {
+                if (!socketInstance) {
+                    throw new Error('A socket objektum nem elérhető a forceReconnect kéréshez.');
+                }
+                try { socketInstance.disconnect(); } catch (_) {}
+                await ensureSocketConnected(socketInstance, connectTimeoutMs);
+                await emitSocketSyncAndWait(socketInstance, `${reason}:force-reconnect`, syncTimeoutMs);
+                return;
+            }
 
             await ensureSocketConnected(socketInstance, connectTimeoutMs);
             await emitSocketSyncAndWait(socketInstance, reason, syncTimeoutMs);
@@ -737,6 +754,22 @@
             });
         });
 
+        // Karbantartas eventek: window-szintu CustomEvent-tel tovabbitjuk, hogy
+        // barmelyik kliens-modul (pl. maintenanceClient.js) hallgathassa azokat
+        // socket-referencia kotes nelkul (robust a betoltesi sorrendre).
+        socket.on('maintenance:countdown', (payload = {}) => {
+            console.log('[socketClient] maintenance:countdown erkezett:', payload);
+            dispatchSocketClientEvent('mattmester:maintenance:countdown', payload);
+        });
+        socket.on('maintenance:enforce', (payload = {}) => {
+            console.log('[socketClient] maintenance:enforce erkezett:', payload);
+            dispatchSocketClientEvent('mattmester:maintenance:enforce', payload);
+        });
+        socket.on('maintenance:cancelled', (payload = {}) => {
+            console.log('[socketClient] maintenance:cancelled erkezett:', payload);
+            dispatchSocketClientEvent('mattmester:maintenance:cancelled', payload);
+        });
+
         socket.on('notification:badge:update', (payload = {}) => {
             // Authoritative badge frissítés a szerverről (DB alapú olvasatlan szám).
             try {
@@ -824,6 +857,37 @@
             }
         });
 
+        socket.on('user:force-logout', (payload = {}) => {
+            try {
+                const reason = String(payload?.reason || 'admin_revoke_sessions');
+                console.warn('[socketClient] user:force-logout:', reason);
+                try { socket.disconnect(); } catch (_) { }
+                window.location.href = '/api/logout';
+            } catch (err) {
+                console.warn('[socketClient] user:force-logout handler hiba:', err);
+                window.location.href = '/api/logout';
+            }
+        });
+
+        socket.on('user:banned', () => {
+            try {
+                try { socket.disconnect(); } catch (_) { }
+                window.location.href = '/html/ban.html';
+            } catch (_) {
+                window.location.href = '/html/ban.html';
+            }
+        });
+
+        socket.on('user:deleted', () => {
+            try {
+                console.warn('[socketClient] user:deleted');
+                try { socket.disconnect(); } catch (_) { }
+                window.location.href = '/html/deleted.html';
+            } catch (_) {
+                window.location.href = '/html/deleted.html';
+            }
+        });
+
         socket.on('user:profile:adminEdit', (payload = {}) => {
             // Admin által módosult a profil — továbbítjuk az oldalaknak,
             // hogy a Security & Activity History és a session-info azonnal frissüljön.
@@ -838,6 +902,39 @@
                 }));
             } catch (forwardErr) {
                 console.warn('[socketClient] user:profile:adminEdit forward hiba:', forwardErr.message);
+            }
+        });
+
+        socket.on('chat:report:muted', (payload = {}) => {
+            // Az admin elutasitotta a felhasznalo egy bejelenteset → 5 oraig nem tud ujabbat tenni.
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:chat:report:muted', {
+                    detail: {
+                        messageId: payload?.messageId || null,
+                        muteUntil: payload?.muteUntil || null,
+                        hours: payload?.hours || 5
+                    }
+                }));
+            } catch (forwardErr) {
+                console.warn('[socketClient] chat:report:muted forward hiba:', forwardErr.message);
+            }
+        });
+
+        socket.on('user:profile:imageReviewed', (payload = {}) => {
+            // Admin jovahagyta / elutasitotta a fuggo profilkepet — a profil oldal
+            // azonnal frissitse az avatart es a status pill-t (re-fetch sessionInfo).
+            try {
+                globalScope.dispatchEvent(new CustomEvent('mattmester:user:profile:imageReviewed', {
+                    detail: {
+                        uploadId: payload?.uploadId || null,
+                        status: payload?.status || null,
+                        filename: payload?.filename || null,
+                        reviewNote: payload?.reviewNote || null,
+                        at: payload?.at || new Date().toISOString()
+                    }
+                }));
+            } catch (forwardErr) {
+                console.warn('[socketClient] user:profile:imageReviewed forward hiba:', forwardErr.message);
             }
         });
 
@@ -944,4 +1041,13 @@
         // Ha a DOM már kész, azonnal frissítünk.
         updateSocketInfoPanel(socketState);
     }
+
+    // Globalis hozzaferes kuldonek (pl. MattMesterMaintenance modul a 'maintenance:*'
+    // eventeket figyeli a default namespace socketen). Csak read-only socket
+    // referenciat exposalunk — a state-et nem.
+    globalScope.MattMesterSocketClient = {
+        socket,
+        get connected() { return socketState.connected; },
+        get socketId() { return socketState.socketId; }
+    };
 })(window);

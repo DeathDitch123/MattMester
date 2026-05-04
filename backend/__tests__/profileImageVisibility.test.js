@@ -13,8 +13,8 @@ const request = require('supertest');
 const express = require('express');
 const session = require('express-session');
 
-jest.mock('../sql/sql_funtions', () => {
-    const actual = jest.requireActual('../sql/sql_funtions');
+jest.mock('../sql/sql_functions', () => {
+    const actual = jest.requireActual('../sql/sql_functions');
     return {
         ...actual,
         getPublicPlayerProfileById: jest.fn(),
@@ -31,7 +31,6 @@ jest.mock('../api/middleware/rateLimiter.js', () => {
         createRateLimiter: () => passthrough,
         userOrIpKeyGenerator: (request) => `uid:${request.session?.userId || 'anon'}`,
         playerSearchLimiter: passthrough,
-        verifyPasswordLimiter: passthrough,
         profileUpdateLimiter: passthrough,
         profileImageUploadLimiter: passthrough,
         profileImageRemoveLimiter: passthrough,
@@ -99,7 +98,7 @@ jest.mock('../services.js', () => ({
     notificationService: { send: jest.fn(() => Promise.resolve({ deliveredTo: [], errors: [] })) }
 }));
 
-const sql = require('../sql/sql_funtions');
+const sql = require('../sql/sql_functions');
 
 function buildApp(sessionUser) {
     const app = express();
@@ -118,7 +117,7 @@ function buildApp(sessionUser) {
     });
 
     const playersRoutes = require('../api/routes/players.js');
-    const adminRoutes = require('../api/routes/admin.js');
+    const adminRoutes = require('../api/routes/admin');
     app.use('/api', playersRoutes);
     app.use('/api/admin', adminRoutes);
     return app;

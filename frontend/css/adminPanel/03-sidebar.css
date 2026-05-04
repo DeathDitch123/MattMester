@@ -1,0 +1,145 @@
+/* ---------- 3) Sidebar ---------- */
+.sidebar {
+    width: var(--sidebar-width);
+    height: 100vh;
+    background: linear-gradient(180deg, var(--bg-sidebar) 0%, #0a0f1e 100%);
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 1000;
+    transition: margin-left 0.3s var(--easing);
+    border-right: 1px solid var(--border-color);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+.sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-width)); }
+
+/* .sidebar-header / .sidebar-brand torolve — a felso MATTMESTER navbar atvette
+   a brand-szerepet (lasd shared/topNavbar.css). */
+
+.sidebar-menu {
+    padding: 0.75rem 0 1.5rem;
+    display: flex;
+    flex-direction: column;
+}
+
+.menu-group { margin-bottom: 0.1rem; }
+
+.menu-separator {
+    height: 1px;
+    background: var(--border-soft);
+    margin: 0.75rem 1rem;
+}
+
+/* Közös stílus: csoport-toggle és nav-link */
+.menu-group-toggle,
+.nav-link {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    padding: 0.7rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    transition: background 0.2s ease, color 0.2s ease, border-left-color 0.2s ease, padding 0.2s ease;
+    border-left: 3px solid transparent;
+    text-decoration: none;
+    text-align: left;
+    cursor: pointer;
+    font-size: 0.92rem;
+    position: relative;
+    overflow: hidden;
+    line-height: 1.3;
+}
+
+.menu-group-toggle > i:first-child,
+.nav-link > i:first-child {
+    font-size: 1.15rem;
+    width: 1.4rem;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.menu-group-toggle .chevron {
+    margin-left: auto;
+    font-size: 0.7rem;
+    transition: transform 0.3s ease;
+    opacity: 0.6;
+}
+.menu-group-toggle[aria-expanded="true"] .chevron { transform: rotate(180deg); opacity: 1; }
+
+/* Hover / active */
+.menu-group-toggle:hover,
+.menu-group-toggle.has-active,
+.menu-group-toggle[aria-expanded="true"],
+.nav-link:hover,
+.nav-link.active {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.08);
+    border-left-color: var(--accent-gold);
+}
+
+.menu-group-toggle::before,
+.nav-link::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, rgba(212, 175, 55, 0.1), transparent);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+}
+.menu-group-toggle:hover::before,
+.menu-group-toggle.has-active::before,
+.nav-link:hover::before,
+.nav-link.active::before { opacity: 1; }
+
+.submenu {
+    background: rgba(0, 0, 0, 0.22);
+    padding: 0.2rem 0;
+}
+.submenu .nav-link {
+    padding-left: 3.1rem;
+    font-size: 0.85rem;
+    color: rgba(148, 163, 184, 0.85);
+}
+.submenu .nav-link > i:first-child { font-size: 0.95rem; width: 1.1rem; }
+
+.nav-link-top {
+    font-weight: 500;
+}
+
+.menu-badge {
+    margin-left: auto;
+    margin-right: 0.5rem;
+    font-size: 0.65rem;
+    padding: 0.25em 0.55em;
+    font-weight: 600;
+}
+.menu-group-toggle .menu-badge ~ .chevron { margin-left: 0; }
+
+.logout-link {
+    color: var(--accent-red) !important;
+}
+.logout-link:hover {
+    color: #fff !important;
+    background: rgba(233, 69, 96, 0.18) !important;
+    border-left-color: var(--accent-red) !important;
+}
+
+/* ---------- Main content ---------- */
+.main-content {
+    margin-left: var(--sidebar-width);
+    transition: margin-left 0.3s var(--easing);
+    min-height: 100vh;
+    /* Felso padding kicsi (0.5rem) — a `.top-navbar` kartya teteje a fix
+     * MATTMESTER navbar TETEJEVEL kerul egy vonalba (lasd a sticky offset-et
+     * shared/topNavbar.css-ben), de nem nyul be a navbar moge teljesen. Az
+     * oldal- es also padding marad --content-pad. */
+    padding: 0.5rem var(--content-pad) var(--content-pad);
+    position: relative;
+    z-index: 1;
+}
+.main-content.expanded { margin-left: 0; }
+

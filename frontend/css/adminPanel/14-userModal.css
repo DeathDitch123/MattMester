@@ -1,0 +1,651 @@
+/* =============================================================
+   ADMIN — User View Modal (két-tabos audit log)
+   ============================================================= */
+.admin-user-view-modal .modal-content {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.98) 0%, rgba(15, 23, 42, 0.94) 100%);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+.admin-user-view-modal .modal-header {
+    border-bottom: 1px solid var(--border-soft);
+    padding: 1rem 1.25rem;
+}
+.admin-user-view-modal .modal-body {
+    padding: 0;
+}
+.admin-user-view-grid {
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) 1fr;
+    min-height: 420px;
+}
+.admin-user-view-aside {
+    padding: 1.5rem 1.25rem;
+    border-right: 1px solid var(--border-soft);
+    background: rgba(2, 6, 23, 0.35);
+    text-align: center;
+}
+.admin-user-view-avatar-wrap {
+    display: flex;
+    justify-content: center;
+}
+.admin-user-view-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid var(--accent-gold);
+    box-shadow: 0 4px 20px rgba(212, 175, 55, 0.25);
+    transition: transform 0.4s ease;
+}
+.admin-user-view-avatar:hover { transform: scale(1.05); }
+.admin-user-view-name {
+    color: var(--text-primary);
+    margin: 0.85rem 0 0.1rem;
+    font-weight: 700;
+}
+.admin-user-view-email {
+    font-size: 0.85rem;
+    word-break: break-all;
+}
+.admin-user-view-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+}
+.admin-user-view-elo {
+    margin-top: 1rem;
+}
+.admin-user-view-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.65rem;
+    text-align: center;
+}
+.admin-user-view-stats > div {
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md, 8px);
+    padding: 0.55rem 0.4rem;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.admin-user-view-stats > div:hover {
+    transform: translateY(-2px);
+    border-color: rgba(212, 175, 55, 0.45);
+}
+.admin-user-view-meta-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+    font-size: 0.85rem;
+}
+.admin-user-view-meta-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px dashed var(--border-soft);
+}
+.admin-user-view-meta-list li:last-child { border-bottom: 0; }
+
+.admin-user-view-main {
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.admin-user-view-tabs {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    border-bottom: 1px solid var(--border-soft);
+    padding-bottom: 0.6rem;
+    margin-bottom: 0.8rem;
+}
+.admin-user-view-tab {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.admin-user-view-tab:hover {
+    color: var(--text-primary);
+    background: rgba(212, 175, 55, 0.08);
+}
+.admin-user-view-tab.is-active {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.14);
+    border-color: rgba(212, 175, 55, 0.4);
+    box-shadow: 0 2px 10px rgba(212, 175, 55, 0.18);
+}
+.admin-user-view-tabs-hint {
+    margin-left: auto;
+}
+
+.admin-user-view-tab-pane {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    max-height: 460px;
+}
+.admin-user-view-audit-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.admin-user-view-audit-row {
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md, 8px);
+    padding: 0.7rem 0.9rem;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.7rem 1rem;
+    align-items: start;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+    animation: admin-user-audit-fade-in 0.35s ease-out;
+}
+.admin-user-view-audit-row:hover {
+    border-color: rgba(212, 175, 55, 0.4);
+    transform: translateX(2px);
+}
+.admin-user-view-audit-row.sev-warning  { border-left: 3px solid #f59e0b; }
+.admin-user-view-audit-row.sev-critical { border-left: 3px solid #ef4444; }
+.admin-user-view-audit-row.sev-info     { border-left: 3px solid #3b82f6; }
+.admin-user-view-audit-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.78rem;
+}
+.admin-user-view-audit-time {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text-secondary);
+}
+.admin-user-view-audit-action {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+.admin-user-view-audit-targets {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-top: 0.2rem;
+}
+.admin-user-view-audit-reason {
+    margin-top: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    border-top: 1px dashed var(--border-soft);
+    padding-top: 0.4rem;
+    line-height: 1.4;
+}
+.admin-user-view-audit-reason i.bi { margin-right: 0.35rem; opacity: 0.6; }
+
+.admin-user-view-empty {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--text-secondary);
+}
+.admin-user-view-empty i.bi {
+    font-size: 1.8rem;
+    display: block;
+    margin-bottom: 0.5rem;
+    opacity: 0.7;
+}
+.admin-user-view-empty-error i.bi { color: #ef4444; opacity: 0.85; }
+
+.admin-user-view-footer {
+    border-top: 1px solid var(--border-soft);
+    padding: 0.85rem 1.25rem;
+}
+
+@keyframes admin-user-audit-fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Reszponzív: kisebb képernyő */
+@media (max-width: 991.98px) {
+    .admin-user-view-grid {
+        grid-template-columns: 1fr;
+    }
+    .admin-user-view-aside {
+        border-right: 0;
+        border-bottom: 1px solid var(--border-soft);
+    }
+}
+
+@media (max-width: 767.98px) {
+    .admin-users-table thead th.col-joined,
+    .admin-users-table tbody td:nth-child(6) { display: none; }
+    .admin-users-table thead th.col-active,
+    .admin-users-table tbody td:nth-child(5) { display: none; }
+    .admin-users-card-header { padding: 0.85rem 1rem !important; }
+    .admin-users-table tbody tr td:first-child { padding-left: 0.85rem; }
+    .admin-users-table tbody tr td:last-child  { padding-right: 0.85rem; }
+    .admin-users-filter-bar select.form-select { flex: 1 1 140px; max-width: none; }
+    .admin-users-filter-bar #adminUsersRefreshBtn { margin-left: 0; }
+}
+
+@media (max-width: 575.98px) {
+    .admin-users-search { max-width: none; }
+    .admin-users-table thead th.col-role,
+    .admin-users-table tbody td:nth-child(3) { display: none; }
+    .admin-user-view-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* =============================================================
+   ADMIN — Online presence dot + ELO trio + security entries
+   ============================================================= */
+
+/* Online/offline pill — kis pulzáló pont, semleges szín bannednél nincs jelölve külön */
+.user-presence {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+}
+.user-presence-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 0 0 currentColor;
+    flex: 0 0 8px;
+}
+.user-presence-online {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.user-presence-online .user-presence-dot {
+    animation: user-presence-pulse 1.6s ease-out infinite;
+}
+.user-presence-offline {
+    color: #94a3b8;
+    background: rgba(148, 163, 184, 0.10);
+    border-color: rgba(148, 163, 184, 0.25);
+}
+.user-presence-tabs {
+    margin-left: 0.2rem;
+    background: rgba(34, 197, 94, 0.25);
+    color: #16a34a;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.4;
+}
+@keyframes user-presence-pulse {
+    0%   { box-shadow: 0 0 0 0   rgba(34, 197, 94, 0.55); }
+    70%  { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
+    100% { box-shadow: 0 0 0 0   rgba(34, 197, 94, 0); }
+}
+
+.user-status-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+/* Online sor halvány bal szín-csík */
+.admin-user-row.is-online td:first-child {
+    box-shadow: inset 3px 0 0 0 rgba(34, 197, 94, 0.55);
+}
+
+/* ELO trio (Klasszikus / MattMester / Bullet) — kompakt sor */
+.elo-trio {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+.elo-trio-item {
+    color: var(--text-secondary);
+    padding: 0.1rem 0.4rem;
+    border-radius: 5px;
+    transition: color 0.18s ease, background 0.18s ease;
+    font-size: 0.86rem;
+}
+.elo-trio-item.is-primary {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.12);
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+.elo-trio-item:hover { background: rgba(212, 175, 55, 0.08); color: var(--text-primary); }
+.elo-trio-sep { color: var(--text-muted); opacity: 0.6; font-size: 0.8rem; }
+
+/* Modal — ELO trio (3 kártyás) */
+.admin-user-view-elo-trio {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.4rem;
+    margin-top: 1rem;
+}
+.admin-user-view-elo-card {
+    text-align: center;
+    background: rgba(2, 6, 23, 0.5);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md, 8px);
+    padding: 0.5rem 0.3rem;
+    transition: transform 0.2s ease, border-color 0.2s ease;
+}
+.admin-user-view-elo-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(212, 175, 55, 0.35);
+}
+.admin-user-view-elo-card.is-primary {
+    background: linear-gradient(135deg, rgba(212, 175, 55, 0.18) 0%, rgba(212, 175, 55, 0.06) 100%);
+    border-color: rgba(212, 175, 55, 0.45);
+}
+.admin-user-view-elo-num {
+    font-weight: 700;
+    font-size: 1.25rem;
+    color: var(--text-primary);
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+}
+.admin-user-view-elo-card.is-primary .admin-user-view-elo-num {
+    color: var(--accent-gold);
+    font-size: 1.45rem;
+}
+.admin-user-view-elo-card small {
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+/* Modal — presence panel */
+.admin-user-view-presence {
+    margin-top: 1rem;
+    padding: 0.7rem 0.85rem;
+    border-radius: var(--radius-md, 8px);
+    background: rgba(2, 6, 23, 0.5);
+    border: 1px solid var(--border-soft);
+    text-align: left;
+    transition: border-color 0.25s ease, background 0.25s ease;
+}
+.admin-user-view-presence[data-state="online"] {
+    border-color: rgba(34, 197, 94, 0.35);
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.10) 0%, rgba(2, 6, 23, 0.55) 100%);
+}
+.admin-user-view-presence-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.admin-user-view-presence-tabs {
+    list-style: none;
+    margin: 0.55rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+}
+.admin-user-view-presence-tab {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.55rem;
+    background: rgba(2, 6, 23, 0.5);
+    border-radius: 6px;
+    font-size: 0.78rem;
+    border: 1px solid var(--border-soft);
+}
+.admin-user-view-presence-tab i.bi { color: var(--accent-gold); opacity: 0.8; }
+.admin-user-view-presence-page {
+    color: var(--text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.admin-user-view-presence-time { font-size: 0.72rem; }
+.admin-user-view-presence-empty {
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    padding: 0.4rem 0;
+}
+
+/* Modal — Biztonsági napló tab */
+.admin-user-view-security-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.7rem;
+    padding-bottom: 0.6rem;
+    border-bottom: 1px dashed var(--border-soft);
+}
+.admin-user-view-sec-filter {
+    background: transparent;
+    border: 1px solid var(--border-soft);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.18s ease;
+}
+.admin-user-view-sec-filter:hover {
+    color: var(--text-primary);
+    border-color: rgba(212, 175, 55, 0.4);
+}
+.admin-user-view-sec-filter.is-active {
+    color: var(--accent-gold);
+    background: rgba(212, 175, 55, 0.14);
+    border-color: rgba(212, 175, 55, 0.5);
+}
+
+.admin-user-view-security-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.admin-user-view-security-row {
+    background: rgba(2, 6, 23, 0.45);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-md, 8px);
+    padding: 0.6rem 0.85rem;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 0.5rem 0.9rem;
+    align-items: start;
+    animation: admin-user-audit-fade-in 0.3s ease-out;
+    transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.admin-user-view-security-row:hover {
+    border-color: rgba(212, 175, 55, 0.35);
+    transform: translateX(2px);
+}
+.admin-user-view-security-row.sev-warning  { border-left: 3px solid #f59e0b; }
+.admin-user-view-security-row.sev-critical { border-left: 3px solid #ef4444; }
+.admin-user-view-security-row.sev-info     { border-left: 3px solid #3b82f6; }
+
+.admin-user-view-security-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-size: 0.74rem;
+}
+.admin-user-view-security-time {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+.admin-user-view-security-cat {
+    color: var(--text-secondary);
+    border: 1px solid var(--border-soft);
+    border-radius: 999px;
+    padding: 0.05rem 0.5rem;
+    text-align: center;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+.admin-user-view-security-cat[data-cat="auth"]     { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
+.admin-user-view-security-cat[data-cat="security"] { color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); }
+.admin-user-view-security-cat[data-cat="profile"]  { color: #a78bfa; border-color: rgba(167, 139, 250, 0.4); }
+.admin-user-view-security-cat[data-cat="social"]   { color: #34d399; border-color: rgba(52, 211, 153, 0.4); }
+
+.admin-user-view-security-event {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 0.88rem;
+}
+.admin-user-view-security-msg {
+    margin-top: 0.2rem;
+    line-height: 1.35;
+}
+.admin-user-view-security-tech {
+    margin-top: 0.35rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.85rem;
+}
+
+/* Reszponzív tweak: kisebb képernyőn 2 oszlopos ELO trio + 1-oszlopos security row */
+@media (max-width: 767.98px) {
+    .admin-users-table thead th.col-active,
+    .admin-users-table tbody td:nth-child(5) { display: table-cell; }
+    .admin-users-table thead th.col-joined,
+    .admin-users-table tbody td:nth-child(6) { display: none; }
+    .admin-users-table { min-width: 620px; }
+    .admin-user-view-elo-trio { grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
+    .admin-user-view-elo-num  { font-size: 1.05rem; }
+    .admin-user-view-elo-card.is-primary .admin-user-view-elo-num { font-size: 1.2rem; }
+    .admin-user-view-security-row {
+        grid-template-columns: 1fr;
+    }
+    .admin-user-view-security-meta {
+        flex-direction: row;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    .admin-user-detail-elo-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 575.98px) {
+    .admin-users-table-wrap { max-height: calc(100vh - 320px); }
+    .admin-users-table { min-width: 540px; }
+    .admin-user-detail-elo-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* =============================================================
+   ADMIN — Email verified + profilkép státusz badge-ek a modalban
+   ============================================================= */
+.admin-user-view-email-line {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+.admin-user-view-email-line > span:first-child {
+    font-size: 0.85rem;
+    word-break: break-all;
+    line-height: 1.25;
+}
+
+.email-verified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+.email-verified-badge i.bi { font-size: 0.85rem; }
+.email-verified-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+.email-verified-badge.is-verified {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.12);
+    border-color: rgba(34, 197, 94, 0.4);
+}
+.email-verified-badge.is-unverified {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.profile-image-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.18rem 0.55rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    line-height: 1;
+    white-space: nowrap;
+    text-transform: lowercase;
+}
+.profile-image-status-badge i.bi { font-size: 0.85rem; }
+.profile-image-status-badge.is-approved {
+    color: #22c55e;
+    background: rgba(34, 197, 94, 0.10);
+    border-color: rgba(34, 197, 94, 0.35);
+}
+.profile-image-status-badge.is-pending {
+    color: #f59e0b;
+    background: rgba(245, 158, 11, 0.10);
+    border-color: rgba(245, 158, 11, 0.35);
+}
+.profile-image-status-badge.is-rejected {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.10);
+    border-color: rgba(239, 68, 68, 0.35);
+}
+.profile-image-status-badge.is-default {
+    color: var(--text-secondary);
+    background: rgba(148, 163, 184, 0.08);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* A modal aside badges sora törje a sort, ha sok */
+.admin-user-view-badges {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    justify-content: center;
+}

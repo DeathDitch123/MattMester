@@ -76,14 +76,6 @@ const authRegisterLimiter = createRateLimiter({
     message: 'Túl sok regisztrációs kísérlet. Próbáld újra egy óra múlva.'
 });
 
-// Jelenlegi jelszó ellenőrzése (settings modal): 15 perces ablakban max 10 sikertelen kísérlet.
-const verifyPasswordLimiter = createRateLimiter({
-    windowMs: 15 * 60 * 1000,
-    max: 10,
-    skipSuccessfulRequests: true,
-    message: 'Túl sok jelszó-ellenőrzési kísérlet. Próbáld újra 15 perc múlva.'
-});
-
 // Profil adatmódosítás (username / email / jelszó): 15 perces ablakban max 10 próbálkozás
 // felhasználónként. Védelem bcrypt-intenzív endpoint abuzálása ellen.
 const profileUpdateLimiter = createRateLimiter({
@@ -216,7 +208,6 @@ module.exports = {
     userOrIpKeyGenerator,
     authLoginLimiter,
     authRegisterLimiter,
-    verifyPasswordLimiter,
     profileUpdateLimiter,
     profileImageUploadLimiter,
     profileImageRemoveLimiter,

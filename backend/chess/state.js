@@ -25,10 +25,10 @@ function abilitiesAlapallapot() {
         cooldowns: { white: {}, black: {} },   // ability key -> hátralévő körök
         effects: {
             frozenPieces:    [],   // [{ x, y, ofColor, untilMoveOf }]
-            shieldedPieces:  [],   // [{ x, y, ofColor, untilMoveOf }]
+            shieldedPieces:  [],   // [{ pieceId, ofColor, movesLeft }]
             blockedUntilMs:  { white: null, black: null }, // board_hide
             pausedUntilMs:   { white: null, black: null }, // time_pause
-            pendingTimeSteal:{ white: 0, black: 0 }        // hátralévő használatok
+            demotedPieces:   []                            // [{ x, y, ofColor, untilMoveOf, maxSquares }] — lefokozás
         }
     };
 }
@@ -99,6 +99,29 @@ function jatekKeres(gameId) {
 }
 
 /**
+ * Issue #63 — multi-tab guard: van-e a userId-nak BARMILYEN aktiv meccse
+ * (bot vagy PvP)? `aktiv` = vege === false.
+ * Iteralja az osszes betoltott meccset; az n itt kicsi (egyszerre max par tucat
+ * meccs futhat), igy nem szukseg per-user Map.
+ *
+ * Visszater: { hasActive, gameId, mode } vagy { hasActive: false }.
+ */
+function hasAnyActiveGameForUser(userId) {
+    let result = { hasActive: false, gameId: null, mode: null };
+    if (!userId) return result;
+    for (const [gameId, jatek] of jatekok.entries()) {
+        if (jatek.vege) continue;
+        const whiteId = jatek.jatekosok?.white?.userId || null;
+        const blackId = jatek.jatekosok?.black?.userId || null;
+        if (whiteId === userId || blackId === userId) {
+            result = { hasActive: true, gameId, mode: jatek.mode };
+            break;
+        }
+    }
+    return result;
+}
+
+/**
  * Játék törlése (befejezés vagy disconnect után).
  */
 function jatekTorol(gameId) {
@@ -119,6 +142,23 @@ function jatekTorol(gameId) {
 function mezoKeres(jatek, x, y) {
     if (x < 0 || x > 7 || y < 0 || y > 7) return null;
     return jatek.tabla[y * 8 + x];
+}
+
+// Pajzsos bábuk aktuális pozícióit keresi meg a táblán (pieceId → {x, y}).
+// A frontend pozíció alapján jeleníti meg, ezért a szerializáláskor feloldjuk.
+function shieldedPiecesKliens(jatek) {
+    if (!jatek.abilities) return [];
+    const piecePos = new Map();
+    for (const m of jatek.tabla) {
+        if (m.piece && m.piece.id != null) piecePos.set(m.piece.id, { x: m.x, y: m.y });
+    }
+    return jatek.abilities.effects.shieldedPieces
+        .map(s => {
+            const pos = piecePos.get(s.pieceId);
+            if (!pos) return null;
+            return { x: pos.x, y: pos.y, ofColor: s.ofColor, movesLeft: s.movesLeft };
+        })
+        .filter(Boolean);
 }
 
 /**
@@ -178,13 +218,21 @@ function jatekAllapotKliens(jatek) {
             },
             effects: {
                 frozenPieces:    jatek.abilities.effects.frozenPieces.map(f => ({ ...f })),
-                shieldedPieces:  jatek.abilities.effects.shieldedPieces.map(s => ({ ...s })),
+                shieldedPieces:  shieldedPiecesKliens(jatek),
                 blockedUntilMs:  { ...jatek.abilities.effects.blockedUntilMs },
                 pausedUntilMs:   { ...jatek.abilities.effects.pausedUntilMs },
-                pendingTimeSteal:{ ...jatek.abilities.effects.pendingTimeSteal }
+                demotedPieces:   jatek.abilities.effects.demotedPieces.map(d => ({ ...d }))
             }
         };
     }
+
+    // Slim lepes-tortenet a kliens move-list panel-jehez. Csak amit a UI
+    // tenyleg renderel: szin + SAN-string. A teljes entry (from/to/captured)
+    // marad szerver-oldali, a kliens nem szennyezodik feleslegessel.
+    const lepesTortenetKliens = jatek.lepesTortenet.map(entry => ({
+        color: entry.color,
+        san: entry.san || null
+    }));
 
     return {
         gameId: jatek.gameId,
@@ -194,6 +242,7 @@ function jatekAllapotKliens(jatek) {
         lepesszam: jatek.lepesszam,
         utolsoLepes,
         sakkPoz,
+        lepesTortenet: lepesTortenetKliens,
         ido: {
             white: jatek.jatekosok.white.ido,
             black: jatek.jatekosok.black.ido
@@ -224,5 +273,6 @@ module.exports = {
     jatekTorol,
     mezoKeres,
     jatekAllapotKliens,
-    abilitiesAlapallapot
+    abilitiesAlapallapot,
+    hasAnyActiveGameForUser
 };

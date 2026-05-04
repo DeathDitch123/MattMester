@@ -1,0 +1,113 @@
+/* MattMester kozos confirm/alert modal — Bootstrap-fuggetlen vanilla
+   implementacio, hogy chess.html-en (ahol nincs Bootstrap) is mukodjon.
+   A `window.mmConfirm` / `window.mmAlert` hozza letre dinamikusan; itt csak
+   a vizualis stilus el. */
+
+.mm-confirm-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.7);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    animation: mm-confirm-fade-in 0.15s ease-out;
+}
+
+@keyframes mm-confirm-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.mm-confirm-dialog {
+    background: #1e293b;
+    color: #f1f5f9;
+    border: 1px solid #334155;
+    border-radius: 16px;
+    padding: 1.75rem;
+    max-width: 460px;
+    width: 100%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    animation: mm-confirm-pop-in 0.18s ease-out;
+}
+
+@keyframes mm-confirm-pop-in {
+    from { transform: scale(0.92); opacity: 0; }
+    to   { transform: scale(1);     opacity: 1; }
+}
+
+.mm-confirm-dialog.is-danger {
+    border-color: #ef4444;
+}
+
+.mm-confirm-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #d4af37;
+    margin: 0 0 0.65rem 0;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+}
+
+.mm-confirm-dialog.is-danger .mm-confirm-title {
+    color: #f87171;
+}
+
+.mm-confirm-message {
+    color: #cbd5e1;
+    margin: 0 0 1.3rem 0;
+    font-size: 0.95rem;
+    line-height: 1.5;
+    white-space: pre-line;
+}
+
+.mm-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.mm-confirm-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1.1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+    line-height: 1.2;
+    min-width: 90px;
+}
+
+.mm-confirm-cancel {
+    background: transparent;
+    color: #cbd5e1;
+    border-color: #475569;
+}
+.mm-confirm-cancel:hover { background: #334155; color: #fff; }
+
+.mm-confirm-primary {
+    background: #d4af37;
+    color: #0f172a;
+    border-color: #d4af37;
+}
+.mm-confirm-primary:hover { background: #b8941f; border-color: #b8941f; }
+
+.mm-confirm-danger {
+    background: #ef4444;
+    color: #fff;
+    border-color: #ef4444;
+}
+.mm-confirm-danger:hover { background: #dc2626; border-color: #dc2626; }
+
+.mm-confirm-btn:focus { outline: 2px solid #d4af37; outline-offset: 2px; }
+.mm-confirm-danger:focus { outline-color: #ef4444; }

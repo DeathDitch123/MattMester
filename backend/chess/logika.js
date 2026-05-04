@@ -172,10 +172,19 @@ function lehetsLepSzamit(jatek, babu, sakkEllen) {
         }
     }
 
+    // Sliding-bábuk lefokozása: ha az adott bábu pillanatnyi mezője le van fokozva,
+    // a sugár-cap LEFOKOZAS_MAX (default 4). Lazy require a circular dep elkerüléséhez.
+    let slidingMax = 7;
+    if (babu.type === "bishop" || babu.type === "rook" || babu.type === "queen") {
+        const { lefokozasMaxLepes } = require('./abilities.js');
+        const cap = lefokozasMaxLepes(jatek, x, y);
+        if (cap && cap > 0) slidingMax = Math.min(7, cap);
+    }
+
     // --- FUTÓ ---
-    else if (babu.type === "bishop") {
+    if (babu.type === "bishop") {
         for (const [dx, dy] of [[1,1],[1,-1],[-1,1],[-1,-1]]) {
-            for (let j = 1; j < 8; j++) {
+            for (let j = 1; j <= slidingMax; j++) {
                 if (!lepesProba(jatek, x + dx * j, y + dy * j, lepesek, babu)) break;
             }
         }
@@ -184,7 +193,7 @@ function lehetsLepSzamit(jatek, babu, sakkEllen) {
     // --- BÁSTYA ---
     else if (babu.type === "rook") {
         for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
-            for (let j = 1; j < 8; j++) {
+            for (let j = 1; j <= slidingMax; j++) {
                 if (!lepesProba(jatek, x + dx * j, y + dy * j, lepesek, babu)) break;
             }
         }
@@ -193,7 +202,7 @@ function lehetsLepSzamit(jatek, babu, sakkEllen) {
     // --- VEZÉR ---
     else if (babu.type === "queen") {
         for (const [dx, dy] of [[1,1],[1,-1],[-1,1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]]) {
-            for (let j = 1; j < 8; j++) {
+            for (let j = 1; j <= slidingMax; j++) {
                 if (!lepesProba(jatek, x + dx * j, y + dy * j, lepesek, babu)) break;
             }
         }

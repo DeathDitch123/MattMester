@@ -10,23 +10,10 @@ function rethrowIfAborted(error) {
     if (error?.name === 'AbortError') throw error;
 }
 
-function runSafely(label, handler) {
-    try {
-        return handler();
-    } catch (error) {
-        console.error(`${label} hiba:`, error);
-        return undefined;
-    }
-}
-
-async function runSafelyAsync(label, handler) {
-    try {
-        return await handler();
-    } catch (error) {
-        console.error(`${label} hiba:`, error);
-        return undefined;
-    }
-}
+// A 4 helper egyetlen kanonikus implementációja a frontend/javascript/_utils.js-ben
+// (`window.MattMesterUtils`). Itt csak delegáljuk, hogy a meglévő hívók ne törjenek.
+const runSafely = (label, handler) => window.MattMesterUtils.runSafely(label, handler);
+const runSafelyAsync = (label, handler) => window.MattMesterUtils.runSafelyAsync(label, handler);
 
 let LeaderboardData = {
     elo: [],
@@ -75,25 +62,8 @@ async function parseJson(response) {
 
 
 //sessionInfo
-async function fetchSessionInfo() {
-    let data = { success: false, loggedIn: false };
-
-    try {
-        const response = await fetch('/api/sessionInfo', {
-            signal: requestController.withAbortSignal('sessionInfo')
-        });
-        if (response.ok) {
-            data = await parseJson(response);
-        }
-    } catch (error) {
-        rethrowIfAborted(error);
-        console.error('Hiba a session informacio lekerdezese soran:', error);
-    } finally {
-        requestController.clearSignal('sessionInfo');
-    }
-
-    return data;
-}
+// Delegate-elve a `_utils.js`-be, hogy a teljes frontenden egyetlen forrás-igazság legyen.
+const fetchSessionInfo = () => window.MattMesterUtils.fetchSessionInfo();
 
 async function loadLeaderBoard() {
     try {
@@ -143,15 +113,8 @@ function bindLeaderBoardControls() {
     });
 }
 
-function escapeHtmlForLeaderboard(value) {
-    const text = String(value == null ? '' : value);
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
+// Delegate-elve a `_utils.js` egyetlen kanonikus escapeHtml-re.
+const escapeHtmlForLeaderboard = (value) => window.MattMesterUtils.escapeHtml(value);
 
 function getRankBadgeClass(index) {
     let className = 'rank-default';
@@ -529,6 +492,22 @@ function bindLoginForm() {
                     const result = await parseJson(response);
 
                     if (!response.ok) {
+                        if (result.code === 'account_banned') {
+                            showFormMessage(
+                                messageElement, 'danger',
+                                'A fiók tiltva lett, ha fellebbezne, vegye fel a kapcsolatot a következő email címen az oldal készítőivel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=Ban%20fellebbez%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AFelhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%20a%20felhaszn%C3%A1l%C3%B3nevedet%5D%0A%0AKifog%C3%A1solom%20a%20r%C3%A1m%20kiszabott%20tilt%C3%A1st%2C%20mert%3A%0A%5Bide%20%C3%ADrd%20az%20indokot%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                true
+                            );
+                            return;
+                        }
+                        if (result.code === 'account_pending_deletion') {
+                            showFormMessage(
+                                messageElement, 'danger',
+                                'A fiókodat az adminisztrátorok törlésre jelölték. Ha tévedésnek tartod, vedd fel a kapcsolatot a fejlesztőkkel: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=mattmester.support@gmail.com&su=T%C3%B6rl%C3%A9s%20fellebbez%C3%A9s%20%E2%80%94%20MattMester&body=Tisztelt%20MattMester%20Support%2C%0A%0AFelhaszn%C3%A1l%C3%B3nevem%3A%20%5Bide%20%C3%ADrd%20a%20felhaszn%C3%A1l%C3%B3nevedet%5D%0A%0AKifog%C3%A1solom%20a%20fi%C3%B3kom%20t%C3%B6rl%C3%A9s%C3%A9t%2C%20mert%3A%0A%5Bide%20%C3%ADrd%20az%20indokot%5D%0A%0AK%C3%B6sz%C3%B6nettel%2C" target="_blank" rel="noopener" class="alert-link">mattmester.support@gmail.com</a>',
+                                true
+                            );
+                            return;
+                        }
                         throw new Error(result.message || 'Sikertelen bejelentkezes.');
                     }
 
@@ -540,10 +519,18 @@ function bindLoginForm() {
                     hideModalById('loginModal');
                     showToast('Sikeres bejelentkezes.');
 
-                    if (socket) {
-                        console.log('Login form successful, refreshing stats via socket...');
-                        socket.disconnect();
-                        socket.connect();
+                    // forceReconnect: true — express-session `saveUninitialized: false`
+                    // miatt egy anonim socket handshake-kori sessionID-je NEM egyezik a
+                    // login HTTP kérés sessionID-jével (utóbbi csak a login response
+                    // Set-Cookie-jával válik aktívvá). Ezért teljes új handshake kell,
+                    // hogy a socket az új cookie-val csatlakozzon és a backend a friss
+                    // session.userId-t lássa. Puszta `socket:sync` itt nem elég.
+                    if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+                        try {
+                            await window.MattMesterSocket.syncSocketContextOrReconnect('login-success', { forceReconnect: true });
+                        } catch (syncErr) {
+                            console.warn('Login utani socket sync hiba:', syncErr.message || syncErr);
+                        }
                     }
                     await refreshAuthUi('login-success');
                 } catch (error) {
@@ -650,6 +637,15 @@ function bindRegisterForm() {
                     registerForm.reset();
                     resetRegisterValidationState();
                     hideModalById('registerModal');
+                    // forceReconnect: true — anonim sessionID != register HTTP sessionID
+                    // (saveUninitialized: false miatt). Lasd a login flow kommentjet.
+                    if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+                        try {
+                            await window.MattMesterSocket.syncSocketContextOrReconnect('register-success', { forceReconnect: true });
+                        } catch (syncErr) {
+                            console.warn('Register utani socket sync hiba:', syncErr.message || syncErr);
+                        }
+                    }
                     await refreshAuthUi('register-success');
                     showToast('Sikeres regisztráció. Most már bejelentkezhetsz.');
                 } catch (error) {
@@ -694,9 +690,14 @@ async function handleLogout() {
             console.warn('[index] logout reset dispatch hiba:', resetError.message);
         }
 
-        if (socket) {
-            socket.disconnect();
-            socket.connect();
+        // forceReconnect: true — logout után a régi session-cookie törölve, új handshake
+        // kell, hogy a socket az anonim állapotot tükrözze a backend felé.
+        if (window.MattMesterSocket?.syncSocketContextOrReconnect) {
+            try {
+                await window.MattMesterSocket.syncSocketContextOrReconnect('logout-success', { forceReconnect: true });
+            } catch (syncErr) {
+                console.warn('Logout utani socket sync hiba:', syncErr.message || syncErr);
+            }
         }
         await refreshAuthUi('logout-success');
     } catch (error) {
@@ -879,13 +880,17 @@ function clearFormMessage(messageElement) {
     messageElement.textContent = '';
 }
 
-function showFormMessage(messageElement, type, message) {
+function showFormMessage(messageElement, type, message, asHtml = false) {
     if (!messageElement) {
         return;
     }
 
     messageElement.className = `mt-3 text-center alert alert-${type}`;
-    messageElement.textContent = message;
+    if (asHtml) {
+        messageElement.innerHTML = message;
+    } else {
+        messageElement.textContent = message;
+    }
 }
 
 function showModalById(modalId) {

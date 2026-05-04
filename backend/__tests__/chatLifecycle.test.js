@@ -22,7 +22,7 @@ jest.mock('../sql/database.js', () => ({
     getPool: () => mockPool
 }));
 
-const sql = require('../sql/sql_funtions.js');
+const sql = require('../sql/sql_functions.js');
 
 // ─── Segéd: mock executor, ami sorra válaszol a várt lekérésekre ───
 function buildExecutor(responses) {

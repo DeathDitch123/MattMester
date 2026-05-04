@@ -87,7 +87,9 @@ describe('admin auth refresh edge cases', () => {
         adminRepo.getUserForAdminAuth.mockResolvedValueOnce({
             id: 12,
             username: 'admin',
-            is_super_admin: 1
+            role: 'admin',
+            is_super_admin: 1,
+            is_banned: 0
         });
 
         const app = buildApp({ userId: 12, role: 'admin', username: 'admin' });

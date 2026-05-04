@@ -1,0 +1,41 @@
+/* Footer */
+.site-footer {
+    background: rgba(2, 6, 23, 0.6);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid var(--border-color);
+    padding: 24px;
+    margin-top: 40px;
+    text-align: center;
+}
+
+.footer-brand {
+    color: var(--accent-gold);
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 8px;
+}
+
+.footer-links {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 12px;
+}
+
+.footer-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.8rem;
+    transition: color 0.2s ease;
+}
+
+.footer-links a:hover {
+    color: var(--accent-gold);
+}
+
+.footer-copy {
+    color: rgba(148, 163, 184, 0.5);
+    font-size: 0.75rem;
+}
+

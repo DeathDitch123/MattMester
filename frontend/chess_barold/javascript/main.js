@@ -11,8 +11,14 @@
 
 import { tablaRajzol, atvaltozasModal, atvaltozasModalElrejt,
          huzasKiemel, huzasKiemelTorol, uiJatekVegeMegjelenit, mezoElemKeres,
-         lepesAnimacio } from './UI-megjelenites.js';
+         lepesAnimacio, renderMoveList, clearMoveList } from './UI-megjelenites.js';
 import { abilitiesInit, abilitiesAllapotFrissit, abilitiesReset, isAbilityArmed } from './abilities.js';
+import { lepesHangLejatszas } from './audio.js';
+import { oldalSerult, oldalVazVisszaallit } from './domSkeleton.js';
+import { initChessSettings, getChessSettings } from './settings.js';
+
+// Manualis flip-toggle state — a setting auto-flip felulirhato manualisan.
+let manualisFlipFelulirva = null; // null = auto-flip kovetkezik, true/false = manualis
 
 // Az aktuális játék ID — a szerver adja
 let gameId = null;
@@ -53,103 +59,18 @@ let pvpAktiv = false;
 let sajatSzin = null;              // 'white' | 'black'
 let ellenfelNev = null;
 let sajatNev = null;
+// A bejelentkezett felhasznalo username-je — bot/lokal meccsen is ezt mutatjuk
+// a `name-white` mezoben (nem a kemenykodolt "Te"-t). Init-kor toltodik fel
+// `/api/sessionInfo`-bol; ha nincs session (vendeg), 'Te' marad fallback-nek.
+let sajatUsername = null;
 let pvpSocket = null;              // Socket.io kliens (globális window.io())
 let kliensIdoTimer = null;         // kliens-oldali óra countdown (csak megjelenítés)
 let varakozoLepesPromisek = [];    // chess:moves:response Promise-ek
 
-// Hang lejátszás deduplikálás + egyszeri AudioContext
-let utolsoHangLepesKulcs = null;
-let audioCtx = null;
-const HANG_FAJLOK = {
-    jatekosLep: '../sounds/Jatekos_lep.mp3',
-    ellenfelLep: '../sounds/Ellenfel_lep.mp3',
-    sakk: '../sounds/sakk.mp3',
-    matt: '../sounds/matt.mp3',
-    sanc: '../sounds/sanc.mp3'
-};
-const hangCache = {};
+// Hang lejátszás → audio.js modulba kiemelve. A lepesHangLejatszas() es a
+// teljes audio-kontextus + cache + dedup ott él, ide csak importáljuk.
 const DRAG_START_THRESHOLD_PX = 6;
 
-// Hardcoded HTML template — a chess.html .app belseje, board tartalma nélkül
-const OLDAL_VAZ = `
-        <header class="topbar">
-            <div class="player player-black">
-                <div class="name" id="name-black">Ellenfél</div>
-                <div class="clock" id="clock-black">10:00</div>
-            </div>
-        </header>
-
-        <main class="main">
-            <div class="board-wrap">
-                <div id="board" class="board" aria-label="Sakk tábla"></div>
-
-                <!-- TÁBLAKITAKARÁS overlay -->
-                <div id="board-hide-overlay" class="board-hide-overlay hidden">
-                    <span>Tábla eltakarva</span>
-                    <span id="board-hide-countdown">5</span>
-                </div>
-
-                <div id="promotion-modal" class="promotion-modal hidden">
-                    <div class="promotion-overlay"></div>
-                    <div class="promotion-choices">
-                        <div class="promotion-piece" data-type="queen"></div>
-                        <div class="promotion-piece" data-type="rook"></div>
-                        <div class="promotion-piece" data-type="bishop"></div>
-                        <div class="promotion-piece" data-type="knight"></div>
-                    </div>
-                </div>
-            </div>
-
-            <aside class="sidebar">
-                <div class="status-row">
-                    Aktív: <strong id="turn-name">fehér</strong>
-                </div>
-                <div id="status" class="status">játékon</div>
-
-                <!-- KÉPESSÉG BAR -->
-                <div id="ability-bar" class="ability-bar hidden">
-                    <div class="ability-points">
-                        <span class="ap-label">Pontok</span>
-                        <span class="ap-mine" id="ap-mine">0</span>
-                        <span class="ap-sep">vs</span>
-                        <span class="ap-opp" id="ap-opp">0</span>
-                    </div>
-                    <div id="ability-buttons" class="ability-buttons"></div>
-                    <div id="ability-hint" class="ability-hint hidden"></div>
-                </div>
-
-                <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
-                <div id="opponent-disconnected" class="opponent-dc hidden">
-                    Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp
-                </div>
-                <div id="elo-change" class="elo-change hidden"></div>
-                <button id="drawOfferBtn" class="draw-btn hidden">Döntetlen ajánlat</button>
-                <div id="draw-offer-received" class="draw-offer hidden">
-                    <p>Ellenfeled döntetlent ajánl</p>
-                    <div class="draw-offer-buttons">
-                        <button id="draw-accept" class="pvp-invite-btn accept">Elfogad</button>
-                        <button id="draw-decline" class="pvp-invite-btn decline">Elutasít</button>
-                    </div>
-                </div>
-                <button id="feladBtn" class="felad-btn">Feladás</button>
-                <button id="newGameBtn" class="new-game-btn hidden">Új játék</button>
-                <div class="legend">
-                    <div><span class="legend-sq from"></span> Utolsó lépés</div>
-                    <div><span class="legend-sq capture"></span> Ütés lehetőség</div>
-                    <div><span class="legend-sq check"></span> Király sakkban</div>
-                    <div><span class="legend-sq enpassant"></span> En passant</div>
-                    <div><span class="legend-sq castle"></span> Sáncolás</div>
-                    <div><span class="legend-sq promotion"></span> Átváltozás</div>
-                </div>
-            </aside>
-        </main>
-
-        <footer class="bottombar">
-            <div class="player player-white">
-                <div class="name" id="name-white">Te</div>
-                <div class="clock" id="clock-white">10:00</div>
-            </div>
-        </footer>`;
 
 // ────────────────────────────────────────────
 // API HÍVÁSOK
@@ -186,26 +107,8 @@ async function apiUjBotJatek(difficulty, mode, ranked) {
     return data.allapot;
 }
 
-async function apiModes() {
-    const res = await fetch('/api/chess/modes');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Hiba a mód-lista lekérésekor.');
-    return data;
-}
-
-async function apiNehezsegek() {
-    const res = await fetch('/api/chess/difficulties');
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Hiba');
-    return data.szintek;
-}
-
-async function apiUserElo() {
-    const res = await fetch('/api/chess/user-elo');
-    const data = await res.json();
-    if (!res.ok) return { elo: 800, bejelentkezve: false };
-    return data;
-}
+// apiModes / apiNehezsegek / apiUserElo torolve — csak a regi (mostmar torolt)
+// modValasztoMegjelenit hasznalta. A frontpage chessModeChooser sajat fetch-ekkel hivja.
 
 async function apiAllapot() {
     const { res, data } = await fetchJsonWithTimeout(`/api/chess/${gameId}/state`, {}, 6000);
@@ -246,262 +149,17 @@ async function apiFeladMagat() {
 let selectedMode = null;
 let selectedRanked = true;
 
-async function modValasztoMegjelenit() {
-    const modal = document.getElementById("mode-modal");
-    const stepModes = document.getElementById("mode-step-modes");
-    const stepOpponent = document.getElementById("mode-step-opponent");
-    const step2 = document.getElementById("mode-step2");
-    const stepPvp = document.getElementById("mode-step-pvp");
-    const stepFriends = document.getElementById("mode-step-friends");
-    const stepQueue = document.getElementById("mode-step-queue");
-    const diffList = document.getElementById("difficulty-list");
-
-    const mindElrejt = () => {
-        if (stepModes) stepModes.classList.add("hidden");
-        if (stepOpponent) stepOpponent.classList.add("hidden");
-        if (step2) step2.classList.add("hidden");
-        if (stepPvp) stepPvp.classList.add("hidden");
-        if (stepFriends) stepFriends.classList.add("hidden");
-        if (stepQueue) stepQueue.classList.add("hidden");
-    };
-
-    modal.classList.remove("hidden");
-    mindElrejt();
-    stepModes.classList.remove("hidden");
-
-    // 1. lépés: 5 mód-gomb dinamikus generálás
-    try {
-        const { modes } = await apiModes();
-        const list = document.getElementById("mode-list");
-        if (list) {
-            list.innerHTML = "";
-            for (const k in modes) {
-                const m = modes[k];
-                const card = document.createElement("button");
-                card.className = "mode-card";
-                const idoTag = m.ido === null
-                    ? '<span class="mc-tag mc-tag-time">∞ idő</span>'
-                    : `<span class="mc-tag mc-tag-time">${m.ido / 60} perc</span>`;
-                const abilityTag = m.abilities
-                    ? '<span class="mc-tag mc-tag-abilities">Képességes</span>'
-                    : '<span class="mc-tag">Klasszikus</span>';
-                card.innerHTML = `
-                    <span class="mc-name">${m.nev}</span>
-                    <span class="mc-meta">
-                        ${abilityTag}
-                        ${idoTag}
-                    </span>
-                `;
-                card.addEventListener("click", () => {
-                    selectedMode = k;
-                    selectedRanked = !!m.rankedAllowed;
-                    document.getElementById("selected-mode-label").textContent = m.nev;
-                    const rankedInput = document.getElementById("ranked-toggle-input");
-                    if (rankedInput) {
-                        rankedInput.checked = selectedRanked;
-                        rankedInput.disabled = !m.rankedAllowed;
-                    }
-                    mindElrejt();
-                    if (stepOpponent) stepOpponent.classList.remove("hidden");
-                });
-                list.appendChild(card);
-            }
-        }
-    } catch (e) {
-        console.error("Mode-lista lekérdezés hiba:", e);
+// Az új (frontpage) chooser megnyitása. Ha valamiért nem érhető el (script load
+// hiba vagy timing race), fallback: visszairányítás az index oldalra.
+function ujMeccsChooserNyitas() {
+    const chooser = window.MattMesterChessModeChooser;
+    if (chooser && typeof chooser.open === 'function') {
+        chooser.open();
+        return;
     }
-
-    // ELO lekérdezés
-    try {
-        const userData = await apiUserElo();
-        const eloElem = document.getElementById("user-elo-value");
-        if (eloElem) eloElem.textContent = userData.elo;
-    } catch (e) {
-        console.error("ELO lekérdezés hiba:", e);
-    }
-
-    // Ranked toggle change handler
-    const rankedInput = document.getElementById("ranked-toggle-input");
-    if (rankedInput) {
-        rankedInput.addEventListener("change", (e) => {
-            selectedRanked = e.target.checked;
-        });
-    }
-
-    // 2. lépés "Robot ellen" gomb
-    document.getElementById("mode-bot").onclick = async () => {
-        mindElrejt();
-        step2.classList.remove("hidden");
-
-        try {
-            const szintek = await apiNehezsegek();
-            diffList.innerHTML = "";
-
-            for (let i = 0; i < szintek.length; i++) {
-                const s = szintek[i];
-                const btn = document.createElement("button");
-                btn.className = "diff-btn";
-                btn.innerHTML = `
-                    <span class="diff-name">${s.nev}</span>
-                    <span class="diff-elo">Ajánlott ELO: ${s.elo}</span>
-                `;
-                btn.addEventListener("click", () => {
-                    modal.classList.add("hidden");
-                    jatekIndit(s.szint, selectedMode, selectedRanked);
-                });
-                diffList.appendChild(btn);
-            }
-        } catch (e) {
-            console.error("Nehézségek lekérdezés hiba:", e);
-            diffList.innerHTML = '<p style="color:#f88">Hiba a szintek betöltésekor.</p>';
-        }
-    };
-
-    // 2. lépés "Játékos ellen" gomb
-    const pvpBtn = document.getElementById("mode-pvp");
-    if (pvpBtn) {
-        pvpBtn.onclick = () => {
-            mindElrejt();
-            if (stepPvp) stepPvp.classList.remove("hidden");
-        };
-    }
-
-    // PvP → Barát
-    const pvpFriendBtn = document.getElementById("pvp-friend");
-    if (pvpFriendBtn) {
-        pvpFriendBtn.onclick = async () => {
-            mindElrejt();
-            if (stepFriends) stepFriends.classList.remove("hidden");
-            await baratListaMegjelenit();
-        };
-    }
-
-    // PvP → Random queue
-    const pvpRandomBtn = document.getElementById("pvp-random");
-    if (pvpRandomBtn) {
-        pvpRandomBtn.onclick = () => {
-            mindElrejt();
-            if (stepQueue) stepQueue.classList.remove("hidden");
-            randomQueueIndit();
-        };
-    }
-
-    // Vissza gombok
-    const backModes = document.getElementById("mode-back-modes");
-    if (backModes) {
-        backModes.onclick = () => {
-            mindElrejt();
-            stepModes.classList.remove("hidden");
-        };
-    }
-    document.getElementById("mode-back").onclick = () => {
-        mindElrejt();
-        if (stepOpponent) stepOpponent.classList.remove("hidden");
-    };
-    const backPvp = document.getElementById("mode-back-pvp-menu");
-    if (backPvp) {
-        backPvp.onclick = () => {
-            mindElrejt();
-            if (stepOpponent) stepOpponent.classList.remove("hidden");
-        };
-    }
-    const backFriends = document.getElementById("mode-back-friends");
-    if (backFriends) {
-        backFriends.onclick = () => {
-            mindElrejt();
-            if (stepPvp) stepPvp.classList.remove("hidden");
-        };
-    }
-    const queueCancel = document.getElementById("queue-cancel");
-    if (queueCancel) {
-        queueCancel.onclick = () => {
-            randomQueueMegse();
-            mindElrejt();
-            if (stepPvp) stepPvp.classList.remove("hidden");
-        };
-    }
+    window.location.href = '/';
 }
 
-// ────────────────────────────────────────────
-// PVP — BARÁT LISTA + QUEUE + MEGHÍVÁS
-// ────────────────────────────────────────────
-
-async function apiBaratLista() {
-    const res = await fetch('/api/friends/list?status=friend');
-    const data = await res.json();
-    if (!res.ok || !data.success) throw new Error(data.message || 'Hiba a barátlista lekérésekor.');
-    return data.data || [];
-}
-
-async function baratListaMegjelenit() {
-    const listaElem = document.getElementById("friend-list");
-    if (!listaElem) return;
-    listaElem.innerHTML = '<p style="color:#aaa">Betöltés...</p>';
-
-    try {
-        const baratok = await apiBaratLista();
-        listaElem.innerHTML = "";
-        if (baratok.length === 0) {
-            listaElem.innerHTML = '<p style="color:#aaa">Nincsenek barátaid.</p>';
-            return;
-        }
-        for (let i = 0; i < baratok.length; i++) {
-            const b = baratok[i];
-            const btn = document.createElement("button");
-            btn.className = "friend-btn";
-            const uid = b.userId || b.id;
-            const uname = b.username || 'Ismeretlen';
-            btn.innerHTML = `
-                <span class="friend-name">${uname}</span>
-                <span class="friend-action">Meghívás</span>
-            `;
-            btn.addEventListener("click", () => meghivasKuld(uid, uname));
-            listaElem.appendChild(btn);
-        }
-    } catch (e) {
-        listaElem.innerHTML = `<p style="color:#f88">${e.message}</p>`;
-    }
-}
-
-function meghivasKuld(targetUserId, targetName) {
-    const socket = pvpSocketKeres();
-    if (!socket) return;
-
-    // Mode + ranked az aktuális mod-választás állapotából
-    socket.emit('chess:invite', {
-        targetUserId,
-        mode: selectedMode,
-        ranked: selectedRanked
-    });
-
-    const waiting = document.getElementById("pvp-waiting");
-    const waitingName = document.getElementById("pvp-waiting-name");
-    if (waitingName) waitingName.textContent = targetName || "";
-    if (waiting) waiting.classList.remove("hidden");
-
-    const cancelBtn = document.getElementById("pvp-cancel");
-    if (cancelBtn) {
-        cancelBtn.onclick = () => {
-            socket.emit('chess:invite:cancel');
-            if (waiting) waiting.classList.add("hidden");
-        };
-    }
-}
-
-function randomQueueIndit() {
-    const socket = pvpSocketKeres();
-    if (!socket) return;
-    socket.emit('chess:queue:join', {
-        mode: selectedMode,
-        ranked: selectedRanked
-    });
-}
-
-function randomQueueMegse() {
-    const socket = pvpSocketKeres();
-    if (!socket) return;
-    socket.emit('chess:queue:leave');
-}
 
 // ────────────────────────────────────────────
 // PVP — SOCKET.IO INTEGRÁCIÓ
@@ -561,6 +219,32 @@ function pvpSocketInit() {
         pvpJatekVege(data);
     });
 
+    // N13 — Rematch event-ek (server → kliens)
+    socket.on('chess:rematch:offered', () => {
+        // Sajat ajanlat nyugtazva — a rematch-gomb varakozasi allapotba kerul.
+        rematchUiVarakozas();
+    });
+    socket.on('chess:rematch:incoming', (data) => {
+        // Ellenfel ajanlott — bejovo modal megjelenitese.
+        rematchBejovoModal(true, data && data.gameId);
+    });
+    socket.on('chess:rematch:declined', (data) => {
+        rematchUiReset('Az ellenfél elutasította a revanst.');
+        rematchBejovoModal(false);
+    });
+    socket.on('chess:rematch:expired', () => {
+        rematchUiReset('A revans lejárt.');
+        rematchBejovoModal(false);
+    });
+    socket.on('chess:rematch:cancelled', () => {
+        rematchUiReset('A revans érvénytelen — ellenfél kilépett.');
+        rematchBejovoModal(false);
+    });
+    socket.on('chess:rematch:error', (data) => {
+        rematchUiReset((data && data.uzenet) || 'Revans hiba');
+        rematchBejovoModal(false);
+    });
+
     // Legális lépések válasz
     socket.on('chess:moves:response', (data) => {
         console.log('[PvP] moves:response', { lepesek: data.lepesek?.length || 0, x: data.x, y: data.y });
@@ -575,8 +259,10 @@ function pvpSocketInit() {
     // Hiba
     socket.on('chess:error', (data) => {
         console.warn('[PvP hiba]', data.uzenet);
-        // Vizuális popup, hogy a tesztelő észrevegye
-        try { alert('PvP hiba: ' + (data.uzenet || 'ismeretlen')); } catch (_) {}
+        // Custom HTML modal a natív alert() helyett (memoria-szabaly).
+        if (typeof window.mmAlert === 'function') {
+            window.mmAlert({ title: 'PvP hiba', message: data.uzenet || 'Ismeretlen hiba.' });
+        }
         const statusElem = document.getElementById('status');
         if (statusElem) {
             statusElem.textContent = data.uzenet || 'Hiba';
@@ -615,7 +301,9 @@ function pvpSocketInit() {
     socket.on('chess:invite:declined', () => {
         const waiting = document.getElementById('pvp-waiting');
         if (waiting) waiting.classList.add('hidden');
-        alert('Az ellenfél elutasította a meghívást.');
+        if (typeof window.mmAlert === 'function') {
+            window.mmAlert({ title: 'Meghívás elutasítva', message: 'Az ellenfél elutasította a meghívást.' });
+        }
     });
 
     // Meghívás lejárt/cancel
@@ -701,9 +389,22 @@ function pvpSocketInit() {
         }
     });
 
-    // Rejoin — ha nincs játék, nincs teendő
+    // Rejoin — ha nincs játék, nincs teendő. KIVÉVE: ha a frontpage chooser
+    // pendingMatch flag-gel ide-küldte a felhasználót de a backend nem talál
+    // aktív meccset (pl. meccs közben befejeződött), nyissuk meg az UJ chooser-t,
+    // különben a user üres oldalon ragadna.
+    // FONTOS: ha az URL-ben van `?type=bot|pvp`, a bot/pvp init-flow eppen
+    // most letrehozza a meccset — ne nyissuk meg a chooser-t, mert csak villanna
+    // egyet feleslegesen.
     socket.on('chess:rejoin:none', () => {
-        // csendben
+        if (pvpAktiv) return;
+        if (gameId) return; // mar van bot/pvp meccs folyamatban
+        try {
+            const params = new URLSearchParams(window.location.search);
+            const t = params.get('type');
+            if (t === 'bot' || t === 'pvp') return;
+        } catch (_) { /* ignore */ }
+        ujMeccsChooserNyitas();
     });
 }
 
@@ -711,11 +412,9 @@ let pvpGameId = null;
 
 function pvpJatekKezdet(data) {
     console.log('[PvP] game:start', { sajatSzin: data.sajatSzin, sajatNev: data.sajatNev, ellenfelNev: data.ellenfelNev, gameId: data.gameId });
-    // Modal elrejtés + játék állapot beállítás
-    const modal = document.getElementById('mode-modal');
+    // PVP overlay-k elrejtese (a regi #mode-modal HTML mar nincs, ne keressuk).
     const waiting = document.getElementById('pvp-waiting');
     const popup = document.getElementById('pvp-invite');
-    if (modal) modal.classList.add('hidden');
     if (waiting) waiting.classList.add('hidden');
     if (popup) popup.classList.add('hidden');
 
@@ -739,8 +438,20 @@ function pvpJatekKezdet(data) {
     // UI reset
     const feladBtn = document.getElementById('feladBtn');
     const newGameBtn = document.getElementById('newGameBtn');
+    const rematchBtn = document.getElementById('rematchBtn');
     if (feladBtn) feladBtn.classList.remove('hidden');
     if (newGameBtn) newGameBtn.classList.add('hidden');
+    // N13: az uj meccs (akar rematch akar friss) elrejti a rematch-gombot.
+    if (rematchBtn) {
+        rematchBtn.classList.add('hidden');
+        rematchBtn.disabled = false;
+        rematchBtn.textContent = 'Revans';
+    }
+    // Uj meccs indulasakor a game-end modal eltunjon (ha veletlenul nyitva
+    // maradt egy elozo veg utan a felhasznalo rakattintasra varakozott).
+    gameEndModalElrejt();
+    // N9: move-list panel ureseses az uj jatekhoz.
+    clearMoveList();
     const drawBtn = document.getElementById('drawOfferBtn');
     if (drawBtn) drawBtn.classList.remove('hidden');
 
@@ -758,6 +469,20 @@ function pvpJatekKezdet(data) {
         isPvp:     () => true,
         getSocket: () => pvpSocketKeres()
     }).then(() => abilitiesAllapotFrissit(data.allapot));
+
+    // Ingame chat aktivalas — csak PvP-n. Bot meccsen nincs ertelme.
+    chatPanelMutat();
+    chatPanelEnged(true);
+    chatMessagesUrites();
+}
+
+// Eldonti hogy flippelve renderelje-e a tablat: manualis felulir > auto-flip
+// setting + sajat szin. Ha a manualis nincs allitva, a setting + sajat szin alapjan.
+function kellFlippelni() {
+    if (manualisFlipFelulirva !== null) return manualisFlipFelulirva;
+    let autoflip = true;
+    try { autoflip = getChessSettings().autoflip !== false; } catch (e) { autoflip = true; }
+    return autoflip && pvpAktiv && sajatSzin === 'black';
 }
 
 function pvpAllapotFrissit(allapot) {
@@ -766,7 +491,8 @@ function pvpAllapotFrissit(allapot) {
     kivalasztott = null;
     try { if (appObserver) appObserver.disconnect(); } catch (e) {}
     oldalVazVisszaallit();
-    tablaRajzol(allapot, sajatSzin === 'black');
+    tablaRajzol(allapot, kellFlippelni());
+    renderMoveList(allapot);
 
     // Animáció minden új lépéshez (saját + ellenfél egyaránt)
     if (ujLepesTortent(elozoAllapot, allapot)) {
@@ -811,16 +537,106 @@ function pvpJatekVege(data) {
     const feladBtn = document.getElementById('feladBtn');
     const newGameBtn = document.getElementById('newGameBtn');
     const drawBtn = document.getElementById('drawOfferBtn');
+    const rematchBtn = document.getElementById('rematchBtn');
     const offerElem = document.getElementById('draw-offer-received');
     const dcElem = document.getElementById('opponent-disconnected');
     if (feladBtn) feladBtn.classList.add('hidden');
     if (newGameBtn) newGameBtn.classList.remove('hidden');
     if (drawBtn) drawBtn.classList.add('hidden');
+    // N13: rematch gomb csak PvP veg utan, es csak ha az ellenfel nem hagyta el a meccset.
+    if (rematchBtn) {
+        rematchBtn.classList.remove('hidden');
+        rematchBtn.disabled = false;
+        rematchBtn.textContent = 'Revans';
+    }
     if (offerElem) offerElem.classList.add('hidden');
     if (dcElem) dcElem.classList.add('hidden');
     if (window._dcInterval) {
         clearInterval(window._dcInterval);
         window._dcInterval = null;
+    }
+}
+
+// N13 — rematch UI segedfuggvenyek
+function rematchUiVarakozas() {
+    const rematchBtn = document.getElementById('rematchBtn');
+    if (rematchBtn) {
+        rematchBtn.disabled = true;
+        rematchBtn.textContent = 'Várakozás az ellenfélre...';
+    }
+}
+function rematchUiReset(uzenet) {
+    const rematchBtn = document.getElementById('rematchBtn');
+    if (rematchBtn) {
+        rematchBtn.disabled = false;
+        rematchBtn.textContent = 'Revans';
+    }
+    if (uzenet) {
+        const statusElem = document.getElementById('status');
+        if (statusElem) {
+            const eredeti = statusElem.textContent;
+            statusElem.textContent = uzenet;
+            setTimeout(() => {
+                if (statusElem.textContent === uzenet) statusElem.textContent = eredeti;
+            }, 3000);
+        }
+    }
+}
+function rematchBejovoModal(mutat, gameId) {
+    const modal = document.getElementById('rematch-offer-modal');
+    if (!modal) return;
+    if (mutat) {
+        modal.dataset.gameId = String(gameId || '');
+        modal.classList.remove('hidden');
+    } else {
+        modal.classList.add('hidden');
+        delete modal.dataset.gameId;
+    }
+}
+
+// Rematch gomb + bejovo modal kotsei. Csak egyszer hivodik az init()-bol.
+function rematchEsemenyekKot() {
+    const rematchBtn = document.getElementById('rematchBtn');
+    if (rematchBtn) {
+        rematchBtn.addEventListener('click', () => {
+            const socket = pvpSocketKeres && pvpSocketKeres();
+            if (!socket || !socket.connected) {
+                rematchUiReset('Nincs kapcsolat a szerverrel.');
+                return;
+            }
+            const targetGameId = (utolsoAllapot && utolsoAllapot.gameId) || pvpGameId;
+            socket.emit('chess:rematch:offer', { gameId: targetGameId });
+            rematchUiVarakozas();
+        });
+    }
+    const acceptBtn = document.getElementById('rematchAcceptBtn');
+    const declineBtn = document.getElementById('rematchDeclineBtn');
+    const modal = document.getElementById('rematch-offer-modal');
+    if (acceptBtn) {
+        acceptBtn.addEventListener('click', () => {
+            const socket = pvpSocketKeres && pvpSocketKeres();
+            const gid = modal && modal.dataset.gameId ? Number(modal.dataset.gameId) : null;
+            rematchBejovoModal(false);
+            if (socket && socket.connected && gid) {
+                socket.emit('chess:rematch:accept', { gameId: gid });
+            }
+        });
+    }
+    if (declineBtn) {
+        declineBtn.addEventListener('click', () => {
+            const socket = pvpSocketKeres && pvpSocketKeres();
+            const gid = modal && modal.dataset.gameId ? Number(modal.dataset.gameId) : null;
+            rematchBejovoModal(false);
+            if (socket && socket.connected && gid) {
+                socket.emit('chess:rematch:decline', { gameId: gid });
+            }
+        });
+    }
+    // Overlay-klikk = decline (custom modal pattern, nem natív confirm).
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal && declineBtn) declineBtn.click();
+        });
     }
 }
 
@@ -857,9 +673,18 @@ function pvpKliensIdoIndit() {
         const aktivSzin = utolsoAllapot.koronLevo;
         if (!utolsoAllapot.ido) return;
 
-        utolsoAllapot.ido[aktivSzin] = Math.max(0, utolsoAllapot.ido[aktivSzin] - 1);
+        // Vegtelen idős mod (ido[szin] === null vagy === Infinity) eseten
+        // nem csokkentunk, kulonben NaN lenne. Csak akkor decrementaljuk,
+        // ha tenylegesen szam.
+        if (Number.isFinite(utolsoAllapot.ido[aktivSzin])) {
+            utolsoAllapot.ido[aktivSzin] = Math.max(0, utolsoAllapot.ido[aktivSzin] - 1);
+        }
 
         const format = (mp) => {
+            // null / undefined / Infinity / NaN -> '∞' (idotlen meccs).
+            // A masik formattol (UI-megjelenites.js) eltérően itt is kezelni
+            // kell, kulonben '0:00' jelenne meg az ora-ticken.
+            if (mp === null || mp === undefined || !Number.isFinite(mp)) return '∞';
             const perc = Math.floor(mp / 60);
             const masodperc = mp % 60;
             return `${perc}:${masodperc.toString().padStart(2, '0')}`;
@@ -957,12 +782,157 @@ function nevekFrissit() {
         if (nameWhite) nameWhite.textContent = `${whiteNev || 'Fehér'}${sajatSzin === 'white' ? ' (Te)' : ''}`;
         if (nameBlack) nameBlack.textContent = `${blackNev || 'Fekete'}${sajatSzin === 'black' ? ' (Te)' : ''}`;
     } else if (botInfo) {
-        // Bot = fekete
+        // Bot = fekete. A jatekos nev: ha be van jelentkezve (sajatUsername),
+        // a username-jet, kulonben "Te" fallback. A korabbi keménykódolt "Te"
+        // helyett (lasd 2026-05-04 user-feedback).
         if (nameBlack) nameBlack.textContent = `🤖 ${botInfo.nev} (${botInfo.elo})`;
-        if (nameWhite) nameWhite.textContent = "Te";
+        if (nameWhite) nameWhite.textContent = sajatUsername || 'Te';
     } else {
         if (nameBlack) nameBlack.textContent = "Fekete";
-        if (nameWhite) nameWhite.textContent = "Fehér";
+        if (nameWhite) nameWhite.textContent = sajatUsername || "Fehér";
+    }
+}
+
+// Bejelentkezett felhasznalo username-jenek lekerese a session API-bol.
+// Egyszer fut le init-kor; idempotens, ha mar van `sajatUsername`, nem hivja
+// ujra. Ha nincs session (vendeg / hiba), null marad — a fallback "Te" /
+// "Fehér" jelzes lep ervenybe.
+async function sajatUsernameKeres() {
+    if (sajatUsername) return sajatUsername;
+    try {
+        const utils = window.MattMesterUtils;
+        if (!utils || typeof utils.fetchSessionInfo !== 'function') return null;
+        const data = await utils.fetchSessionInfo();
+        if (data && data.loggedIn && data.user && typeof data.user.username === 'string') {
+            sajatUsername = data.user.username;
+            // Ha mar fut egy meccs es a "Te" placeholder lathato, frissitsuk
+            // azonnal — nem kell uj jatekot indítani a username-ert.
+            try { nevekFrissit(); } catch (_) {}
+            return sajatUsername;
+        }
+    } catch (err) {
+        console.warn('[chess] username fetch hiba:', err);
+    }
+    return null;
+}
+
+function utottpiecekFrissit(allapot) {
+    const byWhite = document.getElementById('captured-by-white');
+    const byBlack = document.getElementById('captured-by-black');
+    if (!byWhite || !byBlack || !allapot?.tabla) return;
+
+    const KEZDO = { pawn: 8, rook: 2, knight: 2, bishop: 2, queen: 1, king: 1 };
+    const SORREND = ['queen', 'rook', 'bishop', 'knight', 'pawn'];
+
+    const meglevo = { white: {}, black: {} };
+    for (const m of allapot.tabla) {
+        if (!m.piece) continue;
+        const c = m.piece.color, t = m.piece.type;
+        meglevo[c][t] = (meglevo[c][t] || 0) + 1;
+    }
+
+    function utottLista(utottSzin) {
+        const lista = [];
+        for (const tipus of SORREND) {
+            const meglevoDb = meglevo[utottSzin][tipus] || 0;
+            const hianyzik = KEZDO[tipus] - meglevoDb;
+            for (let i = 0; i < hianyzik; i++) lista.push(tipus);
+        }
+        return lista;
+    }
+
+    function render(el, utottSzin) {
+        const lista = utottLista(utottSzin);
+        el.innerHTML = '';
+        for (const tipus of lista) {
+            const img = document.createElement('div');
+            img.className = 'captured-piece';
+            img.style.backgroundImage = `url('../images/${utottSzin}_${tipus}.png')`;
+            el.appendChild(img);
+        }
+    }
+
+    // fehér játékos ütötte a fekete bábukat → captured-by-white mutatja a fekete bábukat
+    render(byWhite, 'black');
+    render(byBlack, 'white');
+
+    // Right-side captured panel — nagyobb meretu icon-ok, ket szegmens.
+    // A "sajat alul" szabaly: a sajat szin alul, az ellenfel felul kerul.
+    // Mindkettonek elotte a username (ha bot, "Te" / bot-nev).
+    capturedPanelFrissit(allapot, utottLista);
+
+    // Material advantage (anyagi elony) — standard babu-pontok alapjan
+    // szamoljuk, ki nyer az utesekben (kiraly nem szamit, mert mate-tel
+    // veget er a meccs). A `+N` cimke csak a vezeto oldalan jelenik meg,
+    // a masik oldalon `hidden`. Ha egyenlo (vagy nincs ütott bábu), mindketto
+    // rejtett — igy nem zavar 0:0-rol felesleges UI-elem.
+    const PIECE_VALUES = { pawn: 1, knight: 3, bishop: 3, rook: 5, queen: 9 };
+    const sumValues = (utottList) => utottList.reduce((acc, t) => acc + (PIECE_VALUES[t] || 0), 0);
+    const blackUtottek = utottLista('black'); // amit a fehér ütött
+    const whiteUtottek = utottLista('white'); // amit a fekete ütött
+    const whiteScore = sumValues(blackUtottek);
+    const blackScore = sumValues(whiteUtottek);
+    const matWhiteEl = document.getElementById('material-white');
+    const matBlackEl = document.getElementById('material-black');
+    if (matWhiteEl && matBlackEl) {
+        const diff = whiteScore - blackScore;
+        matWhiteEl.classList.toggle('hidden', diff <= 0);
+        matBlackEl.classList.toggle('hidden', diff >= 0);
+        if (diff > 0) matWhiteEl.textContent = `+${diff}`;
+        if (diff < 0) matBlackEl.textContent = `+${-diff}`;
+    }
+}
+
+// Right-side captured panel renderer — a leütött bábukat nagyobb meretben
+// mutatja ket szekcioban. "Sajat alul" szabaly:
+//   - bottom = `mySzin` szin altal leutott bábuk (= ellen szin szinet)
+//   - top    = ellenfel altal leutott bábuk (= my szin szinét)
+// Bot-meccsen `name-mine` = sajatUsername (ha bejelentkezett), `name-opp` =
+// `🤖 ${botInfo.nev}`. PvP-n a `pvpJatekosNevek`-bol jonnek a nevek.
+function capturedPanelFrissit(allapot, utottListaFn) {
+    const opp = document.getElementById('captured-pieces-opp');
+    const mine = document.getElementById('captured-pieces-mine');
+    const oppName = document.getElementById('captured-name-opp');
+    const mineName = document.getElementById('captured-name-mine');
+    if (!opp || !mine) return;
+
+    // mySzin: PvP-n `sajatSzin`, bot-on a jatekos = white (botSzin = black)
+    const mySzin = sajatSzin || (allapot && allapot.botSzin ? (allapot.botSzin === 'white' ? 'black' : 'white') : 'white');
+    const oppSzin = mySzin === 'white' ? 'black' : 'white';
+
+    // Captured listak: amit a `mySzin` jatekos leutott (= `oppSzin` szinu babuk)
+    // mine alul jelenik meg, az ellenfel altal leutottek (= `mySzin` szinu babuk) felul.
+    const mineUtottList = utottListaFn(oppSzin); // amit mi utottunk (ellen szinu)
+    const oppUtottList  = utottListaFn(mySzin);  // amit ellenfel utott (mi szinunk)
+
+    function renderBig(el, lista, lostPieceColor) {
+        el.innerHTML = '';
+        for (const tipus of lista) {
+            const div = document.createElement('div');
+            div.className = 'captured-big-piece';
+            div.style.backgroundImage = `url('../images/${lostPieceColor}_${tipus}.png')`;
+            div.title = tipus;
+            el.appendChild(div);
+        }
+    }
+
+    // mineUtottList = ellen szinu babuk amit mi vittunk -> `oppSzin` szinu kepek
+    renderBig(mine, mineUtottList, oppSzin);
+    // oppUtottList = my szinu babuk amit az ellen vitt -> `mySzin` szinu kepek
+    renderBig(opp, oppUtottList, mySzin);
+
+    // Nev cimke beirasa — sajatUsername / botInfo / pvpJatekosNevek alapjan.
+    if (mineName) {
+        mineName.textContent = sajatUsername || (pvpAktiv ? sajatNev : 'Te') || 'Te';
+    }
+    if (oppName) {
+        if (pvpAktiv) {
+            oppName.textContent = ellenfelNev || 'Ellenfél';
+        } else if (botInfo) {
+            oppName.textContent = `🤖 ${botInfo.nev}`;
+        } else {
+            oppName.textContent = 'Ellenfél';
+        }
     }
 }
 
@@ -1064,6 +1034,68 @@ function jatekVegeUI(uzenet, eloValtozas) {
     const newGameBtn = document.getElementById('newGameBtn');
     if (feladBtn) feladBtn.classList.add('hidden');
     if (newGameBtn) newGameBtn.classList.remove('hidden');
+    // Ingame chat: input letiltva (a meccs vege), de az uzenetek megmaradnak
+    // — a felhasznalo elolvashatja a tortenetet meg a modal-zaras elott.
+    chatPanelEnged(false);
+    // Auto-felugro game-end modal — matt / patt / feladas / ido kifutas
+    // utan a felhasznalonak ket valasztasa van: Fololdal vagy Uj jatek.
+    // A modal-on belul az Uj jatek a `chessModeChooser`-t nyitja meg
+    // (ujMeccsChooserNyitas), igy a felhasznalo kivalaszthatja a kovetkezo
+    // mod-ot (Mattmester / Klasszikus / Blitz stb.) ugyanazon az oldalon.
+    gameEndModalMegnyit(uzenet, eloValtozas);
+}
+
+// Game-end modal megnyitas + szovegek beallitasa. A `bindGameEndModal`
+// hivasa egyszer fut le init-kor, az event listener-ek innen kezelodnek.
+function gameEndModalMegnyit(uzenet, eloValtozas) {
+    const modal = document.getElementById('game-end-modal');
+    const msgEl = document.getElementById('gameEndMessage');
+    const eloEl = document.getElementById('gameEndElo');
+    if (!modal) return;
+    if (msgEl) msgEl.textContent = uzenet || 'Játék vége';
+    if (eloEl) {
+        eloEl.classList.remove('positive', 'negative');
+        eloEl.textContent = '';
+        if (eloValtozas && typeof eloValtozas === 'object') {
+            const before = eloValtozas.eloBefore ?? eloValtozas.before;
+            const after  = eloValtozas.eloAfter  ?? eloValtozas.after;
+            if (typeof before === 'number' && typeof after === 'number') {
+                const diff = after - before;
+                const sign = diff >= 0 ? '+' : '';
+                eloEl.textContent = `ELO: ${before} → ${after} (${sign}${diff})`;
+                eloEl.classList.add(diff >= 0 ? 'positive' : 'negative');
+            }
+        }
+    }
+    modal.classList.remove('hidden');
+}
+
+function gameEndModalElrejt() {
+    const modal = document.getElementById('game-end-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+// A game-end modal gombjainak bekotese — egyszer fut le `init()`-bol.
+// `Fololdal` -> sima frontpage redirect (`/`), `Uj jatek` ->
+// `ujMeccsChooserNyitas()` ami a `chessModeChooser`-t nyitja meg.
+function bindGameEndModal() {
+    const homeBtn = document.getElementById('gameEndHomeBtn');
+    const newBtn  = document.getElementById('gameEndNewGameBtn');
+    if (homeBtn) {
+        homeBtn.addEventListener('click', () => {
+            window.location.href = '/';
+        });
+    }
+    if (newBtn) {
+        newBtn.addEventListener('click', () => {
+            gameEndModalElrejt();
+            // Uj meccs valasztas elott a regi chat-tortenetet eldobjuk +
+            // panel rejtve marad, amig a uj PvP `game:start` ujra meg nem
+            // mutatja. Igy az elozo meccs uzenetei nem szivarognak at.
+            chatPanelLezar();
+            ujMeccsChooserNyitas();
+        });
+    }
 }
 
 function botGondolkodasFrissit(allapotVagyBool) {
@@ -1078,93 +1110,6 @@ function botGondolkodasFrissit(allapotVagyBool) {
     else thinkingElem.classList.add('hidden');
 }
 
-function audioContextKeres() {
-    if (audioCtx) return audioCtx;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return null;
-    audioCtx = new Ctx();
-    return audioCtx;
-}
-
-function hangObjektumKeres(hangKulcs) {
-    if (hangCache[hangKulcs]) return hangCache[hangKulcs];
-    const fajl = HANG_FAJLOK[hangKulcs];
-    if (!fajl) return null;
-    const audio = new Audio(fajl);
-    audio.preload = 'auto';
-    hangCache[hangKulcs] = audio;
-    return audio;
-}
-
-function hangLejatszas(hangKulcs, fallbackFreq = 620, fallbackMs = 90, fallbackGain = 0.03) {
-    const hang = hangObjektumKeres(hangKulcs);
-    if (!hang) {
-        pittyen(fallbackFreq, fallbackMs, fallbackGain);
-        return;
-    }
-
-    hang.currentTime = 0;
-    const playPromise = hang.play();
-    if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch(() => {
-            pittyen(fallbackFreq, fallbackMs, fallbackGain);
-        });
-    }
-}
-
-function pittyen(freq, durationMs, gain = 0.03) {
-    const ctx = audioContextKeres();
-    if (!ctx) return;
-
-    if (ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
-    }
-
-    const osc = ctx.createOscillator();
-    const amp = ctx.createGain();
-    const start = ctx.currentTime;
-    const end = start + (durationMs / 1000);
-
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(freq, start);
-
-    amp.gain.setValueAtTime(0, start);
-    amp.gain.linearRampToValueAtTime(gain, start + 0.01);
-    amp.gain.exponentialRampToValueAtTime(0.0001, end);
-
-    osc.connect(amp);
-    amp.connect(ctx.destination);
-    osc.start(start);
-    osc.stop(end);
-}
-
-function lepesHangLejatszas(allapot) {
-    if (!allapot || !allapot.utolsoLepes) return;
-
-    const l = allapot.utolsoLepes;
-    const kulcs = `${allapot.lepesszam}:${l.from.x},${l.from.y}->${l.to.x},${l.to.y}`;
-    if (kulcs === utolsoHangLepesKulcs) return;
-    utolsoHangLepesKulcs = kulcs;
-
-    if (allapot.vege) {
-        hangLejatszas('matt', 350, 180, 0.04);
-        return;
-    }
-
-    if (allapot.sakkPoz) {
-        hangLejatszas('sakk', 900, 90, 0.035);
-        return;
-    }
-
-    if (l.special === 'castle-ks' || l.special === 'castle-qs') {
-        hangLejatszas('sanc', 560, 120, 0.03);
-        return;
-    }
-
-    const lepoSzin = allapot.koronLevo === 'white' ? 'black' : 'white';
-    const botLepett = !!(allapot.botAktiv && allapot.botSzin === lepoSzin);
-    hangLejatszas(botLepett ? 'ellenfelLep' : 'jatekosLep', 620, 90, 0.03);
-}
 
 function allapotLepesKulcs(allapot) {
     if (!allapot || !allapot.utolsoLepes) return null;
@@ -1220,7 +1165,8 @@ function allapotFrissit(allapot, animald = false) {
     kivalasztott = null;
     try { if (appObserver) appObserver.disconnect(); } catch(e) {}
     oldalVazVisszaallit();
-    tablaRajzol(allapot, pvpAktiv && sajatSzin === 'black');
+    tablaRajzol(allapot, kellFlippelni());
+    renderMoveList(allapot);
     const automataAnimacio = ujLepesTortent(elozoAllapot, allapot);
     if ((animald || automataAnimacio) && allapot.utolsoLepes) {
         const animKulcs = allapotLepesKulcs(allapot);
@@ -1236,6 +1182,7 @@ function allapotFrissit(allapot, animald = false) {
     huzasHozzaadMinden(allapot);
     esemenyekUjraKot();
     nevekFrissit();
+    utottpiecekFrissit(allapot);
     eloValtozasFrissit(allapot.eloValtozas || null);
     botGondolkodasFrissit(allapot);
     abilitiesAllapotFrissit(allapot);
@@ -1245,105 +1192,6 @@ function allapotFrissit(allapot, animald = false) {
     }
 }
 
-/**
- * Ellenőrzi hogy az oldal váza sérült-e (bármi hiányzik).
- */
-function oldalSerult(allapot) {
-    const kritikusElemek = [
-        ".app",
-        "header.topbar",
-        ".player-black",
-        ".player-black .name",
-        "#clock-black",
-        "main.main",
-        ".board-wrap",
-        "#board",
-        "#promotion-modal",
-        ".promotion-overlay",
-        ".promotion-choices",
-        '.promotion-piece[data-type="queen"]',
-        '.promotion-piece[data-type="rook"]',
-        '.promotion-piece[data-type="bishop"]',
-        '.promotion-piece[data-type="knight"]',
-        "aside.sidebar",
-        ".sidebar .status-row",
-        "#turn-name",
-        "#status",
-        "#bot-thinking",
-        "#feladBtn",
-        ".sidebar .legend",
-        "footer.bottombar",
-        ".player-white",
-        ".player-white .name",
-        "#clock-white"
-    ];
-    for (let i = 0; i < kritikusElemek.length; i++) {
-        if (!document.querySelector(kritikusElemek[i])) {
-            console.log("[INTEGRITÁS] Hiányzó elem:", kritikusElemek[i]);
-            return true;
-        }
-    }
-
-    // Szöveg tartalom ellenőrzés
-    const szovegEllenorzesek = [
-        { sel: ".player-black .name", min: 1 },
-        { sel: "#clock-black", min: 1 },
-        { sel: "#feladBtn", min: 1 },
-        { sel: "#turn-name", min: 1 },
-        { sel: "#status", min: 1 },
-        { sel: ".player-white .name", min: 1 },
-        { sel: "#clock-white", min: 1 },
-        { sel: ".sidebar .legend", min: 5 },
-        { sel: ".sidebar .status-row", min: 3 },
-    ];
-    for (let i = 0; i < szovegEllenorzesek.length; i++) {
-        const e = szovegEllenorzesek[i];
-        const elem = document.querySelector(e.sel);
-        if (elem && elem.textContent.trim().length < e.min) {
-            console.log("[INTEGRITÁS] Üres szöveg:", e.sel);
-            return true;
-        }
-    }
-
-    // Legend div-ek száma
-    const legendDivek = document.querySelectorAll(".sidebar .legend > div");
-    if (legendDivek.length < 6) {
-        console.log("[INTEGRITÁS] Legend sorok:", legendDivek.length, "/ 6");
-        return true;
-    }
-
-    if (allapot) {
-        const boardElem = document.getElementById("board");
-        if (!boardElem) return true;
-        const mezok = boardElem.querySelectorAll(".square");
-        if (mezok.length !== 64) {
-            console.log("[INTEGRITÁS] Mezők száma:", mezok.length, "/ 64");
-            return true;
-        }
-        const szerverBabuk = allapot.tabla.filter(m => m.piece).length;
-        const domBabuk = boardElem.querySelectorAll(".piece").length;
-        if (domBabuk !== szerverBabuk) {
-            console.log("[INTEGRITÁS] Bábuk DOM:", domBabuk, "szerver:", szerverBabuk);
-            return true;
-        }
-    }
-    return false;
-}
-
-/**
- * Visszaállítja az oldal vázát a hardcoded template-ből.
- */
-function oldalVazVisszaallit() {
-    let appElem = document.querySelector(".app");
-    if (!appElem) {
-        console.log("[HELYREÁLLÍTÁS] .app hiányzik — body-ból újra");
-        appElem = document.createElement("div");
-        appElem.className = "app";
-        document.body.innerHTML = "";
-        document.body.appendChild(appElem);
-    }
-    appElem.innerHTML = OLDAL_VAZ;
-}
 
 /**
  * Observer indítás — figyeli a body-t (subtree).
@@ -1435,6 +1283,8 @@ function idoPollingIndit() {
                 allapotFrissit(allapot, botLepesAnimacioKell(elozoAllapot, allapot));
             } else {
                 const format = (mp) => {
+                    // Vegtelen ido mod -> '∞' (lasd UI-megjelenites.js#idoFrissit).
+                    if (mp === null || mp === undefined || !Number.isFinite(mp)) return '∞';
                     const perc = Math.floor(mp / 60);
                     const masodperc = mp % 60;
                     return `${perc}:${masodperc.toString().padStart(2, '0')}`;
@@ -1543,7 +1393,19 @@ function esemenyekUjraKot() {
             lepesKuldesLezar();
             pvpAllapotReset();
             eloValtozasFrissit(null);
-            modValasztoMegjelenit();
+            // N9: move-list panel uritese, mert uj jatekot indit a felhasznalo.
+            clearMoveList();
+            // N11: manualis flip felulirast is reseteli, hogy a kovetkezo PvP-ben
+            // visszalegyen az auto-flip viselkedes.
+            manualisFlipFelulirva = null;
+            // N13: rematch-gomb elrejtese (mode-valaszto modal a kovetkezo lepes).
+            const rematchBtnReset = document.getElementById('rematchBtn');
+            if (rematchBtnReset) {
+                rematchBtnReset.classList.add('hidden');
+                rematchBtnReset.disabled = false;
+                rematchBtnReset.textContent = 'Revans';
+            }
+            ujMeccsChooserNyitas();
         });
     }
 
@@ -1598,8 +1460,198 @@ function esemenyekUjraKot() {
     }
 }
 
+// ────────────────────────────────────────────
+// INGAME CHAT (bal oldali panel) — csak PvP meccs alatt
+// ────────────────────────────────────────────
+//
+// Backend protokoll (`chess/pvp.js`):
+//   chess:chat:send  ({gameId, text})  -> csak az aktiv meccs ket jatekosatol
+//   chess:chat:message ({gameId, from:{userId,color,username}, text, ts})
+//   -> minden szobatag (sajat is) megkapja
+//
+// Lifecycle:
+//   - PvP `chess:game:start` -> `chatPanelMutat()` + enable input
+//   - Game-end (`jatekVegeUI`) -> `chatPanelEnged(false)` (input letiltva,
+//     uzenetek megmaradnak)
+//   - Uj jatek / oldal-elhagyas -> `chatPanelLezar()` (input torolve, panel rejtve)
+
+let chatSocketBekotve = false;
+
+function chatPanelMutat() {
+    const panel = document.getElementById('ingame-chat-panel');
+    if (panel) panel.classList.remove('hidden');
+    // Probaljuk meg ujra bekotni a socket listener-t — init-kor lehet,
+    // hogy a `pvpSocketKeres()` meg null volt (a socketClient.js aszinkron
+    // tolti be a kapcsolatot). PvP game:start-kor mar megvan, igy itt
+    // sikeresen latoljuk.
+    if (!chatSocketBekotve) {
+        const socket = pvpSocketKeres();
+        if (socket && typeof socket.on === 'function') {
+            socket.on('chess:chat:message', (payload) => {
+                runSafelyHelper(() => chatUzenetRender(payload));
+            });
+            chatSocketBekotve = true;
+        }
+    }
+}
+
+function chatPanelElrejt() {
+    const panel = document.getElementById('ingame-chat-panel');
+    if (panel) panel.classList.add('hidden');
+}
+
+function chatPanelEnged(engedett) {
+    const input = document.getElementById('ingame-chat-input');
+    const sendBtn = document.getElementById('ingame-chat-send');
+    if (input) input.disabled = !engedett;
+    if (sendBtn) sendBtn.disabled = !engedett;
+    if (input && !engedett) {
+        // Game-end-en a meccs UTAN megmarad ami ki van irva, de uj uzenet
+        // nem mehet — a placeholder ezt jelzi.
+        input.placeholder = 'Chat lezárva (meccs vége).';
+    } else if (input) {
+        input.placeholder = 'Üzenet…';
+    }
+}
+
+function chatMessagesUrites() {
+    const cont = document.getElementById('ingame-chat-messages');
+    if (cont) cont.innerHTML = '<div class="ingame-chat-empty">Még nincs üzenet — szólj az ellenfélnek!</div>';
+}
+
+function chatPanelLezar() {
+    chatPanelEnged(false);
+    chatPanelElrejt();
+    chatMessagesUrites();
+}
+
+// Egy uj uzenet renderelese (sajat / ellenfel). A `from.color` alapjan
+// dontjuk el, sajat oldalra (gold) vagy ellenfel oldalra (default) rajzolja.
+function chatUzenetRender(payload) {
+    const cont = document.getElementById('ingame-chat-messages');
+    if (!cont) return;
+    // Az "ures" placeholder-t kivesszuk az elso uzenet erkezesekor.
+    const empty = cont.querySelector('.ingame-chat-empty');
+    if (empty) empty.remove();
+
+    const isMine = payload?.from?.color === sajatSzin;
+    const div = document.createElement('div');
+    div.className = `ingame-chat-msg ${isMine ? 'is-mine' : 'is-opp'}`;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'ingame-chat-msg-name';
+    nameSpan.textContent = payload?.from?.username || (isMine ? 'Te' : 'Ellenfél');
+    const textNode = document.createElement('span');
+    // textContent — XSS-mentes, az input mar szerver-szanitalt
+    textNode.textContent = payload?.text || '';
+    div.appendChild(nameSpan);
+    div.appendChild(textNode);
+    cont.appendChild(div);
+    // Auto-scroll a legujabb uzenetre (sima behavior csillapitja a jumpot).
+    cont.scrollTop = cont.scrollHeight;
+}
+
+function bindChatPanel() {
+    const form = document.getElementById('ingame-chat-form');
+    const input = document.getElementById('ingame-chat-input');
+    if (!form || !input) return;
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const text = (input.value || '').trim();
+        if (!text || !pvpAktiv || !pvpGameId) return;
+        const socket = pvpSocketKeres();
+        if (!socket) return;
+        socket.emit('chess:chat:send', { gameId: pvpGameId, text });
+        input.value = '';
+    });
+
+    // Socket listener — egyszer kotjuk; ha az `pvpSocketKeres()` (ami a
+    // window.MattMesterSocket.socket-et adja) elerheto, csatolunk hozza
+    // egy uzenet listener-t. Ha meg nem, `chatSocketBekotve` false marad
+    // es a kovetkezo `bindChatPanel` hivasnal megprobalja megint.
+    if (!chatSocketBekotve) {
+        const socket = pvpSocketKeres();
+        if (socket && typeof socket.on === 'function') {
+            socket.on('chess:chat:message', (payload) => {
+                runSafelyHelper(() => chatUzenetRender(payload));
+            });
+            chatSocketBekotve = true;
+        }
+    }
+}
+
+function runSafelyHelper(fn) {
+    try { fn(); } catch (err) { console.warn('[chat] handler hiba:', err); }
+}
+
+// Segitseg modal handler — `#helpFloatingBtn` -> `#help-modal` toggle.
+// Custom HTML modal (NEM natív alert/confirm), ESC + overlay-klikk + `×` zar.
+function bindHelpModal() {
+    const modal = document.getElementById('help-modal');
+    const openBtn = document.getElementById('helpFloatingBtn');
+    const closeBtn = document.getElementById('helpModalClose');
+    const overlay = modal ? modal.querySelector('.help-modal-overlay') : null;
+    if (!modal || !openBtn || !closeBtn) return;
+
+    const open = () => modal.classList.remove('hidden');
+    const close = () => modal.classList.add('hidden');
+
+    openBtn.addEventListener('click', open);
+    closeBtn.addEventListener('click', close);
+    if (overlay) overlay.addEventListener('click', close);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !modal.classList.contains('hidden')) close();
+    });
+}
+
 async function init() {
     console.log("[INIT] Mattmester indítás...");
+
+    // N10: kliens-oldali beallitasok betoltese + modal-bind. localStorage perszisztencia,
+    // try-catch a settings.js-ben kezeli az incognito sandboxot.
+    try { initChessSettings(); } catch (e) { console.warn('settings init hiba:', e); }
+
+    // Segitseg (jelmagyarazat) modal kotese — bal-also `?` gombbal nyilik.
+    // A modal background-ra (overlay) vagy a `×` zar gombra klikk + Escape
+    // billentyu mind zarja. Ugyanaz a custom modal pattern mint a settings.
+    bindHelpModal();
+
+    // Game-end modal kotese (Fololdal / Uj jatek) — egyszer kotjuk az event
+    // listener-eket, a modal megnyitasat a `jatekVegeUI` triggerelheti
+    // dinamikusan.
+    bindGameEndModal();
+
+    // Ingame chat — input + form bind. Socket listener-t a `bindChatPanel`
+    // belsoleg csatolja, ha a `pvpSocketKeres()` mar elerheto, kulonben a
+    // pvpJatekKezdet ujrahivja.
+    bindChatPanel();
+    // Oldalbol elnavigaciokor a chat lezar — nincs szerver-leiratkozas
+    // szukseges, mert a socket disconnect-et kovetoen sem fogadunk uzenetet.
+    window.addEventListener('beforeunload', () => {
+        try { chatPanelLezar(); } catch (_) {}
+    });
+
+    // Bejelentkezett username asynk lekerese (cache-elve `sajatUsername`-ben),
+    // hogy a player-badge "Te" helyett a valodi nev lassek meg bot-meccsen.
+    // Tűzz-es-felejts: a nevekFrissit() automatikusan hivodik a fetch utan.
+    sajatUsernameKeres().catch(() => {});
+
+    // N11: manualis flip-toggle a sidebar gombrol. A setting auto-flip felulirhato manualisan,
+    // amig a felhasznalo nem klikkel ujat.
+    const flipBtn = document.getElementById('flipBoardBtn');
+    if (flipBtn) {
+        flipBtn.addEventListener('click', () => {
+            const aktualis = kellFlippelni();
+            manualisFlipFelulirva = !aktualis;
+            if (utolsoAllapot) {
+                tablaRajzol(utolsoAllapot, kellFlippelni());
+                renderMoveList(utolsoAllapot);
+            }
+        });
+    }
+
+    // N13: rematch gomb + bejovo offer modal eseme nykezelok.
+    rematchEsemenyekKot();
 
     // Feladás modal eseménykezelők (csak egyszer kell kötni)
     surrenderModalEsemenyekKot();
@@ -1615,22 +1667,87 @@ async function init() {
     // Socket init + PvP handler regisztráció
     pvpSocketInit();
 
-    // Rejoin próba — ha van aktív PvP játék, visszacsatlakozik
-    setTimeout(() => {
+    // Rejoin próba — ha van aktív PvP játék, visszacsatlakozik. A `chess:rejoin`
+    // emit-et újra-próbáljuk amíg a socket meg nem érkezik (max ~5s), mert a
+    // frontpage-rőL érkezve a meccs adatai csak a backendnél vannak — a kliensnek
+    // ezt kell lekérnie a `chess:rejoin`-nal, különben az index oldalon kapott
+    // `chess:game:start` event "elveszne" (már disconnect-elt socket fogadta).
+    function emitRejoinWhenReady(retriesLeft = 10) {
         const socket = pvpSocketKeres();
         if (socket && socket.connected) {
             socket.emit('chess:rejoin');
             pendingChessInviteAcceptKuld(socket);
-        } else if (socket) {
+            return;
+        }
+        if (socket) {
             socket.once('connect', () => {
                 socket.emit('chess:rejoin');
                 pendingChessInviteAcceptKuld(socket);
             });
+            return;
         }
-    }, 500);
+        if (retriesLeft > 0) {
+            setTimeout(() => emitRejoinWhenReady(retriesLeft - 1), 250);
+        }
+    }
+    setTimeout(() => emitRejoinWhenReady(), 500);
 
-    // Játékmód választó megjelenítés
-    modValasztoMegjelenit();
+    // Query-string alapú auto-indítás (frontpage chess mode chooser-ből):
+    //   - `?type=bot&mode=X&difficulty=Y` → bot meccs azonnal (nincs modal)
+    //   - egyébként ha sessionStorage-ben van pendingMatch (queue / friend
+    //     invite match-et kapott a frontpage) → modal NEM jelenik meg, a
+    //     `chess:rejoin` flow tölti be a meccset
+    //   - különben (direkt URL látogatás vagy backwards-compat) → modal
+    const params = new URLSearchParams(window.location.search);
+    const autoType = params.get('type');
+    const autoMode = params.get('mode');
+    if (autoType === 'bot' && autoMode) {
+        await initBotFromQueryParams(params);
+        return;
+    }
+
+    let hasPendingMatch = false;
+    try {
+        const raw = window.sessionStorage.getItem('mattmester.chessPendingMatch');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.gameId && (Date.now() - (parsed.ts || 0)) < 30_000) {
+                hasPendingMatch = true;
+            }
+            window.sessionStorage.removeItem('mattmester.chessPendingMatch');
+        }
+    } catch (_) { /* ignore */ }
+
+    if (hasPendingMatch || autoType === 'pvp') {
+        // PvP/pending match: a chess:rejoin / chess:game:start eventek tovabb intezik
+        return;
+    }
+
+    // Játékmód választó megjelenítés — az új (frontpage) chooser-rel
+    ujMeccsChooserNyitas();
+}
+
+// ────────────────────────────────────────────
+// Query-paraméteres BOT auto-indítás (frontpage chooser-ből)
+// ────────────────────────────────────────────
+async function initBotFromQueryParams(params) {
+    const mode = params.get('mode');
+    const difficulty = parseInt(params.get('difficulty') || '0', 10);
+
+    selectedMode = mode;
+    selectedRanked = false; // bot MINDIG casual
+
+    try {
+        await jatekIndit(difficulty || 1, mode, false, null);
+    } catch (err) {
+        console.error('Bot auto-indítás hiba:', err);
+        ujMeccsChooserNyitas();
+    }
+}
+
+// Backwards-compat alias — projectIntegrity teszt erre is utal
+async function initFromQueryParams(params) {
+    return initBotFromQueryParams(params);
 }
 
 // ────────────────────────────────────────────
