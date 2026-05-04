@@ -47,33 +47,27 @@ body
 {
     margin: 0;
     font-family: 'Inter', "Segoe UI", Roboto, Arial, sans-serif;
-    /* Tobbreteges hatter:
-     *   1) lassan lebego sotet sakk-tabla minta (premium polish, alig latszik)
-     *   2) finom arany glow felulrol jobbrol (eredeti)
-     *   3) tomor sotet alap.
-     * A `body::before` nelkul mukodik, mert a `background` shorthand tobb
-     * reteget keszit. Az animalt minta a CPU-baratabb `background-position`
-     * keyframe-en megy, nem opacity / filter alapon. */
-    background:
-        repeating-linear-gradient(45deg,
-            rgba(212, 175, 55, 0.025) 0 24px,
-            transparent 24px 48px),
-        repeating-linear-gradient(-45deg,
-            rgba(255, 255, 255, 0.018) 0 24px,
-            transparent 24px 48px),
-        radial-gradient(circle at top right, rgba(212, 175, 55, 0.06), transparent 30%),
-        var(--bg-dark);
-    background-attachment: fixed, fixed, fixed, fixed;
+    /* Solid hatterszin (felhasznalo kerese 2026-05-04): a korabbi animalt
+     * sakk-tabla mintat (`repeating-linear-gradient` 45/-45 deg + radial)
+     * eltavolitottuk, mert a felhasznalo szerint "bugos" volt vizualisan.
+     * `rgb(15, 23, 42)` = sotet navy/slate, megegyezik a `--bg-dark` token-nel
+     * es a tobbi oldal sotet hatter-palettajaval (admin / profile). */
+    background: rgb(15, 23, 42);
     color: var(--text-primary);
     /* 3-oszlopos grid: BAL = ingame chat panel, KOZEP = `.app` (board + badges),
      * JOBB = leütött bábuk panel. Az oldalsav-ok 1fr-1fr-rel egyforman
      * szelesek, a kozep oszlop `auto` (= --board-size). Tabla kozeppontba
      * marad, mindket oldalpanel egyformen elferi a tabla mellett.
      *
-     * Mobilon (lasd alabbi @media) az oldalsav-ok elrejtve, a `.app` egyedul
-     * marad (kompakt mobile-elrendezes). */
+     * grid-template-areas + minden gyerek explicit `grid-area`-val: kulonben
+     * a `display: none`-os chat panel kicsi a auto-flow-bol, es a `.app`
+     * a 1. cellaba "esik" (balra csuszik, lasd lentebb a .app, .ingame-chat-
+     * panel, .captured-panel szabalyokat).
+     *
+     * Mobilon (lasd alabbi @media) flex column, oldalpanelek display:none. */
     display: grid;
     grid-template-columns: 1fr auto 1fr;
+    grid-template-areas: "left center right";
     align-items: center;
     justify-items: center;
     column-gap: 12px;
@@ -83,20 +77,6 @@ body
     min-height: 100vh;
     overflow-x: hidden;
     position: relative;
-    animation: chessBgDrift 60s linear infinite;
-}
-
-@keyframes chessBgDrift {
-    /* Csak a ket repeating-linear-gradient reteget tolja — a radial es a
-     * tomor szin background-attachment: fixed marad, nem mozdul. Egy teljes
-     * 96px ciklust 60 mp alatt fut le -> alig eszrevetheto, de elo. */
-    from { background-position: 0 0, 0 0, 0 0, 0 0; }
-    to   { background-position: 96px 96px, -96px 96px, 0 0, 0 0; }
-}
-
-/* `prefers-reduced-motion` tiszteletben tartasa — accessibility. */
-@media (prefers-reduced-motion: reduce) {
-    body { animation: none; }
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -120,7 +100,23 @@ h1, h2, h3, h4, h5, h6 {
     /* Center vertically when viewport is taller than content. */
     justify-content: center;
     align-items: center;
+    /* Pinneld a grid-areahoz — kulonben ha a chat panel `display: none`-as,
+     * a body grid auto-flow a `.app`-ot az 1. cellaba teszi (balra csuszas). */
+    grid-area: center;
 }
+
+/* Flip-szinkron: amikor a tabla forgatva van (saját = fekete + autoflip),
+ * a player-badge-eket is fizikailag fel kell cserelni — a sajat nev "Te"
+ * MINDIG legyen alul, az ellenfel felul. CSS-only swap order:- es order:+
+ * trukkel, hogy a DOM/data-flow ne valtozzon (clock-white maradjon a feher
+ * jatekos órája, csak a vizualis pozicio cserelodjon).
+ *
+ * Lasd main.js#nevekFrissit() ami a `kellFlippelni()` alapjan toggleli a
+ * `.flipped` class-t. Bug forrasa: 2026-05-04 user-feedback — black jatekos
+ * "Te"-t felul lattal, az opponent-et alul, ami osszezavart. */
+.app.flipped .topbar    { order: 2; }
+.app.flipped .main      { order: 1; }
+.app.flipped .bottombar { order: 0; }
 
 /* FELSŐ ÉS ALSÓ SÁV (játékos információk)
  *
@@ -550,6 +546,56 @@ h1, h2, h3, h4, h5, h6 {
 {
   border-color: #fff;  /* Fehér keret */
   transform: scale(1.1);  /* 10% nagyítás */
+}
+
+/* REJOIN OVERLAY — F5 / disconnect utan visible feedback ameddig a chess:rejoin
+ * valasz nem erkezik meg. A chooser-modal felett van (z-index: 3500), igy
+ * defensive-en eltakarja ha a chooser veletlenul megnyilna a rejoin alatt.
+ * Auto-eltunik a chess:game:start (rejoin success), chess:rejoin:none (no-game)
+ * vagy 5s safety-timeout utan. */
+.rejoin-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.92);
+    z-index: 3500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+.rejoin-overlay.hidden { display: none; }
+.rejoin-overlay-content {
+    background: var(--bg-card);
+    border: 1px solid var(--accent-gold);
+    border-radius: 14px;
+    padding: 32px 40px;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    max-width: 92%;
+}
+.rejoin-overlay-spinner {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 18px;
+    border: 5px solid rgba(212, 175, 55, 0.18);
+    border-top-color: var(--accent-gold);
+    border-radius: 50%;
+    animation: rejoin-spin 0.9s linear infinite;
+}
+@keyframes rejoin-spin {
+    to { transform: rotate(360deg); }
+}
+.rejoin-overlay-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent-gold);
+    margin: 0 0 8px 0;
+}
+.rejoin-overlay-sub {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin: 0;
 }
 
 /* RESZPONZÍV DESIGN (kis képernyők) */
@@ -1137,25 +1183,71 @@ h1, h2, h3, h4, h5, h6 {
     justify-content: center;
 }
 
-/* Disconnect jelzés */
+/* Disconnect jelzés — chess.com-szeru fixed-positioning banner a viewport
+ * teteje kozepen. A sidebar `display: none`-ben van, igy a regi sidebar-belso
+ * megjelenites el volt rejtve. Mostantol fixed banner: figyelemfelkelto piros
+ * border, pulzalo dot + nagyobb monospace countdown. Mobil-friendly: kis
+ * kepernyon a board feletti `--board-size` szelesseget kapja. */
 .opponent-dc {
-    margin: 8px 0;
-    padding: 8px 12px;
-    background: rgba(239, 68, 68, 0.1);
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3200;
+    padding: 14px 22px;
+    background: rgba(15, 23, 42, 0.97);
     color: #fecaca;
-    border: 1px solid rgba(239, 68, 68, 0.5);
-    border-radius: 6px;
+    border: 2px solid var(--accent-red, #ef4444);
+    border-radius: 12px;
     text-align: center;
-    font-size: 0.9em;
+    font-size: 0.95rem;
+    font-weight: 600;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(239, 68, 68, 0.15);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: min(560px, calc(100vw - 24px));
+    animation: opponentDcPulse 2.4s ease-in-out infinite;
 }
 
 .opponent-dc.hidden {
     display: none;
 }
 
+/* Pulzalo piros dot — vizualis "live" jelzes hogy a counter fut. */
+.opponent-dc::before {
+    content: '';
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--accent-red, #ef4444);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6);
+    animation: opponentDcDot 1.2s ease-in-out infinite;
+    flex: 0 0 auto;
+}
+
+@keyframes opponentDcDot {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+    50%      { box-shadow: 0 0 0 9px rgba(239, 68, 68, 0); }
+}
+
+@keyframes opponentDcPulse {
+    0%, 100% { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(239, 68, 68, 0.15); }
+    50%      { box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6), 0 0 0 6px rgba(239, 68, 68, 0.30); }
+}
+
 #dc-countdown {
-    font-weight: 700;
+    font-family: 'Inter', monospace;
+    font-weight: 800;
     color: #fff;
+    font-size: 1.15rem;
+    letter-spacing: 0.5px;
+    min-width: 48px;
+    display: inline-block;
+    text-align: center;
+    background: rgba(239, 68, 68, 0.18);
+    border-radius: 6px;
+    padding: 2px 8px;
 }
 
 /* (A `.user-elo-display` szabály korábban definiálva — landing palette használja.) */
@@ -2115,7 +2207,12 @@ body[data-anim="off"] .square.just-moved::after {
  * =========================================================================== */
 .ingame-chat-panel {
     width: 100%;
-    max-width: 280px;
+    /* 2026-05-04 (második iteráció): 420px → 600px upper bound. 1920px
+     * monitoron a 1fr oszlop kb. 580px széles (= (1920 - board-size) / 2),
+     * így a 600px max gyakorlatilag teljesen kitölti a rendelkezésre álló
+     * szélességet. Kisebb monitoron a 1fr oszlop az érték összeszorítja, igy a
+     * `width: 100%` természetesen skálázódik. */
+    max-width: 600px;
     height: var(--board-size);
     background: var(--bg-card);
     border: 1px solid var(--border-color);
@@ -2124,8 +2221,12 @@ body[data-anim="off"] .square.just-moved::after {
     flex-direction: column;
     overflow: hidden;
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.45);
+    grid-area: left;
+    justify-self: end;   /* az oldalpanel kozelebb tapad a tablahoz */
 }
-.ingame-chat-panel.hidden { display: none; }
+/* `display: none` helyett `visibility: hidden` -> a grid-cella megmarad,
+ * tehat a `.app` nem csuszik balra ha a chat eppen rejtett. */
+.ingame-chat-panel.hidden { visibility: hidden; pointer-events: none; }
 
 .ingame-chat-header {
     padding: 12px 14px;
@@ -2184,6 +2285,44 @@ body[data-anim="off"] .square.just-moved::after {
     border: 1px solid var(--border-color);
 }
 
+/* Quick-chat sav (bot meccsen) — flex-wrap kontener, hogy a 9 gomb 2-3 sorba
+ * tordeljen a panel szelessegtol fuggoen. A gombok kompaktak (kis padding),
+ * cooldown allapotban opacity 0.5. */
+.ingame-chat-quick {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-color);
+    background: rgba(15, 23, 42, 0.4);
+    max-height: 30%;
+    overflow-y: auto;
+}
+.ingame-chat-quick.hidden { display: none; }
+.quick-chat-btn {
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+    padding: 5px 10px;
+    border-radius: 14px;
+    font-size: 0.78rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+    line-height: 1;
+    white-space: nowrap;
+}
+.quick-chat-btn:hover:not(:disabled) {
+    background: rgba(212, 175, 55, 0.12);
+    border-color: rgba(212, 175, 55, 0.55);
+    transform: translateY(-1px);
+}
+.quick-chat-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
 .ingame-chat-input-wrap {
     display: flex;
     gap: 6px;
@@ -2191,6 +2330,7 @@ body[data-anim="off"] .square.just-moved::after {
     border-top: 1px solid var(--border-color);
     background: rgba(15, 23, 42, 0.4);
 }
+.ingame-chat-input-wrap.hidden { display: none; }
 .ingame-chat-input-wrap input {
     flex: 1;
     background: var(--bg-dark);
@@ -2238,11 +2378,16 @@ body[data-anim="off"] .square.just-moved::after {
  * =========================================================================== */
 .captured-panel {
     width: 100%;
-    max-width: 280px;
+    /* 2026-05-04 (második iteráció): 420px → 600px upper bound, igy
+     * 1920px monitoron a 1fr oszlopot teljesen kitölti (lasd .ingame-chat-
+     * panel kommentet). Több hely a leutott bábuknak nagy meretben. */
+    max-width: 600px;
     height: var(--board-size);
     display: flex;
     flex-direction: column;
     gap: 10px;
+    grid-area: right;
+    justify-self: start;   /* a tabla mellett kezdodik, nem a viewport szelen */
 }
 .captured-section {
     flex: 1 1 0;
@@ -2298,16 +2443,72 @@ body[data-anim="off"] .square.just-moved::after {
     flex: 0 0 auto;
 }
 
-/* Mobil/tablet (<=1100px) — oldalpanelek elrejtese, a tabla foglalja el a
- * teljes oszlopot. A grid igy effektive `auto` lesz a kozepen. */
+/* Mobil/tablet (<=1100px) — kis kepernyon a 3-oszlopos grid nem fer el a tabla
+ * mellett, ezert flex column-ra valtunk: tabla felul, alatta a chat + leutott
+ * babuk panelek egymas alatt. A korabbi `display: none` meccs kozben (felhasznaloi
+ * panasz 2026-05-04) elrejtette a chat-et + leutott babukat — most lathatok
+ * maradnak, a tabla alatt scrollozhatok.
+ *
+ * A panelek MAGASSAGAT a viewport-fuggetlen `--board-size` helyett rogzitett
+ * limittel adjuk meg (300px / 50vh), kulonben a tabla magassagaval (95vmin)
+ * lefele tolnak mindent es a footer kovetese problemas. */
 @media (max-width: 1100px) {
     body {
         display: flex;
         flex-direction: column;
+        align-items: center;
+        column-gap: 0;
+        padding: 6px;
     }
-    .ingame-chat-panel,
-    .captured-panel {
+    .app {
+        order: 0;
+        width: 100%;
+    }
+    .ingame-chat-panel {
+        order: 1;
+        width: min(100%, 600px);
+        max-width: 100%;
+        height: auto;
+        max-height: min(50vh, 360px);
+        margin-top: 10px;
+        justify-self: stretch;
+    }
+    .ingame-chat-panel.hidden {
+        /* Mobilon a chat panel csak PvP modban legyen lathato — a `.hidden`
+         * osztaly visibility helyett display-vel rejt el, hogy ne foglaljon
+         * helyet (kulonben ures helyet hagyna a tabla alatt bot-meccsen). */
         display: none;
+        visibility: visible;
+    }
+    .captured-panel {
+        order: 2;
+        width: min(100%, 600px);
+        max-width: 100%;
+        height: auto;
+        margin-top: 10px;
+        justify-self: stretch;
+        flex-direction: row;
+        gap: 8px;
+    }
+    .captured-panel .captured-section {
+        flex: 1 1 0;
+        min-height: 120px;
+        max-height: 240px;
+    }
+    .captured-section-pieces .captured-big-piece {
+        width: 32px;
+        height: 32px;
+    }
+}
+
+/* Nagyon kicsi mobilon (<=520px) a leutott babuk panel tovabb-tordeli
+ * fuggolegesen, hogy ne legyen tul kicsi a ket szegmens. */
+@media (max-width: 520px) {
+    .captured-panel {
+        flex-direction: column;
+    }
+    .captured-panel .captured-section {
+        max-height: 160px;
     }
 }
 

@@ -259,6 +259,29 @@
         // Backend hibaüzenetek
         socket.on('chess:error', (data) => {
             const msg = (data && data.uzenet) || 'Ismeretlen hiba.';
+            // "Mar van aktiv ..." hiba — a felhasznalonak van egy F5/disconnect
+            // utan ragadt PvP meccse. Ne csak hibakent jelezzuk, hanem ajanljuk
+            // fel a folytatast: navigaljunk a chess.html-re, ahol a rejoin flow
+            // (main.js init -> chess:rejoin emit -> chess:game:start) azonnal
+            // visszateszi a felhasznalot a meccsbe. Az ido a backend-ben
+            // tovabbfut, nem veszit semmit.
+            const isActiveMatchError = /m[aá]r van akt[ií]v/i.test(msg);
+            if (isActiveMatchError) {
+                setFeedback('Aktív meccsedhez visszacsatlakozás folyamatban…', 'info');
+                STATE.queueActive = false;
+                STATE.inviteTargetUserId = 0;
+                STATE.navigatingToGame = true;
+                try {
+                    // sessionStorage flag, hogy a chess.html init() ne nyissa meg
+                    // a chooser-t — varja a rejoin flow-t.
+                    window.sessionStorage.setItem('mattmester.chessPendingMatch', JSON.stringify({
+                        gameId: 0,   // ismeretlen — a rejoin handler talalja meg
+                        ts: Date.now()
+                    }));
+                } catch (_) {}
+                window.location.href = '/chess_barold/html/chess.html';
+                return;
+            }
             setFeedback(msg, 'error');
             // Hiba esetén állítsuk vissza a queueActive / inviteTarget flag-et,
             // hogy a felhasználó újra próbálkozhasson
@@ -460,6 +483,19 @@
         // lehet hogy a chooser-en kívül történik (chessInviteGlobal.js
         // kezeli az invite:received-et), de a confirm + outgoing flow itt él.
         bindSocketListeners();
+
+        // AKTIV-MECCS GUARD: mielott chooser-t mutatunk, kuldjunk egy
+        // `chess:rejoin` emit-et. Ha a felhasznalonak aktiv PvP meccse van,
+        // a `chessInviteGlobal.js` chess:game:start handler-e ATIRANYIT a
+        // chess.html-re mielott a chooser-tartalom betoltodne. A felhasznalo
+        // igy NEM ragad be a chooser-en akkor sem ha BACK-gombbal navigalt.
+        // A modal-megnyitas megtortenik, de ha aktiv meccs van, a navigacio
+        // ~50-100ms-on belul atvisz — futo flash, nem ragado allapot.
+        const socket = getSocket();
+        if (socket && socket.connected && !aSakkOldalon()) {
+            try { socket.emit('chess:rejoin'); } catch (_) {}
+        }
+
         STATE.modalEl.classList.add('is-open');
         document.body.classList.add('cmc-open');
 
@@ -479,6 +515,18 @@
         const userData = await fetchUserElo();
         const eloEl = STATE.modalEl.querySelector('#cmcEloValue');
         if (eloEl) eloEl.textContent = String(userData.elo || 800);
+    }
+
+    // A chess.html-en a main.js sajat flow-ja van (overlay + rejoin), igy itt
+    // nem duplikaljuk az aktiv-meccs guard rejoin-emit-jet. Ha a chooser-t a
+    // chess.html-rol nyitjuk (game-end "Uj jatek" gomb), a main.js mar hivta
+    // a pvpAllapotReset-et — nincs aktiv meccs, nem kell rejoin emit.
+    function aSakkOldalon() {
+        try {
+            return window.location.pathname.includes('/chess_barold/');
+        } catch (_) {
+            return false;
+        }
     }
 
     function close() {

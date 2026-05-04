@@ -14,9 +14,97 @@
         }
     }
 
+    // Bug 2026-05-04 — F5 / kapcsolat-vesztés után a felhasználó vissza akar
+    // csatlakozni a meccsébe. A chess:rejoin handler (backend pvp.js) erre van —
+    // ha van aktív PvP meccse, chess:game:start választ küld. A chess.html
+    // ebből rendereli a táblát. Minden más oldalon (home / profile / stb.)
+    // a felhasználó nem látja a meccset, ezért itt automatikusan átirányítjuk
+    // a chess oldalra a sessionStorage-flag-gel, hogy a main.js init() ne nyissa
+    // ki a chooser-t, hanem várja meg a rejoin flow-t.
+    //
+    // FONTOS: az idő a backend-ben TOVÁBB FUT a disconnect grace period alatt
+    // (60s) — a refresh nem állítja meg az órát, a felhasználó ugyanannyi
+    // gondolkodási idővel érkezik vissza, mint amennyije volt a kapcsolat-
+    // vesztéskor. Ha 60s alatt nem jön vissza, auto-forfeit (lasd handlePvpDisconnect).
+    function elindulRejoinDetekcio(socket) {
+        if (aSakkOldalon()) return;          // chess.html sajat rejoin-t kuld
+        if (socket._chessRejoinDetectorOn) return;
+        socket._chessRejoinDetectorOn = true;
+
+        const PENDING_MATCH_KEY = 'mattmester.chessPendingMatch';
+
+        function navigaljChessOldalra(gameId) {
+            try {
+                globalScope.sessionStorage.setItem(PENDING_MATCH_KEY, JSON.stringify({
+                    gameId,
+                    ts: Date.now()
+                }));
+            } catch (_) {}
+            try { globalScope.location.href = CHESS_PAGE_PATH; } catch (_) {}
+        }
+
+        // Ha a rejoin válaszként aktív meccs jön (chess:game:start),
+        // azonnal átirányítjuk a felhasználót. Ugyanez az event erősíti meg
+        // a queue-match-et is — a chooser sajat kezelője elobb fut le, és a
+        // STATE.queueActive/inviteTargetUserId beallítása miatt a chooser
+        // már átiranyított. Ha mire ide érünk, már navigation folyamatban,
+        // a második href-set no-op.
+        socket.on('chess:game:start', (data) => {
+            if (aSakkOldalon()) return;
+            if (!data || !data.gameId) return;
+            navigaljChessOldalra(data.gameId);
+        });
+
+        // chess:rejoin:none — nincs aktív meccs, semmit sem teszunk.
+
+        function probalRejoint() {
+            if (aSakkOldalon()) return;
+            if (socket && socket.connected) {
+                try { socket.emit('chess:rejoin'); } catch (_) {}
+            }
+        }
+
+        if (socket.connected) probalRejoint();
+        // Reconnect (transport switch / network blip) után is megpróbáljuk —
+        // a backend chess:rejoin idempotens (ugyanaz a válasz, ha még él a meccs).
+        socket.on('connect', probalRejoint);
+
+        // Bfcache restore (back/forward gomb): a Chrome/Firefox a DOM-ot a
+        // memoriabol allitja vissza, a script-ek NEM futnak ujra. A `pageshow`
+        // `persisted=true` flag-gel jelzi a bfcache-eset; ilyenkor manualisan
+        // ujra-emit-eljuk a chess:rejoin-t. Kulonben a felhasznalo a regi
+        // (chooser-rel teli) DOM-ot latna, mig a backend mar tudja, hogy aktiv
+        // meccse van.
+        try {
+            globalScope.addEventListener('pageshow', (e) => {
+                if (e && e.persisted) probalRejoint();
+            });
+        } catch (_) { /* defensive — old browsers */ }
+
+        // Tab-visszateres (a felhasznalo egy masik tab-rol jott vissza). A
+        // visibilityState 'visible' eseten ujra-probaljuk — ha kozben a meccse
+        // miatt at kell mennie a chess.html-re, megtegyuk.
+        try {
+            globalScope.document.addEventListener('visibilitychange', () => {
+                if (globalScope.document.visibilityState === 'visible') probalRejoint();
+            });
+        } catch (_) { /* defensive */ }
+
+        // Window focus (alternativ jelzes ugyanarra a flow-ra, fallback a
+        // visibilitychange-re ami nem minden browser-ben mukodik megbizhatoan
+        // bfcache utan).
+        try {
+            globalScope.addEventListener('focus', probalRejoint);
+        } catch (_) { /* defensive */ }
+    }
+
     function regisztracio(socket) {
         if (!socket || socket._chessInviteGlobalRegistered) return;
         socket._chessInviteGlobalRegistered = true;
+
+        // Aktív-meccs detektor: F5 / disconnect után auto-redirect a chess.html-re,
+        // ahol a teljes rejoin flow lefut (tábla render + óra szinkron + chat).
+        elindulRejoinDetekcio(socket);
 
         socket.on('chess:invite:received', async (data) => {
             // A sakk oldalon a chess main.js saját popupja kezeli — ne nyissunk dupla popupot.

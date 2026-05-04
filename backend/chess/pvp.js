@@ -9,7 +9,7 @@
 //   - ELO frissítés mindkét játékosra
 // ============================================================
 
-const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser } = require('./state.js');
+const { jatekLetrehoz, jatekKeres, jatekTorol, jatekAllapotKliens, hasAnyActiveGameForUser, cleanupOwnAbandonedBotGame } = require('./state.js');
 const { jatekUjraIndit, lepesKoordinataval, legalLepesekKliens } = require('./engine.js');
 const { idoLeall } = require('./timer.js');
 const { eloMeccsEredmeny } = require('./elo.js');
@@ -124,6 +124,11 @@ async function pvpEloFrissit(jatek, eredmeny) {
 async function jatekVegeKezeles(jatek, eredmeny, uzenet, io) {
     jatek.vege = true;
     jatek.pvpStatusz = 'finished';
+    // Disconnect-grace-utani rejoin eseten a felhasznalo lassa, hogyan zarult
+    // a meccs (pl. "kileptel — admin nyert"). A `chess:rejoin` handler ezeket
+    // a mezoket olvassa, ha a felhasznalo a forfeit utan jon vissza.
+    jatek.vegeUzenet = uzenet || null;
+    jatek.vegeEredmeny = eredmeny || null;
     idoLeall(jatek);
 
     const whiteId = jatek.jatekosok.white.userId;
@@ -317,7 +322,9 @@ function registerPvpHandlers(socket, io) {
         }
 
         // Issue #63 — multi-tab guard: bot-meccs is blokkolja a PvP invite-ot.
-        if (hasAnyActiveGameForUser(userId).hasActive) {
+        // Sajat orphan bot meccs (F5/tab-bezar) automatikusan eltakaritodik, hogy
+        // ne ragadjon a felhasznalo a "Mar van aktiv jatszmad" hibauzenetben.
+        if (hasAnyActiveGameForUser(userId).hasActive && !cleanupOwnAbandonedBotGame(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
         }
 
@@ -551,7 +558,10 @@ function registerPvpHandlers(socket, io) {
         }
 
         // Issue #63 — multi-tab guard: queue-csatlakozas elott a bot-meccs is blokkol.
-        if (hasAnyActiveGameForUser(userId).hasActive) {
+        // Ha az aktiv meccs egy SAJAT, ORPHAN BOT meccs (F5/tab-bezar utan ragadt),
+        // automatikusan eltakaritjuk es engedjuk a queue csatlakozast. PvP meccs
+        // sosem takaritodik el itt — azt a 60s grace period kezeli.
+        if (hasAnyActiveGameForUser(userId).hasActive && !cleanupOwnAbandonedBotGame(userId)) {
             return socket.emit('chess:error', { uzenet: 'Már van aktív játszmád — fejezd be előbb.' });
         }
 
@@ -924,9 +934,40 @@ function registerPvpHandlers(socket, io) {
         }
 
         const jatek = jatekKeres(gameId);
-        if (!jatek || !jatek.pvpAktiv || jatek.vege) {
+        if (!jatek) {
             activeGamesByUser.delete(context.userId);
             return socket.emit('chess:rejoin:none');
+        }
+
+        // POST-GRACE FORFEIT REJOIN: a felhasznalo a 60s disconnect-grace
+        // LEJARTA utan ter vissza. A meccs mar `vege === true` allapotban
+        // van (auto-forfeit kovetkezteben). Helyett, hogy chooser-re dobjuk
+        // (chess:rejoin:none), kuldjuk el a `chess:game:end`-et a tarolt
+        // vege-uzenet + eredmeny-szel, hogy a felhasznalo lassa: kilepett es
+        // emiatt vesztett. A `jatek.eloValtozas` es `jatek.vegeUzenet` az
+        // expiry-callback (`jatekVegeKezeles`) kozbe mar beallitasra kerult.
+        if (jatek.vege || !jatek.pvpAktiv) {
+            const szin = getUserColorInGame(jatek, context.userId);
+            // Csak akkor emit-elunk game:end-et, ha a felhasznalo tenyleg
+            // resztvevo volt — kulonben ne szivarogjon ki masok meccs-allapota.
+            if (szin) {
+                socket.emit('chess:game:end', {
+                    allapot: jatekAllapotKliens(jatek),
+                    uzenet: jatek.vegeUzenet || 'A meccs befejezodott amig kuldve voltal.',
+                    eredmeny: jatek.vegeEredmeny || null,
+                    eloValtozas: jatek.eloValtozas || null,
+                    // POST-GRACE rejoin: a kliens nem fogadott meg game:start-ot,
+                    // igy a sajatSzin nincs beallitva — itt elkuldjuk hogy a
+                    // pvpJatekVege a megfelelo ELO-valtozast (white/black)
+                    // tudja megmutatni.
+                    sajatSzin: szin,
+                    postGraceRejoin: true
+                });
+            } else {
+                socket.emit('chess:rejoin:none');
+            }
+            activeGamesByUser.delete(context.userId);
+            return;
         }
 
         // Room rejoin
@@ -1178,9 +1219,23 @@ async function handlePvpDisconnect(userId, io) {
     const szin = getUserColorInGame(jatek, userId);
     if (!szin) return;
 
-    // Ellenőrzés: van-e még másik socket-je a usernek (multi-tab)
-    const userSockets = await io.in(`user-room:${userId}`).fetchSockets();
-    if (userSockets.length > 0) return; // Más tab-on még online
+    // Multi-tab guard: csak akkor inditunk grace-periodot, ha a felhasznalonak
+    // EGYETLEN socketje sincs a CHESS-GAME szobaban. Bug 2026-05-04: a regi
+    // `user-room` check nem stimmelt — ha a felhasznalonak nyitva volt egy
+    // home/profile tab is (nem a chess.html-en), a guard "online"-nak vette
+    // es nem indult disconnect grace, holott a felhasznalo elhagyta a meccs
+    // oldalat. A `chess-game:${gameId}` szoba pontosan a meccs aktiv tag-jait
+    // tartalmazza — ha onnan eltunt minden socketje, valoban disconnect-elt.
+    //
+    // Multi-chess.html-tab eseten (2 tab ugyanazon a meccsen) az egyik bezar
+    // utan a masik meg ott van a chess-game szobaban, igy `stillInGame=true` —
+    // nem indul felesleges grace.
+    const gameSockets = await io.in(`chess-game:${gameId}`).fetchSockets();
+    const stillInGame = gameSockets.some(s => {
+        const ctx = s.data && s.data.socketContext;
+        return ctx && ctx.userId === userId;
+    });
+    if (stillInGame) return; // Masik chess.html tab a meccs szobajaban
 
     // Grace period indítás
     jatek.disconnectSzin = szin;

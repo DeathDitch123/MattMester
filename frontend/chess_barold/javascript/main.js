@@ -215,6 +215,26 @@ function pvpSocketInit() {
 
     // Játék vége
     socket.on('chess:game:end', (data) => {
+        // POST-GRACE FORFEIT REJOIN: a backend kuldhet game:end-et a chess:game:start
+        // nelkul is, ha a felhasznalo a 60s disconnect-grace LEJARTA utan jott vissza.
+        // Ilyenkor `pvpAktiv === false`, de a UI-nak meg kell mutatnia a vereseget.
+        // A backend a `postGraceRejoin: true` + `sajatSzin` mezokkel jelzi ezt az
+        // edge-case-et. Beallitjuk a minimalis state-et, hogy a `pvpJatekVege`
+        // helyesen tudja az ELO-jelolest (white/black) megmutatni.
+        if (!pvpAktiv && data && data.postGraceRejoin && data.sajatSzin) {
+            pvpAktiv = true;
+            sajatSzin = data.sajatSzin;
+            pvpGameId = data.allapot && data.allapot.gameId ? data.allapot.gameId : pvpGameId;
+            gameId = pvpGameId;
+            // Rejoin overlay le — sikertelen reconnect, mutatjuk az eredmenyt.
+            rejoinOverlayElrejt();
+            // Chooser is le, ha veletlen kinyilt volna (safety-timeout race).
+            try {
+                if (window.MattMesterChessModeChooser && typeof window.MattMesterChessModeChooser.close === 'function') {
+                    window.MattMesterChessModeChooser.close();
+                }
+            } catch (_) {}
+        }
         if (!pvpAktiv) return;
         pvpJatekVege(data);
     });
@@ -320,6 +340,42 @@ function pvpSocketInit() {
         if (popup) popup.classList.add('hidden');
     });
 
+    // Multi-tab bot-meccs csere ertesites: ha a felhasznalo egy MASIK tab-on
+    // uj bot-meccset inditott, a backend /new-bot endpoint-ja kitakaritotta a
+    // regi (sajat) bot-meccset es ezt az eventet emittalta a user-room minden
+    // tabjara. Ha a sajat (regi) gameId egyezik az `oldGameId`-vel, a frontend
+    // resetel: leallitja a polling-ot, eldobja az utolso allapotot, megnyitja
+    // a chooser-t. Igy a regi tab nem polling-ol 404-et vegtelenul, hanem
+    // tisztan ujraindithat egy uj meccset.
+    socket.on('chess:bot:replaced', (data) => {
+        if (!data || !data.oldGameId) return;
+        // Csak akkor reagaljunk, ha a sajat gameId egyezik (vagy ha botInfo
+        // megvan, de gameId hianyzik — defenziv).
+        if (gameId && Number(gameId) !== Number(data.oldGameId)) return;
+        console.log('[chess:bot:replaced] regi bot meccs kitakaritva masik tab altal:', data);
+        // Polling leallitas
+        idoPollingLeall();
+        if (botPollTimer) {
+            clearInterval(botPollTimer);
+            botPollTimer = null;
+        }
+        integritasEllenorzesLeall();
+        // State reset
+        gameId = null;
+        botInfo = null;
+        utolsoAllapot = null;
+        lepesKuldesLezar();
+        pvpAllapotReset();
+        // Felhasznaloi visszajelzes + chooser ujramegnyitas
+        if (typeof window.mmAlert === 'function') {
+            window.mmAlert({
+                title: 'Másik tab átvette a meccset',
+                message: 'Egy másik böngésző-tabon új bot-meccset indítottál — a régi automatikusan törölve. Új meccs kiválasztása.'
+            });
+        }
+        ujMeccsChooserNyitas();
+    });
+
     // Random queue
     socket.on('chess:queue:joined', () => {
         // Már megjelent a "keresés..." lépésben — nincs plusz teendő
@@ -328,7 +384,10 @@ function pvpSocketInit() {
         // Cancel UI már kezeli
     });
 
-    // Ellenfél disconnect
+    // Ellenfél disconnect — chess.com-szeru countdown banner
+    // (CSS fixed-positioning, lasd `.opponent-dc` a chess.css-ben).
+    // Ha az ellenfel 60mp alatt nem ter vissza, a backend auto-forfeit-tel
+    // zarja a meccset (lasd handlePvpDisconnect).
     socket.on('chess:opponent:disconnected', (data) => {
         if (!pvpAktiv) return;
         const dcElem = document.getElementById('opponent-disconnected');
@@ -336,14 +395,24 @@ function pvpSocketInit() {
         if (!dcElem) return;
         dcElem.classList.remove('hidden');
         let masodperc = Math.floor((data.gracePeriodMs || 60000) / 1000);
-        if (countElem) countElem.textContent = masodperc;
+        // m:ss formatum (pl. 1:00, 0:45, 0:09) — vizualisan tisztabb a "60mp"
+        // helyett, es a felhasznalo lat kell hogy ez ido, nem szam.
+        const formatDc = (mp) => {
+            const m = Math.floor(mp / 60);
+            const s = mp % 60;
+            return `${m}:${s.toString().padStart(2, '0')}`;
+        };
+        if (countElem) countElem.textContent = formatDc(masodperc);
         if (window._dcInterval) clearInterval(window._dcInterval);
         window._dcInterval = setInterval(() => {
             masodperc--;
-            if (countElem) countElem.textContent = masodperc;
+            if (countElem) countElem.textContent = formatDc(Math.max(0, masodperc));
             if (masodperc <= 0) {
                 clearInterval(window._dcInterval);
                 window._dcInterval = null;
+                // 0-ra ert a countdown — a backend auto-forfeit-je hamarosan
+                // game:end-tel zar. Az "1:00" helyett mostantol "0:00" mutatja
+                // a banner, igy a felhasznalo tisztan latja, hogy lejart az ido.
             }
         }, 1000);
     });
@@ -397,6 +466,8 @@ function pvpSocketInit() {
     // most letrehozza a meccset — ne nyissuk meg a chooser-t, mert csak villanna
     // egyet feleslegesen.
     socket.on('chess:rejoin:none', () => {
+        // Akarmi tortent, a rejoin overlay mehet le — nincs aktiv meccs.
+        rejoinOverlayElrejt();
         if (pvpAktiv) return;
         if (gameId) return; // mar van bot/pvp meccs folyamatban
         try {
@@ -408,15 +479,51 @@ function pvpSocketInit() {
     });
 }
 
+// ────────────────────────────────────────────
+// REJOIN OVERLAY — F5 / disconnect utan visible feedback
+// ────────────────────────────────────────────
+//
+// Az overlay az `init()` legelejen aktivalodik (mielott barmi mas tortenne)
+// es eltunik amint:
+//   1. `chess:game:start` erkezik (rejoin success — pvpJatekKezdet hivja)
+//   2. `chess:rejoin:none` erkezik (no active match — handler hivja)
+//   3. 5s safety-timeout (offline socket / hibas backend / vendeg user)
+//
+// Az overlay z-index magasabb mint a chooser-e (3500 > 1080), igy defensive-en
+// eltakar mindent ami a tabla helyett megjelenne, amig a rejoin folyamatban van.
+let _rejoinOverlayHidden = false;
+function rejoinOverlayMutat() {
+    const el = document.getElementById('rejoin-overlay');
+    if (el) el.classList.remove('hidden');
+}
+function rejoinOverlayElrejt() {
+    if (_rejoinOverlayHidden) return;
+    _rejoinOverlayHidden = true;
+    const el = document.getElementById('rejoin-overlay');
+    if (el) el.classList.add('hidden');
+}
+
 let pvpGameId = null;
 
 function pvpJatekKezdet(data) {
     console.log('[PvP] game:start', { sajatSzin: data.sajatSzin, sajatNev: data.sajatNev, ellenfelNev: data.ellenfelNev, gameId: data.gameId });
+    // Rejoin overlay le — sikerult visszacsatlakozni.
+    rejoinOverlayElrejt();
     // PVP overlay-k elrejtese (a regi #mode-modal HTML mar nincs, ne keressuk).
     const waiting = document.getElementById('pvp-waiting');
     const popup = document.getElementById('pvp-invite');
     if (waiting) waiting.classList.add('hidden');
     if (popup) popup.classList.add('hidden');
+
+    // F5 / disconnect rejoin: ha a chess.html init mar megnyitotta a mode
+    // chooser-t (mert a rejoin valasz keson erkezett), zarjuk be — a kovetkezo
+    // sorokban a tabla felulirja az UI-t. Ezzel a felhasznalo egyenesen a
+    // meccsbe ker vissza, nem a "Uj meccs" modal-ba.
+    try {
+        if (window.MattMesterChessModeChooser && typeof window.MattMesterChessModeChooser.close === 'function') {
+            window.MattMesterChessModeChooser.close();
+        }
+    } catch (_) { /* defensive */ }
 
     pvpAktiv = true;
     sajatSzin = data.sajatSzin;
@@ -470,8 +577,9 @@ function pvpJatekKezdet(data) {
         getSocket: () => pvpSocketKeres()
     }).then(() => abilitiesAllapotFrissit(data.allapot));
 
-    // Ingame chat aktivalas — csak PvP-n. Bot meccsen nincs ertelme.
+    // Ingame chat aktivalas — PvP modban a sima text input, NEM quick-chat.
     chatPanelMutat();
+    chatPanelBotMode(false);     // bot-mode kikapcs (input forma latszik)
     chatPanelEnged(true);
     chatMessagesUrites();
 }
@@ -511,6 +619,12 @@ function pvpAllapotFrissit(allapot) {
     huzasHozzaadMinden(allapot);
     esemenyekUjraKot();
     nevekFrissit();
+    // Bug 2026-05-04: PvP-modban a leutott babuk panel sosem renderelodott
+    // (csak a bot-ag `allapotFrissit`-je hivta meg az `utottpiecekFrissit`-et).
+    // Most a PvP allapot-frissito is meghivja, igy a jobb-oldali `#captured-
+    // panel` (mobilon a tabla alatt) a PvP meccs kozben is kepben tartja a
+    // leutott babukat es az anyagi elony jelzest.
+    utottpiecekFrissit(allapot);
     eloValtozasFrissit(allapot.eloValtozas || null);
     abilitiesAllapotFrissit(allapot);
 
@@ -527,19 +641,32 @@ function pvpAllapotFrissit(allapot) {
 function pvpJatekVege(data) {
     utolsoAllapot = data.allapot;
     pvpKliensIdoLeall();
+    // Disconnect-banner es countdown leallitas (a forfeit-emit utan
+    // a banner mar feleslegessen pulzalna). Idempotens: ha nem fut a banner,
+    // a `hidden` class hozzaadasa no-op.
+    const dcElem = document.getElementById('opponent-disconnected');
+    if (dcElem) dcElem.classList.add('hidden');
+    if (window._dcInterval) {
+        clearInterval(window._dcInterval);
+        window._dcInterval = null;
+    }
     // ELO kiszámítás a saját szín szerint
     let eloValtozas = null;
     if (data.eloValtozas) {
         eloValtozas = data.eloValtozas[sajatSzin];
     }
     uiJatekVegeMegjelenit(data.uzenet || 'Játék vége');
+    // A `#elo-change` div a `.sidebar`-ban van, ami `display: none` — igy a
+    // korabbi `eloValtozasFrissit(eloValtozas)` PvP meccs vegen NEM volt
+    // lathato. (User-feedback 2026-05-04: "nem szamolja az ELO-t".) A javitas:
+    // a game-end modalt megnyitjuk az eloValtozas-szal — a `gameEndModalMegnyit`
+    // a modal `#gameEndElo` mezojebe irja a +/-N pontot, ami lathato.
     eloValtozasFrissit(eloValtozas);
     const feladBtn = document.getElementById('feladBtn');
     const newGameBtn = document.getElementById('newGameBtn');
     const drawBtn = document.getElementById('drawOfferBtn');
     const rematchBtn = document.getElementById('rematchBtn');
     const offerElem = document.getElementById('draw-offer-received');
-    const dcElem = document.getElementById('opponent-disconnected');
     if (feladBtn) feladBtn.classList.add('hidden');
     if (newGameBtn) newGameBtn.classList.remove('hidden');
     if (drawBtn) drawBtn.classList.add('hidden');
@@ -550,11 +677,12 @@ function pvpJatekVege(data) {
         rematchBtn.textContent = 'Revans';
     }
     if (offerElem) offerElem.classList.add('hidden');
-    if (dcElem) dcElem.classList.add('hidden');
-    if (window._dcInterval) {
-        clearInterval(window._dcInterval);
-        window._dcInterval = null;
-    }
+    // (a `dcElem` mar a fuggveny tetejen elrejtve a banner-cleanup blokkban)
+    // Game-end modal felugras (matt / patt / feladas / kifutott ido / disconnect).
+    // Ranked meccs eseten itt jelenik meg az ELO-valtozas (+12 / -8 stb.) — a
+    // sidebar #elo-change rejtett, igy ez az egyetlen lathato visszajelzes.
+    chatPanelEnged(false);
+    gameEndModalMegnyit(data.uzenet || 'Játék vége', eloValtozas);
 }
 
 // N13 — rematch UI segedfuggvenyek
@@ -761,6 +889,12 @@ async function jatekIndit(nehezseg, mode, ranked, modal) {
         });
         abilitiesAllapotFrissit(allapot);
 
+        // Bot meccsen quick-chat sav latszik (elore-megirt uzenetek), a sima
+        // text-input REJTETT. A bot canned valaszokkal reagal a klikkekre.
+        chatPanelMutat();
+        chatPanelBotPlaceholder();    // quick lathato + uzenet ureses
+        chatPanelEnged(true);         // quick gombok aktivak
+
         console.log(`[INIT] Bot játék indítva — ${botInfo.nev} (ELO: ${botInfo.elo}) — mode=${allapot.mode || mode || 'default'}, ranked=${allapot.ranked}`);
     } catch (e) {
         console.error('Bot játék indítási hiba:', e);
@@ -791,6 +925,18 @@ function nevekFrissit() {
         if (nameBlack) nameBlack.textContent = "Fekete";
         if (nameWhite) nameWhite.textContent = sajatUsername || "Fehér";
     }
+
+    // Layout flip szinkron: amikor a tabla forgatva van (sajat = fekete +
+    // autoflip), a player-badge-eket is meg kell csereltetni a CSS-ben (lasd
+    // chess.css `.app.flipped`), kulonben a sajat "Te" cimke felul lenne, az
+    // ellenfel meg alul — pont forditva mint amit a felhasznalo lat a tablan.
+    // A `flipped` class-t fuggetlenul allitjuk a content-tol (PvP / bot / stb.):
+    // a `kellFlippelni()` egyetlen forrasa az igazsagnak.
+    const appEl = document.querySelector('.app');
+    if (appEl) {
+        const flipNeeded = (typeof kellFlippelni === 'function') ? !!kellFlippelni() : false;
+        appEl.classList.toggle('flipped', flipNeeded);
+    }
 }
 
 // Bejelentkezett felhasznalo username-jenek lekerese a session API-bol.
@@ -817,9 +963,7 @@ async function sajatUsernameKeres() {
 }
 
 function utottpiecekFrissit(allapot) {
-    const byWhite = document.getElementById('captured-by-white');
-    const byBlack = document.getElementById('captured-by-black');
-    if (!byWhite || !byBlack || !allapot?.tabla) return;
+    if (!allapot?.tabla) return;
 
     const KEZDO = { pawn: 8, rook: 2, knight: 2, bishop: 2, queen: 1, king: 1 };
     const SORREND = ['queen', 'rook', 'bishop', 'knight', 'pawn'];
@@ -841,20 +985,26 @@ function utottpiecekFrissit(allapot) {
         return lista;
     }
 
-    function render(el, utottSzin) {
-        const lista = utottLista(utottSzin);
-        el.innerHTML = '';
-        for (const tipus of lista) {
-            const img = document.createElement('div');
-            img.className = 'captured-piece';
-            img.style.backgroundImage = `url('../images/${utottSzin}_${tipus}.png')`;
-            el.appendChild(img);
+    // A regi badge-en levo `captured-by-white/black` icon-sorok 2026-05-04
+    // ELTAVOLITASRA kerultek (felhasznalo kerese: csak a jobb-oldali nagy
+    // panelen latszanak a babuk). Ha valaki visszaallitja a HTML-be, a
+    // render-elhelyezes az `if (el)` guard-on athaladva fut.
+    const byWhite = document.getElementById('captured-by-white');
+    const byBlack = document.getElementById('captured-by-black');
+    if (byWhite && byBlack) {
+        function renderSmall(el, utottSzin) {
+            const lista = utottLista(utottSzin);
+            el.innerHTML = '';
+            for (const tipus of lista) {
+                const img = document.createElement('div');
+                img.className = 'captured-piece';
+                img.style.backgroundImage = `url('../images/${utottSzin}_${tipus}.png')`;
+                el.appendChild(img);
+            }
         }
+        renderSmall(byWhite, 'black');
+        renderSmall(byBlack, 'white');
     }
-
-    // fehér játékos ütötte a fekete bábukat → captured-by-white mutatja a fekete bábukat
-    render(byWhite, 'black');
-    render(byBlack, 'white');
 
     // Right-side captured panel — nagyobb meretu icon-ok, ket szegmens.
     // A "sajat alul" szabaly: a sajat szin alul, az ellenfel felul kerul.
@@ -1503,8 +1653,12 @@ function chatPanelElrejt() {
 function chatPanelEnged(engedett) {
     const input = document.getElementById('ingame-chat-input');
     const sendBtn = document.getElementById('ingame-chat-send');
+    const quickBtns = document.querySelectorAll('.quick-chat-btn');
     if (input) input.disabled = !engedett;
     if (sendBtn) sendBtn.disabled = !engedett;
+    // Quick-chat gombok is letiltodnak game-end-en (bot meccs vege => ne lehessen
+    // tovabb gombot nyomni a botnak).
+    quickBtns.forEach((b) => { b.disabled = !engedett; });
     if (input && !engedett) {
         // Game-end-en a meccs UTAN megmarad ami ki van irva, de uj uzenet
         // nem mehet — a placeholder ezt jelzi.
@@ -1517,6 +1671,104 @@ function chatPanelEnged(engedett) {
 function chatMessagesUrites() {
     const cont = document.getElementById('ingame-chat-messages');
     if (cont) cont.innerHTML = '<div class="ingame-chat-empty">Még nincs üzenet — szólj az ellenfélnek!</div>';
+}
+
+// Bot meccsen a chat panel megjelenik, de a sima text-input helyett
+// quick-chat sav latszik — elore-megirt uzeneteket lehet kuldeni a botnak,
+// es a bot canned valasszal reagal (1-2 mp delay-jel, hogy ele-szeruen
+// hasson).
+function chatPanelBotPlaceholder() {
+    const cont = document.getElementById('ingame-chat-messages');
+    if (cont) cont.innerHTML = '<div class="ingame-chat-empty">Klikkelj egy uzenetre lent a botnak!</div>';
+    chatPanelBotMode(true);
+}
+
+// Bot mode toggle — a quick-chat sav lathato, az input forma rejtett.
+// PvP-n forditva (pvpJatekKezdet -> chatPanelBotMode(false)).
+function chatPanelBotMode(botMode) {
+    const quick = document.getElementById('ingame-chat-quick');
+    const form  = document.getElementById('ingame-chat-form');
+    if (quick) quick.classList.toggle('hidden', !botMode);
+    if (form)  form.classList.toggle('hidden', !!botMode);
+}
+
+// Quick-chat felulrol jott uzenet -> renderelt + bot valasz delay utan.
+// A `pvpAktiv` ellenorzese kizarja, hogy PvP-meccsen veletlen aktivaljon
+// (defenziv). Cooldown anti-spam: 1500ms / globalis (egyszerre csak egy
+// in-flight bot-valasz, klikk-spam nem halmoz).
+const QUICK_CHAT_FRAZISOK = {
+    gl:       'Sok szerencsét!',
+    hello:    'Hello!',
+    nice:     'Szép lépés!',
+    wow:      'Hűha!',
+    oops:     'Hopp!',
+    thinking: 'Gondolkodok…',
+    thanks:   'Köszi a meccset!',
+    wp:       'Jól játszottál!',
+    gg:       'GG'
+};
+
+// Bot canned valaszai kulcs-szerint. Tobb opcios valasz koztul random egyet
+// valasztunk, hogy ne legyen monoton. A kulcsoknak megfeleloleg "kontextuhalt"
+// valaszok — a "Sok szerencset!"-re a bot is sok szerencset kivan, stb.
+const BOT_CANNED_VALASZOK = {
+    gl:       ['Köszi, neked is sok szerencsét!', 'Köszi! 🤖 Lássuk!'],
+    hello:    ['Helló, készen állok!', 'Üdv! 🤖'],
+    nice:     ['Köszi! 🤖', 'Na, próbálkozok!', 'Tanulok belőled.'],
+    wow:      ['Igen, ez érdekes pozíció.', '🤖 Hmmm.'],
+    oops:     ['Mindenkivel előfordul!', 'Néha a botok is bakiznak.'],
+    thinking: ['Én is.', '🤖 számol…', 'Nehéz pozíció.'],
+    thanks:   ['Én köszönöm a meccset!', 'Bármikor! 🤖'],
+    wp:       ['Köszi! Te is jól játszottál.', '🤖 köszi!'],
+    gg:       ['GG! Jó volt játszani.', 'GG! Bármikor revans.']
+};
+
+let quickChatCooldownTill = 0;
+
+function bindQuickChatPanel() {
+    const cont = document.getElementById('ingame-chat-quick');
+    if (!cont) return;
+    cont.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('.quick-chat-btn');
+        if (!btn || btn.disabled) return;
+        const key = btn.dataset.key;
+        if (!key || !QUICK_CHAT_FRAZISOK[key]) return;
+        // Csak bot-meccsen aktivalhato — PvP-n a quick-chat sav rejtett,
+        // de defenziv ellenorzes hatha valami CSS bekapcsolja
+        if (pvpAktiv) return;
+
+        // Anti-spam: globalis cooldown 1500ms.
+        const now = Date.now();
+        if (now < quickChatCooldownTill) return;
+        quickChatCooldownTill = now + 1500;
+        cont.querySelectorAll('.quick-chat-btn').forEach((b) => { b.disabled = true; });
+        setTimeout(() => {
+            cont.querySelectorAll('.quick-chat-btn').forEach((b) => { b.disabled = false; });
+        }, 1500);
+
+        // Sajat uzenet renderelese
+        chatUzenetRender({
+            from: { color: sajatSzin || 'white', username: sajatUsername || 'Te' },
+            text: QUICK_CHAT_FRAZISOK[key],
+            ts: now
+        });
+
+        // Bot valasz: 800-1800ms delay, random canned valasz a `key` listabol
+        const valaszok = BOT_CANNED_VALASZOK[key] || ['🤖 Hmm.'];
+        const valasz = valaszok[Math.floor(Math.random() * valaszok.length)];
+        const botSzin = sajatSzin === 'white' ? 'black' : 'white';
+        const botName = botInfo ? `🤖 ${botInfo.nev}` : '🤖 Bot';
+        const delay = 800 + Math.floor(Math.random() * 1000);
+        setTimeout(() => {
+            // Ha mar veget ert a meccs vagy a felhasznalo elnavigalt, ne valaszoljunk.
+            if (!botInfo || !gameId) return;
+            chatUzenetRender({
+                from: { color: botSzin, username: botName },
+                text: valasz,
+                ts: Date.now()
+            });
+        }, delay);
+    });
 }
 
 function chatPanelLezar() {
@@ -1607,6 +1859,15 @@ function bindHelpModal() {
 async function init() {
     console.log("[INIT] Mattmester indítás...");
 
+    // F5 / disconnect rejoin overlay AZONNAL — még mielőtt bármi mas tortenne,
+    // megmutatjuk a "Visszacsatlakozas folyamatban..." overlay-t. Igy a felhasznalo
+    // sosem lat ures tablat vagy chooser-t mig a backend chess:rejoin valaszat
+    // varjuk. Az overlay a chess:game:start (pvpJatekKezdet) vagy a chess:rejoin:none
+    // handler vagy a 5s safety-timeout utan tunik el.
+    //
+    // Bot URL-params (`?type=bot&...`) eseten kesobb, az auto-indit elott rejtjuk.
+    rejoinOverlayMutat();
+
     // N10: kliens-oldali beallitasok betoltese + modal-bind. localStorage perszisztencia,
     // try-catch a settings.js-ben kezeli az incognito sandboxot.
     try { initChessSettings(); } catch (e) { console.warn('settings init hiba:', e); }
@@ -1625,6 +1886,9 @@ async function init() {
     // belsoleg csatolja, ha a `pvpSocketKeres()` mar elerheto, kulonben a
     // pvpJatekKezdet ujrahivja.
     bindChatPanel();
+    // Quick-chat (bot-meccs) gombok bekotese — egyszer fut le, a delegate
+    // pattern miatt a click-handler a kontainerbol bubblezik.
+    bindQuickChatPanel();
     // Oldalbol elnavigaciokor a chat lezar — nincs szerver-leiratkozas
     // szukseges, mert a socket disconnect-et kovetoen sem fogadunk uzenetet.
     window.addEventListener('beforeunload', () => {
@@ -1668,40 +1932,57 @@ async function init() {
     pvpSocketInit();
 
     // Rejoin próba — ha van aktív PvP játék, visszacsatlakozik. A `chess:rejoin`
-    // emit-et újra-próbáljuk amíg a socket meg nem érkezik (max ~5s), mert a
-    // frontpage-rőL érkezve a meccs adatai csak a backendnél vannak — a kliensnek
-    // ezt kell lekérnie a `chess:rejoin`-nal, különben az index oldalon kapott
-    // `chess:game:start` event "elveszne" (már disconnect-elt socket fogadta).
-    function emitRejoinWhenReady(retriesLeft = 10) {
+    // emit AGRESSZIV (azonnali + minden connect-en + 250ms retry, max 20x = 5s).
+    // A backend handler valasza:
+    //   - aktiv meccs -> chess:game:start (pvpJatekKezdet rendereli a tablat)
+    //   - nincs meccs -> chess:rejoin:none (ujMeccsChooserNyitas a chooser-t nyit)
+    //
+    // Az ido a backend-ben TOVABB FUT a 60s grace alatt — a felhasznalo nem
+    // veszit gondolkodasi idot a refresh miatt.
+    function probaljRejoint() {
         const socket = pvpSocketKeres();
-        if (socket && socket.connected) {
+        if (!socket) return false;
+        if (socket._rejoinAlreadySent) return true;
+        if (socket.connected) {
+            socket._rejoinAlreadySent = true;
             socket.emit('chess:rejoin');
             pendingChessInviteAcceptKuld(socket);
-            return;
+            return true;
         }
-        if (socket) {
-            socket.once('connect', () => {
-                socket.emit('chess:rejoin');
-                pendingChessInviteAcceptKuld(socket);
-            });
-            return;
-        }
-        if (retriesLeft > 0) {
-            setTimeout(() => emitRejoinWhenReady(retriesLeft - 1), 250);
-        }
+        // Ha a socket meg nem connected, a connect eventre kuldjuk.
+        socket.once('connect', () => {
+            if (socket._rejoinAlreadySent) return;
+            socket._rejoinAlreadySent = true;
+            socket.emit('chess:rejoin');
+            pendingChessInviteAcceptKuld(socket);
+        });
+        return true;
     }
-    setTimeout(() => emitRejoinWhenReady(), 500);
+    // Azonnali probalkozas + minden 250ms-ben ujraproba a socket meg-jelenesere.
+    if (!probaljRejoint()) {
+        let probaSzam = 0;
+        const probaInterval = setInterval(() => {
+            probaSzam++;
+            if (probaljRejoint() || probaSzam > 20) {
+                clearInterval(probaInterval);
+            }
+        }, 250);
+    }
 
     // Query-string alapú auto-indítás (frontpage chess mode chooser-ből):
     //   - `?type=bot&mode=X&difficulty=Y` → bot meccs azonnal (nincs modal)
     //   - egyébként ha sessionStorage-ben van pendingMatch (queue / friend
     //     invite match-et kapott a frontpage) → modal NEM jelenik meg, a
     //     `chess:rejoin` flow tölti be a meccset
-    //   - különben (direkt URL látogatás vagy backwards-compat) → modal
+    //   - különben (direkt URL látogatás vagy backwards-compat) → varunk a
+    //     rejoin valaszra (overlay alatt) majd a megfelelo handler dont
     const params = new URLSearchParams(window.location.search);
     const autoType = params.get('type');
     const autoMode = params.get('mode');
     if (autoType === 'bot' && autoMode) {
+        // Bot auto-indit: a rejoin overlay-t most rejtjuk, mert nincs PvP rejoin-
+        // varakozas. A bot meccs sajat init flow-ja folytatja.
+        rejoinOverlayElrejt();
         await initBotFromQueryParams(params);
         return;
     }
@@ -1711,20 +1992,35 @@ async function init() {
         const raw = window.sessionStorage.getItem('mattmester.chessPendingMatch');
         if (raw) {
             const parsed = JSON.parse(raw);
-            if (parsed && parsed.gameId && (Date.now() - (parsed.ts || 0)) < 30_000) {
+            // 30s-os friss flag (queue match / friend invite / aktiv-meccs reconnect).
+            // gameId === 0 (sentinel "ismeretlen, rejoin keresi") szandekosan
+            // accept-elt — ilyenkor csak az ido-stempel alapjan dontunk.
+            if (parsed && (Date.now() - (parsed.ts || 0)) < 30_000) {
                 hasPendingMatch = true;
             }
             window.sessionStorage.removeItem('mattmester.chessPendingMatch');
         }
     } catch (_) { /* ignore */ }
 
-    if (hasPendingMatch || autoType === 'pvp') {
-        // PvP/pending match: a chess:rejoin / chess:game:start eventek tovabb intezik
-        return;
-    }
-
-    // Játékmód választó megjelenítés — az új (frontpage) chooser-rel
-    ujMeccsChooserNyitas();
+    // Akar van pendingMatch akar nincs: a rejoin overlay-t mostantol mar fut
+    // (init() elejen aktivaltuk). A pvpSocketInit-ben regisztralt listenerek:
+    //   - chess:game:start -> pvpJatekKezdet -> overlay le, tabla render, chooser zar
+    //   - chess:rejoin:none -> overlay le, chooser nyit
+    //
+    // Safety: 5s alatt ha semmi nem tortent (offline socket / vendeg felh /
+    // hibas backend), overlay le + chooser nyit. Igy a felhasznalo nem
+    // ragad orokre az overlay alatt.
+    setTimeout(() => {
+        if (pvpAktiv || gameId) {
+            // Mar fut egy meccs (rejoin sikerult vagy bot indult): csak overlay le.
+            rejoinOverlayElrejt();
+            return;
+        }
+        rejoinOverlayElrejt();
+        const modal = document.getElementById('chessModeChooserModal');
+        if (modal && modal.classList.contains('is-open')) return;
+        ujMeccsChooserNyitas();
+    }, 5000);
 }
 
 // ────────────────────────────────────────────

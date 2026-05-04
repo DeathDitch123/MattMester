@@ -136,6 +136,29 @@ function jatekTorol(gameId) {
 }
 
 /**
+ * Ha a felhasznalo aktiv meccse egy SAJAT BOT meccs (orphan — pl. F5 / tab-bezar
+ * utan a beforeunload surrender nem futott le), akkor torli es true-t ad vissza.
+ * PvP meccset SOSEM takarit el — azt csak a 60s grace period kezeli.
+ *
+ * Hasznalat: a /new-bot endpoint, valamint a PvP queue/invite handlerek hivjak
+ * a multi-tab guard ELOTT, hogy egy "ragadt" bot meccs ne blokkolja se uj bot,
+ * se PvP meccs inditasat.
+ *
+ * Returns: true ha takaritottunk, false ha nem (nincs aktiv meccs / PvP / nem sajat).
+ */
+function cleanupOwnAbandonedBotGame(userId) {
+    if (!userId) return false;
+    const active = hasAnyActiveGameForUser(userId);
+    if (!active.hasActive) return false;
+    const jatek = jatekKeres(active.gameId);
+    if (!jatek) return false;
+    if (!jatek.botAktiv || jatek.pvpAktiv) return false;
+    if (jatek.jatekosok?.white?.userId !== userId) return false;
+    jatekTorol(active.gameId);
+    return true;
+}
+
+/**
  * Mező keresése a tábla tömbben.
  * 1:1 a frontend mezoKeres-sel, de egy adott játékra vonatkozik.
  */
@@ -274,5 +297,6 @@ module.exports = {
     mezoKeres,
     jatekAllapotKliens,
     abilitiesAlapallapot,
-    hasAnyActiveGameForUser
+    hasAnyActiveGameForUser,
+    cleanupOwnAbandonedBotGame
 };

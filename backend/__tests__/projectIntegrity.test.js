@@ -794,14 +794,35 @@ describe('Chess lifecycle invariánsok', () => {
         });
     });
 
-    // Regresszio: orphan bot meccs auto-cleanup a /new-bot endpoint-ban
-    test('chess_api.js /new-bot tartalmazza a cleanupOwnAbandonedBotGame helper-t', () => {
-        const content = readFile(path.join(BACKEND, 'api', 'chess_api.js'));
+    // Regresszio: orphan bot meccs auto-cleanup. A helper 2026-05-04 ota
+    // a state.js-bol export-alva (kozos modul), igy a /new-bot ES a PvP queue/
+    // invite handlerei is hasznaljak ugyanazt a takarito logikat.
+    test('state.js export-olja a cleanupOwnAbandonedBotGame helper-t', () => {
+        const content = readFile(path.join(BACKEND, 'chess', 'state.js'));
         expect(content).toMatch(/function\s+cleanupOwnAbandonedBotGame\s*\(/);
-        // A guard-ban hivva van
-        expect(content).toMatch(/cleanupOwnAbandonedBotGame\s*\(\s*req\.session\.userId\s*\)/);
         // A helper csak BOT meccset takarit, PvP-t nem
         expect(content).toMatch(/!jatek\.botAktiv\s*\|\|\s*jatek\.pvpAktiv/);
+        // Export-ban benne van
+        expect(content).toMatch(/cleanupOwnAbandonedBotGame[\s,}]/);
+    });
+
+    test('chess_api.js /new-bot importalja es hivja a cleanupOwnAbandonedBotGame-t', () => {
+        const content = readFile(path.join(BACKEND, 'api', 'chess_api.js'));
+        // Import a state.js-bol
+        expect(content).toMatch(/cleanupOwnAbandonedBotGame[^=]*=\s*require\(['"]\.\.\/chess\/state\.js['"]\)/);
+        // A helper hivva van userId-vel (a tenyleges valtozonev lehet `userIdEarly`,
+        // `userId` vagy `req.session.userId` — mindharom elfogadott).
+        expect(content).toMatch(/cleanupOwnAbandonedBotGame\s*\(\s*(req\.session\.userId|userId\w*)/);
+    });
+
+    test('pvp.js queue+invite handlerei meghivjak a cleanupOwnAbandonedBotGame-t (Bug 2026-05-04)', () => {
+        // Bug-fix: F5 / tab-bezar utan ragadt orphan bot meccs ne blokkolja
+        // a PvP queue / invite csatlakozast "Mar van aktiv jatszmad" hibaval.
+        const content = readFile(path.join(BACKEND, 'chess', 'pvp.js'));
+        expect(content).toMatch(/cleanupOwnAbandonedBotGame[^=]*=\s*require\(['"]\.\/state\.js['"]\)/);
+        // Legalabb ket helyen hivva (queue + invite)
+        const hits = content.match(/cleanupOwnAbandonedBotGame\s*\(/g) || [];
+        expect(hits.length).toBeGreaterThanOrEqual(2);
     });
 
     test('Vegtelen idős módok casual: rankedAllowed=false ÉS eloColumn=null', () => {

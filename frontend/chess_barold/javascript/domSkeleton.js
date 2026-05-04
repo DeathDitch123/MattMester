@@ -22,7 +22,7 @@ const OLDAL_VAZ = `
 
         <header class="topbar">
             <div class="player player-black">
-                <div class="captured-pieces" id="captured-by-black"></div>
+                <!-- captured-pieces eltavolitva 2026-05-04 — lasd chess.html komment. -->
                 <span id="material-black" class="material-adv hidden">+0</span>
                 <div class="name" id="name-black">Ellenfél</div>
                 <div class="player-abilities" id="player-abilities-black"></div>
@@ -65,9 +65,9 @@ const OLDAL_VAZ = `
                 </div>
 
                 <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
-                <div id="opponent-disconnected" class="opponent-dc hidden">
-                    Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp
-                </div>
+                <!-- Az #opponent-disconnected ELTAVOLITVA a sidebar-bol -
+                     body-szinten van a chess.html-ben (parent display:none
+                     miatt itt sosem latszodott). -->
                 <div id="elo-change" class="elo-change hidden"></div>
                 <button id="drawOfferBtn" class="draw-btn hidden">Döntetlen ajánlat</button>
                 <div id="draw-offer-received" class="draw-offer hidden">
@@ -84,7 +84,7 @@ const OLDAL_VAZ = `
 
         <footer class="bottombar">
             <div class="player player-white">
-                <div class="captured-pieces" id="captured-by-white"></div>
+                <!-- captured-pieces eltavolitva 2026-05-04 — lasd chess.html komment. -->
                 <span id="material-white" class="material-adv hidden">+0</span>
                 <div class="name" id="name-white">Te</div>
                 <div class="player-abilities" id="player-abilities-white"></div>

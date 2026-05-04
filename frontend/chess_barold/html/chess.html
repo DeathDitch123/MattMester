@@ -31,6 +31,18 @@
          frontpage chooser-t hasznaljuk (chessModeChooser.js), amit a
          ujMeccsChooserNyitas() nyit meg minden esetben. -->
 
+    <!-- REJOIN OVERLAY — F5 / kapcsolat-vesztés után a chess:rejoin emit
+         ideje alatt mutatjuk, hogy a felhasználó tudja: tortenik valami,
+         nem ragadt be a chooser/üres tábla. A pvpJatekKezdet (chess:game:start)
+         és a chess:rejoin:none handler eltüntetik a 5s safety-vel együtt. -->
+    <div id="rejoin-overlay" class="rejoin-overlay hidden" role="status" aria-live="polite">
+        <div class="rejoin-overlay-content">
+            <div class="rejoin-overlay-spinner" aria-hidden="true"></div>
+            <p class="rejoin-overlay-title">Visszacsatlakozás a meccsedhez…</p>
+            <p class="rejoin-overlay-sub">Az időd a szerveren tovább fut, addig is kérlek várj.</p>
+        </div>
+    </div>
+
     <!-- PVP VÁRAKOZÁS OVERLAY (meghívás elküldve) -->
     <div id="pvp-waiting" class="pvp-waiting hidden">
         <div class="pvp-waiting-content">
@@ -63,6 +75,20 @@
         <div class="ingame-chat-messages" id="ingame-chat-messages" role="log" aria-live="polite">
             <div class="ingame-chat-empty">Még nincs üzenet — szólj az ellenfélnek!</div>
         </div>
+        <!-- Quick-chat sav (bot meccsen aktiv): elore-megirt uzenetek gombokent.
+             A sav default `hidden`, csak bot-meccsen mutatjuk; PvP-n a sima
+             input forma latszik helyette. -->
+        <div class="ingame-chat-quick hidden" id="ingame-chat-quick">
+            <button type="button" class="quick-chat-btn" data-key="gl">Sok szerencsét!</button>
+            <button type="button" class="quick-chat-btn" data-key="hello">Hello!</button>
+            <button type="button" class="quick-chat-btn" data-key="nice">Szép lépés!</button>
+            <button type="button" class="quick-chat-btn" data-key="wow">Hűha!</button>
+            <button type="button" class="quick-chat-btn" data-key="oops">Hopp!</button>
+            <button type="button" class="quick-chat-btn" data-key="thinking">Gondolkodok…</button>
+            <button type="button" class="quick-chat-btn" data-key="thanks">Köszi a meccset!</button>
+            <button type="button" class="quick-chat-btn" data-key="wp">Jól játszottál!</button>
+            <button type="button" class="quick-chat-btn" data-key="gg">GG</button>
+        </div>
         <form class="ingame-chat-input-wrap" id="ingame-chat-form">
             <input type="text" id="ingame-chat-input" placeholder="Üzenet…" maxlength="240" autocomplete="off" disabled />
             <button type="submit" id="ingame-chat-send" disabled>Küld</button>
@@ -82,7 +108,11 @@
 
         <header class="topbar">
             <div class="player player-black">
-                <div class="captured-pieces" id="captured-by-black"></div>
+                <!-- A korabbi pici `captured-pieces` icon-sor a badge-rol
+                     ELTAVOLITVA (2026-05-04): a leutott babuk MOSTANTOL csak
+                     a jobb-oldali #captured-panel-en latszanak, nagy meretben.
+                     A material-adv (+N) cimke maradt, mert az numerikus elony
+                     informacio mas elem-bol nem jon at. -->
                 <span id="material-black" class="material-adv hidden">+0</span>
                 <div class="name" id="name-black">Ellenfél</div>
                 <div class="player-abilities" id="player-abilities-black"></div>
@@ -130,9 +160,10 @@
                 </div>
 
                 <div id="bot-thinking" class="bot-thinking hidden">🤖 A bot gondolkodik...</div>
-                <div id="opponent-disconnected" class="opponent-dc hidden">
-                    Ellenfél kikapcsolt... <span id="dc-countdown">60</span>mp
-                </div>
+                <!-- Az `#opponent-disconnected` mar NEM itt van — a sidebar
+                     `display: none` miatt minden gyermek (akkor is fixed-position-os)
+                     rejtve marad a parent miatt. Az element a `body` szintre
+                     kerult athelyezve (lasd lentebb a `.app` utan). -->
 
                 <!-- ELO változás kijelzés -->
                 <div id="elo-change" class="elo-change hidden"></div>
@@ -173,13 +204,23 @@
 
         <footer class="bottombar">
             <div class="player player-white">
-                <div class="captured-pieces" id="captured-by-white"></div>
+                <!-- captured-pieces eltavolitva (lasd player-black komment). -->
                 <span id="material-white" class="material-adv hidden">+0</span>
                 <div class="name" id="name-white">Te</div>
                 <div class="player-abilities" id="player-abilities-white"></div>
                 <div class="clock" id="clock-white">10:00</div>
             </div>
         </footer>
+    </div>
+
+    <!-- ELLENFEL DISCONNECTED BANNER — fixed-position, body-szinten (NEM
+         a sidebar-ban, mert annak `display: none` parent-je megolne minden
+         gyermek render-t, akkor is ha pos:fixed). A banner csak akkor latszodik,
+         ha az ellenfel kapcsolata megszakadt; a chess.com-szeru 1:00 countdown
+         tickel benne lefele. Lasd chess.css `.opponent-dc`. -->
+    <div id="opponent-disconnected" class="opponent-dc hidden" role="status" aria-live="polite">
+        <span class="opponent-dc-text">Ellenfél kapcsolata megszakadt — visszacsatlakozás:</span>
+        <span id="dc-countdown">1:00</span>
     </div>
 
     <!-- LEUTOTT BABUK PANEL (jobb oldalon) — ket szegmens egymas alatt:
