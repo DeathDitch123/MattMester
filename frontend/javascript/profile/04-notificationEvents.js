@@ -1,5 +1,9 @@
 function bindNotificationCenterEvents() {
     if (!notificationCenterState.bound) {
+        // Jelzes a `notificationToast.js` globalis fallback-jenek, hogy itt
+        // mar megjelenitjuk a toast-ot — igy nem kell ket toast egy push-ra.
+        try { window.__mmNotifCenterBound = true; } catch (_) { /* ignore */ }
+
         const { list, modal, markAllBtn } = getNotificationCenterElements();
 
         // Admin által módosult profil — friss adatok lehúzása, hogy a felület
@@ -37,6 +41,15 @@ function bindNotificationCenterEvents() {
                     setNotificationBadge(notificationCenterState.unreadCount + 1);
                 }
                 renderNotificationCenterList();
+
+                // Magas-prioritasu typusok (admin uzenet, ban, deletion) eseten
+                // explicit, lathato toast-ot jelenitunk meg — kulonben a felhasznalo
+                // csak a csengo-ikon badge-jet latja, ami eszrevetlen marad ha epp
+                // mas oldalon van vagy mas modallal van elfoglalva.
+                if (window.MattMesterNotificationToast?.show) {
+                    try { window.MattMesterNotificationToast.show(notification); }
+                    catch (toastErr) { console.warn('[notif] toast hiba:', toastErr.message); }
+                }
             });
         });
 

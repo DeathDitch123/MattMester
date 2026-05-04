@@ -23,7 +23,7 @@
     <!-- Kozos felso navbar (kerul be ide az adminPanel + profile altal megosztott
          topNavbar.js + topNavbar.css alapjan). data-page="admin" donti el a
          logout viselkedeset (csak admin token-clear, fooldal session marad). -->
-    <nav class="mm-top-navbar" data-page="admin" aria-label="Felső navigáció">
+    <nav class="mm-top-navbar" data-page="admin" aria-label="Felső navigáció" data-i18n-attr="aria-label:profile.top_nav_aria">
         <div class="mm-top-navbar-inner">
             <a class="mm-top-navbar-brand" href="/">
                 <i class="bi bi-king-fill"></i>
@@ -488,14 +488,14 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-shield-fill-exclamation me-2 text-danger"></i>
-                        Hozzáadás a tiltott szavak listájához
+                        <span data-i18n="admin.blocklist_add_title">Hozzáadás a tiltott szavak listájához</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="critical-warning">
                         <i class="bi bi-info-circle-fill"></i>
-                        <div>
+                        <div data-i18n-html="admin.blocklist_add_warning">
                             A kiválasztott szavak <strong>azonnal</strong> bekerülnek a dinamikus blocklist-be (perzisztens, runtime-cache).
                             Ezután minden új chat üzenet, amely ezen szavak valamelyikét tartalmazza,
                             <strong>automatikusan maszkolva</strong> kerül mentésre. Ez naplózásra kerül (severity: critical).
@@ -503,34 +503,34 @@
                     </div>
 
                     <div class="critical-action-meta">
-                        <strong class="text-white">Forrás üzenet:</strong>
+                        <strong class="text-white" data-i18n="admin.blocklist_source_message">Forrás üzenet:</strong>
                         <span class="text-gold font-monospace" id="chatBlocklistAddSourceMessageId">—</span>
                         <div id="chatBlocklistAddSourceBody" class="mt-1 text-secondary" style="font-style:italic;">—</div>
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Szavak az üzenetből</label>
+                        <label class="form-label" data-i18n="admin.blocklist_words_label">Szavak az üzenetből</label>
                         <div id="chatBlocklistAddWordsContainer" class="d-flex flex-wrap gap-2">
-                            <span class="text-secondary small">Nincs választható szó.</span>
+                            <span class="text-secondary small" data-i18n="admin.blocklist_no_words">Nincs választható szó.</span>
                         </div>
-                        <small class="text-secondary mt-1 d-block">A 3 karakternél rövidebb szavak és a már listán lévők ki vannak hagyva. Pipáld be amelyiket trágárnak ítéled.</small>
+                        <small class="text-secondary mt-1 d-block" data-i18n="admin.blocklist_words_hint">A 3 karakternél rövidebb szavak és a már listán lévők ki vannak hagyva. Pipáld be amelyiket trágárnak ítéled.</small>
                     </div>
 
                     <div class="mb-1">
                         <label for="chatBlocklistAddReason" class="form-label">
-                            Indok <span class="text-danger">*</span>
+                            <span data-i18n="admin.reason">Indok</span> <span class="text-danger">*</span>
                             <span class="critical-reason-counter ms-2">
                                 <span id="chatBlocklistAddReasonCount">0</span> / 10
                             </span>
                         </label>
                         <textarea id="chatBlocklistAddReason" class="form-control" rows="3"
-                            placeholder="Min. 10 karakter — pl. ismétlődő szabálysértés, sértő tartalom, közösségi normák megsértése..."></textarea>
+                            placeholder="Min. 10 karakter — pl. ismétlődő szabálysértés, sértő tartalom, közösségi normák megsértése..." data-i18n-attr="placeholder:admin.blocklist_reason_ph"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
                     <button type="button" class="btn btn-danger" id="chatBlocklistAddConfirmBtn" disabled>
-                        <i class="bi bi-shield-plus me-1"></i>Hozzáadás a blocklisthez
+                        <i class="bi bi-shield-plus me-1"></i><span data-i18n="admin.blocklist_add_btn">Hozzáadás a blocklisthez</span>
                     </button>
                 </div>
             </div>
@@ -545,39 +545,39 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-check-circle me-2 text-success"></i>
-                        Chat üzenet engedélyezése
+                        <span data-i18n="admin.chat_allow_title">Chat üzenet engedélyezése</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="critical-warning">
                         <i class="bi bi-info-circle-fill"></i>
-                        <div>
+                        <div data-i18n-html="admin.chat_allow_warning">
                             Az engedélyezéssel a profanity-filter által <strong>maszkolt</strong> üzenetről leveszed a maszkot.
                             A résztvevők ezután az eredeti szöveget látják. A művelet <strong>naplózásra kerül</strong>.
                         </div>
                     </div>
 
                     <div class="critical-action-meta">
-                        <strong class="text-white">Feladó:</strong>
+                        <strong class="text-white" data-i18n="admin.chat_sender">Feladó:</strong>
                         <span class="text-gold font-monospace" id="chatAllowModalUser">—</span>
                     </div>
 
                     <div class="mb-1">
                         <label for="chatAllowReason" class="form-label">
-                            Felülbírálás indoka <span class="text-danger">*</span>
+                            <span data-i18n="admin.chat_allow_reason_label">Felülbírálás indoka</span> <span class="text-danger">*</span>
                             <span class="critical-reason-counter ms-2">
                                 <span id="chatAllowReasonCount">0</span> / 10–1000
                             </span>
                         </label>
                         <textarea id="chatAllowReason" class="form-control" rows="3" maxlength="1000"
-                            placeholder="Min. 10 karakter — pl. szövegkörnyezetben rendben van, nem szabálysértő..."></textarea>
+                            placeholder="Min. 10 karakter — pl. szövegkörnyezetben rendben van, nem szabálysértő..." data-i18n-attr="placeholder:admin.chat_allow_reason_ph"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
                     <button type="button" class="btn btn-success" id="chatAllowConfirmBtn" disabled>
-                        <i class="bi bi-check-circle me-1"></i>Engedélyezés megerősítése
+                        <i class="bi bi-check-circle me-1"></i><span data-i18n="admin.chat_allow_btn">Engedélyezés megerősítése</span>
                     </button>
                 </div>
             </div>
@@ -592,39 +592,39 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-x-circle me-2 text-danger"></i>
-                        Profilkép elutasítása
+                        <span data-i18n="admin.image_reject_title">Profilkép elutasítása</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="critical-warning">
                         <i class="bi bi-info-circle-fill"></i>
-                        <div>
+                        <div data-i18n-html="admin.image_reject_warning">
                             Az elutasítás után a feltöltő publikus profilképe <strong>visszaáll az alapértelmezettre</strong>.
                             Az indok <strong>naplózásra kerül</strong>.
                         </div>
                     </div>
 
                     <div class="critical-action-meta">
-                        <strong class="text-white">Felhasználó:</strong>
+                        <strong class="text-white" data-i18n="admin.image_reject_user">Felhasználó:</strong>
                         <span class="text-gold font-monospace" id="profileImageRejectModalUser">—</span>
                     </div>
 
                     <div class="mb-1">
                         <label for="profileImageRejectReason" class="form-label">
-                            Elutasítás indoka <span class="text-danger">*</span>
+                            <span data-i18n="admin.image_reject_reason_label">Elutasítás indoka</span> <span class="text-danger">*</span>
                             <span class="critical-reason-counter ms-2">
                                 <span id="profileImageRejectReasonCount">0</span> / 10–500
                             </span>
                         </label>
                         <textarea id="profileImageRejectReason" class="form-control" rows="3" maxlength="500"
-                            placeholder="Min. 10 karakter — pl. szabálysértő tartalom, sértő ábrázolás, alacsony minőség..."></textarea>
+                            placeholder="Min. 10 karakter — pl. szabálysértő tartalom, sértő ábrázolás, alacsony minőség..." data-i18n-attr="placeholder:admin.image_reject_reason_ph"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
                     <button type="button" class="btn btn-danger" id="profileImageRejectConfirmBtn" disabled>
-                        <i class="bi bi-x-circle me-1"></i>Elutasítás megerősítése
+                        <i class="bi bi-x-circle me-1"></i><span data-i18n="admin.image_reject_btn">Elutasítás megerősítése</span>
                     </button>
                 </div>
             </div>
@@ -638,38 +638,38 @@
                 <div class="modal-header">
                     <h5 class="modal-title d-flex align-items-center gap-2" id="adminProfileImageEditorModalLabel">
                         <i class="bi bi-crop"></i>
-                        Profilkép kivágása — admin
+                        <span data-i18n="admin.admin_image_crop">Profilkép kivágása — admin</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-secondary mb-3">A képet húzással mozgathatod, zoomolhatod és forgathatod. Az admin által feltöltött kép azonnal jóváhagyott státuszt kap.</p>
+                    <p class="text-secondary mb-3" data-i18n="admin.admin_image_hint">A képet húzással mozgathatod, zoomolhatod és forgathatod. Az admin által feltöltött kép azonnal jóváhagyott státuszt kap.</p>
                     <div class="profile-image-editor-grid">
                         <div class="profile-image-editor-main">
                             <canvas id="adminProfileImageEditorCanvas" class="profile-image-editor-canvas" width="640" height="360"></canvas>
                         </div>
                         <div class="profile-image-editor-side">
                             <div>
-                                <label for="adminProfileImageZoom" class="form-label mb-1">Nagyítás</label>
+                                <label for="adminProfileImageZoom" class="form-label mb-1" data-i18n="profile.zoom">Nagyítás</label>
                                 <input id="adminProfileImageZoom" type="range" class="form-range" min="0.6" max="3" step="0.05" value="1">
                             </div>
                             <div>
-                                <label for="adminProfileImageRotate" class="form-label mb-1">Forgatás</label>
+                                <label for="adminProfileImageRotate" class="form-label mb-1" data-i18n="profile.rotate">Forgatás</label>
                                 <input id="adminProfileImageRotate" type="range" class="form-range" min="-180" max="180" step="1" value="0">
                             </div>
                             <div>
-                                <label class="form-label mb-2">Előnézet</label>
+                                <label class="form-label mb-2" data-i18n="profile.preview">Előnézet</label>
                                 <canvas id="adminProfileImageEditorPreview" class="profile-image-editor-preview" width="160" height="160"></canvas>
                             </div>
-                            <button id="adminResetProfileImageEditor" type="button" class="btn btn-outline-gold btn-sm">Visszaállítás</button>
+                            <button id="adminResetProfileImageEditor" type="button" class="btn btn-outline-gold btn-sm" data-i18n="profile.reset">Visszaállítás</button>
                         </div>
                     </div>
                     <div id="adminProfileImageEditorMessage" class="alert d-none mt-3 mb-0" role="alert"></div>
                 </div>
                 <div class="modal-footer">
-                    <small class="text-secondary me-auto">A kép azonnal jóváhagyottként kerül mentésre.</small>
-                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal">Mégse</button>
-                    <button type="button" class="btn btn-gold" id="adminSaveProfileImageButton">Mentés és jóváhagyás</button>
+                    <small class="text-secondary me-auto" data-i18n="admin.admin_image_save_hint">A kép azonnal jóváhagyottként kerül mentésre.</small>
+                    <button type="button" class="btn btn-outline-gold" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
+                    <button type="button" class="btn btn-gold" id="adminSaveProfileImageButton" data-i18n="admin.admin_image_save">Mentés és jóváhagyás</button>
                 </div>
             </div>
         </div>
@@ -749,27 +749,27 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-play-circle-fill me-2 text-gold"></i>
-                        Tesztek futtatása
+                        <span data-i18n="admin.tests_run_title">Tesztek futtatása</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezaras"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-secondary small mb-3">
+                    <p class="text-secondary small mb-3" data-i18n="admin.tests_run_hint">
                         A backend Jest + Supertest tesztkészlete fut le (~5-10 mp). Egyszerre csak egy futás
                         lehetséges. A futás naplózva lesz az audit log-ba (info szintű bejegyzés).
                     </p>
                     <div class="mb-1">
                         <label for="testsRunReason" class="form-label">
-                            Megjegyzés <span class="text-secondary fw-normal small ms-1">(opcionális)</span>
+                            <span data-i18n="admin.note_optional">Megjegyzés</span> <span class="text-secondary fw-normal small ms-1" data-i18n="admin.optional">(opcionális)</span>
                         </label>
                         <textarea id="testsRunReason" class="form-control" rows="2"
-                                  placeholder="Pl.: utolso PR előtti smoke-test — uresen is hagyhato."></textarea>
+                                  placeholder="Pl.: utolso PR előtti smoke-test — uresen is hagyhato." data-i18n-attr="placeholder:admin.tests_note_ph"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Megse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
                     <button type="button" class="btn btn-gold" onclick="submitTestsRunFromConfirm()">
-                        <i class="bi bi-play-fill me-1"></i>Indítás
+                        <i class="bi bi-play-fill me-1"></i><span data-i18n="admin.tests_run_btn">Indítás</span>
                     </button>
                 </div>
             </div>
@@ -785,29 +785,29 @@
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-chat-dots-fill me-2 text-gold"></i>
-                        Üzenet küldése — <span id="adminQuickChatTargetName" class="text-gold">—</span>
+                        <span data-i18n="admin.quick_chat_title">Üzenet küldése —</span> <span id="adminQuickChatTargetName" class="text-gold">—</span>
                     </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Bezárás" data-i18n-attr="aria-label:common.close"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-secondary small mb-3">
+                    <p class="text-secondary small mb-3" data-i18n="admin.quick_chat_intro">
                         Az üzenet egy direkt beszélgetésben (1-az-1) érkezik a felhasználónak.
                         Ha még nem volt direkt-conv, a rendszer most létrehozza.
                     </p>
                     <div class="mb-3">
-                        <label for="adminQuickChatMessage" class="form-label">Üzenet</label>
+                        <label for="adminQuickChatMessage" class="form-label" data-i18n="admin.message">Üzenet</label>
                         <textarea id="adminQuickChatMessage" class="form-control" rows="4"
-                                  maxlength="1000" placeholder="Írd ide az üzenetet..."></textarea>
+                                  maxlength="1000" placeholder="Írd ide az üzenetet..." data-i18n-attr="placeholder:admin.quick_chat_ph"></textarea>
                         <div class="form-text text-secondary">
-                            <span id="adminQuickChatCount">0</span>/1000 karakter
+                            <span id="adminQuickChatCount">0</span>/1000 <span data-i18n="admin.character_count">karakter</span>
                         </div>
                     </div>
                     <div id="adminQuickChatFeedback" class="alert d-none" role="alert"></div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Mégse</button>
+                    <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal" data-i18n="common.cancel">Mégse</button>
                     <button type="button" class="btn btn-gold" id="adminQuickChatSendBtn" onclick="submitAdminQuickChat()">
-                        <i class="bi bi-send-fill me-1"></i>Küldés
+                        <i class="bi bi-send-fill me-1"></i><span data-i18n="admin.send">Küldés</span>
                     </button>
                 </div>
             </div>
@@ -898,6 +898,7 @@
     <script src="../javascript/adminPanel/28-bootstrap.js"></script>
     <script src="../javascript/shared/topNavbar.js" defer></script>
     <script src="../javascript/shared/i18n.js" defer></script>
+    <script src="../javascript/shared/notificationToast.js" defer></script>
 </body>
 
 </html>

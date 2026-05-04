@@ -289,6 +289,50 @@ router.post('/chat/conversations/:conversationId/messages', chatMessageLimiter, 
             }
         }
 
+        // Issue #53 follow-up: ha admin kuld direkt uzenetet egy felhasznalonak,
+        // a chat-badge frissitesen tul egy notification (csengo-ikon) bejegyzest is
+        // letrehozunk az osszes nem-admin resztvevonek. Igy a felhasznalo akkor is
+        // azonnal lat valamit, ha a chat-modal nincs nyitva — toast + notification
+        // center entry. A regular player-kozott uzenetnel ezt nem hivjuk meg, mert
+        // ott a sima chat-badge eleg.
+        try {
+            const senderRole = String(request.session?.role || '').toLowerCase();
+            if (senderRole === 'admin') {
+                const participantIds = await sql.getPrivateConversationParticipantIds(conversationId);
+                const recipientIds = (participantIds || [])
+                    .map((id) => Number(id) || 0)
+                    .filter((id) => id > 0 && id !== currentUserId);
+
+                if (recipientIds.length > 0) {
+                    const senderUsername = String(request.session?.username || 'Admin');
+                    const preview = String(message).slice(0, 140);
+                    const notif = {
+                        audience: recipientIds.length === 1 ? 'user' : 'multi',
+                        type: 'chat_message_from_admin',
+                        senderUserId: currentUserId,
+                        title: `Üzenet az adminisztrátortól (${senderUsername})`,
+                        message: preview || 'Új admin üzenet érkezett.',
+                        severity: 'info',
+                        payload: {
+                            conversationId,
+                            messageId: data?.id || data?.messageId || null,
+                            senderUserId: currentUserId,
+                            senderUsername,
+                            preview
+                        }
+                    };
+                    if (recipientIds.length === 1) {
+                        notif.targetUserId = recipientIds[0];
+                    } else {
+                        notif.targetUserIds = recipientIds;
+                    }
+                    await notificationService.send(socketHub, notif);
+                }
+            }
+        } catch (notifError) {
+            console.warn('[chat REST] admin notification side-effect hiba:', notifError.message);
+        }
+
         payload = {
             success: true,
             data,
